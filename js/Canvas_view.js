@@ -217,28 +217,20 @@ async function createCanvasWidget(node, widget, app) {
                 textContent: "Paste Image",
                 onclick: async () => {
                     try {
-                        // Sprawdzenie, czy przeglądarka obsługuje API schowka
                         if (!navigator.clipboard || !navigator.clipboard.read) {
                             alert("Your browser does not support pasting from the clipboard.");
                             return;
                         }
-
-                        // Poproś o dostęp do schowka i odczytaj jego zawartość
                         const clipboardItems = await navigator.clipboard.read();
                         let imageFound = false;
 
                         for (const item of clipboardItems) {
-                            // Szukaj typu danych, który jest obrazem
                             const imageType = item.types.find(type => type.startsWith('image/'));
 
                             if (imageType) {
-                                // Pobierz dane obrazu jako Blob
                                 const blob = await item.getType(imageType);
-
-                                // Ta część jest niemal identyczna jak w "Add Image"
                                 const img = new Image();
                                 img.onload = () => {
-                                    // Skaluj obraz, aby pasował do canvasu, zachowując proporcje
                                     const scale = Math.min(
                                         canvas.width / img.width,
                                         canvas.height / img.height
@@ -255,15 +247,13 @@ async function createCanvasWidget(node, widget, app) {
                                     };
 
                                     canvas.layers.push(layer);
-                                    canvas.updateSelection([layer]); // Zaznacz nową warstwę
+                                    canvas.updateSelection([layer]);
                                     canvas.render();
-
-                                    // Zwolnij zasób URL po załadowaniu obrazu
                                     URL.revokeObjectURL(img.src);
                                 };
                                 img.src = URL.createObjectURL(blob);
                                 imageFound = true;
-                                break; // Znaleziono obraz, przerwij pętlę
+                                break;
                             }
                         }
 
@@ -366,9 +356,7 @@ async function createCanvasWidget(node, widget, app) {
                 textContent: "Remove Layer",
                 onclick: () => {
                     if (canvas.selectedLayers.length > 0) {
-                        // Tworzy nową tablicę warstw, odfiltrowując te zaznaczone
                         canvas.layers = canvas.layers.filter(l => !canvas.selectedLayers.includes(l));
-                        // Czyści zaznaczenie i powiadamia UI
                         canvas.updateSelection([]);
                         canvas.render();
                     }
@@ -426,8 +414,6 @@ async function createCanvasWidget(node, widget, app) {
                         if (canvas.selectedLayers.length !== 1) {
                             throw new Error("Please select exactly one image layer for matting.");
                         }
-
-                        // Ustaw status na 'przetwarzanie' (żółty)
                         statusIndicator.setStatus('processing');
 
                         const selectedLayer = canvas.selectedLayers[0];
@@ -467,12 +453,8 @@ async function createCanvasWidget(node, widget, app) {
 
                                 await canvas.saveToServer(widget.value);
                                 app.graph.runStep();
-
-                                // Ustaw status na 'ukończono' (zielony)
                                 statusIndicator.setStatus('completed');
                             };
-
-                            // Tworzymy obraz z przezroczystością z serwera
                             newImage.src = result.matted_image;
                         };
                         mattedImage.onerror = () => {
@@ -483,7 +465,6 @@ async function createCanvasWidget(node, widget, app) {
                     } catch (error) {
                         console.error("Matting error:", error);
                         alert(`Error during matting process: ${error.message}`);
-                        // Ustaw status na 'błąd' (czerwony)
                         statusIndicator.setStatus('error');
                     }
                 }
@@ -497,13 +478,9 @@ async function createCanvasWidget(node, widget, app) {
     const updateButtonStates = () => {
         const selectionCount = canvas.selectedLayers.length;
         const hasSelection = selectionCount > 0;
-
-        // Ogólne przyciski wymagające przynajmniej jednego zaznaczenia
         controlPanel.querySelectorAll('.requires-selection').forEach(btn => {
             btn.disabled = !hasSelection;
         });
-
-        // Specjalna logika dla przycisku "Matting", który wymaga DOKŁADNIE jednego zaznaczenia
         const mattingBtn = controlPanel.querySelector('.matting-button');
         if (mattingBtn) {
             mattingBtn.disabled = selectionCount !== 1;
@@ -568,7 +545,6 @@ async function createCanvasWidget(node, widget, app) {
         }
     }, [controlPanel, canvasContainer]);
     const handleFileLoad = async (file) => {
-        // Sprawdzamy, czy plik jest obrazem
         if (!file.type.startsWith('image/')) {
             return;
         }
@@ -595,38 +571,30 @@ async function createCanvasWidget(node, widget, app) {
             canvas.layers.push(layer);
             canvas.selectedLayer = layer;
             canvas.render();
-
-            // Używamy funkcji updateOutput, aby zapisać stan i uruchomić graf
             await updateOutput();
-
-            // Zwolnienie zasobu URL
             URL.revokeObjectURL(img.src);
         };
         img.src = URL.createObjectURL(file);
     };
 
     mainContainer.addEventListener('dragover', (e) => {
-        e.preventDefault(); // Niezbędne, aby zdarzenie 'drop' zadziałało
+        e.preventDefault();
         e.stopPropagation();
-        // Dodajemy klasę, aby pokazać wizualną informację zwrotną
         canvasContainer.classList.add('drag-over');
     });
 
     mainContainer.addEventListener('dragleave', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Usuwamy klasę po opuszczeniu obszaru
         canvasContainer.classList.remove('drag-over');
     });
 
     mainContainer.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        // Usuwamy klasę po upuszczeniu pliku
         canvasContainer.classList.remove('drag-over');
 
         if (e.dataTransfer.files) {
-            // Przetwarzamy wszystkie upuszczone pliki
             for (const file of e.dataTransfer.files) {
                 await handleFileLoad(file);
             }
@@ -677,14 +645,10 @@ class MattingStatusIndicator {
     }
 
     constructor(container) {
-        // Lista możliwych statusów, aby łatwiej nimi zarządzać
         this.statuses = ['processing', 'completed', 'error'];
 
         this.indicator = document.createElement('div');
-        // Ustawiamy bazową klasę, która będzie miała domyślny szary kolor
         this.indicator.className = 'matting-indicator';
-
-        // Usunięto 'background-color' z stylów inline
         this.indicator.style.cssText = `
             width: 10px;
             height: 10px;
@@ -725,16 +689,11 @@ class MattingStatusIndicator {
     }
 
     setStatus(status) {
-        // 1. Usuń wszystkie poprzednie klasy statusu, pozostawiając klasę bazową
         this.indicator.classList.remove(...this.statuses);
-
-        // 2. Dodaj nową klasę statusu, jeśli została podana
         if (status && this.statuses.includes(status)) {
             this.indicator.classList.add(status);
         }
 
-        // 3. Usuń statusy końcowe (sukces/błąd) po 3 sekundach,
-        //    aby wskaźnik wrócił do domyślnego szarego koloru.
         if (status === 'completed' || status === 'error') {
             setTimeout(() => {
                 this.indicator.classList.remove(status);

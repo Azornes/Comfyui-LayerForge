@@ -17,7 +17,7 @@ export class Canvas {
             zoom: 0.8,
         };
         this.interaction = {
-            mode: 'none', // 'none', 'panning', 'dragging', 'resizing', 'rotating', 'resizingCanvas'
+            mode: 'none',
             panStart: {x: 0, y: 0},
             dragStart: {x: 0, y: 0},
             transformOrigin: {},
@@ -25,8 +25,8 @@ export class Canvas {
             resizeAnchor: {x: 0, y: 0},
             canvasResizeStart: {x: 0, y: 0},
             isCtrlPressed: false,
-            isAltPressed: false,      // <-- DODANO
-            hasClonedInDrag: false,   // <-- DODANO
+            isAltPressed: false,
+            hasClonedInDrag: false,
             lastClickTime: 0,
         };
         this.originalLayerPositions = new Map();
@@ -82,7 +82,6 @@ export class Canvas {
     }
 
     setupEventListeners() {
-        // Używamy .bind(this), aby upewnić się, że 'this' wewnątrz handlerów odnosi się do instancji klasy Canvas
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
@@ -96,8 +95,6 @@ export class Canvas {
     updateSelection(newSelection) {
         this.selectedLayers = newSelection || [];
         this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
-
-        // Wywołaj callback, jeśli istnieje, aby zaktualizować UI
         if (this.onSelectionChange) {
             this.onSelectionChange();
         }
@@ -111,7 +108,7 @@ export class Canvas {
         this.interaction.resizeHandle = null;
         this.originalLayerPositions.clear();
         this.canvasResizeRect = null;
-        this.interaction.hasClonedInDrag = false; // <-- DODANO
+        this.interaction.hasClonedInDrag = false;
         this.canvas.style.cursor = 'default';
     }
 
@@ -121,8 +118,6 @@ export class Canvas {
     handleMouseDown(e) {
         const currentTime = Date.now();
         const worldCoords = this.getMouseWorldCoordinates(e);
-
-        // Deselekcja po szybkim kliknięciu (pseudo-double-click)
         if (currentTime - this.interaction.lastClickTime < 300) {
             this.updateSelection([]);
             this.selectedLayer = null;
@@ -133,16 +128,12 @@ export class Canvas {
         this.interaction.lastClickTime = currentTime;
 
         const handle = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
-
-        // 1. Interakcja z uchwytem (skalowanie/rotacja)
         if (this.selectedLayer && handle) {
             this.startLayerTransform(handle, worldCoords);
             return;
         }
 
         const clickedLayerResult = this.getLayerAtPosition(worldCoords.x, worldCoords.y);
-
-        // 2. Interakcja z warstwą (przesuwanie/selekcja)
         if (clickedLayerResult) {
             if (e.shiftKey && this.selectedLayers.includes(clickedLayerResult.layer)) {
                 this.showBlendModeMenu(e.clientX, e.clientY);
@@ -151,8 +142,6 @@ export class Canvas {
             this.startLayerDrag(clickedLayerResult.layer, worldCoords);
             return;
         }
-
-        // 3. Interakcja z tłem (zmiana rozmiaru canvasu lub panoramowanie)
         if (e.shiftKey) {
             this.startCanvasResize(worldCoords);
         } else {
@@ -221,9 +210,9 @@ export class Canvas {
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
 
             this.selectedLayers.forEach(layer => {
-                if (e.shiftKey) { // Rotacja
+                if (e.shiftKey) {
                     layer.rotation += rotationStep;
-                } else { // Skalowanie
+                } else {
                     const oldWidth = layer.width;
                     const oldHeight = layer.height;
                     layer.width *= scaleFactor;
@@ -232,7 +221,7 @@ export class Canvas {
                     layer.y += (oldHeight - layer.height) / 2;
                 }
             });
-        } else { // Zoom widoku
+        } else {
             const worldCoords = this.getMouseWorldCoordinates(e);
             const rect = this.canvas.getBoundingClientRect();
             const mouseBufferX = (e.clientX - rect.left) * (this.offscreenCanvas.width / rect.width);
@@ -260,11 +249,9 @@ export class Canvas {
 
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
-                // Szukamy indeksu w tablicy this.layers, aby go usunąć
-                // Ale musimy usunąć wszystkie zaznaczone warstwy
-                // Filtrujemy główną tablicę warstw, usuwając te, które są zaznaczone
+
+
                 this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
-                // Resetujemy zaznaczenie
                 this.updateSelection([]);
                 this.render();
                 return;
@@ -312,7 +299,7 @@ export class Canvas {
      */
     handleKeyUp(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
-        if (e.key === 'Alt') this.interaction.isAltPressed = false; // <-- DODANO
+        if (e.key === 'Alt') this.interaction.isAltPressed = false;
     }
 
     updateCursor(worldCoords) {
@@ -411,35 +398,24 @@ export class Canvas {
     }
 
     dragLayers(worldCoords) {
-        // Logika klonowania warstw przy wciśniętym klawiszu Alt
         if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.selectedLayers.length > 0) {
             const newLayers = [];
-
-            // Stwórz klony zaznaczonych warstw
             this.selectedLayers.forEach(layer => {
                 const newLayer = {
-                    ...layer, // Płytka kopia właściwości warstwy
-                    zIndex: this.layers.length, // Upewnij się, że nowa warstwa jest na wierzchu
+                    ...layer,
+                    zIndex: this.layers.length,
                 };
                 this.layers.push(newLayer);
                 newLayers.push(newLayer);
             });
-
-            // Zaktualizuj zaznaczenie, aby obejmowało tylko nowe warstwy
             this.updateSelection(newLayers);
             this.selectedLayer = newLayers.length > 0 ? newLayers[newLayers.length - 1] : null;
-
-            // Zresetuj pozycje startowe dla nowo przeciąganych klonów
             this.originalLayerPositions.clear();
             this.selectedLayers.forEach(l => {
                 this.originalLayerPositions.set(l, {x: l.x, y: l.y});
             });
-
-            // Oznacz, że klonowanie w tej sesji przeciągania już się odbyło
             this.interaction.hasClonedInDrag = true;
         }
-
-        // Istniejąca logika przesuwania (teraz działa na oryginalnych lub sklonowanych warstwach)
         const totalDx = worldCoords.x - this.interaction.dragStart.x;
         const totalDy = worldCoords.y - this.interaction.dragStart.y;
         let finalDx = totalDx, finalDy = totalDy;
@@ -1208,27 +1184,37 @@ export class Canvas {
 
 
     moveLayerUp() {
-        if (!this.selectedLayer) return;
-        const index = this.layers.indexOf(this.selectedLayer);
-        if (index < this.layers.length - 1) {
-            const temp = this.layers[index].zIndex;
-            this.layers[index].zIndex = this.layers[index + 1].zIndex;
-            this.layers[index + 1].zIndex = temp;
-            [this.layers[index], this.layers[index + 1]] = [this.layers[index + 1], this.layers[index]];
-            this.render();
-        }
+        if (this.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.selectedLayers.map(layer => this.layers.indexOf(layer)));
+
+        const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => b - a);
+
+        sortedIndices.forEach(index => {
+            const targetIndex = index + 1;
+
+            if (targetIndex < this.layers.length && !selectedIndicesSet.has(targetIndex)) {
+                [this.layers[index], this.layers[targetIndex]] = [this.layers[targetIndex], this.layers[index]];
+            }
+        });
+        this.layers.forEach((layer, i) => layer.zIndex = i);
+        this.render();
     }
 
     moveLayerDown() {
-        if (!this.selectedLayer) return;
-        const index = this.layers.indexOf(this.selectedLayer);
-        if (index > 0) {
-            const temp = this.layers[index].zIndex;
-            this.layers[index].zIndex = this.layers[index - 1].zIndex;
-            this.layers[index - 1].zIndex = temp;
-            [this.layers[index], this.layers[index - 1]] = [this.layers[index - 1], this.layers[index]];
-            this.render();
-        }
+        if (this.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.selectedLayers.map(layer => this.layers.indexOf(layer)));
+
+        const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => a - b);
+
+        sortedIndices.forEach(index => {
+            const targetIndex = index - 1;
+
+            if (targetIndex >= 0 && !selectedIndicesSet.has(targetIndex)) {
+                [this.layers[index], this.layers[targetIndex]] = [this.layers[targetIndex], this.layers[index]];
+            }
+        });
+        this.layers.forEach((layer, i) => layer.zIndex = i);
+        this.render();
     }
 
 
