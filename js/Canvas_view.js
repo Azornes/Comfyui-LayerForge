@@ -168,8 +168,8 @@ async function createCanvasWidget(node, widget, app) {
                             img.onload = async () => {
 
                                 const scale = Math.min(
-                                    canvas.width / img.width * 0.8,
-                                    canvas.height / img.height * 0.8
+                                    canvas.width / img.width,
+                                    canvas.height / img.height
                                 );
 
                                 const layer = {
@@ -213,6 +213,72 @@ async function createCanvasWidget(node, widget, app) {
                     }
                 }
             }),
+            $el("button.painter-button.primary", {
+                textContent: "Paste Image",
+                onclick: async () => {
+                    try {
+                        // Sprawdzenie, czy przeglądarka obsługuje API schowka
+                        if (!navigator.clipboard || !navigator.clipboard.read) {
+                            alert("Your browser does not support pasting from the clipboard.");
+                            return;
+                        }
+
+                        // Poproś o dostęp do schowka i odczytaj jego zawartość
+                        const clipboardItems = await navigator.clipboard.read();
+                        let imageFound = false;
+
+                        for (const item of clipboardItems) {
+                            // Szukaj typu danych, który jest obrazem
+                            const imageType = item.types.find(type => type.startsWith('image/'));
+
+                            if (imageType) {
+                                // Pobierz dane obrazu jako Blob
+                                const blob = await item.getType(imageType);
+
+                                // Ta część jest niemal identyczna jak w "Add Image"
+                                const img = new Image();
+                                img.onload = () => {
+                                    // Skaluj obraz, aby pasował do canvasu, zachowując proporcje
+                                    const scale = Math.min(
+                                        canvas.width / img.width,
+                                        canvas.height / img.height
+                                    );
+
+                                    const layer = {
+                                        image: img,
+                                        x: (canvas.width - img.width * scale) / 2,
+                                        y: (canvas.height - img.height * scale) / 2,
+                                        width: img.width * scale,
+                                        height: img.height * scale,
+                                        rotation: 0,
+                                        zIndex: canvas.layers.length
+                                    };
+
+                                    canvas.layers.push(layer);
+                                    canvas.updateSelection([layer]); // Zaznacz nową warstwę
+                                    canvas.render();
+
+                                    // Zwolnij zasób URL po załadowaniu obrazu
+                                    URL.revokeObjectURL(img.src);
+                                };
+                                img.src = URL.createObjectURL(blob);
+                                imageFound = true;
+                                break; // Znaleziono obraz, przerwij pętlę
+                            }
+                        }
+
+                        if (!imageFound) {
+                            alert("No image found in the clipboard.");
+                        }
+
+                    } catch (err) {
+                        console.error("Failed to paste image:", err);
+                        alert("Could not paste image. Please ensure you have granted clipboard permissions or that there is an image in the clipboard.");
+                    }
+                }
+            }),
+
+
             $el("button.painter-button", {
                 textContent: "Canvas Size",
                 onclick: () => {
@@ -351,107 +417,97 @@ async function createCanvasWidget(node, widget, app) {
                 }
             }),
 
-            $el("button.painter-button.requires-selection", {
+            $el("button.painter-button.requires-selection.matting-button", {
                 textContent: "Matting",
                 onclick: async () => {
+                    const statusIndicator = MattingStatusIndicator.getInstance(controlPanel.querySelector('.controls'));
+
                     try {
-                        if (!canvas.selectedLayer) {
-                            throw new Error("Please select an image first");
+                        if (canvas.selectedLayers.length !== 1) {
+                            throw new Error("Please select exactly one image layer for matting.");
                         }
 
-                        const statusIndicator = MattingStatusIndicator.getInstance(controlPanel.querySelector('.controls'));
+                        // Ustaw status na 'przetwarzanie' (żółty)
+                        statusIndicator.setStatus('processing');
 
-                        const updateStatus = (event) => {
-                            const {status} = event.detail;
-                            statusIndicator.setStatus(status);
-                        };
+                        const selectedLayer = canvas.selectedLayers[0];
+                        const imageData = await canvas.getLayerImageData(selectedLayer);
 
-                        api.addEventListener("matting_status", updateStatus);
+                        console.log("Sending image to server for matting...");
 
-                        try {
+                        const response = await fetch("/matting", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({image: imageData})
+                        });
 
-                            const imageData = await canvas.getLayerImageData(canvas.selectedLayer);
-                            console.log("Sending image to server...");
+                        if (!response.ok) {
+                            throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+                        }
 
-                            const response = await fetch("/matting", {
-                                method: "POST",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify({
-                                    image: imageData,
-                                    threshold: 0.5,
-                                    refinement: 1
-                                })
-                            });
+                        const result = await response.json();
+                        console.log("Creating new layer with matting result...");
 
-                            if (!response.ok) {
-                                throw new Error(`Server error: ${response.status}`);
-                            }
-
-                            const result = await response.json();
-                            console.log("Creating new layer with matting result...");
-
-                            const mattedImage = new Image();
-                            mattedImage.onload = async () => {
-
-                                const tempCanvas = document.createElement('canvas');
-                                const tempCtx = tempCanvas.getContext('2d');
-                                tempCanvas.width = canvas.selectedLayer.width;
-                                tempCanvas.height = canvas.selectedLayer.height;
-
-                                tempCtx.drawImage(
-                                    mattedImage,
-                                    0, 0,
-                                    tempCanvas.width, tempCanvas.height
-                                );
-
-                                const newImage = new Image();
-                                newImage.onload = async () => {
-                                    const newLayer = {
-                                        image: newImage,
-                                        x: canvas.selectedLayer.x,
-                                        y: canvas.selectedLayer.y,
-                                        width: canvas.selectedLayer.width,
-                                        height: canvas.selectedLayer.height,
-                                        rotation: canvas.selectedLayer.rotation,
-                                        zIndex: canvas.layers.length + 1
-                                    };
-
-                                    canvas.layers.push(newLayer);
-                                    canvas.selectedLayer = newLayer;
-                                    canvas.render();
-
-                                    await canvas.saveToServer(widget.value);
-                                    app.graph.runStep();
+                        const mattedImage = new Image();
+                        mattedImage.onload = async () => {
+                            const newImage = new Image();
+                            newImage.onload = async () => {
+                                const newLayer = {
+                                    image: newImage,
+                                    x: selectedLayer.x,
+                                    y: selectedLayer.y,
+                                    width: selectedLayer.width,
+                                    height: selectedLayer.height,
+                                    rotation: selectedLayer.rotation,
+                                    zIndex: canvas.layers.length + 1
                                 };
+                                canvas.layers.push(newLayer);
+                                canvas.updateSelection([newLayer]);
+                                canvas.render();
 
-                                newImage.src = tempCanvas.toDataURL('image/png');
+                                await canvas.saveToServer(widget.value);
+                                app.graph.runStep();
+
+                                // Ustaw status na 'ukończono' (zielony)
+                                statusIndicator.setStatus('completed');
                             };
 
-                            mattedImage.src = result.matted_image;
-                            console.log("Matting result applied successfully");
-
-                        } finally {
-                            api.removeEventListener("matting_status", updateStatus);
-                        }
+                            // Tworzymy obraz z przezroczystością z serwera
+                            newImage.src = result.matted_image;
+                        };
+                        mattedImage.onerror = () => {
+                            throw new Error("Failed to load the matted image from server response.");
+                        };
+                        mattedImage.src = result.matted_image;
 
                     } catch (error) {
                         console.error("Matting error:", error);
                         alert(`Error during matting process: ${error.message}`);
+                        // Ustaw status na 'błąd' (czerwony)
+                        statusIndicator.setStatus('error');
                     }
                 }
             })
+
+
         ])
     ]);
 
 
     const updateButtonStates = () => {
-        const hasSelection = canvas.selectedLayers.length > 0;
-        const buttonsToToggle = controlPanel.querySelectorAll('.requires-selection');
-        buttonsToToggle.forEach(btn => {
+        const selectionCount = canvas.selectedLayers.length;
+        const hasSelection = selectionCount > 0;
+
+        // Ogólne przyciski wymagające przynajmniej jednego zaznaczenia
+        controlPanel.querySelectorAll('.requires-selection').forEach(btn => {
             btn.disabled = !hasSelection;
         });
+
+        // Specjalna logika dla przycisku "Matting", który wymaga DOKŁADNIE jednego zaznaczenia
+        const mattingBtn = controlPanel.querySelector('.matting-button');
+        if (mattingBtn) {
+            mattingBtn.disabled = selectionCount !== 1;
+        }
     };
 
     canvas.onSelectionChange = updateButtonStates;
@@ -519,10 +575,9 @@ async function createCanvasWidget(node, widget, app) {
 
         const img = new Image();
         img.onload = async () => {
-            // Logika dodawania obrazu jest taka sama jak w przycisku "Add Image"
             const scale = Math.min(
-                canvas.width / img.width * 0.8,
-                canvas.height / img.height * 0.8
+                canvas.width / img.width,
+                canvas.height / img.height
             );
 
             const layer = {
@@ -608,7 +663,6 @@ async function createCanvasWidget(node, widget, app) {
     };
 }
 
-
 class MattingStatusIndicator {
     static instance = null;
 
@@ -616,32 +670,46 @@ class MattingStatusIndicator {
         if (!MattingStatusIndicator.instance) {
             MattingStatusIndicator.instance = new MattingStatusIndicator(container);
         }
+        if (container && !container.contains(MattingStatusIndicator.instance.indicator)) {
+            container.appendChild(MattingStatusIndicator.instance.indicator);
+        }
         return MattingStatusIndicator.instance;
     }
 
     constructor(container) {
+        // Lista możliwych statusów, aby łatwiej nimi zarządzać
+        this.statuses = ['processing', 'completed', 'error'];
+
         this.indicator = document.createElement('div');
+        // Ustawiamy bazową klasę, która będzie miała domyślny szary kolor
+        this.indicator.className = 'matting-indicator';
+
+        // Usunięto 'background-color' z stylów inline
         this.indicator.style.cssText = `
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background-color: #808080;
             margin-left: 10px;
             display: inline-block;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s ease;
         `;
 
         const style = document.createElement('style');
         style.textContent = `
-            .processing {
-                background-color: #2196F3;
+            /* Styl dla domyślnego stanu (szary) */
+            .matting-indicator {
+                background-color: #808080;
+            }
+            /* Style dla konkretnych statusów, które nadpiszą domyślny */
+            .matting-indicator.processing {
+                background-color: #FFC107; /* Żółty */
                 animation: blink 1s infinite;
             }
-            .completed {
-                background-color: #4CAF50;
+            .matting-indicator.completed {
+                background-color: #4CAF50; /* Zielony */
             }
-            .error {
-                background-color: #f44336;
+            .matting-indicator.error {
+                background-color: #f44336; /* Czerwony */
             }
             @keyframes blink {
                 0% { opacity: 1; }
@@ -651,18 +719,26 @@ class MattingStatusIndicator {
         `;
         document.head.appendChild(style);
 
-        container.appendChild(this.indicator);
+        if (container) {
+            container.appendChild(this.indicator);
+        }
     }
 
     setStatus(status) {
-        this.indicator.className = '';
-        if (status) {
+        // 1. Usuń wszystkie poprzednie klasy statusu, pozostawiając klasę bazową
+        this.indicator.classList.remove(...this.statuses);
+
+        // 2. Dodaj nową klasę statusu, jeśli została podana
+        if (status && this.statuses.includes(status)) {
             this.indicator.classList.add(status);
         }
-        if (status === 'completed') {
+
+        // 3. Usuń statusy końcowe (sukces/błąd) po 3 sekundach,
+        //    aby wskaźnik wrócił do domyślnego szarego koloru.
+        if (status === 'completed' || status === 'error') {
             setTimeout(() => {
-                this.indicator.classList.remove('completed');
-            }, 2000);
+                this.indicator.classList.remove(status);
+            }, 3000);
         }
     }
 }
