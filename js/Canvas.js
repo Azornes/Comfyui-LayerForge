@@ -560,7 +560,7 @@ export class Canvas {
 
     startCanvasMove(worldCoords) {
         this.interaction.mode = 'movingCanvas';
-        this.interaction.dragStart = { ...worldCoords };
+        this.interaction.dragStart = {...worldCoords};
         const initialX = this.snapToGrid(worldCoords.x - this.width / 2);
         const initialY = this.snapToGrid(worldCoords.y - this.height / 2);
 
@@ -700,6 +700,29 @@ export class Canvas {
 
         let newWidth = vecX * cos + vecY * sin;
         let newHeight = vecY * cos - vecX * sin;
+
+        if (isShiftPressed) {
+            const originalAspectRatio = o.width / o.height;
+            if (handle.length === 2) {
+
+                const potentialWidth = Math.abs(newWidth);
+                const potentialHeight = Math.abs(newHeight);
+
+                if (potentialWidth / originalAspectRatio > potentialHeight) {
+                    newHeight = newWidth / originalAspectRatio;
+                } else {
+                    newWidth = newHeight * originalAspectRatio;
+                }
+            } else {
+
+                if (signX !== 0) {
+                    newHeight = newWidth / originalAspectRatio;
+                } else {
+                    newWidth = newHeight * originalAspectRatio;
+                }
+            }
+        }
+
 
         let signX = handle.includes('e') ? 1 : (handle.includes('w') ? -1 : 0);
         let signY = handle.includes('s') ? 1 : (handle.includes('n') ? -1 : 0);
