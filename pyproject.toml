@@ -6,8 +6,8 @@ license = {file = "LICENSE"}
 dependencies = ["torch", "torchvision", "transformers", "aiohttp", "numpy", "tqdm", "Pillow"]
 
 [project.urls]
-Repository = "https://github.com/yichengup/Comfyui-Ycanvas"
-#  Used by Comfy Registry https://comfyregistry.org
+Repository = "https:
+
 
 [tool.comfy]
 PublisherId = ""

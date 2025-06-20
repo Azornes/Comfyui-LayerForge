@@ -8,57 +8,63 @@ export class Canvas {
         this.height = 512;
         this.layers = [];
         this.selectedLayer = null;
-        this.isRotating = false;
-        this.rotationStartAngle = 0;
-        this.rotationCenter = { x: 0, y: 0 };
         this.selectedLayers = [];
-        this.isCtrlPressed = false;
-        
+
+        this.viewport = {
+            x: -(this.width / 4),
+            y: -(this.height / 4),
+            zoom: 0.8,
+        };
+        this.interaction = {
+            mode: 'none', // 'none', 'panning', 'dragging', 'resizing', 'rotating', 'resizingCanvas'
+            panStart: {x: 0, y: 0},
+            dragStart: {x: 0, y: 0},
+            transformOrigin: {},
+            resizeHandle: null,
+            resizeAnchor: {x: 0, y: 0},
+            canvasResizeStart: {x: 0, y: 0},
+            isCtrlPressed: false,
+            lastClickTime: 0,
+        };
+        this.originalLayerPositions = new Map();
+        this.canvasResizeRect = null;
+
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
             alpha: false
         });
-        this.gridCache = document.createElement('canvas');
-        this.gridCacheCtx = this.gridCache.getContext('2d', {
-            alpha: false
-        });
-        
         this.renderAnimationFrame = null;
         this.lastRenderTime = 0;
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
-        
+
         this.dataInitialized = false;
         this.pendingDataCheck = null;
-        
         this.initCanvas();
         this.setupEventListeners();
         this.initNodeData();
-        
-        // 添加混合模式列表
+
         this.blendModes = [
-            { name: 'normal', label: '正常' },
-            { name: 'multiply', label: '正片叠底' },
-            { name: 'screen', label: '滤色' },
-            { name: 'overlay', label: '叠加' },
-            { name: 'darken', label: '变暗' },
-            { name: 'lighten', label: '变亮' },
-            { name: 'color-dodge', label: '颜色减淡' },
-            { name: 'color-burn', label: '颜色加深' },
-            { name: 'hard-light', label: '强光' },
-            { name: 'soft-light', label: '柔光' },
-            { name: 'difference', label: '差值' },
-            { name: 'exclusion', label: '排除' }
+            {name: '.', label: 'Normal'},
+            {name: '.', label: 'Multiply'},
+            {name: '.', label: 'Screen'},
+            {name: '.', label: 'Overlay'},
+            {name: '.', label: 'Darken'},
+            {name: '.', label: 'Lighten'},
+            {name: '.', label: 'Color Dodge'},
+            {name: '.', label: 'Color Burn'},
+            {name: '.', label: 'Hard Light'},
+            {name: '.', label: 'Soft Light'},
+            {name: '.', label: 'Difference'},
+            {name: '.', label: 'Exclusion'}
         ];
-        
         this.selectedBlendMode = null;
         this.blendOpacity = 100;
         this.isAdjustingOpacity = false;
-        
-        // 添加不透明度属性
+
         this.layers = this.layers.map(layer => ({
             ...layer,
-            opacity: 1 // 默认不透明度为 1
+            opacity: 1
         }));
     }
 
@@ -68,316 +74,466 @@ export class Canvas {
         this.canvas.style.border = '1px solid black';
         this.canvas.style.maxWidth = '100%';
         this.canvas.style.backgroundColor = '#606060';
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
     }
 
     setupEventListeners() {
-        let isDragging = false;
-        let lastX = 0;
-        let lastY = 0;
-        let isRotating = false;
-        let isResizing = false;
-        let resizeHandle = null;
-        let lastClickTime = 0;
-        let isAltPressed = false;
-        let dragStartX = 0;
-        let dragStartY = 0;
-        let originalWidth = 0;
-        let originalHeight = 0;
-        
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Control') {
-                this.isCtrlPressed = true;
-            }
-            if (e.key === 'Alt') {
-                isAltPressed = true;
-                e.preventDefault();
-            }
-            if (e.key === 'Delete' && this.selectedLayer) {
-                const index = this.layers.indexOf(this.selectedLayer);
-                this.removeLayer(index);
-            }
-        });
+        // Używamy .bind(this), aby upewnić się, że 'this' wewnątrz handlerów odnosi się do instancji klasy Canvas
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this), {passive: false});
 
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Control') {
-                this.isCtrlPressed = false;
-            }
-            if (e.key === 'Alt') {
-                isAltPressed = false;
-            }
-        });
+        document.addEventListener('keydown', this.handleKeyDown.bind(this));
+        document.addEventListener('keyup', this.handleKeyUp.bind(this));
+    }
 
-        this.canvas.addEventListener('mousedown', (e) => {
-            const currentTime = new Date().getTime();
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+    /**
+     * Resetuje stan interakcji do wartości domyślnych.
+     */
+    resetInteractionState() {
+        this.interaction.mode = 'none';
+        this.interaction.resizeHandle = null;
+        this.originalLayerPositions.clear();
+        this.canvasResizeRect = null;
+        this.canvas.style.cursor = 'default';
+    }
 
-            if (currentTime - lastClickTime < 300) {
-                this.selectedLayers = [];
-                this.selectedLayer = null;
-                this.render();
+    /**
+     * Główna metoda obsługująca wciśnięcie przycisku myszy.
+     */
+    handleMouseDown(e) {
+        const currentTime = Date.now();
+        const worldCoords = this.getMouseWorldCoordinates(e);
+
+        // Deselekcja po szybkim kliknięciu (pseudo-double-click)
+        if (currentTime - this.interaction.lastClickTime < 300) {
+            this.selectedLayers = [];
+            this.selectedLayer = null;
+            this.resetInteractionState();
+            this.render();
+            return;
+        }
+        this.interaction.lastClickTime = currentTime;
+
+        const handle = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
+
+        // 1. Interakcja z uchwytem (skalowanie/rotacja)
+        if (this.selectedLayer && handle) {
+            this.startLayerTransform(handle, worldCoords);
+            return;
+        }
+
+        const clickedLayerResult = this.getLayerAtPosition(worldCoords.x, worldCoords.y);
+
+        // 2. Interakcja z warstwą (przesuwanie/selekcja)
+        if (clickedLayerResult) {
+            if (e.shiftKey && this.selectedLayers.includes(clickedLayerResult.layer)) {
+                this.showBlendModeMenu(e.clientX, e.clientY);
                 return;
             }
-            lastClickTime = currentTime;
+            this.startLayerDrag(clickedLayerResult.layer, worldCoords);
+            return;
+        }
 
-            const result = this.getLayerAtPosition(mouseX, mouseY);
-            
-            if (result) {
-                const clickedLayer = result.layer;
-                
-                dragStartX = mouseX;
-                dragStartY = mouseY;
-                if (clickedLayer) {
-                    originalWidth = clickedLayer.width;
-                    originalHeight = clickedLayer.height;
-                }
-                
-                if (this.isCtrlPressed) {
-                    const index = this.selectedLayers.indexOf(clickedLayer);
-                    if (index === -1) {
-                        this.selectedLayers.push(clickedLayer);
-                        this.selectedLayer = clickedLayer;
-                    } else {
-                        this.selectedLayers.splice(index, 1);
-                        this.selectedLayer = this.selectedLayers[this.selectedLayers.length - 1] || null;
-                    }
-                } else {
-                    if (!this.selectedLayers.includes(clickedLayer)) {
-                        this.selectedLayers = [clickedLayer];
-                        this.selectedLayer = clickedLayer;
-                    }
-                }
+        // 3. Interakcja z tłem (zmiana rozmiaru canvasu lub panoramowanie)
+        if (e.shiftKey) {
+            this.startCanvasResize(worldCoords);
+        } else {
+            this.startPanning(e);
+        }
 
-                if (this.isRotationHandle(mouseX, mouseY)) {
-                    isRotating = true;
-                    this.rotationCenter.x = this.selectedLayer.x + this.selectedLayer.width/2;
-                    this.rotationCenter.y = this.selectedLayer.y + this.selectedLayer.height/2;
-                    this.rotationStartAngle = Math.atan2(
-                        mouseY - this.rotationCenter.y,
-                        mouseX - this.rotationCenter.x
-                    );
-                } else {
-                    isDragging = true;
-                    lastX = mouseX;
-                    lastY = mouseY;
-                }
-            } else {
-                if (!this.isCtrlPressed) {
-                    this.selectedLayers = [];
-                    this.selectedLayer = null;
-                }
-            }
+        this.render();
+    }
+
+    /**
+     * Główna metoda obsługująca ruch myszy.
+     */
+    handleMouseMove(e) {
+        const worldCoords = this.getMouseWorldCoordinates(e);
+
+        switch (this.interaction.mode) {
+            case 'panning':
+                this.panViewport(e);
+                break;
+            case 'dragging':
+                this.dragLayers(worldCoords);
+                break;
+            case 'resizing':
+                this.resizeLayerFromHandle(worldCoords, e.shiftKey);
+                break;
+            case 'rotating':
+                this.rotateLayerFromHandle(worldCoords, e.shiftKey);
+                break;
+            case 'resizingCanvas':
+                this.updateCanvasResize(worldCoords);
+                break;
+            default:
+                this.updateCursor(worldCoords);
+                break;
+        }
+    }
+
+    /**
+     * Metoda obsługująca puszczenie przycisku myszy.
+     */
+    handleMouseUp(e) {
+        if (this.interaction.mode === 'resizingCanvas') {
+            this.finalizeCanvasResize();
+        }
+        this.resetInteractionState();
+        this.render();
+    }
+
+    /**
+     * Metoda obsługująca opuszczenie obszaru canvas przez kursor.
+     */
+    handleMouseLeave(e) {
+        if (this.interaction.mode !== 'none') {
+            this.resetInteractionState();
             this.render();
-        });
+        }
+    }
 
-        this.canvas.addEventListener('mousemove', (e) => {
-            if (!this.selectedLayer) return;
-            
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            if (isDragging && isAltPressed) {
-                const dx = mouseX - dragStartX;
-                const dy = mouseY - dragStartY;
-                
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    this.selectedLayer.width = Math.max(20, originalWidth + dx);
-                } else {
-                    this.selectedLayer.height = Math.max(20, originalHeight + dy);
-                }
-                
-                this.render();
-            } else if (isDragging && !isAltPressed) {
-                const dx = mouseX - lastX;
-                const dy = mouseY - lastY;
-                
-                this.selectedLayers.forEach(layer => {
-                    layer.x += dx;
-                    layer.y += dy;
-                });
-                
-                lastX = mouseX;
-                lastY = mouseY;
-                this.render();
-            }
-
-            const cursor = isAltPressed && isDragging 
-                ? (Math.abs(mouseX - dragStartX) > Math.abs(mouseY - dragStartY) ? 'ew-resize' : 'ns-resize')
-                : this.getResizeHandle(mouseX, mouseY) 
-                    ? 'nw-resize' 
-                    : this.isRotationHandle(mouseX, mouseY) 
-                        ? 'grab' 
-                        : isDragging ? 'move' : 'default';
-            this.canvas.style.cursor = cursor;
-        });
-
-        this.canvas.addEventListener('mouseup', () => {
-            isDragging = false;
-            isRotating = false;
-        });
-
-        this.canvas.addEventListener('mouseleave', () => {
-            isDragging = false;
-            isRotating = false;
-        });
-
-        // 添加鼠标滚轮缩放功能
-        this.canvas.addEventListener('wheel', (e) => {
-            if (!this.selectedLayer) return;
-            
-            e.preventDefault();
+    /**
+     * Metoda obsługująca kółko myszy (zoom / skalowanie / rotacja warstwy).
+     */
+    handleWheel(e) {
+        e.preventDefault();
+        if (this.selectedLayer) {
             const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05;
-            
-            // 如果按住Shift键，则进行旋转而不是缩放
-            if (e.shiftKey) {
-                const rotateAngle = e.deltaY > 0 ? -5 : 5;
-                this.selectedLayers.forEach(layer => {
-                    layer.rotation = (layer.rotation + rotateAngle) % 360;
-                });
-            } else {
-                // 从鼠标位置为中心进行缩放
-                const rect = this.canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-                
-                this.selectedLayers.forEach(layer => {
-                    const centerX = layer.x + layer.width/2;
-                    const centerY = layer.y + layer.height/2;
-                    
-                    // 计算鼠标相对于图中心的位置
-                    const relativeX = mouseX - centerX;
-                    const relativeY = mouseY - centerY;
-                    
-                    // 更新尺寸
+            const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
+
+            this.selectedLayers.forEach(layer => {
+                if (e.shiftKey) { // Rotacja
+                    layer.rotation += rotationStep;
+                } else { // Skalowanie
                     const oldWidth = layer.width;
                     const oldHeight = layer.height;
                     layer.width *= scaleFactor;
                     layer.height *= scaleFactor;
-                    
-                    // 调整位置以保持鼠标指向的点不变
                     layer.x += (oldWidth - layer.width) / 2;
                     layer.y += (oldHeight - layer.height) / 2;
-                });
-            }
-            this.render();
-        });
-
-        // 优化旋转控制逻辑
-        let initialRotation = 0;
-        let initialAngle = 0;
-
-        this.canvas.addEventListener('mousemove', (e) => {
-            // ... 其他代码保持不变 ...
-
-            if (isRotating) {
-                const rect = this.canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-                
-                const centerX = this.selectedLayer.x + this.selectedLayer.width/2;
-                const centerY = this.selectedLayer.y + this.selectedLayer.height/2;
-                
-                // 计算当前角度
-                const angle = Math.atan2(mouseY - centerY, mouseX - centerX) * 180 / Math.PI;
-                
-                if (e.shiftKey) {
-                    // 按住Shift键时启用15度角度吸附
-                    const snap = 15;
-                    const rotation = Math.round((angle - initialAngle + initialRotation) / snap) * snap;
-                    this.selectedLayers.forEach(layer => {
-                        layer.rotation = rotation;
-                    });
-                } else {
-                    // 正常旋转
-                    const rotation = angle - initialAngle + initialRotation;
-                    this.selectedLayers.forEach(layer => {
-                        layer.rotation = rotation;
-                    });
                 }
-                this.render();
+            });
+        } else { // Zoom widoku
+            const worldCoords = this.getMouseWorldCoordinates(e);
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseBufferX = (e.clientX - rect.left) * (this.offscreenCanvas.width / rect.width);
+            const mouseBufferY = (e.clientY - rect.top) * (this.offscreenCanvas.height / rect.height);
+
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            const newZoom = this.viewport.zoom * zoomFactor;
+
+            this.viewport.zoom = Math.max(0.1, Math.min(10, newZoom));
+            this.viewport.x = worldCoords.x - (mouseBufferX / this.viewport.zoom);
+            this.viewport.y = worldCoords.y - (mouseBufferY / this.viewport.zoom);
+        }
+        this.render();
+    }
+
+    /**
+     * Metoda obsługująca wciśnięcie klawisza.
+     */
+    handleKeyDown(e) {
+        if (e.key === 'Control') this.interaction.isCtrlPressed = true;
+        if (e.key === 'Alt') {
+            e.preventDefault();
+        }
+
+        if (this.selectedLayer) {
+            if (e.key === 'Delete') {
+                const index = this.layers.indexOf(this.selectedLayer);
+                this.removeLayer(index);
+                return;
             }
-        });
 
-        this.canvas.addEventListener('mousedown', (e) => {
-            // ... 其他代码保持不变 ...
+            const step = e.shiftKey ? 10 : 1;
+            let needsRender = false;
 
-            if (this.isRotationHandle(mouseX, mouseY)) {
-                isRotating = true;
-                const centerX = this.selectedLayer.x + this.selectedLayer.width/2;
-                const centerY = this.selectedLayer.y + this.selectedLayer.height/2;
-                initialRotation = this.selectedLayer.rotation;
-                initialAngle = Math.atan2(mouseY - centerY, mouseX - centerX) * 180 / Math.PI;
-            }
-        });
-
-        // 添加键盘快捷键
-        document.addEventListener('keydown', (e) => {
-            if (!this.selectedLayer) return;
-            
-            const step = e.shiftKey ? 1 : 5; // Shift键按下时更精细的控制
-            
-            switch(e.key) {
+            switch (e.key) {
                 case 'ArrowLeft':
-                    this.selectedLayers.forEach(layer => layer.x -= step);
+                    this.selectedLayers.forEach(l => l.x -= step);
+                    needsRender = true;
                     break;
                 case 'ArrowRight':
-                    this.selectedLayers.forEach(layer => layer.x += step);
+                    this.selectedLayers.forEach(l => l.x += step);
+                    needsRender = true;
                     break;
                 case 'ArrowUp':
-                    this.selectedLayers.forEach(layer => layer.y -= step);
+                    this.selectedLayers.forEach(l => l.y -= step);
+                    needsRender = true;
                     break;
                 case 'ArrowDown':
-                    this.selectedLayers.forEach(layer => layer.y += step);
+                    this.selectedLayers.forEach(l => l.y += step);
+                    needsRender = true;
                     break;
                 case '[':
-                    this.selectedLayers.forEach(layer => layer.rotation -= step);
+                    this.selectedLayers.forEach(l => l.rotation -= step);
+                    needsRender = true;
                     break;
                 case ']':
-                    this.selectedLayers.forEach(layer => layer.rotation += step);
+                    this.selectedLayers.forEach(l => l.rotation += step);
+                    needsRender = true;
                     break;
             }
-            
-            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '[', ']'].includes(e.key)) {
+
+            if (needsRender) {
                 e.preventDefault();
                 this.render();
             }
-        });
+        }
+    }
 
-        this.canvas.addEventListener('mousedown', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+    /**
+     * Metoda obsługująca puszczenie klawisza.
+     */
+    handleKeyUp(e) {
+        if (e.key === 'Control') this.interaction.isCtrlPressed = false;
+    }
 
-            if (e.shiftKey) {
-                const result = this.getLayerAtPosition(mouseX, mouseY);
-                if (result) {
-                    this.selectedLayer = result.layer;
-                    this.showBlendModeMenu(e.clientX, e.clientY);
-                    e.preventDefault(); // 阻止默认行为
-                    return;
-                }
+    updateCursor(worldCoords) {
+        const handle = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        if (handle) {
+            const cursorMap = {
+                'n': 'ns-resize', 's': 'ns-resize', 'e': 'ew-resize', 'w': 'ew-resize',
+                'nw': 'nwse-resize', 'se': 'nwse-resize', 'ne': 'nesw-resize', 'sw': 'nesw-resize',
+                'rot': 'grab'
+            };
+            this.canvas.style.cursor = cursorMap[handle];
+        } else if (this.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
+            this.canvas.style.cursor = 'move';
+        } else {
+            this.canvas.style.cursor = 'default';
+        }
+    }
+
+    startLayerTransform(handle, worldCoords) {
+        const layer = this.selectedLayer;
+        this.interaction.transformOrigin = {
+            x: layer.x, y: layer.y,
+            width: layer.width, height: layer.height,
+            rotation: layer.rotation,
+            centerX: layer.x + layer.width / 2,
+            centerY: layer.y + layer.height / 2
+        };
+        this.interaction.dragStart = {...worldCoords};
+
+        if (handle === 'rot') {
+            this.interaction.mode = 'rotating';
+        } else {
+            this.interaction.mode = 'resizing';
+            this.interaction.resizeHandle = handle;
+            const handles = this.getHandles(layer);
+            const oppositeHandleKey = {
+                'n': 's', 's': 'n', 'e': 'w', 'w': 'e',
+                'nw': 'se', 'se': 'nw', 'ne': 'sw', 'sw': 'ne'
+            }[handle];
+            this.interaction.resizeAnchor = handles[oppositeHandleKey];
+        }
+        this.render();
+    }
+
+    startLayerDrag(layer, worldCoords) {
+        this.interaction.mode = 'dragging';
+        this.interaction.dragStart = {...worldCoords};
+
+        if (this.interaction.isCtrlPressed) {
+            const index = this.selectedLayers.indexOf(layer);
+            if (index === -1) this.selectedLayers.push(layer);
+            else this.selectedLayers.splice(index, 1);
+        } else {
+            if (!this.selectedLayers.includes(layer)) {
+                this.selectedLayers = [layer];
             }
-            
-            // ... 其余现的mousedown处理代 ...
+        }
+
+        this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+
+        this.originalLayerPositions.clear();
+        this.selectedLayers.forEach(l => {
+            this.originalLayerPositions.set(l, {x: l.x, y: l.y});
         });
     }
 
+    startCanvasResize(worldCoords) {
+        this.interaction.mode = 'resizingCanvas';
+        const startX = this.snapToGrid(worldCoords.x);
+        const startY = this.snapToGrid(worldCoords.y);
+        this.interaction.canvasResizeStart = {x: startX, y: startY};
+        this.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
+        this.render();
+    }
+
+    startPanning(e) {
+        if (!this.interaction.isCtrlPressed) {
+            this.selectedLayers = [];
+            this.selectedLayer = null;
+        }
+        this.interaction.mode = 'panning';
+        this.interaction.panStart = {x: e.clientX, y: e.clientY};
+    }
+
+    panViewport(e) {
+        const dx = e.clientX - this.interaction.panStart.x;
+        const dy = e.clientY - this.interaction.panStart.y;
+        this.viewport.x -= dx / this.viewport.zoom;
+        this.viewport.y -= dy / this.viewport.zoom;
+        this.interaction.panStart = {x: e.clientX, y: e.clientY};
+        this.render();
+    }
+
+    dragLayers(worldCoords) {
+        const totalDx = worldCoords.x - this.interaction.dragStart.x;
+        const totalDy = worldCoords.y - this.interaction.dragStart.y;
+        let finalDx = totalDx, finalDy = totalDy;
+
+        if (this.interaction.isCtrlPressed && this.selectedLayer) {
+            const originalPos = this.originalLayerPositions.get(this.selectedLayer);
+            if (originalPos) {
+                const tempLayerForSnap = {
+                    ...this.selectedLayer,
+                    x: originalPos.x + totalDx,
+                    y: originalPos.y + totalDy
+                };
+                const snapAdjustment = this.getSnapAdjustment(tempLayerForSnap);
+                finalDx += snapAdjustment.dx;
+                finalDy += snapAdjustment.dy;
+            }
+        }
+
+        this.selectedLayers.forEach(layer => {
+            const originalPos = this.originalLayerPositions.get(layer);
+            if (originalPos) {
+                layer.x = originalPos.x + finalDx;
+                layer.y = originalPos.y + finalDy;
+            }
+        });
+        this.render();
+    }
+
+    resizeLayerFromHandle(worldCoords, isShiftPressed) {
+        let mouseX = worldCoords.x;
+        let mouseY = worldCoords.y;
+
+        if (this.interaction.isCtrlPressed) {
+            const snapThreshold = 10 / this.viewport.zoom;
+            const snappedMouseX = this.snapToGrid(mouseX);
+            if (Math.abs(mouseX - snappedMouseX) < snapThreshold) mouseX = snappedMouseX;
+            const snappedMouseY = this.snapToGrid(mouseY);
+            if (Math.abs(mouseY - snappedMouseY) < snapThreshold) mouseY = snappedMouseY;
+        }
+
+        const layer = this.selectedLayer;
+        const o = this.interaction.transformOrigin;
+        const handle = this.interaction.resizeHandle;
+        const anchor = this.interaction.resizeAnchor;
+
+        const rad = o.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        const vecX = mouseX - anchor.x;
+        const vecY = mouseY - anchor.y;
+
+        let newWidth = vecX * cos + vecY * sin;
+        let newHeight = vecY * cos - vecX * sin;
+
+        let signX = handle.includes('e') ? 1 : (handle.includes('w') ? -1 : 0);
+        let signY = handle.includes('s') ? 1 : (handle.includes('n') ? -1 : 0);
+
+        newWidth *= signX;
+        newHeight *= signY;
+
+        if (signX === 0) newWidth = o.width;
+        if (signY === 0) newHeight = o.height;
+
+        if (newWidth < 10) newWidth = 10;
+        if (newHeight < 10) newHeight = 10;
+
+        layer.width = newWidth;
+        layer.height = newHeight;
+
+        const deltaW = newWidth - o.width;
+        const deltaH = newHeight - o.height;
+
+        const shiftX = (deltaW / 2) * signX;
+        const shiftY = (deltaH / 2) * signY;
+
+        const worldShiftX = shiftX * cos - shiftY * sin;
+        const worldShiftY = shiftX * sin + shiftY * cos;
+
+        const newCenterX = o.centerX + worldShiftX;
+        const newCenterY = o.centerY + worldShiftY;
+
+        layer.x = newCenterX - layer.width / 2;
+        layer.y = newCenterY - layer.height / 2;
+        this.render();
+    }
+
+    rotateLayerFromHandle(worldCoords, isShiftPressed) {
+        const o = this.interaction.transformOrigin;
+        const startAngle = Math.atan2(this.interaction.dragStart.y - o.centerY, this.interaction.dragStart.x - o.centerX);
+        const currentAngle = Math.atan2(worldCoords.y - o.centerY, worldCoords.x - o.centerX);
+        let angleDiff = (currentAngle - startAngle) * 180 / Math.PI;
+        let newRotation = o.rotation + angleDiff;
+
+        if (isShiftPressed) {
+            newRotation = Math.round(newRotation / 15) * 15;
+        }
+
+        this.selectedLayer.rotation = newRotation;
+        this.render();
+    }
+
+    updateCanvasResize(worldCoords) {
+        const snappedMouseX = this.snapToGrid(worldCoords.x);
+        const snappedMouseY = this.snapToGrid(worldCoords.y);
+        const start = this.interaction.canvasResizeStart;
+
+        this.canvasResizeRect.x = Math.min(snappedMouseX, start.x);
+        this.canvasResizeRect.y = Math.min(snappedMouseY, start.y);
+        this.canvasResizeRect.width = Math.abs(snappedMouseX - start.x);
+        this.canvasResizeRect.height = Math.abs(snappedMouseY - start.y);
+        this.render();
+    }
+
+    finalizeCanvasResize() {
+        if (this.canvasResizeRect && this.canvasResizeRect.width > 1 && this.canvasResizeRect.height > 1) {
+            const newWidth = Math.round(this.canvasResizeRect.width);
+            const newHeight = Math.round(this.canvasResizeRect.height);
+            const rectX = this.canvasResizeRect.x;
+            const rectY = this.canvasResizeRect.y;
+
+            this.updateCanvasSize(newWidth, newHeight);
+
+            this.layers.forEach(layer => {
+                layer.x -= rectX;
+                layer.y -= rectY;
+            });
+
+            this.viewport.x -= rectX;
+            this.viewport.y -= rectY;
+        }
+    }
+
+
     isRotationHandle(x, y) {
         if (!this.selectedLayer) return false;
-        
-        const handleX = this.selectedLayer.x + this.selectedLayer.width/2;
+
+        const handleX = this.selectedLayer.x + this.selectedLayer.width / 2;
         const handleY = this.selectedLayer.y - 20;
         const handleRadius = 5;
-        
+
         return Math.sqrt(Math.pow(x - handleX, 2) + Math.pow(y - handleY, 2)) <= handleRadius;
     }
 
     addLayer(image) {
         try {
             console.log("Adding layer with image:", image);
-            
+
             const layer = {
                 image: image,
                 x: (this.width - image.width) / 2,
@@ -386,14 +542,14 @@ export class Canvas {
                 height: image.height,
                 rotation: 0,
                 zIndex: this.layers.length,
-                blendMode: 'normal',  // 添加默认混合模式
-                opacity: 1  // 添加默认透明度
+                blendMode: 'normal',
+                opacity: 1
             };
-            
+
             this.layers.push(layer);
             this.selectedLayer = layer;
             this.render();
-            
+
             console.log("Layer added successfully");
         } catch (error) {
             console.error("Error adding layer:", error);
@@ -407,6 +563,62 @@ export class Canvas {
             this.selectedLayer = this.layers[this.layers.length - 1] || null;
             this.render();
         }
+    }
+
+    getMouseWorldCoordinates(e) {
+        const rect = this.canvas.getBoundingClientRect();
+
+        const mouseX_DOM = e.clientX - rect.left;
+        const mouseY_DOM = e.clientY - rect.top;
+
+        const scaleX = this.offscreenCanvas.width / rect.width;
+        const scaleY = this.offscreenCanvas.height / rect.height;
+
+        const mouseX_Buffer = mouseX_DOM * scaleX;
+        const mouseY_Buffer = mouseY_DOM * scaleY;
+
+        const worldX = (mouseX_Buffer / this.viewport.zoom) + this.viewport.x;
+        const worldY = (mouseY_Buffer / this.viewport.zoom) + this.viewport.y;
+
+        return {x: worldX, y: worldY};
+    }
+
+    snapToGrid(value, gridSize = 64) {
+        return Math.round(value / gridSize) * gridSize;
+    }
+
+    getSnapAdjustment(layer, gridSize = 64, snapThreshold = 10) {
+        if (!layer) {
+            return {dx: 0, dy: 0};
+        }
+
+        const layerEdges = {
+            left: layer.x,
+            right: layer.x + layer.width,
+            top: layer.y,
+            bottom: layer.y + layer.height
+        };
+        const x_adjustments = [
+            {type: 'x', delta: this.snapToGrid(layerEdges.left, gridSize) - layerEdges.left},
+            {type: 'x', delta: this.snapToGrid(layerEdges.right, gridSize) - layerEdges.right}
+        ];
+
+        const y_adjustments = [
+            {type: 'y', delta: this.snapToGrid(layerEdges.top, gridSize) - layerEdges.top},
+            {type: 'y', delta: this.snapToGrid(layerEdges.bottom, gridSize) - layerEdges.bottom}
+        ];
+        x_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
+        y_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
+        const bestXSnap = x_adjustments
+            .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
+            .sort((a, b) => a.abs - b.abs)[0];
+        const bestYSnap = y_adjustments
+            .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
+            .sort((a, b) => a.abs - b.abs)[0];
+        return {
+            dx: bestXSnap ? bestXSnap.delta : 0,
+            dy: bestYSnap ? bestYSnap.delta : 0
+        };
     }
 
     moveLayer(fromIndex, toIndex) {
@@ -436,22 +648,10 @@ export class Canvas {
     updateCanvasSize(width, height) {
         this.width = width;
         this.height = height;
-        
+
         this.canvas.width = width;
         this.canvas.height = height;
-        
-        // 调整所有图层的位置和大小
-        this.layers.forEach(layer => {
-            const scale = Math.min(
-                width / layer.image.width * 0.8,
-                height / layer.image.height * 0.8
-            );
-            layer.width = layer.image.width * scale;
-            layer.height = layer.image.height * scale;
-            layer.x = (width - layer.width) / 2;
-            layer.y = (height - layer.height) / 2;
-        });
-        
+
         this.render();
     }
 
@@ -460,7 +660,6 @@ export class Canvas {
             this.isDirty = true;
             return;
         }
-        
         this.renderAnimationFrame = requestAnimationFrame(() => {
             const now = performance.now();
             if (now - this.lastRenderTime >= this.renderInterval) {
@@ -468,7 +667,7 @@ export class Canvas {
                 this.actualRender();
                 this.isDirty = false;
             }
-            
+
             if (this.isDirty) {
                 this.renderAnimationFrame = null;
                 this.render();
@@ -478,255 +677,394 @@ export class Canvas {
         });
     }
 
+
     actualRender() {
-        if (this.offscreenCanvas.width !== this.width || 
-            this.offscreenCanvas.height !== this.height) {
-            this.offscreenCanvas.width = this.width;
-            this.offscreenCanvas.height = this.height;
+        if (this.offscreenCanvas.width !== this.canvas.clientWidth ||
+            this.offscreenCanvas.height !== this.canvas.clientHeight) {
+            const newWidth = Math.max(1, this.canvas.clientWidth);
+            const newHeight = Math.max(1, this.canvas.clientHeight);
+            this.offscreenCanvas.width = newWidth;
+            this.offscreenCanvas.height = newHeight;
         }
 
         const ctx = this.offscreenCtx;
-        
+
         ctx.fillStyle = '#606060';
-        ctx.fillRect(0, 0, this.width, this.height);
-        
-        this.drawCachedGrid();
-        
+        ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
+
+        ctx.save();
+        ctx.scale(this.viewport.zoom, this.viewport.zoom);
+        ctx.translate(-this.viewport.x, -this.viewport.y);
+
+        this.drawGrid(ctx);
+        this.drawCanvasOutline(ctx);
+
         const sortedLayers = [...this.layers].sort((a, b) => a.zIndex - b.zIndex);
-        
         sortedLayers.forEach(layer => {
             if (!layer.image) return;
-            
             ctx.save();
-            
-            // 应用混合模式和不透明度
+            const currentTransform = ctx.getTransform();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.globalCompositeOperation = layer.blendMode || 'normal';
             ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-            
-            const centerX = layer.x + layer.width/2;
-            const centerY = layer.y + layer.height/2;
-            const rad = layer.rotation * Math.PI / 180;
-            
-            // 1. 先设置变换
-            ctx.setTransform(
-                Math.cos(rad), Math.sin(rad),
-                -Math.sin(rad), Math.cos(rad),
-                centerX, centerY
-            );
-            
+            ctx.setTransform(currentTransform);
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            ctx.translate(centerX, centerY);
+            ctx.rotate(layer.rotation * Math.PI / 180);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-            
-            // 2. 先绘制原始图像
             ctx.drawImage(
-                layer.image,
-                -layer.width/2,
-                -layer.height/2,
+                layer.image, -layer.width / 2, -layer.height / 2,
                 layer.width,
                 layer.height
             );
-            
-            // 3. 再应用遮罩
-            if (layer.mask) {
-                try {
-                    console.log("Applying mask to layer");
-                    const maskCanvas = document.createElement('canvas');
-                    const maskCtx = maskCanvas.getContext('2d');
-                    maskCanvas.width = layer.width;
-                    maskCanvas.height = layer.height;
-                    
-                    const maskImageData = maskCtx.createImageData(layer.width, layer.height);
-                    const maskData = new Float32Array(layer.mask);
-                    for (let i = 0; i < maskData.length; i++) {
-                        maskImageData.data[i * 4] = 
-                        maskImageData.data[i * 4 + 1] = 
-                        maskImageData.data[i * 4 + 2] = 255;
-                        maskImageData.data[i * 4 + 3] = maskData[i] * 255;
-                    }
-                    maskCtx.putImageData(maskImageData, 0, 0);
-                    
-                    // 使用destination-in混合模式
-                    ctx.globalCompositeOperation = 'destination-in';
-                    ctx.drawImage(maskCanvas, 
-                        -layer.width/2, -layer.height/2,
-                        layer.width, layer.height
-                    );
-                    
-                    console.log("Mask applied successfully");
-                } catch (error) {
-                    console.error("Error applying mask:", error);
-                }
+            if (layer.mask) { /* Logika maski */
             }
-            
-            // 4. 最后绘制选择框
             if (this.selectedLayers.includes(layer)) {
-                this.drawSelectionFrame(layer);
+                this.drawSelectionFrame(ctx, layer);
             }
-            
             ctx.restore();
         });
-        
+        if (this.isResizingCanvas && this.canvasResizeRect) {
+            const rect = this.canvasResizeRect;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.lineWidth = 2 / this.viewport.zoom;
+            ctx.setLineDash([8 / this.viewport.zoom, 4 / this.viewport.zoom]);
+            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+            ctx.setLineDash([]);
+            ctx.restore();
+            if (rect.width > 0 && rect.height > 0) {
+                const text = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
+                const textWorldX = rect.x + rect.width / 2;
+                const textWorldY = rect.y + rect.height + (20 / this.viewport.zoom);
+
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+                const screenX = (textWorldX - this.viewport.x) * this.viewport.zoom;
+                const screenY = (textWorldY - this.viewport.y) * this.viewport.zoom;
+
+                ctx.font = "14px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                const textMetrics = ctx.measureText(text);
+                const bgWidth = textMetrics.width + 10;
+                const bgHeight = 22;
+
+                ctx.fillStyle = "rgba(0, 128, 0, 0.7)";
+                ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
+
+                ctx.fillStyle = "white";
+                ctx.fillText(text, screenX, screenY);
+
+                ctx.restore();
+            }
+        }
+
+        if (this.selectedLayer) {
+            this.selectedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                const currentWidth = Math.round(layer.width);
+                const currentHeight = Math.round(layer.height);
+                const rotation = Math.round(layer.rotation % 360);
+                const text = `${currentWidth}x${currentHeight} | ${rotation}°`;
+
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                const rad = layer.rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+
+                const halfW = layer.width / 2;
+                const halfH = layer.height / 2;
+
+                const localCorners = [
+                    {x: -halfW, y: -halfH},
+                    {x: halfW, y: -halfH},
+                    {x: halfW, y: halfH},
+                    {x: -halfW, y: halfH}
+                ];
+                const worldCorners = localCorners.map(p => ({
+                    x: centerX + p.x * cos - p.y * sin,
+                    y: centerY + p.x * sin + p.y * cos
+                }));
+                let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
+                worldCorners.forEach(p => {
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    maxY = Math.max(maxY, p.y);
+                });
+                const padding = 20 / this.viewport.zoom;
+                const textWorldX = (minX + maxX) / 2;
+                const textWorldY = maxY + padding;
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+                const screenX = (textWorldX - this.viewport.x) * this.viewport.zoom;
+                const screenY = (textWorldY - this.viewport.y) * this.viewport.zoom;
+
+                ctx.font = "14px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                const textMetrics = ctx.measureText(text);
+                const textBgWidth = textMetrics.width + 10;
+                const textBgHeight = 22;
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(screenX - textBgWidth / 2, screenY - textBgHeight / 2, textBgWidth, textBgHeight);
+
+                ctx.fillStyle = "white";
+                ctx.fillText(text, screenX, screenY);
+
+                ctx.restore();
+            });
+        }
+
+        ctx.restore();
+
+        if (this.canvas.width !== this.offscreenCanvas.width || this.canvas.height !== this.offscreenCanvas.height) {
+            this.canvas.width = this.offscreenCanvas.width;
+            this.canvas.height = this.offscreenCanvas.height;
+        }
         this.ctx.drawImage(this.offscreenCanvas, 0, 0);
     }
 
-    drawCachedGrid() {
-        if (this.gridCache.width !== this.width || 
-            this.gridCache.height !== this.height) {
-            this.gridCache.width = this.width;
-            this.gridCache.height = this.height;
-            
-            const ctx = this.gridCacheCtx;
-            const gridSize = 20;
-            
-            ctx.beginPath();
-            ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 0.5;
-            
-            for(let y = 0; y < this.height; y += gridSize) {
-                ctx.moveTo(0, y);
-                ctx.lineTo(this.width, y);
-            }
-            
-            for(let x = 0; x < this.width; x += gridSize) {
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, this.height);
-            }
-            
-            ctx.stroke();
+    drawGrid(ctx) {
+        const gridSize = 64;
+        const lineWidth = 0.5 / this.viewport.zoom;
+
+        const viewLeft = this.viewport.x;
+        const viewTop = this.viewport.y;
+        const viewRight = this.viewport.x + this.offscreenCanvas.width / this.viewport.zoom;
+        const viewBottom = this.viewport.y + this.offscreenCanvas.height / this.viewport.zoom;
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#707070';
+        ctx.lineWidth = lineWidth;
+
+        for (let x = Math.floor(viewLeft / gridSize) * gridSize; x < viewRight; x += gridSize) {
+            ctx.moveTo(x, viewTop);
+            ctx.lineTo(x, viewBottom);
         }
-        
-        this.offscreenCtx.drawImage(this.gridCache, 0, 0);
+
+        for (let y = Math.floor(viewTop / gridSize) * gridSize; y < viewBottom; y += gridSize) {
+            ctx.moveTo(viewLeft, y);
+            ctx.lineTo(viewRight, y);
+        }
+
+        ctx.stroke();
     }
 
-    drawSelectionFrame(layer) {
-        const ctx = this.offscreenCtx;
-        
+    drawCanvasOutline(ctx) {
         ctx.beginPath();
-        
-        ctx.rect(-layer.width/2, -layer.height/2, layer.width, layer.height);
-        
-        ctx.moveTo(0, -layer.height/2);
-        ctx.lineTo(0, -layer.height/2 - 20);
-        
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.lineWidth = 2 / this.viewport.zoom;
+        ctx.setLineDash([10 / this.viewport.zoom, 5 / this.viewport.zoom]);
+
+
+        ctx.rect(0, 0, this.width, this.height);
+
         ctx.stroke();
-        
-        ctx.beginPath();
-        
-        const points = [
-            {x: 0, y: -layer.height/2 - 20},
-            {x: -layer.width/2, y: -layer.height/2},
-            {x: layer.width/2, y: -layer.height/2},
-            {x: layer.width/2, y: layer.height/2},
-            {x: -layer.width/2, y: layer.height/2}
-        ];
-        
-        points.forEach(point => {
-            ctx.moveTo(point.x, point.y);
-            ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
-        });
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.stroke();
+        ctx.setLineDash([]);
     }
+
+    drawSelectionFrame(ctx, layer) {
+        const lineWidth = 2 / this.viewport.zoom;
+        const handleRadius = 5 / this.viewport.zoom;
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.rect(-layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -layer.height / 2);
+        ctx.lineTo(0, -layer.height / 2 - 20 / this.viewport.zoom);
+        ctx.stroke();
+        const handles = this.getHandles(layer);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1 / this.viewport.zoom;
+
+        for (const key in handles) {
+            const point = handles[key];
+            ctx.beginPath();
+            const localX = point.x - (layer.x + layer.width / 2);
+            const localY = point.y - (layer.y + layer.height / 2);
+
+            const rad = -layer.rotation * Math.PI / 180;
+            const rotatedX = localX * Math.cos(rad) - localY * Math.sin(rad);
+            const rotatedY = localX * Math.sin(rad) + localY * Math.cos(rad);
+
+            ctx.arc(rotatedX, rotatedY, handleRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+    }
+
+
+    getHandles(layer) {
+        if (!layer) return {};
+
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
+        const rad = layer.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        const halfW = layer.width / 2;
+        const halfH = layer.height / 2;
+        const localHandles = {
+            'n': {x: 0, y: -halfH},
+            'ne': {x: halfW, y: -halfH},
+            'e': {x: halfW, y: 0},
+            'se': {x: halfW, y: halfH},
+            's': {x: 0, y: halfH},
+            'sw': {x: -halfW, y: halfH},
+            'w': {x: -halfW, y: 0},
+            'nw': {x: -halfW, y: -halfH},
+            'rot': {x: 0, y: -halfH - 20 / this.viewport.zoom}
+        };
+
+        const worldHandles = {};
+        for (const key in localHandles) {
+            const p = localHandles[key];
+            worldHandles[key] = {
+                x: centerX + (p.x * cos - p.y * sin),
+                y: centerY + (p.x * sin + p.y * cos)
+            };
+        }
+        return worldHandles;
+    }
+
+    getHandleAtPosition(worldX, worldY) {
+        if (!this.selectedLayer) return null;
+
+        const handles = this.getHandles(this.selectedLayer);
+        const handleRadius = 8 / this.viewport.zoom;
+
+        for (const key in handles) {
+            const handlePos = handles[key];
+            const dx = worldX - handlePos.x;
+            const dy = worldY - handlePos.y;
+            if (dx * dx + dy * dy <= handleRadius * handleRadius) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    worldToLocal(worldX, worldY, layerProps) {
+        const dx = worldX - layerProps.centerX;
+        const dy = worldY - layerProps.centerY;
+        const rad = -layerProps.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        return {
+            x: dx * cos - dy * sin,
+            y: dx * sin + dy * cos
+        };
+    }
+
+    localToWorld(localX, localY, layerProps) {
+        const rad = layerProps.rotation * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        return {
+            x: layerProps.centerX + localX * cos - localY * sin,
+            y: layerProps.centerY + localX * sin + localY * cos
+        };
+    }
+
 
     async saveToServer(fileName) {
         return new Promise((resolve) => {
-            // 创建临时画布
+
             const tempCanvas = document.createElement('canvas');
             const maskCanvas = document.createElement('canvas');
             tempCanvas.width = this.width;
             tempCanvas.height = this.height;
             maskCanvas.width = this.width;
             maskCanvas.height = this.height;
-            
+
             const tempCtx = tempCanvas.getContext('2d');
             const maskCtx = maskCanvas.getContext('2d');
 
-            // 填充白色背景
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.width, this.height);
-            
-            // 填充黑色背景作为遮罩的基础
+
             maskCtx.fillStyle = '#000000';
             maskCtx.fillRect(0, 0, this.width, this.height);
 
-            // 按照zIndex顺序绘制所有图层
             this.layers.sort((a, b) => a.zIndex - b.zIndex).forEach(layer => {
-                // 绘制主图像，包含混合模式和透明度
+
                 tempCtx.save();
-                
-                // 应用混合模式和透明度
+
                 tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
                 tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                
-                tempCtx.translate(layer.x + layer.width/2, layer.y + layer.height/2);
+
+                tempCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
                 tempCtx.drawImage(
                     layer.image,
-                    -layer.width/2,
-                    -layer.height/2,
+                    -layer.width / 2,
+                    -layer.height / 2,
                     layer.width,
                     layer.height
                 );
                 tempCtx.restore();
-                
-                // 处理遮罩
+
                 maskCtx.save();
-                maskCtx.translate(layer.x + layer.width/2, layer.y + layer.height/2);
+                maskCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 maskCtx.rotate(layer.rotation * Math.PI / 180);
                 maskCtx.globalCompositeOperation = 'lighter';
-                
-                // 如果图层有遮罩，使用它
+
                 if (layer.mask) {
-                    maskCtx.drawImage(layer.mask, -layer.width/2, -layer.height/2, layer.width, layer.height);
+                    maskCtx.drawImage(layer.mask, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 } else {
-                    // 如果没有遮罩，使用图层的alpha通道和透明度值
+
                     const layerCanvas = document.createElement('canvas');
                     layerCanvas.width = layer.width;
                     layerCanvas.height = layer.height;
                     const layerCtx = layerCanvas.getContext('2d');
                     layerCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
                     const imageData = layerCtx.getImageData(0, 0, layer.width, layer.height);
-                    
-                    // 创建遮罩画布
+
                     const alphaCanvas = document.createElement('canvas');
                     alphaCanvas.width = layer.width;
                     alphaCanvas.height = layer.height;
                     const alphaCtx = alphaCanvas.getContext('2d');
                     const alphaData = alphaCtx.createImageData(layer.width, layer.height);
-                    
-                    // 提取alpha通道并应用图层透明度
+
                     for (let i = 0; i < imageData.data.length; i += 4) {
                         const alpha = imageData.data[i + 3] * (layer.opacity !== undefined ? layer.opacity : 1);
                         alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = alpha;
                         alphaData.data[i + 3] = 255;
                     }
-                    
+
                     alphaCtx.putImageData(alphaData, 0, 0);
-                    maskCtx.drawImage(alphaCanvas, -layer.width/2, -layer.height/2, layer.width, layer.height);
+                    maskCtx.drawImage(alphaCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 }
                 maskCtx.restore();
             });
 
-            // 反转最终的遮罩
             const finalMaskData = maskCtx.getImageData(0, 0, this.width, this.height);
             for (let i = 0; i < finalMaskData.data.length; i += 4) {
-                finalMaskData.data[i] = 
-                finalMaskData.data[i + 1] = 
-                finalMaskData.data[i + 2] = 255 - finalMaskData.data[i];
+                finalMaskData.data[i] =
+                    finalMaskData.data[i + 1] =
+                        finalMaskData.data[i + 2] = 255 - finalMaskData.data[i];
                 finalMaskData.data[i + 3] = 255;
             }
             maskCtx.putImageData(finalMaskData, 0, 0);
 
-            // 保存主图像和遮罩
             tempCanvas.toBlob(async (blob) => {
                 const formData = new FormData();
                 formData.append("image", blob, fileName);
                 formData.append("overwrite", "true");
-                
+
                 try {
                     const resp = await fetch("/upload/image", {
                         method: "POST",
@@ -734,7 +1072,7 @@ export class Canvas {
                     });
 
                     if (resp.status === 200) {
-                        // 保存遮罩图像
+
                         maskCanvas.toBlob(async (maskBlob) => {
                             const maskFormData = new FormData();
                             const maskFileName = fileName.replace('.png', '_mask.png');
@@ -772,6 +1110,47 @@ export class Canvas {
         });
     }
 
+    async getFlattenedCanvasAsBlob() {
+        return new Promise((resolve, reject) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.width;
+            tempCanvas.height = this.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            const sortedLayers = [...this.layers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2,
+                    -layer.height / 2,
+                    layer.width,
+                    layer.height
+                );
+
+                tempCtx.restore();
+            });
+
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas toBlob failed.'));
+                }
+            }, 'image/png');
+        });
+    }
+
+
     moveLayerUp() {
         if (!this.selectedLayer) return;
         const index = this.layers.indexOf(this.selectedLayer);
@@ -796,80 +1175,31 @@ export class Canvas {
         }
     }
 
-    getLayerAtPosition(x, y) {
-        // 获取画布的实际显示尺寸和位置
-        const rect = this.canvas.getBoundingClientRect();
-        
-        // 计算画布的缩放比例
-        const displayWidth = rect.width;
-        const displayHeight = rect.height;
-        const scaleX = this.width / displayWidth;
-        const scaleY = this.height / displayHeight;
-        
-        // 计算鼠标在画布上的实际位置
-        const canvasX = (x) * scaleX;
-        const canvasY = (y) * scaleY;
-        
-        // 从上层到下层遍历所有图层
+
+    getLayerAtPosition(worldX, worldY) {
+
         for (let i = this.layers.length - 1; i >= 0; i--) {
             const layer = this.layers[i];
-            
-            // 计算旋转后的点击位置
-            const centerX = layer.x + layer.width/2;
-            const centerY = layer.y + layer.height/2;
+
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+
             const rad = -layer.rotation * Math.PI / 180;
-            
-            // 将点击坐标转换到图层的本地坐标系
-            const dx = canvasX - centerX;
-            const dy = canvasY - centerY;
-            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad) + centerX;
-            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad) + centerY;
-            
-            // 检查点击位置是否在图层范围内
-            if (rotatedX >= layer.x && 
-                rotatedX <= layer.x + layer.width &&
-                rotatedY >= layer.y && 
-                rotatedY <= layer.y + layer.height) {
-                
-                // 创建临时画布来检查透明度
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = layer.width;
-                tempCanvas.height = layer.height;
-                
-                // 绘制图层到临时画布
-                tempCtx.save();
-                tempCtx.clearRect(0, 0, layer.width, layer.height);
-                tempCtx.drawImage(
-                    layer.image,
-                    0,
-                    0,
-                    layer.width,
-                    layer.height
-                );
-                tempCtx.restore();
-                
-                // 获取点击位置的像素数据
-                const localX = rotatedX - layer.x;
-                const localY = rotatedY - layer.y;
-                
-                try {
-                    const pixel = tempCtx.getImageData(
-                        Math.round(localX), 
-                        Math.round(localY), 
-                        1, 1
-                    ).data;
-                    // 检查像素的alpha值
-                    if (pixel[3] > 10) {
-                        return {
-                            layer: layer,
-                            localX: localX,
-                            localY: localY
-                        };
-                    }
-                } catch(e) {
-                    console.error("Error checking pixel transparency:", e);
-                }
+            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+            if (Math.abs(rotatedX) <= layer.width / 2 && Math.abs(rotatedY) <= layer.height / 2) {
+                const localX = rotatedX + layer.width / 2;
+                const localY = rotatedY + layer.height / 2;
+
+                return {
+                    layer: layer,
+                    localX: localX,
+                    localY: localY
+                };
             }
         }
         return null;
@@ -877,12 +1207,15 @@ export class Canvas {
 
     getResizeHandle(x, y) {
         if (!this.selectedLayer) return null;
-        
+
         const handleRadius = 5;
         const handles = {
             'nw': {x: this.selectedLayer.x, y: this.selectedLayer.y},
             'ne': {x: this.selectedLayer.x + this.selectedLayer.width, y: this.selectedLayer.y},
-            'se': {x: this.selectedLayer.x + this.selectedLayer.width, y: this.selectedLayer.y + this.selectedLayer.height},
+            'se': {
+                x: this.selectedLayer.x + this.selectedLayer.width,
+                y: this.selectedLayer.y + this.selectedLayer.height
+            },
             'sw': {x: this.selectedLayer.x, y: this.selectedLayer.y + this.selectedLayer.height}
         };
 
@@ -894,22 +1227,18 @@ export class Canvas {
         return null;
     }
 
-    // 修改水平镜像方法
     mirrorHorizontal() {
         if (!this.selectedLayer) return;
-        
-        // 创建临时画布
+
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
         tempCanvas.width = this.selectedLayer.image.width;
         tempCanvas.height = this.selectedLayer.image.height;
-        
-        // 水平翻转绘制
+
         tempCtx.translate(tempCanvas.width, 0);
         tempCtx.scale(-1, 1);
         tempCtx.drawImage(this.selectedLayer.image, 0, 0);
-        
-        // 创建新图像
+
         const newImage = new Image();
         newImage.onload = () => {
             this.selectedLayer.image = newImage;
@@ -918,22 +1247,18 @@ export class Canvas {
         newImage.src = tempCanvas.toDataURL();
     }
 
-    // 修改垂直镜像方法
     mirrorVertical() {
         if (!this.selectedLayer) return;
-        
-        // 创建临时画布
+
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
         tempCanvas.width = this.selectedLayer.image.width;
         tempCanvas.height = this.selectedLayer.image.height;
-        
-        // 垂直翻转绘制
+
         tempCtx.translate(0, tempCanvas.height);
         tempCtx.scale(1, -1);
         tempCtx.drawImage(this.selectedLayer.image, 0, 0);
-        
-        // 创建新图像
+
         const newImage = new Image();
         newImage.onload = () => {
             this.selectedLayer.image = newImage;
@@ -946,33 +1271,29 @@ export class Canvas {
         try {
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            
-            // 设置画布尺寸
+
             tempCanvas.width = layer.width;
             tempCanvas.height = layer.height;
-            
-            // 清除画布
+
             tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-            
-            // 绘制图层
+
             tempCtx.save();
-            tempCtx.translate(layer.width/2, layer.height/2);
+            tempCtx.translate(layer.width / 2, layer.height / 2);
             tempCtx.rotate(layer.rotation * Math.PI / 180);
             tempCtx.drawImage(
                 layer.image,
-                -layer.width/2,
-                -layer.height/2,
+                -layer.width / 2,
+                -layer.height / 2,
                 layer.width,
                 layer.height
             );
             tempCtx.restore();
-            
-            // 获取base64数据
+
             const dataUrl = tempCanvas.toDataURL('image/png');
             if (!dataUrl.startsWith('data:image/png;base64,')) {
                 throw new Error("Invalid image data format");
             }
-            
+
             return dataUrl;
         } catch (error) {
             console.error("Error getting layer image data:", error);
@@ -980,7 +1301,6 @@ export class Canvas {
         }
     }
 
-    // 添加带遮罩的图层
     addMattedLayer(image, mask) {
         const layer = {
             image: image,
@@ -992,7 +1312,7 @@ export class Canvas {
             rotation: 0,
             zIndex: this.layers.length
         };
-        
+
         this.layers.push(layer);
         this.selectedLayer = layer;
         this.render();
@@ -1024,15 +1344,13 @@ export class Canvas {
 
     async addInputToCanvas(inputImage, inputMask) {
         try {
-            console.log("Adding input to canvas:", { inputImage });
-            
-            // 创建临时画布
+            console.log("Adding input to canvas:", {inputImage});
+
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = inputImage.width;
             tempCanvas.height = inputImage.height;
 
-            // 将数据绘制到临时画布
             const imgData = new ImageData(
                 inputImage.data,
                 inputImage.width,
@@ -1040,7 +1358,6 @@ export class Canvas {
             );
             tempCtx.putImageData(imgData, 0, 0);
 
-            // 创建新图像
             const image = new Image();
             await new Promise((resolve, reject) => {
                 image.onload = resolve;
@@ -1048,13 +1365,11 @@ export class Canvas {
                 image.src = tempCanvas.toDataURL();
             });
 
-            // 计算缩放比例
             const scale = Math.min(
                 this.width / inputImage.width * 0.8,
                 this.height / inputImage.height * 0.8
             );
 
-            // 创建新图层
             const layer = {
                 image: image,
                 x: (this.width - inputImage.width * scale) / 2,
@@ -1065,19 +1380,16 @@ export class Canvas {
                 zIndex: this.layers.length
             };
 
-            // 如果有遮罩数据，添加到图层
             if (inputMask) {
                 layer.mask = inputMask.data;
             }
 
-            // 添加图层并选中
             this.layers.push(layer);
             this.selectedLayer = layer;
-            
-            // 渲染画布
+
             this.render();
             console.log("Layer added successfully");
-            
+
             return true;
 
         } catch (error) {
@@ -1086,32 +1398,27 @@ export class Canvas {
         }
     }
 
-    // 改进图像转换方法
     async convertTensorToImage(tensor) {
         try {
             console.log("Converting tensor to image:", tensor);
-            
+
             if (!tensor || !tensor.data || !tensor.width || !tensor.height) {
                 throw new Error("Invalid tensor data");
             }
 
-            // 创建临时画布
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = tensor.width;
             canvas.height = tensor.height;
 
-            // 创建像数据
             const imageData = new ImageData(
                 new Uint8ClampedArray(tensor.data),
                 tensor.width,
                 tensor.height
             );
 
-            // 将数据绘制到画布
             ctx.putImageData(imageData, 0, 0);
 
-            // 创建新图像
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.onload = () => resolve(img);
@@ -1124,36 +1431,32 @@ export class Canvas {
         }
     }
 
-    // 改进遮罩转换方法
     async convertTensorToMask(tensor) {
         if (!tensor || !tensor.data) {
             throw new Error("Invalid mask tensor");
         }
 
         try {
-            // 确保数据是Float32Array
+
             return new Float32Array(tensor.data);
         } catch (error) {
             throw new Error(`Mask conversion failed: ${error.message}`);
         }
     }
 
-    // 改进数据初始化方法
     async initNodeData() {
         try {
             console.log("Starting node data initialization...");
-            
-            // 检查节点和输入是否存在
+
             if (!this.node || !this.node.inputs) {
                 console.log("Node or inputs not ready");
                 return this.scheduleDataCheck();
             }
 
-            // 检查图像��入
             if (this.node.inputs[0] && this.node.inputs[0].link) {
                 const imageLinkId = this.node.inputs[0].link;
                 const imageData = app.nodeOutputs[imageLinkId];
-                
+
                 if (imageData) {
                     console.log("Found image data:", imageData);
                     await this.processImageData(imageData);
@@ -1164,11 +1467,10 @@ export class Canvas {
                 }
             }
 
-            // 检查遮罩输入
             if (this.node.inputs[1] && this.node.inputs[1].link) {
                 const maskLinkId = this.node.inputs[1].link;
                 const maskData = app.nodeOutputs[maskLinkId];
-                
+
                 if (maskData) {
                     console.log("Found mask data:", maskData);
                     await this.processMaskData(maskData);
@@ -1181,58 +1483,50 @@ export class Canvas {
         }
     }
 
-    // 添加数据检查调度方法
     scheduleDataCheck() {
         if (this.pendingDataCheck) {
             clearTimeout(this.pendingDataCheck);
         }
-        
+
         this.pendingDataCheck = setTimeout(() => {
             this.pendingDataCheck = null;
             if (!this.dataInitialized) {
                 this.initNodeData();
             }
-        }, 1000); // 1秒后重试
+        }, 1000);
     }
 
-    // 修改图像数据处理方法
     async processImageData(imageData) {
         try {
             if (!imageData) return;
-            
+
             console.log("Processing image data:", {
                 type: typeof imageData,
                 isArray: Array.isArray(imageData),
                 shape: imageData.shape,
                 hasData: !!imageData.data
             });
-            
-            // 处理数组格式
+
             if (Array.isArray(imageData)) {
                 imageData = imageData[0];
             }
-            
-            // 验证数据格式
+
             if (!imageData.shape || !imageData.data) {
                 throw new Error("Invalid image data format");
             }
-            
-            // 保持原始尺寸和比例
+
             const originalWidth = imageData.shape[2];
             const originalHeight = imageData.shape[1];
-            
-            // 计算适当的缩放比例
+
             const scale = Math.min(
                 this.width / originalWidth * 0.8,
                 this.height / originalHeight * 0.8
             );
-            
-            // 转换数据
+
             const convertedData = this.convertTensorToImageData(imageData);
             if (convertedData) {
                 const image = await this.createImageFromData(convertedData);
-                
-                // 使用计算的缩放比例添加图层
+
                 this.addScaledLayer(image, scale);
                 console.log("Image layer added successfully with scale:", scale);
             }
@@ -1242,12 +1536,11 @@ export class Canvas {
         }
     }
 
-    // 添加新的缩放图层方法
     addScaledLayer(image, scale) {
         try {
             const scaledWidth = image.width * scale;
             const scaledHeight = image.height * scale;
-            
+
             const layer = {
                 image: image,
                 x: (this.width - scaledWidth) / 2,
@@ -1259,11 +1552,11 @@ export class Canvas {
                 originalWidth: image.width,
                 originalHeight: image.height
             };
-            
+
             this.layers.push(layer);
             this.selectedLayer = layer;
             this.render();
-            
+
             console.log("Scaled layer added:", {
                 originalSize: `${image.width}x${image.height}`,
                 scaledSize: `${scaledWidth}x${scaledHeight}`,
@@ -1275,14 +1568,13 @@ export class Canvas {
         }
     }
 
-    // 改进张量转换方法
     convertTensorToImageData(tensor) {
         try {
             const shape = tensor.shape;
             const height = shape[1];
             const width = shape[2];
             const channels = shape[3];
-            
+
             console.log("Converting tensor:", {
                 shape: shape,
                 dataRange: {
@@ -1290,31 +1582,27 @@ export class Canvas {
                     max: tensor.max_val
                 }
             });
-            
-            // 创建图像数据
+
             const imageData = new ImageData(width, height);
             const data = new Uint8ClampedArray(width * height * 4);
-            
-            // 重建数据结构
+
             const flatData = tensor.data;
             const pixelCount = width * height;
-            
+
             for (let i = 0; i < pixelCount; i++) {
                 const pixelIndex = i * 4;
                 const tensorIndex = i * channels;
-                
-                // 正确处理RGB通道
+
                 for (let c = 0; c < channels; c++) {
                     const value = flatData[tensorIndex + c];
-                    // 根据实际值范围行映射
+
                     const normalizedValue = (value - tensor.min_val) / (tensor.max_val - tensor.min_val);
                     data[pixelIndex + c] = Math.round(normalizedValue * 255);
                 }
-                
-                // Alpha通道
+
                 data[pixelIndex + 3] = 255;
             }
-            
+
             imageData.data.set(data);
             return imageData;
         } catch (error) {
@@ -1323,7 +1611,6 @@ export class Canvas {
         }
     }
 
-    // 添加图像创建方法
     async createImageFromData(imageData) {
         return new Promise((resolve, reject) => {
             const canvas = document.createElement('canvas');
@@ -1339,7 +1626,6 @@ export class Canvas {
         });
     }
 
-    // 添加数据重试机制
     async retryDataLoad(maxRetries = 3, delay = 1000) {
         for (let i = 0; i < maxRetries; i++) {
             try {
@@ -1358,20 +1644,17 @@ export class Canvas {
     async processMaskData(maskData) {
         try {
             if (!maskData) return;
-            
+
             console.log("Processing mask data:", maskData);
-            
-            // 处理数组格式
+
             if (Array.isArray(maskData)) {
                 maskData = maskData[0];
             }
-            
-            // 检查数据格式
+
             if (!maskData.shape || !maskData.data) {
                 throw new Error("Invalid mask data format");
             }
-            
-            // 如果有选中的图层，应用遮罩
+
             if (this.selectedLayer) {
                 const maskTensor = await this.convertTensorToMask(maskData);
                 this.selectedLayer.mask = maskTensor;
@@ -1397,23 +1680,19 @@ export class Canvas {
             console.log("Starting image import with cache data");
             const img = await this.loadImageFromCache(cacheData.image);
             const mask = cacheData.mask ? await this.loadImageFromCache(cacheData.mask) : null;
-            
-            // 计算缩放比例
+
             const scale = Math.min(
                 this.width / img.width * 0.8,
                 this.height / img.height * 0.8
             );
-            
-            // 创建临时画布来合并图像和遮罩
+
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = img.width;
             tempCanvas.height = img.height;
             const tempCtx = tempCanvas.getContext('2d');
-            
-            // 绘制图像
+
             tempCtx.drawImage(img, 0, 0);
-            
-            // 如果有遮罩，应用遮罩
+
             if (mask) {
                 const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
                 const maskCanvas = document.createElement('canvas');
@@ -1422,23 +1701,20 @@ export class Canvas {
                 const maskCtx = maskCanvas.getContext('2d');
                 maskCtx.drawImage(mask, 0, 0);
                 const maskData = maskCtx.getImageData(0, 0, img.width, img.height);
-                
-                // 应用遮罩到alpha通道
+
                 for (let i = 0; i < imageData.data.length; i += 4) {
                     imageData.data[i + 3] = maskData.data[i];
                 }
-                
+
                 tempCtx.putImageData(imageData, 0, 0);
             }
-            
-            // 创��最终图像
+
             const finalImage = new Image();
             await new Promise((resolve) => {
                 finalImage.onload = resolve;
                 finalImage.src = tempCanvas.toDataURL();
             });
-            
-            // 创建新图层
+
             const layer = {
                 image: finalImage,
                 x: (this.width - img.width * scale) / 2,
@@ -1448,19 +1724,61 @@ export class Canvas {
                 rotation: 0,
                 zIndex: this.layers.length
             };
-            
+
             this.layers.push(layer);
             this.selectedLayer = layer;
             this.render();
-            
+
         } catch (error) {
             console.error('Error importing image:', error);
         }
     }
 
-    // 修改 showBlendModeMenu 方法
+    async importLatestImage() {
+        try {
+            console.log("Fetching latest image from server...");
+            const response = await fetch('/ycnode/get_latest_image');
+            const result = await response.json();
+
+            if (result.success && result.image_data) {
+                console.log("Latest image received, adding to canvas.");
+                const img = new Image();
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                    img.src = result.image_data;
+                });
+
+                const layer = {
+                    image: img,
+                    x: 0,
+                    y: 0,
+                    width: this.width,
+                    height: this.height,
+                    rotation: 0,
+                    zIndex: this.layers.length,
+                    blendMode: 'normal',
+                    opacity: 1
+                };
+
+                this.layers.push(layer);
+                this.selectedLayers = [layer];
+                this.selectedLayer = layer;
+                this.render();
+                console.log("Latest image imported and placed on canvas successfully.");
+                return true;
+            } else {
+                throw new Error(result.error || "Failed to fetch the latest image.");
+            }
+        } catch (error) {
+            console.error("Error importing latest image:", error);
+            alert(`Failed to import latest image: ${error.message}`);
+            return false;
+        }
+    }
+
     showBlendModeMenu(x, y) {
-        // 移除已存在的菜单
+
         const existingMenu = document.getElementById('blend-mode-menu');
         if (existingMenu) {
             document.body.removeChild(existingMenu);
@@ -1495,13 +1813,12 @@ export class Canvas {
                 transition: background-color 0.2s;
             `;
             option.textContent = `${mode.label} (${mode.name})`;
-            
-            // 创建滑动条，使用当前图层的透明度值
+
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = '0';
             slider.max = '100';
-            // 使用当前图层的透明度值，如果存在的话
+
             slider.value = this.selectedLayer.opacity ? Math.round(this.selectedLayer.opacity * 100) : 100;
             slider.style.cssText = `
                 width: 100%;
@@ -1509,34 +1826,29 @@ export class Canvas {
                 display: none;
             `;
 
-            // 如果是当前图层的混合模式，显示滑动条
             if (this.selectedLayer.blendMode === mode.name) {
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
             }
 
-            // 修改点击事件
             option.onclick = () => {
-                // 隐藏所有其他滑动条
+
                 menu.querySelectorAll('input[type="range"]').forEach(s => {
                     s.style.display = 'none';
                 });
                 menu.querySelectorAll('.blend-mode-container div').forEach(d => {
                     d.style.backgroundColor = '';
                 });
-                
-                // 显示当前选项的滑动条
+
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
-                
-                // 设置当前选中的混合模式
+
                 if (this.selectedLayer) {
                     this.selectedLayer.blendMode = mode.name;
                     this.render();
                 }
             };
 
-            // 添加滑动条的input事件（实时更新）
             slider.addEventListener('input', () => {
                 if (this.selectedLayer) {
                     this.selectedLayer.opacity = slider.value / 100;
@@ -1544,12 +1856,11 @@ export class Canvas {
                 }
             });
 
-            // 添加滑动条的change事件（结束拖动时保存状态）
             slider.addEventListener('change', async () => {
                 if (this.selectedLayer) {
                     this.selectedLayer.opacity = slider.value / 100;
                     this.render();
-                    // 保存到服务器并更新节点
+
                     await this.saveToServer(this.widget.value);
                     if (this.node) {
                         app.graph.runStep();
@@ -1564,7 +1875,6 @@ export class Canvas {
 
         document.body.appendChild(menu);
 
-        // 点击其他地方关闭菜单
         const closeMenu = (e) => {
             if (!menu.contains(e.target)) {
                 document.body.removeChild(menu);
@@ -1578,11 +1888,9 @@ export class Canvas {
 
     handleBlendModeSelection(mode) {
         if (this.selectedBlendMode === mode && !this.isAdjustingOpacity) {
-            // 第二次点击，应用效果
             this.applyBlendMode(mode, this.blendOpacity);
             this.closeBlendModeMenu();
         } else {
-            // 第一次点击，显示透明度调整器
             this.selectedBlendMode = mode;
             this.isAdjustingOpacity = true;
             this.showOpacitySlider(mode);
@@ -1590,20 +1898,19 @@ export class Canvas {
     }
 
     showOpacitySlider(mode) {
-        // 创建滑动条
+
         const slider = document.createElement('input');
         slider.type = 'range';
         slider.min = '0';
         slider.max = '100';
         slider.value = this.blendOpacity;
         slider.className = 'blend-opacity-slider';
-        
+
         slider.addEventListener('input', (e) => {
             this.blendOpacity = parseInt(e.target.value);
-            // 可以添加实时预览效果
+
         });
-        
-        // 将滑动条添加到对应的混合模式选项下
+
         const modeElement = document.querySelector(`[data-blend-mode="${mode}"]`);
         if (modeElement) {
             modeElement.appendChild(slider);
@@ -1611,12 +1918,11 @@ export class Canvas {
     }
 
     applyBlendMode(mode, opacity) {
-        // 应用混合模式和透明度
+
         this.currentLayer.style.mixBlendMode = mode;
         this.currentLayer.style.opacity = opacity / 100;
-        
-        // 清理状态
+
         this.selectedBlendMode = null;
         this.isAdjustingOpacity = false;
     }
-} 
+}

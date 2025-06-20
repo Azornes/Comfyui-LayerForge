@@ -1,6 +1,5 @@
 from .canvas_node import CanvasNode
 
-# 设置路由
 CanvasNode.setup_routes()
 
 NODE_CLASS_MAPPINGS = {

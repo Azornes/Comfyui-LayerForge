@@ -1,4 +1,4 @@
-# Comfyui-Ycnode
+
 **Canvas Node**
 
 **1**. Basic Operations:
@@ -27,21 +27,21 @@ Model Name： models--ZhengPeng7--BiRefNet
 
 The cloud disk link is as follows
 
-baidu Link：https://pan.baidu.com/s/1PiZvuHcdlcZGoL7WDYnMkA?pwd=nt76  
-google link: https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing
+baidu Link：https:
+google link: https:
 
 Place it in： models/BiRefNet
 
 2024/11/24 Updated Features：
 Add input images and masks; add blending mode options for images in the canvas (you can select them by selecting the image and then shift+clicking the image to pop up the menu)
 Note: The output blending mode does not change, and needs to be updated by slightly changing the canvas content
-![1732416209647](https://github.com/user-attachments/assets/befb83a6-44aa-436f-9e11-614e4090a8d9)
+![1732416209647](https:
 
 
 **Example diagram of the process of canvas node, matting, layout, and output**
-![1732110001138](https://github.com/user-attachments/assets/372a14a5-8255-4768-9547-d8a6083bb76c)
+![1732110001138](https:
 
 
 **press the button of matting can matting the image in the canvas, and then continue to edit the image in the canvass**
-![image](https://github.com/user-attachments/assets/faa4156c-e511-4c8c-9165-1a139fb8c894)
+![image](https:
 
