@@ -24,6 +24,8 @@ export class Canvas {
             resizeAnchor: {x: 0, y: 0},
             canvasResizeStart: {x: 0, y: 0},
             isCtrlPressed: false,
+            isAltPressed: false,      // <-- DODANO
+            hasClonedInDrag: false,   // <-- DODANO
             lastClickTime: 0,
         };
         this.originalLayerPositions = new Map();
@@ -98,6 +100,7 @@ export class Canvas {
         this.interaction.resizeHandle = null;
         this.originalLayerPositions.clear();
         this.canvasResizeRect = null;
+        this.interaction.hasClonedInDrag = false; // <-- DODANO
         this.canvas.style.cursor = 'default';
     }
 
@@ -240,13 +243,24 @@ export class Canvas {
     handleKeyDown(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Alt') {
+            this.interaction.isAltPressed = true;
             e.preventDefault();
         }
 
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
-                const index = this.layers.indexOf(this.selectedLayer);
-                this.removeLayer(index);
+                // Szukamy indeksu w tablicy this.layers, aby go usunąć
+                // Ale musimy usunąć wszystkie zaznaczone warstwy
+                this.selectedLayers.forEach(layerToRemove => {
+                    const index = this.layers.indexOf(layerToRemove);
+                    if (index > -1) {
+                        this.layers.splice(index, 1);
+                    }
+                });
+
+                this.selectedLayers = [];
+                this.selectedLayer = null;
+                this.render();
                 return;
             }
 
@@ -292,6 +306,7 @@ export class Canvas {
      */
     handleKeyUp(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
+        if (e.key === 'Alt') this.interaction.isAltPressed = false; // <-- DODANO
     }
 
     updateCursor(worldCoords) {
@@ -386,6 +401,35 @@ export class Canvas {
     }
 
     dragLayers(worldCoords) {
+        // Logika klonowania warstw przy wciśniętym klawiszu Alt
+        if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.selectedLayers.length > 0) {
+            const newLayers = [];
+
+            // Stwórz klony zaznaczonych warstw
+            this.selectedLayers.forEach(layer => {
+                const newLayer = {
+                    ...layer, // Płytka kopia właściwości warstwy
+                    zIndex: this.layers.length, // Upewnij się, że nowa warstwa jest na wierzchu
+                };
+                this.layers.push(newLayer);
+                newLayers.push(newLayer);
+            });
+
+            // Zaktualizuj zaznaczenie, aby obejmowało tylko nowe warstwy
+            this.selectedLayers = newLayers;
+            this.selectedLayer = newLayers.length > 0 ? newLayers[newLayers.length - 1] : null;
+
+            // Zresetuj pozycje startowe dla nowo przeciąganych klonów
+            this.originalLayerPositions.clear();
+            this.selectedLayers.forEach(l => {
+                this.originalLayerPositions.set(l, {x: l.x, y: l.y});
+            });
+
+            // Oznacz, że klonowanie w tej sesji przeciągania już się odbyło
+            this.interaction.hasClonedInDrag = true;
+        }
+
+        // Istniejąca logika przesuwania (teraz działa na oryginalnych lub sklonowanych warstwach)
         const totalDx = worldCoords.x - this.interaction.dragStart.x;
         const totalDy = worldCoords.y - this.interaction.dragStart.y;
         let finalDx = totalDx, finalDy = totalDy;
