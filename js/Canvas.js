@@ -707,7 +707,6 @@ export class Canvas {
         });
     }
 
-
     actualRender() {
         if (this.offscreenCanvas.width !== this.canvas.clientWidth ||
             this.offscreenCanvas.height !== this.canvas.clientHeight) {
@@ -727,7 +726,7 @@ export class Canvas {
         ctx.translate(-this.viewport.x, -this.viewport.y);
 
         this.drawGrid(ctx);
-        this.drawCanvasOutline(ctx);
+        // Usunięto this.drawCanvasOutline(ctx) z tego miejsca.
 
         const sortedLayers = [...this.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
@@ -756,6 +755,10 @@ export class Canvas {
             }
             ctx.restore();
         });
+
+        // Dodano this.drawCanvasOutline(ctx) tutaj, aby rysowała się na wierzchu warstw.
+        this.drawCanvasOutline(ctx);
+
         if (this.interaction.mode === 'resizingCanvas' && this.canvasResizeRect) {
             const rect = this.canvasResizeRect;
             ctx.save();
@@ -1290,6 +1293,7 @@ export class Canvas {
             newImage.src = tempCanvas.toDataURL();
         });
     }
+
     mirrorVertical() {
         if (this.selectedLayers.length === 0) return;
 
@@ -1311,6 +1315,7 @@ export class Canvas {
             newImage.src = tempCanvas.toDataURL();
         });
     }
+
     async getLayerImageData(layer) {
         try {
             const tempCanvas = document.createElement('canvas');
