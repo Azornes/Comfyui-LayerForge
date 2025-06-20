@@ -1,47 +1,86 @@
+# LayerForge – Advanced Canvas Node Editor for ComfyUI 🎨
 
-**Canvas Node**
+**LayerForge** is an advanced fork of the original `Canvas Node` for ComfyUI, extended with full multi-layer support, masks, blending modes, opacity control, canvas resizing, snapping, and high-precision transformations — all integrated into a node-based workflow.
 
-**1**. Basic Operations:
-Select Image: Click on the image with the mouse to select it.
-Deselect Image: Double-click on the image or click on an empty area to deselect it.
+---
 
-**2**. Zooming Image:
-Zoom In/Out: With the image selected, scroll the mouse wheel up/down to zoom in/out.
+## ✨ Key Features
 
-**3**. Rotating Image:
-hold down the Shift key and scroll the mouse wheel up/down to rotate the image clockwise/counterclockwise.
+- 🖼️ Add images to layers from disk or node outputs
+- 📐 Move, scale, rotate layers with mouse or keyboard
+- 🌈 Blend Modes (e.g. overlay, multiply, soft-light, etc.)
+- 🕳️ Per-layer **masking** with full alpha control
+- 🔎 Scalable & pannable canvas viewport
+- 🎯 Grid snapping with `Ctrl` modifier
+- 📤 Export flattened image + mask to server
+- 🔃 Import latest generated image from ComfyUI
+- 🔧 Canvas resize with live preview overlay
 
-**4**. When you press ATL, you can stretch or compress the image by dragging the image with the mouse.
+---
 
-**5**. matting，The button:  is the cutout function
+## 🖱️ Controls
 
-**6**. Other functions:
-All on the button, quite obvious
+| Action | Description |
+|--------|-------------|
+| 🖱️ Click layer | Select layer |
+| 🖱️ Shift + Click | Open blend mode menu |
+| 🖱️ Double-click or empty area | Deselect layers |
+| 🖱️ Scroll | Zoom canvas (no selection) or scale selected layer |
+| 🖱️ Shift + Scroll | Rotate selected layer |
+| 🖱️ Ctrl + Drag | Enable snapping to grid |
+| 🖱️ ALT + Drag | Stretch/compress layer (non-uniform) |
+| 🖱️ Shift + drag on empty space | Start canvas resize |
+| ⌨️ Delete | Remove selected layer |
+| ⌨️ Arrow keys | Move layer (Shift = faster) |
+| ⌨️ [ / ] | Rotate selected layer (Shift = snap to 15°) |
 
-**Revise the canvas size and drag the node interface box to refresh it.**
+---
 
-Generally, the model is downloaded automatically. If it doesn't work, you can use the following
-Manual placement
+## 🎨 Blend Mode Menu
 
-Model Name： models--ZhengPeng7--BiRefNet
+When `Shift+Clicking` a selected layer, a **blend mode menu** appears with:
+- Available modes: `normal`, `multiply`, `overlay`, etc.
+- Per-layer **opacity slider**
 
-The cloud disk link is as follows
+Changes are applied live.
 
-baidu Link：https:
-google link: https:
+---
 
-Place it in： models/BiRefNet
+## 🖼️ Adding Images
 
-2024/11/24 Updated Features：
-Add input images and masks; add blending mode options for images in the canvas (you can select them by selecting the image and then shift+clicking the image to pop up the menu)
-Note: The output blending mode does not change, and needs to be updated by slightly changing the canvas content
-![1732416209647](https:
+Click **"Add Image"** to upload files from your disk.  
+Or click **"Import Input"** to fetch the latest generated image from ComfyUI (`/ycnode/get_latest_image`).
+
+---
+
+## 💾 Saving to Server
+
+When saving, the canvas exports two files:
+- A **flattened image** (`.png`)
+- A **binary mask** (`_mask.png`)
+
+Both are sent to `/upload/image`.
+
+---
+
+## 🧠 Optional: Matting Model (for cutout)
+
+If matting (cutout) is enabled:
+
+- **Model Name**: `models--ZhengPeng7--BiRefNet`
+- Download from:
+  - [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
+  - [Baidu](https://pan.baidu.com/s/1PiZvuHcdlcZGoL7WDYnMkA?pwd=nt76)
+- Place it in: `models/BiRefNet`
 
 
-**Example diagram of the process of canvas node, matting, layout, and output**
-![1732110001138](https:
+---
 
+## 📜 License
 
-**press the button of matting can matting the image in the canvas, and then continue to edit the image in the canvass**
-![image](https:
+MIT — free to use, modify, and share.
 
+---
+
+Based on the original [`Comfyui-Ycnode`](https://github.com/Yc735/comfyui-ycnode)  
+This fork significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
