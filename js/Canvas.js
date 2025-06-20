@@ -29,6 +29,7 @@ export class Canvas {
             isAltPressed: false,
             hasClonedInDrag: false,
             lastClickTime: 0,
+            transformingLayer: null,
         };
         this.originalLayerPositions = new Map();
         this.interaction.canvasResizeRect = null;
@@ -121,6 +122,7 @@ export class Canvas {
         this.interaction.canvasResizeRect = null;
         this.interaction.canvasMoveRect = null;
         this.interaction.hasClonedInDrag = false;
+        this.interaction.transformingLayer = null;
         this.canvas.style.cursor = 'default';
     }
 
@@ -145,9 +147,9 @@ export class Canvas {
         }
         this.interaction.lastClickTime = currentTime;
 
-        const handle = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
-        if (this.selectedLayer && handle) {
-            this.startLayerTransform(handle, worldCoords);
+        const transformTarget = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        if (transformTarget) {
+            this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
             return;
         }
 
@@ -481,14 +483,16 @@ export class Canvas {
     }
 
     updateCursor(worldCoords) {
-        const handle = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
-        if (handle) {
+        const transformTarget = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
+
+        if (transformTarget) {
+            const handleName = transformTarget.handle; // Wyciągamy nazwę uchwytu z obiektu
             const cursorMap = {
                 'n': 'ns-resize', 's': 'ns-resize', 'e': 'ew-resize', 'w': 'ew-resize',
                 'nw': 'nwse-resize', 'se': 'nwse-resize', 'ne': 'nesw-resize', 'sw': 'nesw-resize',
                 'rot': 'grab'
             };
-            this.canvas.style.cursor = cursorMap[handle];
+            this.canvas.style.cursor = cursorMap[handleName]; // Używamy nazwy jako klucza
         } else if (this.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
             this.canvas.style.cursor = 'move';
         } else {
@@ -496,8 +500,8 @@ export class Canvas {
         }
     }
 
-    startLayerTransform(handle, worldCoords) {
-        const layer = this.selectedLayer;
+    startLayerTransform(layer, handle, worldCoords) {
+        this.interaction.transformingLayer = layer;
         this.interaction.transformOrigin = {
             x: layer.x, y: layer.y,
             width: layer.width, height: layer.height,
@@ -675,6 +679,9 @@ export class Canvas {
     }
 
     resizeLayerFromHandle(worldCoords, isShiftPressed) {
+        const layer = this.interaction.transformingLayer;
+        if (!layer) return;
+
         let mouseX = worldCoords.x;
         let mouseY = worldCoords.y;
 
@@ -686,7 +693,6 @@ export class Canvas {
             if (Math.abs(mouseY - snappedMouseY) < snapThreshold) mouseY = snappedMouseY;
         }
 
-        const layer = this.selectedLayer;
         const o = this.interaction.transformOrigin;
         const handle = this.interaction.resizeHandle;
         const anchor = this.interaction.resizeAnchor;
@@ -756,7 +762,11 @@ export class Canvas {
         this.render();
     }
 
+
     rotateLayerFromHandle(worldCoords, isShiftPressed) {
+        const layer = this.interaction.transformingLayer;
+        if (!layer) return;
+
         const o = this.interaction.transformOrigin;
         const startAngle = Math.atan2(this.interaction.dragStart.y - o.centerY, this.interaction.dragStart.x - o.centerX);
         const currentAngle = Math.atan2(worldCoords.y - o.centerY, worldCoords.x - o.centerX);
@@ -767,7 +777,7 @@ export class Canvas {
             newRotation = Math.round(newRotation / 15) * 15;
         }
 
-        this.selectedLayer.rotation = newRotation;
+        layer.rotation = newRotation;
         this.render();
     }
 
@@ -1249,17 +1259,20 @@ export class Canvas {
     }
 
     getHandleAtPosition(worldX, worldY) {
-        if (!this.selectedLayer) return null;
+        if (this.selectedLayers.length === 0) return null;
 
-        const handles = this.getHandles(this.selectedLayer);
         const handleRadius = 8 / this.viewport.zoom;
+        for (let i = this.selectedLayers.length - 1; i >= 0; i--) {
+            const layer = this.selectedLayers[i];
+            const handles = this.getHandles(layer);
 
-        for (const key in handles) {
-            const handlePos = handles[key];
-            const dx = worldX - handlePos.x;
-            const dy = worldY - handlePos.y;
-            if (dx * dx + dy * dy <= handleRadius * handleRadius) {
-                return key;
+            for (const key in handles) {
+                const handlePos = handles[key];
+                const dx = worldX - handlePos.x;
+                const dy = worldY - handlePos.y;
+                if (dx * dx + dy * dy <= handleRadius * handleRadius) {
+                    return {layer: layer, handle: key};
+                }
             }
         }
         return null;
