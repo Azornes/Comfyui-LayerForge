@@ -1,106 +1,122 @@
-# LayerForge – Advanced Canvas Node Editor for ComfyUI 🎨
 
-**LayerForge** is an advanced fork of the original `Canvas Node` for ComfyUI, extended with full multi-layer support, masks, blending modes, opacity control, canvas resizing, snapping, and high-precision transformations — all integrated into a node-based workflow.
+---
+# LayerForge – Advanced Canvas Editor for ComfyUI 🎨
+
+**LayerForge** is an advanced canvas node for ComfyUI, providing a Photoshop-like layer-based editing experience directly within your workflow. It extends the concept of a simple canvas with multi-layer support, masking, blend modes, precise transformations, and seamless integration with other nodes.
+
+### Why LayerForge?
+-   **Full Creative Control:** Move beyond simple image inputs. Composite, mask, and blend multiple elements without leaving ComfyUI.
+-   **Seamless Integration:** Outputs a final image and a corresponding mask, ready to be piped into any other node (e.g., `VAEEncode`, `Apply Mask`).
+-   **Intuitive UI:** Familiar controls like drag-and-drop, keyboard shortcuts, and a pannable/zoomable viewport make editing fast and easy.
 
 ---
 
+<!-- 
+    ADD A COMPELLING GIF HERE! 
+    A short screen recording showing layer dragging, resizing, the blend mode menu, and canvas resizing would be perfect.
+-->
+
 ## ✨ Key Features
 
-- 🖼️ Add images to layers from disk or node outputs
-- 📐 Move, scale, rotate layers with mouse or keyboard
-- 🌈 Blend Modes (e.g. overlay, multiply, soft-light, etc.)
-- 🕳️ Per-layer **masking** with full alpha control
-- 🔎 Scalable & pannable canvas viewport
-- 🎯 Grid snapping with `Ctrl` modifier
-- 📤 Export flattened image + mask to server
-- 🔃 Import latest generated image from ComfyUI
-- 🔧 Canvas resize with live preview overlay
+-   **Multi-Layer Editing:** Add, arrange, and manage multiple image layers.
+-   **Full Transformation Controls:** Move, scale, and rotate layers with mouse or keyboard shortcuts.
+-   **Blend Modes & Opacity:** Apply 12 common blend modes (`Overlay`, `Multiply`, etc.) and adjust opacity on a per-layer basis.
+-   **Drag & Drop:** Drop image files directly onto the canvas to create new layers.
+-   **Precise Alignment:** Snap layers to a grid (`Ctrl` key) for perfect positioning.
+-   **Dynamic Canvas:** Resize the entire canvas with a live preview of the new dimensions.
+-   **Workflow Integration:**
+    -   Import the last generated image directly into a layer.
+    -   Outputs a final composite **image** and a combined alpha **mask**.
+
+---
+
+## 🚀 Installation
+
+1.  Navigate to your ComfyUI `custom_nodes` directory.
+    ```bash
+    cd ComfyUI/custom_nodes/
+    ```
+2.  Clone this repository:
+    ```bash
+    git clone https://github.com/YOUR_USERNAME/LayerForge.git
+    ```
+3.  Restart ComfyUI.
 
 ---
 
 ## 🖱️ Controls
 
-### 🟩 When a Single Layer(Photo) is Selected
+### Layer Controls (When one or more layers are selected)
 
-| Action           | Description                                   |
-|------------------| --------------------------------------------- |
-| 🔁 Mouse wheel   | Scale layer in/out                            |
-| ⇧ + Mouse wheel  | Rotate layer clockwise / counterclockwise     |
-| 🖱️ Drag         | Move layer freely                             |
-| Ctrl + Drag      | Move layer with **grid snapping**             |
-| ⇧ + Click again  | Open **Blend Mode** and opacity menu          |
-| Delete        | Remove selected layer                         |
-| e + ⌨️ Arrow keys | Nudge layer                  |
-| ⌨️ \[ / ]        | Rotate layer by -1° / +1° |
+| Action                    | Description                                                              |
+| ------------------------- | ------------------------------------------------------------------------ |
+| **Mouse Drag**            | Move selected layer(s).                                                  |
+| `Ctrl` + **Mouse Drag**   | Move selected layer(s) with **grid snapping**.                           |
+| `Ctrl` + **Click**        | Add or remove a layer from the current selection.                        |
+| **Mouse Wheel**           | Scale selected layer(s) up or down.                                      |
+| `Shift` + **Mouse Wheel** | Rotate selected layer(s).                                                |
+| `Shift` + **Click**       | Open the **Blend Mode & Opacity** menu for the clicked layer.            |
+| `Delete` Key              | Remove all selected layers.                                              |
+| **Arrow Keys**            | Nudge selected layer(s) by 1 pixel.                                      |
+| `Shift` + **Arrow Keys**  | Nudge selected layer(s) by 10 pixels.                                    |
+| `[` / `]` Keys            | Rotate selected layer(s) by 1 degree.                                    |
+| `Shift` + `[` / `]` Keys  | Rotate selected layer(s) by 10 degrees.                                  |
 
+### Canvas & Global Controls
 
-### 🟦 When Multiple Layers Are Selected
-
-| Action                    | Description                                 |
-|---------------------------| ------------------------------------------- |
-| Ctrl + Click other layers | Add/remove from selection                   |
-| 🖱️ Drag                  | Move all selected layers together           |
-| Ctrl + Drag                  | Move with **snapping to grid**              |
-| ⇧ + Click on one          | Open **blend mode** for that specific layer |
-| Delete                    | Remove all selected layers                  |
-
-### ⬜ When No Layer is Selected
-
-| Action                            | Description                              |
-| --------------------------------- | ---------------------------------------- |
-| 🖱️ Drag background               | Pan the canvas                           |
-| 🖱️ Mouse wheel                   | Zoom in/out (focused on cursor position) |
-| ⇧ + Drag in empty space           | Start **canvas resize** region           |
-| 🖱️ Click layer                   | Select it                                |
-| Double click or click empty space | Deselect all layers                      |
-
-
-
-## 🎨 Blend Mode Menu
-
-When `Shift+Clicking` a selected layer, a **blend mode menu** appears with:
-- Available modes: `normal`, `multiply`, `overlay`, etc.
-- Per-layer **opacity slider**
-
-Changes are applied live.
+| Action                      | Description                                                  |
+| --------------------------- | ------------------------------------------------------------ |
+| **Drag Background**         | Pan the canvas viewport.                                     |
+| **Mouse Wheel**             | Zoom the viewport in or out (centered on the cursor).        |
+| **Drag & Drop Image File**  | Add a new image layer from a file on your disk.              |
+| `Shift` + **Drag Empty Space** | Define a new canvas size with a live preview.              |
+| **Double-Click Empty Space**  | Deselect all layers.                                         |
 
 ---
 
-## 🖼️ Adding Images
+## 🛠️ Basic Workflow
 
-Click **"Add Image"** to upload files from your disk.  
-Or click **"Import Input"** to fetch the latest generated image from ComfyUI (`/ycnode/get_latest_image`).
+1.  Add the **LayerForge** node to your graph.
+2.  Use the **"Add Image"** button or **Drag & Drop** a file to create a layer.
+3.  Use the **"Import Input"** button to load the last generated image from your workflow.
+4.  Arrange, resize, and blend your layers as needed.
+5.  Connect the outputs to other nodes:
+    -   `image` -> `VAE Encode` (for further processing)
+    -   `mask` -> `Apply Mask` or `Set Latent Noise Mask`
+
+```
+┌────────────────┐
+│   Load Image   │
+└───────┬────────┘
+        │
+┌───────▼────────┐      ┌──────────────┐
+│   LayerForge   ├──────►  VAE Encode  │
+│(output: image) │      └──────────────┘
+└───────┬────────┘
+        │
+┌───────▼────────┐      ┌──────────────┐
+│(output: mask)  ├──────► Apply Mask   │
+└────────────────┘      └──────────────┘
+```
 
 ---
 
-## 💾 Saving to Server
+## 🧠 Optional: Matting Model (for image cutout)
 
-When saving, the canvas exports two files:
-- A **flattened image** (`.png`)
-- A **binary mask** (`_mask.png`)
+The "Matting" feature allows you to automatically generate a cutout (alpha mask) for a selected layer. This is an optional feature and requires a model.
 
-Both are sent to `/upload/image`.
-
----
-
-## 🧠 Optional: Matting Model (for cutout)
-
-If matting (cutout) is enabled:
-
-- **Model Name**: `models--ZhengPeng7--BiRefNet`
-- Download from:
-  - [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
-  - [Baidu](https://pan.baidu.com/s/1PiZvuHcdlcZGoL7WDYnMkA?pwd=nt76)
-- Place it in: `models/BiRefNet`
-
+> -   **Model Name**: `BiRefNet`
+> -   **Download from**:
+>     -   [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet/tree/main) (Recommended)
+>     -   [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
+> -   **Installation Path**: Place the model file in `ComfyUI/models/BiRefNet/`.
 
 ---
 
 ## 📜 License
 
-MIT — free to use, modify, and share.
+This project is licensed under the MIT License. Feel free to use, modify, and distribute.
 
 ---
 
-Based on the original [`Comfyui-Ycnode`](https://github.com/Yc735/comfyui-ycnode)  
-This fork significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
+Based on the original [**Comfyui-Ycnode**](https://github.com/Yc735/comfyui-ycnode) by Yc735. This fork significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
