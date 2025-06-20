@@ -20,21 +20,41 @@
 
 ## 🖱️ Controls
 
-| Action | Description |
-|--------|-------------|
-| 🖱️ Click layer | Select layer |
-| 🖱️ Shift + Click | Open blend mode menu |
-| 🖱️ Double-click or empty area | Deselect layers |
-| 🖱️ Scroll | Zoom canvas (no selection) or scale selected layer |
-| 🖱️ Shift + Scroll | Rotate selected layer |
-| 🖱️ Ctrl + Drag | Enable snapping to grid |
-| 🖱️ ALT + Drag | Stretch/compress layer (non-uniform) |
-| 🖱️ Shift + drag on empty space | Start canvas resize |
-| ⌨️ Delete | Remove selected layer |
-| ⌨️ Arrow keys | Move layer (Shift = faster) |
-| ⌨️ [ / ] | Rotate selected layer (Shift = snap to 15°) |
+### 🟩 When a Single Layer(Photo) is Selected
 
----
+| Action            | Description                                   |
+|-------------------| --------------------------------------------- |
+| 🔁 Mouse wheel    | Scale layer in/out                            |
+| ⇧ + Mouse wheel   | Rotate layer clockwise / counterclockwise     |
+| 🖱️ Drag          | Move layer freely                             |
+| Ctrl + Drag       | Move layer with **grid snapping**             |
+| ⇧ + Click again   | Open **Blend Mode** and opacity menu          |
+| ⌫ / Delete        | Remove selected layer                         |
+| e + ⌨️ Arrow keys | Nudge layer                  |
+| ⌨️ \[ / ]         | Rotate layer by -1° / +1° |
+
+
+### 🟦 When Multiple Layers Are Selected
+
+| Action                    | Description                                 |
+|---------------------------| ------------------------------------------- |
+| Ctrl + Click other layers | Add/remove from selection                   |
+| 🖱️ Drag                  | Move all selected layers together           |
+| Ctrl + Drag                  | Move with **snapping to grid**              |
+| ⇧ + Click on one          | Open **blend mode** for that specific layer |
+| Delete                    | Remove all selected layers                  |
+
+### ⬜ When No Layer is Selected
+
+| Action                            | Description                              |
+| --------------------------------- | ---------------------------------------- |
+| 🖱️ Drag background               | Pan the canvas                           |
+| 🖱️ Mouse wheel                   | Zoom in/out (focused on cursor position) |
+| ⇧ + Drag in empty space           | Start **canvas resize** region           |
+| 🖱️ Click layer                   | Select it                                |
+| Double click or click empty space | Deselect all layers                      |
+
+
 
 ## 🎨 Blend Mode Menu
 
