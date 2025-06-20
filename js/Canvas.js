@@ -10,6 +10,7 @@ export class Canvas {
         this.selectedLayer = null;
         this.selectedLayers = [];
         this.onSelectionChange = null;
+        this.lastMousePosition = { x: 0, y: 0 };
 
         this.viewport = {
             x: -(this.width / 4),
@@ -38,6 +39,8 @@ export class Canvas {
         });
         this.renderAnimationFrame = null;
         this.lastRenderTime = 0;
+        this.internalClipboard = [];
+        this.isMouseOver = false;
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
 
@@ -90,6 +93,9 @@ export class Canvas {
 
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
+
+        this.canvas.addEventListener('mouseenter', () => { this.isMouseOver = true; });
+        this.canvas.addEventListener('mouseleave', () => { this.isMouseOver = false; });
     }
 
     updateSelection(newSelection) {
@@ -152,10 +158,124 @@ export class Canvas {
     }
 
     /**
+     * Kopiuje zaznaczone warstwy do wewnętrznego schowka ORAZ
+     * jako spłaszczony obraz do globalnego schowka systemowego.
+     */
+    async copySelectedLayers() {
+        if (this.selectedLayers.length === 0) return;
+
+        // 1. Kopiowanie do wewnętrznego schowka (bez zmian)
+        this.internalClipboard = this.selectedLayers.map(layer => ({ ...layer }));
+        console.log(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
+
+        // 2. Kopiowanie spłaszczonego obrazu do globalnego schowka
+        try {
+            const blob = await this.getFlattenedSelectionAsBlob();
+            if (blob) {
+                // Używamy Clipboard API do wstawienia obrazka
+                const item = new ClipboardItem({ 'image/png': blob });
+                await navigator.clipboard.write([item]);
+                console.log("Flattened selection copied to the system clipboard.");
+            }
+        } catch (error) {
+            console.error("Failed to copy image to system clipboard:", error);
+            // Można tu dodać powiadomienie dla użytkownika, jeśli operacja się nie uda
+        }
+    }
+
+    /**
+     * Wkleja warstwy z wewnętrznego schowka na płótno.
+     */
+    pasteLayers() {
+        if (this.internalClipboard.length === 0) return;
+
+        const newLayers = [];
+        const pasteOffset = 20; // Przesunięcie wklejonych warstw
+
+        this.internalClipboard.forEach(clipboardLayer => {
+            const newLayer = {
+                ...clipboardLayer,
+                x: clipboardLayer.x + pasteOffset / this.viewport.zoom,
+                y: clipboardLayer.y + pasteOffset / this.viewport.zoom,
+                zIndex: this.layers.length // Upewnij się, że nowa warstwa jest na wierzchu
+            };
+            this.layers.push(newLayer);
+            newLayers.push(newLayer);
+        });
+
+        this.updateSelection(newLayers); // Zaznacz nowo wklejone warstwy
+        this.render();
+        console.log(`Pasted ${newLayers.length} layer(s).`);
+    }
+
+        /**
+     * Inteligentnie obsługuje operację wklejania.
+     * Najpierw próbuje wkleić obraz z globalnego schowka,
+     * a jeśli to się nie uda, wkleja z wewnętrznego schowka.
+     */
+    async handlePaste() {
+        try {
+            // Sprawdź, czy przeglądarka obsługuje API schowka
+            if (!navigator.clipboard?.read) {
+                console.log("Browser does not support clipboard read API. Falling back to internal paste.");
+                this.pasteLayers(); // Fallback do wklejania wewnętrznego
+                return;
+            }
+
+            const clipboardItems = await navigator.clipboard.read();
+            let imagePasted = false;
+
+            for (const item of clipboardItems) {
+                const imageType = item.types.find(type => type.startsWith('image/'));
+
+                if (imageType) {
+                    const blob = await item.getType(imageType);
+                    const img = new Image();
+                    img.onload = () => {
+                        // Tworzenie nowej warstwy z obrazka ze schowka
+                        const newLayer = {
+                            image: img,
+                            // Wklej obrazek tak, aby jego środek był pod kursorem
+                            x: this.lastMousePosition.x - img.width / 2,
+                            y: this.lastMousePosition.y - img.height / 2,
+                            width: img.width,   // Oryginalna szerokość
+                            height: img.height, // Oryginalna wysokość
+                            rotation: 0,
+                            zIndex: this.layers.length,
+                            blendMode: 'normal',
+                            opacity: 1
+                        };
+                        this.layers.push(newLayer);
+                        this.updateSelection([newLayer]); // Zaznacz nową warstwę
+                        this.render();
+
+                        // Zwolnij zasoby, aby uniknąć wycieków pamięci
+                        URL.revokeObjectURL(img.src);
+                    };
+                    img.src = URL.createObjectURL(blob);
+                    imagePasted = true;
+                    break; // Znaleziono i przetworzono obraz, przerwij pętlę
+                }
+            }
+
+            // Jeśli żaden obraz nie został wklejony z globalnego schowka, użyj naszego wewnętrznego
+            if (!imagePasted) {
+                this.pasteLayers();
+            }
+
+        } catch (err) {
+            console.error("Paste operation failed, falling back to internal paste. Error:", err);
+            // Błąd (np. brak uprawnień) również powinien skutkować próbą wklejenia z wewnętrznego schowka
+            this.pasteLayers();
+        }
+    }
+
+    /**
      * Główna metoda obsługująca ruch myszy.
      */
     handleMouseMove(e) {
         const worldCoords = this.getMouseWorldCoordinates(e);
+        this.lastMousePosition = worldCoords; // Zapisujemy ostatnią pozycję kursora
 
         switch (this.interaction.mode) {
             case 'panning':
@@ -281,6 +401,27 @@ export class Canvas {
      * Metoda obsługująca wciśnięcie klawisza.
      */
     handleKeyDown(e) {
+        // Przechwytywanie Ctrl+C i Ctrl+V tylko jeśli kursor jest nad płótnem
+        if (this.isMouseOver) {
+            // Kopiowanie (Ctrl+C)
+            if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+                if (this.selectedLayers.length > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.copySelectedLayers();
+                    return;
+                }
+            }
+
+            // Wklejanie (Ctrl+V)
+            if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handlePaste(); // Wywołujemy naszą nową, inteligentną funkcję
+                return;
+            }
+        }
+
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
@@ -289,8 +430,6 @@ export class Canvas {
 
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
-
-
                 this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
                 this.updateSelection([]);
                 this.render();
@@ -333,7 +472,6 @@ export class Canvas {
             }
         }
     }
-
     /**
      * Metoda obsługująca puszczenie klawisza.
      */
@@ -1222,6 +1360,93 @@ export class Canvas {
         });
     }
 
+
+        /**
+     * Tworzy spłaszczony obraz z zaznaczonych warstw, przycięty do ich zawartości.
+     * @returns {Promise<Blob|null>} Obiekt Blob z obrazem PNG lub null, jeśli nic nie jest zaznaczone.
+     */
+    async getFlattenedSelectionAsBlob() {
+        if (this.selectedLayers.length === 0) {
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            // 1. Oblicz bounding box dla wszystkich zaznaczonych i obróconych warstw
+            this.selectedLayers.forEach(layer => {
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                const rad = layer.rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+
+                const halfW = layer.width / 2;
+                const halfH = layer.height / 2;
+
+                const corners = [
+                    { x: -halfW, y: -halfH },
+                    { x:  halfW, y: -halfH },
+                    { x:  halfW, y:  halfH },
+                    { x: -halfW, y:  halfH }
+                ];
+
+                corners.forEach(p => {
+                    const worldX = centerX + (p.x * cos - p.y * sin);
+                    const worldY = centerY + (p.x * sin + p.y * cos);
+
+                    minX = Math.min(minX, worldX);
+                    minY = Math.min(minY, worldY);
+                    maxX = Math.max(maxX, worldX);
+                    maxY = Math.max(maxY, worldY);
+                });
+            });
+
+            const newWidth = Math.ceil(maxX - minX);
+            const newHeight = Math.ceil(maxY - minY);
+
+            if (newWidth <= 0 || newHeight <= 0) {
+                resolve(null);
+                return;
+            }
+
+            // 2. Stwórz tymczasowe płótno o wymiarach bounding boxa
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = newWidth;
+            tempCanvas.height = newHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // 3. Narysuj zaznaczone warstwy na nowym płótnie
+            // Przesuwamy cały układ współrzędnych, aby lewy górny róg bounding boxa był w (0,0)
+            tempCtx.translate(-minX, -minY);
+
+            const sortedSelection = [...this.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedSelection.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2, -layer.height / 2,
+                    layer.width, layer.height
+                );
+                tempCtx.restore();
+            });
+
+            // 4. Konwertuj płótno na Blob
+            tempCanvas.toBlob((blob) => {
+                resolve(blob);
+            }, 'image/png');
+        });
+    }
 
     moveLayerUp() {
         if (this.selectedLayers.length === 0) return;
