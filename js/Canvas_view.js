@@ -32,6 +32,16 @@ async function createCanvasWidget(node, widget, app) {
             background: linear-gradient(to bottom, #3a3a3a, #4a4a4a);
             transform: translateY(1px);
         }
+        
+        .painter-button:disabled,
+        .painter-button:disabled:hover {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            border-color: #444;
+        }
 
         .painter-button.primary {
             background: linear-gradient(to bottom, #4a6cd4, #3a5cc4);
@@ -286,26 +296,31 @@ async function createCanvasWidget(node, widget, app) {
                     };
                 }
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Remove Layer",
                 onclick: () => {
-                    const index = canvas.layers.indexOf(canvas.selectedLayer);
-                    canvas.removeLayer(index);
+                    if (canvas.selectedLayers.length > 0) {
+                        // Tworzy nową tablicę warstw, odfiltrowując te zaznaczone
+                        canvas.layers = canvas.layers.filter(l => !canvas.selectedLayers.includes(l));
+                        // Czyści zaznaczenie i powiadamia UI
+                        canvas.updateSelection([]);
+                        canvas.render();
+                    }
                 }
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Rotate +90°",
                 onclick: () => canvas.rotateLayer(90)
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Scale +5%",
                 onclick: () => canvas.resizeLayer(1.05)
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Scale -5%",
                 onclick: () => canvas.resizeLayer(0.95)
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Layer Up",
                 onclick: async () => {
                     canvas.moveLayerUp();
@@ -313,7 +328,7 @@ async function createCanvasWidget(node, widget, app) {
                     app.graph.runStep();
                 }
             }),
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Layer Down",
                 onclick: async () => {
                     canvas.moveLayerDown();
@@ -322,21 +337,21 @@ async function createCanvasWidget(node, widget, app) {
                 }
             }),
 
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Mirror H",
                 onclick: () => {
                     canvas.mirrorHorizontal();
                 }
             }),
 
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Mirror V",
                 onclick: () => {
                     canvas.mirrorVertical();
                 }
             }),
 
-            $el("button.painter-button", {
+            $el("button.painter-button.requires-selection", {
                 textContent: "Matting",
                 onclick: async () => {
                     try {
@@ -429,6 +444,18 @@ async function createCanvasWidget(node, widget, app) {
             })
         ])
     ]);
+
+
+    const updateButtonStates = () => {
+        const hasSelection = canvas.selectedLayers.length > 0;
+        const buttonsToToggle = controlPanel.querySelectorAll('.requires-selection');
+        buttonsToToggle.forEach(btn => {
+            btn.disabled = !hasSelection;
+        });
+    };
+
+    canvas.onSelectionChange = updateButtonStates;
+    updateButtonStates();
 
     const resizeObserver = new ResizeObserver((entries) => {
         const controlsHeight = entries[0].target.offsetHeight;

@@ -9,6 +9,7 @@ export class Canvas {
         this.layers = [];
         this.selectedLayer = null;
         this.selectedLayers = [];
+        this.onSelectionChange = null;
 
         this.viewport = {
             x: -(this.width / 4),
@@ -92,6 +93,16 @@ export class Canvas {
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
     }
 
+    updateSelection(newSelection) {
+        this.selectedLayers = newSelection || [];
+        this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+
+        // Wywołaj callback, jeśli istnieje, aby zaktualizować UI
+        if (this.onSelectionChange) {
+            this.onSelectionChange();
+        }
+    }
+
     /**
      * Resetuje stan interakcji do wartości domyślnych.
      */
@@ -113,7 +124,7 @@ export class Canvas {
 
         // Deselekcja po szybkim kliknięciu (pseudo-double-click)
         if (currentTime - this.interaction.lastClickTime < 300) {
-            this.selectedLayers = [];
+            this.updateSelection([]);
             this.selectedLayer = null;
             this.resetInteractionState();
             this.render();
@@ -251,15 +262,10 @@ export class Canvas {
             if (e.key === 'Delete') {
                 // Szukamy indeksu w tablicy this.layers, aby go usunąć
                 // Ale musimy usunąć wszystkie zaznaczone warstwy
-                this.selectedLayers.forEach(layerToRemove => {
-                    const index = this.layers.indexOf(layerToRemove);
-                    if (index > -1) {
-                        this.layers.splice(index, 1);
-                    }
-                });
-
-                this.selectedLayers = [];
-                this.selectedLayer = null;
+                // Filtrujemy główną tablicę warstw, usuwając te, które są zaznaczone
+                this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
+                // Resetujemy zaznaczenie
+                this.updateSelection([]);
                 this.render();
                 return;
             }
@@ -355,17 +361,22 @@ export class Canvas {
         this.interaction.mode = 'dragging';
         this.interaction.dragStart = {...worldCoords};
 
+        let currentSelection = [...this.selectedLayers];
+
         if (this.interaction.isCtrlPressed) {
-            const index = this.selectedLayers.indexOf(layer);
-            if (index === -1) this.selectedLayers.push(layer);
-            else this.selectedLayers.splice(index, 1);
+            const index = currentSelection.indexOf(layer);
+            if (index === -1) {
+                currentSelection.push(layer);
+            } else {
+                currentSelection.splice(index, 1);
+            }
         } else {
-            if (!this.selectedLayers.includes(layer)) {
-                this.selectedLayers = [layer];
+            if (!currentSelection.includes(layer)) {
+                currentSelection = [layer];
             }
         }
 
-        this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+        this.updateSelection(currentSelection);
 
         this.originalLayerPositions.clear();
         this.selectedLayers.forEach(l => {
@@ -384,8 +395,7 @@ export class Canvas {
 
     startPanning(e) {
         if (!this.interaction.isCtrlPressed) {
-            this.selectedLayers = [];
-            this.selectedLayer = null;
+            this.updateSelection([]);
         }
         this.interaction.mode = 'panning';
         this.interaction.panStart = {x: e.clientX, y: e.clientY};
@@ -416,7 +426,7 @@ export class Canvas {
             });
 
             // Zaktualizuj zaznaczenie, aby obejmowało tylko nowe warstwy
-            this.selectedLayers = newLayers;
+            this.updateSelection(newLayers);
             this.selectedLayer = newLayers.length > 0 ? newLayers[newLayers.length - 1] : null;
 
             // Zresetuj pozycje startowe dla nowo przeciąganych klonów
@@ -591,7 +601,7 @@ export class Canvas {
             };
 
             this.layers.push(layer);
-            this.selectedLayer = layer;
+            this.updateSelection([layer]);
             this.render();
 
             console.log("Layer added successfully");
@@ -1274,45 +1284,47 @@ export class Canvas {
     }
 
     mirrorHorizontal() {
-        if (!this.selectedLayer) return;
+        if (this.selectedLayers.length === 0) return;
 
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = this.selectedLayer.image.width;
-        tempCanvas.height = this.selectedLayer.image.height;
+        this.selectedLayers.forEach(layer => {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = layer.image.width;
+            tempCanvas.height = layer.image.height;
 
-        tempCtx.translate(tempCanvas.width, 0);
-        tempCtx.scale(-1, 1);
-        tempCtx.drawImage(this.selectedLayer.image, 0, 0);
+            tempCtx.translate(tempCanvas.width, 0);
+            tempCtx.scale(-1, 1);
+            tempCtx.drawImage(layer.image, 0, 0);
 
-        const newImage = new Image();
-        newImage.onload = () => {
-            this.selectedLayer.image = newImage;
-            this.render();
-        };
-        newImage.src = tempCanvas.toDataURL();
+            const newImage = new Image();
+            newImage.onload = () => {
+                layer.image = newImage;
+                this.render();
+            };
+            newImage.src = tempCanvas.toDataURL();
+        });
     }
-
     mirrorVertical() {
-        if (!this.selectedLayer) return;
+        if (this.selectedLayers.length === 0) return;
 
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCanvas.width = this.selectedLayer.image.width;
-        tempCanvas.height = this.selectedLayer.image.height;
+        this.selectedLayers.forEach(layer => {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = layer.image.width;
+            tempCanvas.height = layer.image.height;
 
-        tempCtx.translate(0, tempCanvas.height);
-        tempCtx.scale(1, -1);
-        tempCtx.drawImage(this.selectedLayer.image, 0, 0);
+            tempCtx.translate(0, tempCanvas.height);
+            tempCtx.scale(1, -1);
+            tempCtx.drawImage(layer.image, 0, 0);
 
-        const newImage = new Image();
-        newImage.onload = () => {
-            this.selectedLayer.image = newImage;
-            this.render();
-        };
-        newImage.src = tempCanvas.toDataURL();
+            const newImage = new Image();
+            newImage.onload = () => {
+                layer.image = newImage;
+                this.render();
+            };
+            newImage.src = tempCanvas.toDataURL();
+        });
     }
-
     async getLayerImageData(layer) {
         try {
             const tempCanvas = document.createElement('canvas');
