@@ -726,7 +726,7 @@ export class Canvas {
             }
             ctx.restore();
         });
-        if (this.isResizingCanvas && this.canvasResizeRect) {
+        if (this.interaction.mode === 'resizingCanvas' && this.canvasResizeRect) {
             const rect = this.canvasResizeRect;
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
