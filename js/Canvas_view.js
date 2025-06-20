@@ -177,29 +177,36 @@ async function createCanvasWidget(node, widget, app) {
     const helpTooltip = $el("div.painter-tooltip", {
         id: `painter-help-tooltip-${node.id}`,
         innerHTML: `
-            <h4>General</h4>
+            <h4>Canvas Control</h4>
             <ul>
-                <li><kbd>Click + Drag</kbd> - Pan canvas</li>
-                <li><kbd>Mouse Wheel</kbd> - Zoom in/out</li>
-                <li><kbd>Shift + Click (background)</kbd> - Resize canvas area</li>
+                <li><kbd>Click + Drag</kbd> - Pan canvas view</li>
+                <li><kbd>Mouse Wheel</kbd> - Zoom view in/out</li>
+                <li><kbd>Shift + Click (background)</kbd> - Start resizing canvas area</li>
+                <li><kbd>Shift + Ctrl + Click</kbd> - Start moving entire canvas</li>
                 <li><kbd>Double Click (background)</kbd> - Deselect all layers</li>
+            </ul>
+            <h4>Clipboard & I/O</h4>
+            <ul>
+                <li><kbd>Ctrl + C</kbd> - Copy selected layer(s)</li>
+                <li><kbd>Ctrl + V</kbd> - Paste from clipboard (image or internal layers)</li>
                 <li><kbd>Drag & Drop Image File</kbd> - Add image as a new layer</li>
             </ul>
             <h4>Layer Interaction</h4>
             <ul>
-                <li><kbd>Click + Drag</kbd> - Move layer</li>
+                <li><kbd>Click + Drag</kbd> - Move selected layer(s)</li>
                 <li><kbd>Ctrl + Click</kbd> - Add/Remove layer from selection</li>
                 <li><kbd>Alt + Drag</kbd> - Clone selected layer(s)</li>
                 <li><kbd>Shift + Click</kbd> - Show blend mode & opacity menu</li>
-                <li><kbd>Mouse Wheel</kbd> - Scale selected layer(s)</li>
-                <li><kbd>Shift + Mouse Wheel</kbd> - Rotate selected layer(s)</li>
+                <li><kbd>Mouse Wheel</kbd> - Scale layer (snaps to grid)</li>
+                <li><kbd>Ctrl + Mouse Wheel</kbd> - Fine-scale layer</li>
+                <li><kbd>Shift + Mouse Wheel</kbd> - Rotate layer by 5°</li>
                 <li><kbd>Arrow Keys</kbd> - Nudge layer by 1px</li>
                 <li><kbd>Shift + Arrow Keys</kbd> - Nudge layer by 10px</li>
                 <li><kbd>[</kbd> or <kbd>]</kbd> - Rotate by 1°</li>
                 <li><kbd>Shift + [</kbd> or <kbd>]</kbd> - Rotate by 10°</li>
                 <li><kbd>Delete</kbd> - Delete selected layer(s)</li>
             </ul>
-            <h4>Transform Handles (when layer selected)</h4>
+            <h4>Transform Handles (on selected layer)</h4>
             <ul>
                 <li><kbd>Drag Corner/Side</kbd> - Resize layer</li>
                 <li><kbd>Drag Rotation Handle</kbd> - Rotate layer</li>
