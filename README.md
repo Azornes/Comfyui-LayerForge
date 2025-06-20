@@ -119,4 +119,4 @@ This project is licensed under the MIT License. Feel free to use, modify, and di
 
 ---
 
-Based on the original [**Comfyui-Ycnode**](https://github.com/Yc735/comfyui-ycnode) by Yc735. This fork significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
+Based on the original [**Comfyui-Ycanvas**](https://github.com/yichengup/Comfyui-Ycanvas) by yichengup. This fork significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
