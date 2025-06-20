@@ -10,7 +10,7 @@ export class Canvas {
         this.selectedLayer = null;
         this.selectedLayers = [];
         this.onSelectionChange = null;
-        this.lastMousePosition = { x: 0, y: 0 };
+        this.lastMousePosition = {x: 0, y: 0};
 
         this.viewport = {
             x: -(this.width / 4),
@@ -31,7 +31,8 @@ export class Canvas {
             lastClickTime: 0,
         };
         this.originalLayerPositions = new Map();
-        this.canvasResizeRect = null;
+        this.interaction.canvasResizeRect = null;
+        this.interaction.canvasMoveRect = null;
 
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
@@ -94,8 +95,12 @@ export class Canvas {
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
 
-        this.canvas.addEventListener('mouseenter', () => { this.isMouseOver = true; });
-        this.canvas.addEventListener('mouseleave', () => { this.isMouseOver = false; });
+        this.canvas.addEventListener('mouseenter', () => {
+            this.isMouseOver = true;
+        });
+        this.canvas.addEventListener('mouseleave', () => {
+            this.isMouseOver = false;
+        });
     }
 
     updateSelection(newSelection) {
@@ -113,7 +118,8 @@ export class Canvas {
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
         this.originalLayerPositions.clear();
-        this.canvasResizeRect = null;
+        this.interaction.canvasResizeRect = null;
+        this.interaction.canvasMoveRect = null;
         this.interaction.hasClonedInDrag = false;
         this.canvas.style.cursor = 'default';
     }
@@ -124,6 +130,12 @@ export class Canvas {
     handleMouseDown(e) {
         const currentTime = Date.now();
         const worldCoords = this.getMouseWorldCoordinates(e);
+        if (e.shiftKey && e.ctrlKey) {
+            this.startCanvasMove(worldCoords);
+            this.render();
+            return;
+        }
+
         if (currentTime - this.interaction.lastClickTime < 300) {
             this.updateSelection([]);
             this.selectedLayer = null;
@@ -163,23 +175,17 @@ export class Canvas {
      */
     async copySelectedLayers() {
         if (this.selectedLayers.length === 0) return;
-
-        // 1. Kopiowanie do wewnętrznego schowka (bez zmian)
-        this.internalClipboard = this.selectedLayers.map(layer => ({ ...layer }));
+        this.internalClipboard = this.selectedLayers.map(layer => ({...layer}));
         console.log(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
-
-        // 2. Kopiowanie spłaszczonego obrazu do globalnego schowka
         try {
             const blob = await this.getFlattenedSelectionAsBlob();
             if (blob) {
-                // Używamy Clipboard API do wstawienia obrazka
-                const item = new ClipboardItem({ 'image/png': blob });
+                const item = new ClipboardItem({'image/png': blob});
                 await navigator.clipboard.write([item]);
                 console.log("Flattened selection copied to the system clipboard.");
             }
         } catch (error) {
             console.error("Failed to copy image to system clipboard:", error);
-            // Można tu dodać powiadomienie dla użytkownika, jeśli operacja się nie uda
         }
     }
 
@@ -190,35 +196,34 @@ export class Canvas {
         if (this.internalClipboard.length === 0) return;
 
         const newLayers = [];
-        const pasteOffset = 20; // Przesunięcie wklejonych warstw
+        const pasteOffset = 20;
 
         this.internalClipboard.forEach(clipboardLayer => {
             const newLayer = {
                 ...clipboardLayer,
                 x: clipboardLayer.x + pasteOffset / this.viewport.zoom,
                 y: clipboardLayer.y + pasteOffset / this.viewport.zoom,
-                zIndex: this.layers.length // Upewnij się, że nowa warstwa jest na wierzchu
+                zIndex: this.layers.length
             };
             this.layers.push(newLayer);
             newLayers.push(newLayer);
         });
 
-        this.updateSelection(newLayers); // Zaznacz nowo wklejone warstwy
+        this.updateSelection(newLayers);
         this.render();
         console.log(`Pasted ${newLayers.length} layer(s).`);
     }
 
-        /**
+    /**
      * Inteligentnie obsługuje operację wklejania.
      * Najpierw próbuje wkleić obraz z globalnego schowka,
      * a jeśli to się nie uda, wkleja z wewnętrznego schowka.
      */
     async handlePaste() {
         try {
-            // Sprawdź, czy przeglądarka obsługuje API schowka
             if (!navigator.clipboard?.read) {
                 console.log("Browser does not support clipboard read API. Falling back to internal paste.");
-                this.pasteLayers(); // Fallback do wklejania wewnętrznego
+                this.pasteLayers();
                 return;
             }
 
@@ -232,40 +237,33 @@ export class Canvas {
                     const blob = await item.getType(imageType);
                     const img = new Image();
                     img.onload = () => {
-                        // Tworzenie nowej warstwy z obrazka ze schowka
                         const newLayer = {
                             image: img,
-                            // Wklej obrazek tak, aby jego środek był pod kursorem
                             x: this.lastMousePosition.x - img.width / 2,
                             y: this.lastMousePosition.y - img.height / 2,
-                            width: img.width,   // Oryginalna szerokość
-                            height: img.height, // Oryginalna wysokość
+                            width: img.width,
+                            height: img.height,
                             rotation: 0,
                             zIndex: this.layers.length,
                             blendMode: 'normal',
                             opacity: 1
                         };
                         this.layers.push(newLayer);
-                        this.updateSelection([newLayer]); // Zaznacz nową warstwę
+                        this.updateSelection([newLayer]);
                         this.render();
-
-                        // Zwolnij zasoby, aby uniknąć wycieków pamięci
                         URL.revokeObjectURL(img.src);
                     };
                     img.src = URL.createObjectURL(blob);
                     imagePasted = true;
-                    break; // Znaleziono i przetworzono obraz, przerwij pętlę
+                    break;
                 }
             }
-
-            // Jeśli żaden obraz nie został wklejony z globalnego schowka, użyj naszego wewnętrznego
             if (!imagePasted) {
                 this.pasteLayers();
             }
 
         } catch (err) {
             console.error("Paste operation failed, falling back to internal paste. Error:", err);
-            // Błąd (np. brak uprawnień) również powinien skutkować próbą wklejenia z wewnętrznego schowka
             this.pasteLayers();
         }
     }
@@ -275,7 +273,7 @@ export class Canvas {
      */
     handleMouseMove(e) {
         const worldCoords = this.getMouseWorldCoordinates(e);
-        this.lastMousePosition = worldCoords; // Zapisujemy ostatnią pozycję kursora
+        this.lastMousePosition = worldCoords;
 
         switch (this.interaction.mode) {
             case 'panning':
@@ -293,6 +291,9 @@ export class Canvas {
             case 'resizingCanvas':
                 this.updateCanvasResize(worldCoords);
                 break;
+            case 'movingCanvas':
+                this.updateCanvasMove(worldCoords);
+                break;
             default:
                 this.updateCursor(worldCoords);
                 break;
@@ -305,6 +306,8 @@ export class Canvas {
     handleMouseUp(e) {
         if (this.interaction.mode === 'resizingCanvas') {
             this.finalizeCanvasResize();
+        } else if (this.interaction.mode === 'movingCanvas') {
+            this.finalizeCanvasMove();
         }
         this.resetInteractionState();
         this.render();
@@ -401,9 +404,7 @@ export class Canvas {
      * Metoda obsługująca wciśnięcie klawisza.
      */
     handleKeyDown(e) {
-        // Przechwytywanie Ctrl+C i Ctrl+V tylko jeśli kursor jest nad płótnem
         if (this.isMouseOver) {
-            // Kopiowanie (Ctrl+C)
             if (e.ctrlKey && e.key.toLowerCase() === 'c') {
                 if (this.selectedLayers.length > 0) {
                     e.preventDefault();
@@ -412,12 +413,10 @@ export class Canvas {
                     return;
                 }
             }
-
-            // Wklejanie (Ctrl+V)
             if (e.ctrlKey && e.key.toLowerCase() === 'v') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.handlePaste(); // Wywołujemy naszą nową, inteligentną funkcję
+                this.handlePaste();
                 return;
             }
         }
@@ -472,6 +471,7 @@ export class Canvas {
             }
         }
     }
+
     /**
      * Metoda obsługująca puszczenie klawisza.
      */
@@ -554,7 +554,59 @@ export class Canvas {
         const startX = this.snapToGrid(worldCoords.x);
         const startY = this.snapToGrid(worldCoords.y);
         this.interaction.canvasResizeStart = {x: startX, y: startY};
-        this.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
+        this.interaction.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
+        this.render();
+    }
+
+    startCanvasMove(worldCoords) {
+        this.interaction.mode = 'movingCanvas';
+        this.interaction.dragStart = { ...worldCoords };
+        const initialX = this.snapToGrid(worldCoords.x - this.width / 2);
+        const initialY = this.snapToGrid(worldCoords.y - this.height / 2);
+
+        this.interaction.canvasMoveRect = {
+            x: initialX,
+            y: initialY,
+            width: this.width,
+            height: this.height
+        };
+
+        this.canvas.style.cursor = 'grabbing';
+        this.render();
+    }
+
+    /**
+     * Aktualizuje pozycję "ducha" płótna podczas przesuwania.
+     */
+    updateCanvasMove(worldCoords) {
+        if (!this.interaction.canvasMoveRect) return;
+        const dx = worldCoords.x - this.interaction.dragStart.x;
+        const dy = worldCoords.y - this.interaction.dragStart.y;
+        const initialRectX = this.snapToGrid(this.interaction.dragStart.x - this.width / 2);
+        const initialRectY = this.snapToGrid(this.interaction.dragStart.y - this.height / 2);
+        this.interaction.canvasMoveRect.x = this.snapToGrid(initialRectX + dx);
+        this.interaction.canvasMoveRect.y = this.snapToGrid(initialRectY + dy);
+
+        this.render();
+    }
+
+    /**
+     * Kończy przesuwanie płótna i zatwierdza nową pozycję.
+     */
+    finalizeCanvasMove() {
+        const moveRect = this.interaction.canvasMoveRect;
+
+        if (moveRect && (moveRect.x !== 0 || moveRect.y !== 0)) {
+            const finalX = moveRect.x;
+            const finalY = moveRect.y;
+
+            this.layers.forEach(layer => {
+                layer.x -= finalX;
+                layer.y -= finalY;
+            });
+            this.viewport.x -= finalX;
+            this.viewport.y -= finalY;
+        }
         this.render();
     }
 
@@ -701,19 +753,19 @@ export class Canvas {
         const snappedMouseY = this.snapToGrid(worldCoords.y);
         const start = this.interaction.canvasResizeStart;
 
-        this.canvasResizeRect.x = Math.min(snappedMouseX, start.x);
-        this.canvasResizeRect.y = Math.min(snappedMouseY, start.y);
-        this.canvasResizeRect.width = Math.abs(snappedMouseX - start.x);
-        this.canvasResizeRect.height = Math.abs(snappedMouseY - start.y);
+        this.interaction.canvasResizeRect.x = Math.min(snappedMouseX, start.x);
+        this.interaction.canvasResizeRect.y = Math.min(snappedMouseY, start.y);
+        this.interaction.canvasResizeRect.width = Math.abs(snappedMouseX - start.x);
+        this.interaction.canvasResizeRect.height = Math.abs(snappedMouseY - start.y);
         this.render();
     }
 
     finalizeCanvasResize() {
-        if (this.canvasResizeRect && this.canvasResizeRect.width > 1 && this.canvasResizeRect.height > 1) {
-            const newWidth = Math.round(this.canvasResizeRect.width);
-            const newHeight = Math.round(this.canvasResizeRect.height);
-            const rectX = this.canvasResizeRect.x;
-            const rectY = this.canvasResizeRect.y;
+        if (this.interaction.canvasResizeRect && this.interaction.canvasResizeRect.width > 1 && this.interaction.canvasResizeRect.height > 1) {
+            const newWidth = Math.round(this.interaction.canvasResizeRect.width);
+            const newHeight = Math.round(this.interaction.canvasResizeRect.height);
+            const rectX = this.interaction.canvasResizeRect.x;
+            const rectY = this.interaction.canvasResizeRect.y;
 
             this.updateCanvasSize(newWidth, newHeight);
 
@@ -932,10 +984,10 @@ export class Canvas {
             }
             ctx.restore();
         });
-        this.drawCanvasOutline(ctx);
 
-        if (this.interaction.mode === 'resizingCanvas' && this.canvasResizeRect) {
-            const rect = this.canvasResizeRect;
+        this.drawCanvasOutline(ctx);
+        if (this.interaction.mode === 'resizingCanvas' && this.interaction.canvasResizeRect) {
+            const rect = this.interaction.canvasResizeRect;
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
             ctx.lineWidth = 2 / this.viewport.zoom;
@@ -950,25 +1002,50 @@ export class Canvas {
 
                 ctx.save();
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
-
                 const screenX = (textWorldX - this.viewport.x) * this.viewport.zoom;
                 const screenY = (textWorldY - this.viewport.y) * this.viewport.zoom;
-
                 ctx.font = "14px sans-serif";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 const textMetrics = ctx.measureText(text);
                 const bgWidth = textMetrics.width + 10;
                 const bgHeight = 22;
-
                 ctx.fillStyle = "rgba(0, 128, 0, 0.7)";
                 ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
-
                 ctx.fillStyle = "white";
                 ctx.fillText(text, screenX, screenY);
-
                 ctx.restore();
             }
+        }
+        if (this.interaction.mode === 'movingCanvas' && this.interaction.canvasMoveRect) {
+            const rect = this.interaction.canvasMoveRect;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+            ctx.lineWidth = 2 / this.viewport.zoom;
+            ctx.setLineDash([10 / this.viewport.zoom, 5 / this.viewport.zoom]);
+            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+            ctx.setLineDash([]);
+            ctx.restore();
+
+            const text = `(${Math.round(rect.x)}, ${Math.round(rect.y)})`;
+            const textWorldX = rect.x + rect.width / 2;
+            const textWorldY = rect.y - (20 / this.viewport.zoom);
+
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            const screenX = (textWorldX - this.viewport.x) * this.viewport.zoom;
+            const screenY = (textWorldY - this.viewport.y) * this.viewport.zoom;
+            ctx.font = "14px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const textMetrics = ctx.measureText(text);
+            const bgWidth = textMetrics.width + 10;
+            const bgHeight = 22;
+            ctx.fillStyle = "rgba(0, 100, 170, 0.7)";
+            ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
+            ctx.fillStyle = "white";
+            ctx.fillText(text, screenX, screenY);
+            ctx.restore();
         }
 
         if (this.selectedLayer) {
@@ -1361,7 +1438,7 @@ export class Canvas {
     }
 
 
-        /**
+    /**
      * Tworzy spłaszczony obraz z zaznaczonych warstw, przycięty do ich zawartości.
      * @returns {Promise<Blob|null>} Obiekt Blob z obrazem PNG lub null, jeśli nic nie jest zaznaczone.
      */
@@ -1372,8 +1449,6 @@ export class Canvas {
 
         return new Promise((resolve) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-            // 1. Oblicz bounding box dla wszystkich zaznaczonych i obróconych warstw
             this.selectedLayers.forEach(layer => {
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
@@ -1385,10 +1460,10 @@ export class Canvas {
                 const halfH = layer.height / 2;
 
                 const corners = [
-                    { x: -halfW, y: -halfH },
-                    { x:  halfW, y: -halfH },
-                    { x:  halfW, y:  halfH },
-                    { x: -halfW, y:  halfH }
+                    {x: -halfW, y: -halfH},
+                    {x: halfW, y: -halfH},
+                    {x: halfW, y: halfH},
+                    {x: -halfW, y: halfH}
                 ];
 
                 corners.forEach(p => {
@@ -1409,15 +1484,11 @@ export class Canvas {
                 resolve(null);
                 return;
             }
-
-            // 2. Stwórz tymczasowe płótno o wymiarach bounding boxa
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = newWidth;
             tempCanvas.height = newHeight;
             const tempCtx = tempCanvas.getContext('2d');
 
-            // 3. Narysuj zaznaczone warstwy na nowym płótnie
-            // Przesuwamy cały układ współrzędnych, aby lewy górny róg bounding boxa był w (0,0)
             tempCtx.translate(-minX, -minY);
 
             const sortedSelection = [...this.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
@@ -1440,8 +1511,6 @@ export class Canvas {
                 );
                 tempCtx.restore();
             });
-
-            // 4. Konwertuj płótno na Blob
             tempCanvas.toBlob((blob) => {
                 resolve(blob);
             }, 'image/png');
