@@ -127,9 +127,89 @@ async function createCanvasWidget(node, widget, app) {
         .blend-mode-item.active {
             background-color: rgba(0,0,0,0.1);
         }
+        
+                .blend-mode-item.active {
+            background-color: rgba(0,0,0,0.1);
+        }
+
+        .painter-tooltip {
+            position: fixed; /* Pozycjonowanie względem okna przeglądarki */
+            display: none;   /* Domyślnie ukryty */
+            background: #3a3a3a;
+            color: #f0f0f0;
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 12px 18px;
+            z-index: 1001; /* Wyżej niż inne elementy UI */
+            font-size: 13px;
+            line-height: 1.7;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none; /* Zapobiega interakcji myszy z dymkiem */
+        }
+        
+        .painter-tooltip h4 {
+            margin-top: 10px;
+            margin-bottom: 5px;
+            color: #4a90e2; /* Jasnoniebieski akcent */
+            border-bottom: 1px solid #555;
+            padding-bottom: 4px;
+        }
+
+        .painter-tooltip ul {
+            list-style: none;
+            padding-left: 10px;
+            margin: 0;
+        }
+        
+        .painter-tooltip kbd {
+            background-color: #2a2a2a;
+            border: 1px solid #1a1a1a;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #d0d0d0;
+        }
     `;
     document.head.appendChild(style);
 
+    const helpTooltip = $el("div.painter-tooltip", {
+        id: `painter-help-tooltip-${node.id}`,
+        innerHTML: `
+            <h4>General</h4>
+            <ul>
+                <li><kbd>Click + Drag</kbd> - Pan canvas</li>
+                <li><kbd>Mouse Wheel</kbd> - Zoom in/out</li>
+                <li><kbd>Shift + Click (background)</kbd> - Resize canvas area</li>
+                <li><kbd>Double Click (background)</kbd> - Deselect all layers</li>
+                <li><kbd>Drag & Drop Image File</kbd> - Add image as a new layer</li>
+            </ul>
+            <h4>Layer Interaction</h4>
+            <ul>
+                <li><kbd>Click + Drag</kbd> - Move layer</li>
+                <li><kbd>Ctrl + Click</kbd> - Add/Remove layer from selection</li>
+                <li><kbd>Alt + Drag</kbd> - Clone selected layer(s)</li>
+                <li><kbd>Shift + Click</kbd> - Show blend mode & opacity menu</li>
+                <li><kbd>Mouse Wheel</kbd> - Scale selected layer(s)</li>
+                <li><kbd>Shift + Mouse Wheel</kbd> - Rotate selected layer(s)</li>
+                <li><kbd>Arrow Keys</kbd> - Nudge layer by 1px</li>
+                <li><kbd>Shift + Arrow Keys</kbd> - Nudge layer by 10px</li>
+                <li><kbd>[</kbd> or <kbd>]</kbd> - Rotate by 1°</li>
+                <li><kbd>Shift + [</kbd> or <kbd>]</kbd> - Rotate by 10°</li>
+                <li><kbd>Delete</kbd> - Delete selected layer(s)</li>
+            </ul>
+            <h4>Transform Handles (when layer selected)</h4>
+            <ul>
+                <li><kbd>Drag Corner/Side</kbd> - Resize layer</li>
+                <li><kbd>Drag Rotation Handle</kbd> - Rotate layer</li>
+                <li><kbd>Hold Shift</kbd> - Keep aspect ratio / Snap rotation to 15°</li>
+                <li><kbd>Hold Ctrl</kbd> - Snap to grid</li>
+            </ul>
+        `
+    });
+
+    document.body.appendChild(helpTooltip);
     const controlPanel = $el("div.painterControlPanel", {}, [
         $el("div.controls.painter-controls", {
             style: {
@@ -154,6 +234,25 @@ async function createCanvasWidget(node, widget, app) {
                 canvasContainer.style.top = (controlsHeight + 10) + "px";
             }
         }, [
+            $el("button.painter-button", {
+                textContent: "?",
+                title: "Show shortcuts",
+                style: {
+                    minWidth: "30px",
+                    maxWidth: "30px",
+                    fontWeight: "bold",
+                },
+                onmouseenter: (e) => {
+                    const rect = e.target.getBoundingClientRect();
+                    // Pozycjonujemy dymek pod przyciskiem
+                    helpTooltip.style.left = `${rect.left}px`;
+                    helpTooltip.style.top = `${rect.bottom + 5}px`;
+                    helpTooltip.style.display = 'block';
+                },
+                onmouseleave: () => {
+                    helpTooltip.style.display = 'none';
+                }
+            }),
             $el("button.painter-button.primary", {
                 textContent: "Add Image",
                 onclick: () => {
@@ -469,8 +568,6 @@ async function createCanvasWidget(node, widget, app) {
                     }
                 }
             })
-
-
         ])
     ]);
 
@@ -901,6 +998,18 @@ app.registerExtension({
 
                 return r;
             };
+
+            const onRemoved = nodeType.prototype.onRemoved;
+            nodeType.prototype.onRemoved = function () {
+                // Usuń dymek z podpowiedziami, jeśli istnieje
+                const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
+                if (tooltip) {
+                    tooltip.remove();
+                }
+                return onRemoved?.apply(this, arguments);
+            };
+
+
             const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
             nodeType.prototype.getExtraMenuOptions = function (_, options) {
                 originalGetExtraMenuOptions?.apply(this, arguments);
