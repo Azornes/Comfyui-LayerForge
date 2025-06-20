@@ -22,16 +22,16 @@
 
 ### 🟩 When a Single Layer(Photo) is Selected
 
-| Action            | Description                                   |
-|-------------------| --------------------------------------------- |
-| 🔁 Mouse wheel    | Scale layer in/out                            |
-| ⇧ + Mouse wheel   | Rotate layer clockwise / counterclockwise     |
-| 🖱️ Drag          | Move layer freely                             |
-| Ctrl + Drag       | Move layer with **grid snapping**             |
-| ⇧ + Click again   | Open **Blend Mode** and opacity menu          |
-| ⌫ / Delete        | Remove selected layer                         |
+| Action           | Description                                   |
+|------------------| --------------------------------------------- |
+| 🔁 Mouse wheel   | Scale layer in/out                            |
+| ⇧ + Mouse wheel  | Rotate layer clockwise / counterclockwise     |
+| 🖱️ Drag         | Move layer freely                             |
+| Ctrl + Drag      | Move layer with **grid snapping**             |
+| ⇧ + Click again  | Open **Blend Mode** and opacity menu          |
+| Delete        | Remove selected layer                         |
 | e + ⌨️ Arrow keys | Nudge layer                  |
-| ⌨️ \[ / ]         | Rotate layer by -1° / +1° |
+| ⌨️ \[ / ]        | Rotate layer by -1° / +1° |
 
 
 ### 🟦 When Multiple Layers Are Selected
