@@ -811,10 +811,12 @@ export class Canvas {
             this.selectedLayers.forEach(layer => {
                 if (!layer.image) return;
 
+                const layerIndex = this.layers.indexOf(layer);
                 const currentWidth = Math.round(layer.width);
                 const currentHeight = Math.round(layer.height);
                 const rotation = Math.round(layer.rotation % 360);
-                const text = `${currentWidth}x${currentHeight} | ${rotation}°`;
+                const text = `${currentWidth}x${currentHeight} | ${rotation}° | Layer #${layerIndex + 1}`;
+
 
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
