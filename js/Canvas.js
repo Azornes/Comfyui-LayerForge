@@ -206,7 +206,6 @@ export class Canvas {
     handleWheel(e) {
         e.preventDefault();
         if (this.selectedLayer) {
-            const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05;
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
 
             this.selectedLayers.forEach(layer => {
@@ -215,10 +214,51 @@ export class Canvas {
                 } else {
                     const oldWidth = layer.width;
                     const oldHeight = layer.height;
-                    layer.width *= scaleFactor;
-                    layer.height *= scaleFactor;
-                    layer.x += (oldWidth - layer.width) / 2;
-                    layer.y += (oldHeight - layer.height) / 2;
+                    let scaleFactor;
+
+                    if (e.ctrlKey) {
+
+                        const direction = e.deltaY > 0 ? -1 : 1;
+
+                        const baseDimension = Math.max(layer.width, layer.height);
+                        const newBaseDimension = baseDimension + direction;
+                        if (newBaseDimension < 10) {
+                            return;
+                        }
+
+                        scaleFactor = newBaseDimension / baseDimension;
+
+                    } else {
+
+                        const gridSize = 64;
+                        const direction = e.deltaY > 0 ? -1 : 1;
+                        let targetHeight;
+
+                        if (direction > 0) {
+
+                            targetHeight = (Math.floor(oldHeight / gridSize) + 1) * gridSize;
+                        } else {
+
+                            targetHeight = (Math.ceil(oldHeight / gridSize) - 1) * gridSize;
+                        }
+                        if (targetHeight < gridSize / 2) {
+                            targetHeight = gridSize / 2;
+                        }
+                        if (Math.abs(oldHeight - targetHeight) < 1) {
+                            if (direction > 0) targetHeight += gridSize;
+                            else targetHeight -= gridSize;
+
+                            if (targetHeight < gridSize / 2) return;
+                        }
+
+                        scaleFactor = targetHeight / oldHeight;
+                    }
+                    if (scaleFactor && isFinite(scaleFactor)) {
+                        layer.width *= scaleFactor;
+                        layer.height *= scaleFactor;
+                        layer.x += (oldWidth - layer.width) / 2;
+                        layer.y += (oldHeight - layer.height) / 2;
+                    }
                 }
             });
         } else {
@@ -726,7 +766,6 @@ export class Canvas {
         ctx.translate(-this.viewport.x, -this.viewport.y);
 
         this.drawGrid(ctx);
-        // Usunięto this.drawCanvasOutline(ctx) z tego miejsca.
 
         const sortedLayers = [...this.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
@@ -755,8 +794,6 @@ export class Canvas {
             }
             ctx.restore();
         });
-
-        // Dodano this.drawCanvasOutline(ctx) tutaj, aby rysowała się na wierzchu warstw.
         this.drawCanvasOutline(ctx);
 
         if (this.interaction.mode === 'resizingCanvas' && this.canvasResizeRect) {
