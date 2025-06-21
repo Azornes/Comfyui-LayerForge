@@ -171,6 +171,15 @@ async function createCanvasWidget(node, widget, app) {
             font-size: 12px;
             color: #d0d0d0;
         }
+        
+        .painter-container.has-focus {
+            /* Używamy box-shadow, aby stworzyć efekt zewnętrznej ramki,
+               która nie wpłynie na rozmiar ani pozycję elementu. */
+            box-shadow: 0 0 0 2px white;
+            /* Możesz też zmienić kolor istniejącej ramki, ale box-shadow jest bardziej wyrazisty */
+            /* border-color: white; */
+        }
+       
     `;
     document.head.appendChild(style);
 
@@ -251,7 +260,6 @@ async function createCanvasWidget(node, widget, app) {
                 },
                 onmouseenter: (e) => {
                     const rect = e.target.getBoundingClientRect();
-                    // Pozycjonujemy dymek pod przyciskiem
                     helpTooltip.style.left = `${rect.left}px`;
                     helpTooltip.style.top = `${rect.bottom + 5}px`;
                     helpTooltip.style.display = 'block';
@@ -634,12 +642,22 @@ async function createCanvasWidget(node, widget, app) {
         }
     }, [canvas.canvas]);
 
+    canvas.canvas.addEventListener('focus', () => {
+        canvasContainer.classList.add('has-focus');
+    });
+
+    canvas.canvas.addEventListener('blur', () => {
+        canvasContainer.classList.remove('has-focus');
+    });
+
+
     node.onResize = function () {
         canvas.render();
     };
 
     canvas.canvas.addEventListener('mouseup', updateOutput);
     canvas.canvas.addEventListener('mouseleave', updateOutput);
+
 
     const mainContainer = $el("div.painterMainContainer", {
         style: {
@@ -1008,7 +1026,6 @@ app.registerExtension({
 
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {
-                // Usuń dymek z podpowiedziami, jeśli istnieje
                 const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
                 if (tooltip) {
                     tooltip.remove();

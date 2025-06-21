@@ -84,6 +84,10 @@ export class Canvas {
         this.canvas.style.backgroundColor = '#606060';
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
+
+
+        this.canvas.tabIndex = 0;
+        this.canvas.style.outline = 'none';
     }
 
     setupEventListeners() {
@@ -93,8 +97,9 @@ export class Canvas {
         this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
         this.canvas.addEventListener('wheel', this.handleWheel.bind(this), {passive: false});
 
-        document.addEventListener('keydown', this.handleKeyDown.bind(this));
-        document.addEventListener('keyup', this.handleKeyUp.bind(this));
+
+        this.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
+        this.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
 
         this.canvas.addEventListener('mouseenter', () => {
             this.isMouseOver = true;
@@ -112,7 +117,7 @@ export class Canvas {
         }
     }
 
-    
+
     resetInteractionState() {
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
@@ -124,8 +129,11 @@ export class Canvas {
         this.canvas.style.cursor = 'default';
     }
 
-    
     handleMouseDown(e) {
+
+
+        this.canvas.focus();
+
         const currentTime = Date.now();
         const worldCoords = this.getMouseWorldCoordinates(e);
         if (e.shiftKey && e.ctrlKey) {
@@ -167,7 +175,7 @@ export class Canvas {
         this.render();
     }
 
-    
+
     async copySelectedLayers() {
         if (this.selectedLayers.length === 0) return;
         this.internalClipboard = this.selectedLayers.map(layer => ({...layer}));
@@ -184,7 +192,7 @@ export class Canvas {
         }
     }
 
-    
+
     pasteLayers() {
         if (this.internalClipboard.length === 0) return;
 
@@ -207,7 +215,7 @@ export class Canvas {
         console.log(`Pasted ${newLayers.length} layer(s).`);
     }
 
-    
+
     async handlePaste() {
         try {
             if (!navigator.clipboard?.read) {
@@ -257,7 +265,7 @@ export class Canvas {
         }
     }
 
-    
+
     handleMouseMove(e) {
         const worldCoords = this.getMouseWorldCoordinates(e);
         this.lastMousePosition = worldCoords;
@@ -287,7 +295,7 @@ export class Canvas {
         }
     }
 
-    
+
     handleMouseUp(e) {
         if (this.interaction.mode === 'resizingCanvas') {
             this.finalizeCanvasResize();
@@ -298,7 +306,7 @@ export class Canvas {
         this.render();
     }
 
-    
+
     handleMouseLeave(e) {
         if (this.interaction.mode !== 'none') {
             this.resetInteractionState();
@@ -306,7 +314,7 @@ export class Canvas {
         }
     }
 
-    
+
     handleWheel(e) {
         e.preventDefault();
         if (this.selectedLayer) {
@@ -381,33 +389,30 @@ export class Canvas {
         this.render();
     }
 
-    
     handleKeyDown(e) {
-        if (this.isMouseOver) {
-            if (e.ctrlKey && e.key.toLowerCase() === 'c') {
-                if (this.selectedLayers.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.copySelectedLayers();
-                    return;
-                }
-            }
-            if (e.ctrlKey && e.key.toLowerCase() === 'v') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handlePaste();
-                return;
-            }
-        }
-
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
             e.preventDefault();
         }
-
+        if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+            if (this.selectedLayers.length > 0) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.copySelectedLayers();
+                return;
+            }
+        }
+        if (e.ctrlKey && e.key.toLowerCase() === 'v') {
+            e.preventDefault();
+            e.stopPropagation();
+            this.handlePaste();
+            return;
+        }
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
+                e.preventDefault();
+                e.stopPropagation();
                 this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
                 this.updateSelection([]);
                 this.render();
@@ -418,39 +423,31 @@ export class Canvas {
             let needsRender = false;
             switch (e.code) {
                 case 'ArrowLeft':
-                    this.selectedLayers.forEach(l => l.x -= step);
-                    needsRender = true;
-                    break;
                 case 'ArrowRight':
-                    this.selectedLayers.forEach(l => l.x += step);
-                    needsRender = true;
-                    break;
                 case 'ArrowUp':
-                    this.selectedLayers.forEach(l => l.y -= step);
-                    needsRender = true;
-                    break;
                 case 'ArrowDown':
-                    this.selectedLayers.forEach(l => l.y += step);
-                    needsRender = true;
-                    break;
                 case 'BracketLeft':
-                    this.selectedLayers.forEach(l => l.rotation -= step);
-                    needsRender = true;
-                    break;
                 case 'BracketRight':
-                    this.selectedLayers.forEach(l => l.rotation += step);
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (e.code === 'ArrowLeft') this.selectedLayers.forEach(l => l.x -= step);
+                    if (e.code === 'ArrowRight') this.selectedLayers.forEach(l => l.x += step);
+                    if (e.code === 'ArrowUp') this.selectedLayers.forEach(l => l.y -= step);
+                    if (e.code === 'ArrowDown') this.selectedLayers.forEach(l => l.y += step);
+                    if (e.code === 'BracketLeft') this.selectedLayers.forEach(l => l.rotation -= step);
+                    if (e.code === 'BracketRight') this.selectedLayers.forEach(l => l.rotation += step);
+
                     needsRender = true;
                     break;
             }
 
             if (needsRender) {
-                e.preventDefault();
                 this.render();
             }
         }
     }
 
-    
     handleKeyUp(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
         if (e.key === 'Alt') this.interaction.isAltPressed = false;
@@ -553,7 +550,7 @@ export class Canvas {
         this.render();
     }
 
-    
+
     updateCanvasMove(worldCoords) {
         if (!this.interaction.canvasMoveRect) return;
         const dx = worldCoords.x - this.interaction.dragStart.x;
@@ -566,7 +563,7 @@ export class Canvas {
         this.render();
     }
 
-    
+
     finalizeCanvasMove() {
         const moveRect = this.interaction.canvasMoveRect;
 
@@ -980,7 +977,7 @@ export class Canvas {
                 layer.width,
                 layer.height
             );
-            if (layer.mask) { 
+            if (layer.mask) {
             }
             if (this.selectedLayers.includes(layer)) {
                 this.drawSelectionFrame(ctx, layer);
@@ -1444,7 +1441,6 @@ export class Canvas {
     }
 
 
-    
     async getFlattenedSelectionAsBlob() {
         if (this.selectedLayers.length === 0) {
             return null;
