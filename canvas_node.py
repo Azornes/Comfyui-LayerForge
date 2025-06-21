@@ -141,7 +141,7 @@ class CanvasNode:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "process_canvas_image"
-    CATEGORY = "Ycanvas"
+    CATEGORY = "azNodes > LayerForge"
 
     def add_image_to_canvas(self, input_image):
 
