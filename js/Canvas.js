@@ -112,9 +112,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Resetuje stan interakcji do wartości domyślnych.
-     */
+    
     resetInteractionState() {
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
@@ -126,9 +124,7 @@ export class Canvas {
         this.canvas.style.cursor = 'default';
     }
 
-    /**
-     * Główna metoda obsługująca wciśnięcie przycisku myszy.
-     */
+    
     handleMouseDown(e) {
         const currentTime = Date.now();
         const worldCoords = this.getMouseWorldCoordinates(e);
@@ -171,10 +167,7 @@ export class Canvas {
         this.render();
     }
 
-    /**
-     * Kopiuje zaznaczone warstwy do wewnętrznego schowka ORAZ
-     * jako spłaszczony obraz do globalnego schowka systemowego.
-     */
+    
     async copySelectedLayers() {
         if (this.selectedLayers.length === 0) return;
         this.internalClipboard = this.selectedLayers.map(layer => ({...layer}));
@@ -191,9 +184,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Wkleja warstwy z wewnętrznego schowka na płótno.
-     */
+    
     pasteLayers() {
         if (this.internalClipboard.length === 0) return;
 
@@ -216,11 +207,7 @@ export class Canvas {
         console.log(`Pasted ${newLayers.length} layer(s).`);
     }
 
-    /**
-     * Inteligentnie obsługuje operację wklejania.
-     * Najpierw próbuje wkleić obraz z globalnego schowka,
-     * a jeśli to się nie uda, wkleja z wewnętrznego schowka.
-     */
+    
     async handlePaste() {
         try {
             if (!navigator.clipboard?.read) {
@@ -270,9 +257,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Główna metoda obsługująca ruch myszy.
-     */
+    
     handleMouseMove(e) {
         const worldCoords = this.getMouseWorldCoordinates(e);
         this.lastMousePosition = worldCoords;
@@ -302,9 +287,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Metoda obsługująca puszczenie przycisku myszy.
-     */
+    
     handleMouseUp(e) {
         if (this.interaction.mode === 'resizingCanvas') {
             this.finalizeCanvasResize();
@@ -315,9 +298,7 @@ export class Canvas {
         this.render();
     }
 
-    /**
-     * Metoda obsługująca opuszczenie obszaru canvas przez kursor.
-     */
+    
     handleMouseLeave(e) {
         if (this.interaction.mode !== 'none') {
             this.resetInteractionState();
@@ -325,9 +306,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Metoda obsługująca kółko myszy (zoom / skalowanie / rotacja warstwy).
-     */
+    
     handleWheel(e) {
         e.preventDefault();
         if (this.selectedLayer) {
@@ -402,9 +381,7 @@ export class Canvas {
         this.render();
     }
 
-    /**
-     * Metoda obsługująca wciśnięcie klawisza.
-     */
+    
     handleKeyDown(e) {
         if (this.isMouseOver) {
             if (e.ctrlKey && e.key.toLowerCase() === 'c') {
@@ -439,8 +416,7 @@ export class Canvas {
 
             const step = e.shiftKey ? 10 : 1;
             let needsRender = false;
-
-            switch (e.key) {
+            switch (e.code) {
                 case 'ArrowLeft':
                     this.selectedLayers.forEach(l => l.x -= step);
                     needsRender = true;
@@ -457,11 +433,11 @@ export class Canvas {
                     this.selectedLayers.forEach(l => l.y += step);
                     needsRender = true;
                     break;
-                case '[':
+                case 'BracketLeft':
                     this.selectedLayers.forEach(l => l.rotation -= step);
                     needsRender = true;
                     break;
-                case ']':
+                case 'BracketRight':
                     this.selectedLayers.forEach(l => l.rotation += step);
                     needsRender = true;
                     break;
@@ -474,9 +450,7 @@ export class Canvas {
         }
     }
 
-    /**
-     * Metoda obsługująca puszczenie klawisza.
-     */
+    
     handleKeyUp(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
         if (e.key === 'Alt') this.interaction.isAltPressed = false;
@@ -486,13 +460,13 @@ export class Canvas {
         const transformTarget = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
 
         if (transformTarget) {
-            const handleName = transformTarget.handle; // Wyciągamy nazwę uchwytu z obiektu
+            const handleName = transformTarget.handle;
             const cursorMap = {
                 'n': 'ns-resize', 's': 'ns-resize', 'e': 'ew-resize', 'w': 'ew-resize',
                 'nw': 'nwse-resize', 'se': 'nwse-resize', 'ne': 'nesw-resize', 'sw': 'nesw-resize',
                 'rot': 'grab'
             };
-            this.canvas.style.cursor = cursorMap[handleName]; // Używamy nazwy jako klucza
+            this.canvas.style.cursor = cursorMap[handleName];
         } else if (this.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
             this.canvas.style.cursor = 'move';
         } else {
@@ -579,9 +553,7 @@ export class Canvas {
         this.render();
     }
 
-    /**
-     * Aktualizuje pozycję "ducha" płótna podczas przesuwania.
-     */
+    
     updateCanvasMove(worldCoords) {
         if (!this.interaction.canvasMoveRect) return;
         const dx = worldCoords.x - this.interaction.dragStart.x;
@@ -594,9 +566,7 @@ export class Canvas {
         this.render();
     }
 
-    /**
-     * Kończy przesuwanie płótna i zatwierdza nową pozycję.
-     */
+    
     finalizeCanvasMove() {
         const moveRect = this.interaction.canvasMoveRect;
 
@@ -1010,7 +980,7 @@ export class Canvas {
                 layer.width,
                 layer.height
             );
-            if (layer.mask) { /* Logika maski */
+            if (layer.mask) { 
             }
             if (this.selectedLayers.includes(layer)) {
                 this.drawSelectionFrame(ctx, layer);
@@ -1474,10 +1444,7 @@ export class Canvas {
     }
 
 
-    /**
-     * Tworzy spłaszczony obraz z zaznaczonych warstw, przycięty do ich zawartości.
-     * @returns {Promise<Blob|null>} Obiekt Blob z obrazem PNG lub null, jeśli nic nie jest zaznaczone.
-     */
+    
     async getFlattenedSelectionAsBlob() {
         if (this.selectedLayers.length === 0) {
             return null;
