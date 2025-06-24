@@ -180,7 +180,40 @@ async function createCanvasWidget(node, widget, app) {
             /* Możesz też zmienić kolor istniejącej ramki, ale box-shadow jest bardziej wyrazisty */
             /* border-color: white; */
         }
-       
+
+        .painter-button.matting-button {
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .painter-button.matting-button.loading {
+            padding-right: 36px; /* Make space for spinner */
+            cursor: wait;
+        }
+
+        .painter-button.matting-button .matting-spinner {
+            display: none;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: matting-spin 1s linear infinite;
+        }
+
+        .painter-button.matting-button.loading .matting-spinner {
+            display: block;
+        }
+
+        @keyframes matting-spin {
+            to {
+                transform: translateY(-50%) rotate(360deg);
+            }
+        }
     `;
     document.head.appendChild(style);
 
@@ -560,13 +593,18 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection.matting-button", {
                     textContent: "Matting",
                     onclick: async (e) => {
-                        const statusIndicator = MattingStatusIndicator.getInstance(e.target.parentElement);
+                        const button = e.target;
+                        if (button.classList.contains('loading')) return;
+
+                        const spinner = $el("div.matting-spinner");
+                        button.appendChild(spinner);
+                        button.classList.add('loading');
+                        button.disabled = true;
 
                         try {
                             if (canvas.selectedLayers.length !== 1) {
                                 throw new Error("Please select exactly one image layer for matting.");
                             }
-                            statusIndicator.setStatus('processing');
 
                             const selectedLayer = canvas.selectedLayers[0];
                             const imageData = await canvas.getLayerImageData(selectedLayer);
@@ -606,7 +644,6 @@ async function createCanvasWidget(node, widget, app) {
 
                                     await canvas.saveToServer(widget.value);
                                     app.graph.runStep();
-                                    statusIndicator.setStatus('completed');
                                 };
                                 newImage.src = result.matted_image;
                             };
@@ -618,7 +655,10 @@ async function createCanvasWidget(node, widget, app) {
                         } catch (error) {
                             console.error("Matting error:", error);
                             alert(`Error during matting process: ${error.message}`);
-                            statusIndicator.setStatus('error');
+                        } finally {
+                            button.removeChild(spinner);
+                            button.classList.remove('loading');
+                            button.disabled = false;
                         }
                     }
                 })
@@ -652,7 +692,7 @@ async function createCanvasWidget(node, widget, app) {
             btn.disabled = !hasSelection;
         });
         const mattingBtn = controlPanel.querySelector('.matting-button');
-        if (mattingBtn) {
+        if (mattingBtn && !mattingBtn.classList.contains('loading')) {
             mattingBtn.disabled = selectionCount !== 1;
         }
     };
@@ -840,76 +880,6 @@ async function createCanvasWidget(node, widget, app) {
     };
 }
 
-class MattingStatusIndicator {
-    static instance = null;
-
-    static getInstance(container) {
-        if (!MattingStatusIndicator.instance) {
-            MattingStatusIndicator.instance = new MattingStatusIndicator(container);
-        }
-        if (container && !container.contains(MattingStatusIndicator.instance.indicator)) {
-            container.appendChild(MattingStatusIndicator.instance.indicator);
-        }
-        return MattingStatusIndicator.instance;
-    }
-
-    constructor(container) {
-        this.statuses = ['processing', 'completed', 'error'];
-
-        this.indicator = document.createElement('div');
-        this.indicator.className = 'matting-indicator';
-        this.indicator.style.cssText = `
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-left: 10px;
-            display: inline-block;
-            transition: background-color 0.3s ease;
-        `;
-
-        const style = document.createElement('style');
-        style.textContent = `
-            /* Styl dla domyślnego stanu (szary) */
-            .matting-indicator {
-                background-color: #808080;
-            }
-            /* Style dla konkretnych statusów, które nadpiszą domyślny */
-            .matting-indicator.processing {
-                background-color: #FFC107; /* Żółty */
-                animation: blink 1s infinite;
-            }
-            .matting-indicator.completed {
-                background-color: #4CAF50; /* Zielony */
-            }
-            .matting-indicator.error {
-                background-color: #f44336; /* Czerwony */
-            }
-            @keyframes blink {
-                0% { opacity: 1; }
-                50% { opacity: 0.4; }
-                100% { opacity: 1; }
-            }
-        `;
-        document.head.appendChild(style);
-
-        if (container) {
-            container.appendChild(this.indicator);
-        }
-    }
-
-    setStatus(status) {
-        this.indicator.classList.remove(...this.statuses);
-        if (status && this.statuses.includes(status)) {
-            this.indicator.classList.add(status);
-        }
-
-        if (status === 'completed' || status === 'error') {
-            setTimeout(() => {
-                this.indicator.classList.remove(status);
-            }, 3000);
-        }
-    }
-}
 
 function validateImageData(data) {
 
