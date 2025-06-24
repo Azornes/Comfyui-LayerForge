@@ -670,39 +670,52 @@ async function createCanvasWidget(node, widget, app) {
     node.size = [500, 500];
 
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
-    openEditorBtn.onclick = () => {
-        const originalParent = mainContainer.parentNode;
-        if (!originalParent) {
-            console.error("Could not find original parent of the canvas container!");
-            return;
-        }
-        const backdrop = $el("div.painter-modal-backdrop");
-        const modalContent = $el("div.painter-modal-content");
+    let backdrop = null;
+    let modalContent = null;
+    let originalParent = null;
+    let isEditorOpen = false;
+
+    const closeEditor = () => {
+        originalParent.appendChild(mainContainer);
+        document.body.removeChild(backdrop);
         
-        modalContent.appendChild(mainContainer);
-        backdrop.appendChild(modalContent);
-        document.body.appendChild(backdrop);
-        openEditorBtn.disabled = true;
+        isEditorOpen = false;
+        openEditorBtn.textContent = "⛶";
+        openEditorBtn.title = "Open in Editor";
 
         canvas.render();
         if (node.onResize) {
             node.onResize();
         }
+    };
 
-        const closeButton = $el("button", {
-            textContent: "Close",
-            style: { position: 'absolute', top: '10px', right: '10px', zIndex: 100 },
-            onclick: () => {
-                originalParent.appendChild(mainContainer);
-                document.body.removeChild(backdrop);
-                openEditorBtn.disabled = false;
-                canvas.render();
-                if (node.onResize) {
-                    node.onResize();
-                }
-            }
-        });
-        modalContent.appendChild(closeButton);
+    openEditorBtn.onclick = () => {
+        if (isEditorOpen) {
+            closeEditor();
+            return;
+        }
+
+        originalParent = mainContainer.parentNode;
+        if (!originalParent) {
+            console.error("Could not find original parent of the canvas container!");
+            return;
+        }
+
+        backdrop = $el("div.painter-modal-backdrop");
+        modalContent = $el("div.painter-modal-content");
+        
+        modalContent.appendChild(mainContainer);
+        backdrop.appendChild(modalContent);
+        document.body.appendChild(backdrop);
+        
+        isEditorOpen = true;
+        openEditorBtn.textContent = "X";
+        openEditorBtn.title = "Close Editor";
+
+        canvas.render();
+        if (node.onResize) {
+            node.onResize();
+        }
     };
 
     api.addEventListener("execution_start", async () => {
