@@ -890,23 +890,12 @@ export class Canvas {
 
         if (isShiftPressed) {
             const originalAspectRatio = o.width / o.height;
-            if (handle.length === 2) {
+            const newAspectRatio = Math.abs(newWidth / newHeight);
 
-                const potentialWidth = Math.abs(newWidth);
-                const potentialHeight = Math.abs(newHeight);
-
-                if (potentialWidth / originalAspectRatio > potentialHeight) {
-                    newHeight = newWidth / originalAspectRatio;
-                } else {
-                    newWidth = newHeight * originalAspectRatio;
-                }
+            if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
+                 newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
             } else {
-
-                if (signX !== 0) {
-                    newHeight = newWidth / originalAspectRatio;
-                } else {
-                    newWidth = newHeight * originalAspectRatio;
-                }
+                 newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
             }
         }
 
