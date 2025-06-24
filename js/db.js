@@ -95,3 +95,23 @@ export async function removeCanvasState(id) {
         };
     });
 }
+
+export async function clearAllCanvasStates() {
+    console.log("DB: Clearing all canvas states...");
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.clear();
+
+        request.onerror = (event) => {
+            console.error("DB: Error clearing canvas states:", event.target.error);
+            reject("Error clearing states.");
+        };
+
+        request.onsuccess = () => {
+            console.log("DB: All canvas states cleared successfully.");
+            resolve();
+        };
+    });
+}

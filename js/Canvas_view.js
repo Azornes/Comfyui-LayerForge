@@ -2,6 +2,7 @@ import {app} from "../../scripts/app.js";
 import {api} from "../../scripts/api.js";
 import {$el} from "../../scripts/ui.js";
 import {Canvas} from "./Canvas.js";
+import { clearAllCanvasStates } from "./db.js";
 
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget);
@@ -608,6 +609,24 @@ async function createCanvasWidget(node, widget, app) {
                         console.error("Matting error:", error);
                         alert(`Error during matting process: ${error.message}`);
                         statusIndicator.setStatus('error');
+                    }
+                }
+            }),
+            $el("button.painter-button", {
+                textContent: "Clear Cache",
+                style: {
+                    backgroundColor: "#d44a4a",
+                    borderColor: "#b42a2a",
+                },
+                onclick: async () => {
+                    if (confirm("Are you sure you want to clear all saved canvas states? This action cannot be undone.")) {
+                        try {
+                            await clearAllCanvasStates();
+                            alert("Canvas cache cleared successfully!");
+                        } catch (e) {
+                            console.error("Failed to clear canvas cache:", e);
+                            alert("Error clearing canvas cache. Check the console for details.");
+                        }
                     }
                 }
             })
