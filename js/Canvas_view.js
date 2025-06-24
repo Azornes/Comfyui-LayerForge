@@ -271,41 +271,46 @@ async function createCanvasWidget(node, widget, app) {
             $el("button.painter-button.primary", {
                 textContent: "Add Image",
                 onclick: () => {
+                    console.log("Add Image button clicked.");
                     const input = document.createElement('input');
                     input.type = 'file';
                     input.accept = 'image/*';
                     input.multiple = true;
                     input.onchange = async (e) => {
                         for (const file of e.target.files) {
+                           console.log("File selected:", file.name);
+                            const reader = new FileReader();
+                            reader.onload = async (event) => {
+                               console.log("FileReader finished loading file as data:URL.");
+                                const img = new Image();
+                                img.onload = async () => {
+                                   console.log("Image object loaded from data:URL.");
+                                    const scale = Math.min(
+                                        canvas.width / img.width,
+                                        canvas.height / img.height
+                                    );
 
-                            const img = new Image();
-                            img.onload = async () => {
+                                    const layer = {
+                                        image: img,
+                                        x: (canvas.width - img.width * scale) / 2,
+                                        y: (canvas.height - img.height * scale) / 2,
+                                        width: img.width * scale,
+                                        height: img.height * scale,
+                                        rotation: 0,
+                                        zIndex: canvas.layers.length
+                                    };
 
-                                const scale = Math.min(
-                                    canvas.width / img.width,
-                                    canvas.height / img.height
-                                );
-
-                                const layer = {
-                                    image: img,
-                                    x: (canvas.width - img.width * scale) / 2,
-                                    y: (canvas.height - img.height * scale) / 2,
-                                    width: img.width * scale,
-                                    height: img.height * scale,
-                                    rotation: 0,
-                                    zIndex: canvas.layers.length
+                                    canvas.layers.push(layer);
+                                    canvas.updateSelection([layer]);
+                                    canvas.render();
+                                    canvas.saveState();
+                                    console.log("New layer added and state saved.");
+                                    await canvas.saveToServer(widget.value);
+                                    app.graph.runStep();
                                 };
-
-                                canvas.layers.push(layer);
-                                canvas.selectedLayer = layer;
-
-                                canvas.render();
-
-                                await canvas.saveToServer(widget.value);
-
-                                app.graph.runStep();
+                                img.src = event.target.result;
                             };
-                            img.src = URL.createObjectURL(file);
+                            reader.readAsDataURL(file);
                         }
                     };
                     input.click();
@@ -330,8 +335,10 @@ async function createCanvasWidget(node, widget, app) {
             $el("button.painter-button.primary", {
                 textContent: "Paste Image",
                 onclick: async () => {
+                   console.log("Paste Image button clicked.");
                     try {
                         if (!navigator.clipboard || !navigator.clipboard.read) {
+                           console.warn("Clipboard API not supported.");
                             alert("Your browser does not support pasting from the clipboard.");
                             return;
                         }
@@ -342,36 +349,45 @@ async function createCanvasWidget(node, widget, app) {
                             const imageType = item.types.find(type => type.startsWith('image/'));
 
                             if (imageType) {
+                               console.log("Image found in clipboard.");
                                 const blob = await item.getType(imageType);
-                                const img = new Image();
-                                img.onload = () => {
-                                    const scale = Math.min(
-                                        canvas.width / img.width,
-                                        canvas.height / img.height
-                                    );
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                   console.log("FileReader finished loading pasted blob as data:URL.");
+                                    const img = new Image();
+                                    img.onload = () => {
+                                       console.log("Image object loaded from pasted data:URL.");
+                                        const scale = Math.min(
+                                            canvas.width / img.width,
+                                            canvas.height / img.height
+                                        );
 
-                                    const layer = {
-                                        image: img,
-                                        x: (canvas.width - img.width * scale) / 2,
-                                        y: (canvas.height - img.height * scale) / 2,
-                                        width: img.width * scale,
-                                        height: img.height * scale,
-                                        rotation: 0,
-                                        zIndex: canvas.layers.length
+                                        const layer = {
+                                            image: img,
+                                            x: (canvas.width - img.width * scale) / 2,
+                                            y: (canvas.height - img.height * scale) / 2,
+                                            width: img.width * scale,
+                                            height: img.height * scale,
+                                            rotation: 0,
+                                            zIndex: canvas.layers.length
+                                        };
+
+                                        canvas.layers.push(layer);
+                                        canvas.updateSelection([layer]);
+                                        canvas.render();
+                                        canvas.saveState();
+                                        console.log("Pasted layer added and state saved.");
                                     };
-
-                                    canvas.layers.push(layer);
-                                    canvas.updateSelection([layer]);
-                                    canvas.render();
-                                    URL.revokeObjectURL(img.src);
+                                    img.src = event.target.result;
                                 };
-                                img.src = URL.createObjectURL(blob);
+                                reader.readAsDataURL(blob);
                                 imageFound = true;
                                 break;
                             }
                         }
 
                         if (!imageFound) {
+                           console.warn("No image found in clipboard.");
                             alert("No image found in the clipboard.");
                         }
 
@@ -695,36 +711,45 @@ async function createCanvasWidget(node, widget, app) {
         }
     }, [controlPanel, canvasContainer]);
     const handleFileLoad = async (file) => {
+       console.log("File dropped:", file.name);
         if (!file.type.startsWith('image/')) {
+           console.log("Dropped file is not an image.");
             return;
         }
 
-        const img = new Image();
-        img.onload = async () => {
-            const scale = Math.min(
-                canvas.width / img.width,
-                canvas.height / img.height
-            );
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+           console.log("FileReader finished loading dropped file as data:URL.");
+            const img = new Image();
+            img.onload = async () => {
+               console.log("Image object loaded from dropped data:URL.");
+                const scale = Math.min(
+                    canvas.width / img.width,
+                    canvas.height / img.height
+                );
 
-            const layer = {
-                image: img,
-                x: (canvas.width - img.width * scale) / 2,
-                y: (canvas.height - img.height * scale) / 2,
-                width: img.width * scale,
-                height: img.height * scale,
-                rotation: 0,
-                zIndex: canvas.layers.length,
-                blendMode: 'normal',
-                opacity: 1
+                const layer = {
+                    image: img,
+                    x: (canvas.width - img.width * scale) / 2,
+                    y: (canvas.height - img.height * scale) / 2,
+                    width: img.width * scale,
+                    height: img.height * scale,
+                    rotation: 0,
+                    zIndex: canvas.layers.length,
+                    blendMode: 'normal',
+                    opacity: 1
+                };
+
+                canvas.layers.push(layer);
+                canvas.updateSelection([layer]);
+                canvas.render();
+                canvas.saveState();
+                console.log("Dropped layer added and state saved.");
+                await updateOutput();
             };
-
-            canvas.layers.push(layer);
-            canvas.selectedLayer = layer;
-            canvas.render();
-            await updateOutput();
-            URL.revokeObjectURL(img.src);
+            img.src = event.target.result;
         };
-        img.src = URL.createObjectURL(file);
+        reader.readAsDataURL(file);
     };
 
     mainContainer.addEventListener('dragover', (e) => {
@@ -775,6 +800,10 @@ async function createCanvasWidget(node, widget, app) {
 
     node.canvasWidget = canvas;
 
+    setTimeout(() => {
+        canvas.loadInitialState();
+    }, 100);
+   
     return {
         canvas: canvas,
         panel: controlPanel
@@ -1044,9 +1073,11 @@ app.registerExtension({
         if (nodeType.comfyClass === "CanvasNode") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = async function () {
+                console.log("CanvasNode created, ID:", this.id);
                 const r = onNodeCreated?.apply(this, arguments);
 
                 const widget = this.widgets.find(w => w.name === "canvas_image");
+                console.log("Found canvas_image widget:", widget);
                 await createCanvasWidget(this, widget, app);
 
                 return r;

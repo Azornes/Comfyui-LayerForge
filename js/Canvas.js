@@ -79,7 +79,115 @@ export class Canvas {
         this.redoStack = [];
         this.historyLimit = 100;
 
-        this.saveState();
+        // this.saveState(); // Wywołanie przeniesione do loadInitialState
+    }
+
+    getLocalStorageKey() {
+        if (!this.node.id) {
+            console.error("Node ID is not available for generating localStorage key.");
+            return null;
+        }
+        return `canvas-state-${this.node.id}`;
+    }
+
+    async loadStateFromLocalStorage() {
+        console.log("Attempting to load state from localStorage for node:", this.node.id);
+        const key = this.getLocalStorageKey();
+        if (!key) return false;
+
+        try {
+            const savedStateJSON = localStorage.getItem(key);
+            if (!savedStateJSON) {
+                console.log("No saved state found in localStorage for key:", key);
+                return false;
+            }
+            console.log("Found saved state in localStorage:", savedStateJSON.substring(0, 200) + "...");
+
+            const savedState = JSON.parse(savedStateJSON);
+
+            this.width = savedState.width || 512;
+            this.height = savedState.height || 512;
+            this.viewport = savedState.viewport || { x: -(this.width / 4), y: -(this.height / 4), zoom: 0.8 };
+            
+            this.updateCanvasSize(this.width, this.height, false);
+            console.log(`Canvas resized to ${this.width}x${this.height} and viewport set.`);
+
+            const imagePromises = savedState.layers.map((layerData, index) => {
+                return new Promise((resolve) => {
+                    if (layerData.imageSrc) {
+                        console.log(`Layer ${index}: Loading image from data:URL...`);
+                        const img = new Image();
+                        img.onload = () => {
+                            console.log(`Layer ${index}: Image loaded successfully.`);
+                            const newLayer = { ...layerData, image: img };
+                            delete newLayer.imageSrc;
+                            resolve(newLayer);
+                        };
+                        img.onerror = () => {
+                            console.error(`Layer ${index}: Failed to load image from src.`);
+                            resolve(null);
+                        };
+                        img.src = layerData.imageSrc;
+                    } else {
+                        console.log(`Layer ${index}: No imageSrc found, resolving layer data.`);
+                        resolve({ ...layerData });
+                    }
+                });
+            });
+
+            const loadedLayers = await Promise.all(imagePromises);
+            this.layers = loadedLayers.filter(l => l !== null);
+            console.log(`Loaded ${this.layers.length} layers.`);
+            
+            this.updateSelectionAfterHistory();
+            this.render();
+            console.log("Canvas state loaded successfully from localStorage for node", this.node.id);
+            return true;
+        } catch (e) {
+            console.error("Error loading canvas state from localStorage:", e);
+            localStorage.removeItem(key);
+            return false;
+        }
+    }
+    
+    saveStateToLocalStorage() {
+        console.log("Attempting to save state to localStorage for node:", this.node.id);
+        const key = this.getLocalStorageKey();
+        if (!key) return;
+
+        try {
+            const state = {
+                layers: this.layers.map((layer, index) => {
+                    const newLayer = { ...layer };
+                    if (layer.image instanceof HTMLImageElement) {
+                        console.log(`Layer ${index}: Serializing image to data:URL.`);
+                        newLayer.imageSrc = layer.image.src;
+                    } else {
+                        console.log(`Layer ${index}: No HTMLImageElement found.`);
+                    }
+                    delete newLayer.image;
+                    return newLayer;
+                }),
+                viewport: this.viewport,
+                width: this.width,
+                height: this.height,
+            };
+            const stateJSON = JSON.stringify(state);
+            localStorage.setItem(key, stateJSON);
+            console.log("Canvas state saved to localStorage:", stateJSON.substring(0, 200) + "...");
+        } catch (e) {
+            console.error("Error saving canvas state to localStorage:", e);
+        }
+    }
+
+    async loadInitialState() {
+        console.log("Loading initial state for node:", this.node.id);
+        const loaded = await this.loadStateFromLocalStorage();
+        if (!loaded) {
+            console.log("No saved state found, initializing from node data.");
+            await this.initNodeData();
+        }
+        this.saveState(); // Save initial state to undo stack
     }
 
     cloneLayers(layers) {
@@ -112,6 +220,7 @@ export class Canvas {
         }
         this.redoStack = [];
         this.updateHistoryButtons();
+        this.saveStateToLocalStorage();
     }
 
     undo() {
@@ -309,25 +418,29 @@ export class Canvas {
 
                 if (imageType) {
                     const blob = await item.getType(imageType);
-                    const img = new Image();
-                    img.onload = () => {
-                        const newLayer = {
-                            image: img,
-                            x: this.lastMousePosition.x - img.width / 2,
-                            y: this.lastMousePosition.y - img.height / 2,
-                            width: img.width,
-                            height: img.height,
-                            rotation: 0,
-                            zIndex: this.layers.length,
-                            blendMode: 'normal',
-                            opacity: 1
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const newLayer = {
+                                image: img,
+                                x: this.lastMousePosition.x - img.width / 2,
+                                y: this.lastMousePosition.y - img.height / 2,
+                                width: img.width,
+                                height: img.height,
+                                rotation: 0,
+                                zIndex: this.layers.length,
+                                blendMode: 'normal',
+                                opacity: 1
+                            };
+                            this.layers.push(newLayer);
+                            this.updateSelection([newLayer]);
+                            this.render();
+                            this.saveState();
                         };
-                        this.layers.push(newLayer);
-                        this.updateSelection([newLayer]);
-                        this.render();
-                        URL.revokeObjectURL(img.src);
+                        img.src = event.target.result;
                     };
-                    img.src = URL.createObjectURL(blob);
+                    reader.readAsDataURL(blob);
                     imagePasted = true;
                     break;
                 }
@@ -470,6 +583,7 @@ export class Canvas {
             this.viewport.y = worldCoords.y - (mouseBufferY / this.viewport.zoom);
         }
         this.render();
+        this.saveState(true);
     }
 
     handleKeyDown(e) {
@@ -914,6 +1028,7 @@ export class Canvas {
             this.layers.push(layer);
             this.updateSelection([layer]);
             this.render();
+            this.saveState();
 
             console.log("Layer added successfully");
         } catch (error) {
@@ -1010,8 +1125,10 @@ export class Canvas {
         this.render();
     }
 
-    updateCanvasSize(width, height) {
-        this.saveState();
+    updateCanvasSize(width, height, saveHistory = true) {
+        if (saveHistory) {
+            this.saveState();
+        }
         this.width = width;
         this.height = height;
 
@@ -1019,6 +1136,10 @@ export class Canvas {
         this.canvas.height = height;
 
         this.render();
+
+        if (saveHistory) {
+            this.saveStateToLocalStorage();
+        }
     }
 
     render() {
