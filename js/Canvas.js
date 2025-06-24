@@ -74,6 +74,85 @@ export class Canvas {
             ...layer,
             opacity: 1
         }));
+
+        this.undoStack = [];
+        this.redoStack = [];
+        this.historyLimit = 100;
+
+        this.saveState();
+    }
+
+    cloneLayers(layers) {
+        return layers.map(layer => {
+            const newLayer = { ...layer };
+            // Obiekty Image nie są klonowane, aby oszczędzać pamięć.
+            // Zakładamy, że same dane obrazu się nie zmieniają.
+            return newLayer;
+        });
+    }
+
+    saveState(replaceLast = false) {
+        if (replaceLast && this.undoStack.length > 0) {
+            this.undoStack.pop();
+        }
+
+        const currentState = this.cloneLayers(this.layers);
+
+        if (this.undoStack.length > 0) {
+            const lastState = this.undoStack[this.undoStack.length - 1];
+            if (JSON.stringify(currentState) === JSON.stringify(lastState)) {
+                return;
+            }
+        }
+
+        this.undoStack.push(currentState);
+
+        if (this.undoStack.length > this.historyLimit) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+        this.updateHistoryButtons();
+    }
+
+    undo() {
+        if (this.undoStack.length <= 1) return;
+        const currentState = this.undoStack.pop();
+        this.redoStack.push(currentState);
+        const prevState = this.undoStack[this.undoStack.length - 1];
+        this.layers = this.cloneLayers(prevState);
+        this.updateSelectionAfterHistory();
+        this.render();
+        this.updateHistoryButtons();
+    }
+
+    redo() {
+        if (this.redoStack.length === 0) return;
+        const nextState = this.redoStack.pop();
+        this.undoStack.push(nextState);
+        this.layers = this.cloneLayers(nextState);
+        this.updateSelectionAfterHistory();
+        this.render();
+        this.updateHistoryButtons();
+    }
+    
+    updateSelectionAfterHistory() {
+        const newSelectedLayers = [];
+        if (this.selectedLayers) {
+            this.selectedLayers.forEach(sl => {
+                const found = this.layers.find(l => l.id === sl.id);
+                if(found) newSelectedLayers.push(found);
+            });
+        }
+        this.updateSelection(newSelectedLayers);
+    }
+
+    updateHistoryButtons() {
+        if (this.onHistoryChange) {
+            this.onHistoryChange({
+                canUndo: this.undoStack.length > 1,
+                canRedo: this.redoStack.length > 0
+            });
+        }
     }
 
     initCanvas() {
@@ -130,8 +209,6 @@ export class Canvas {
     }
 
     handleMouseDown(e) {
-
-
         this.canvas.focus();
 
         const currentTime = Date.now();
@@ -195,7 +272,7 @@ export class Canvas {
 
     pasteLayers() {
         if (this.internalClipboard.length === 0) return;
-
+        this.saveState();
         const newLayers = [];
         const pasteOffset = 20;
 
@@ -297,6 +374,8 @@ export class Canvas {
 
 
     handleMouseUp(e) {
+        const interactionEnded = this.interaction.mode !== 'none' && this.interaction.mode !== 'panning';
+
         if (this.interaction.mode === 'resizingCanvas') {
             this.finalizeCanvasResize();
         } else if (this.interaction.mode === 'movingCanvas') {
@@ -304,6 +383,10 @@ export class Canvas {
         }
         this.resetInteractionState();
         this.render();
+
+        if (interactionEnded) {
+            this.saveState();
+        }
     }
 
 
@@ -395,24 +478,45 @@ export class Canvas {
             this.interaction.isAltPressed = true;
             e.preventDefault();
         }
-        if (e.ctrlKey && e.key.toLowerCase() === 'c') {
-            if (this.selectedLayers.length > 0) {
+
+        if (e.ctrlKey) {
+            if (e.key.toLowerCase() === 'z') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.copySelectedLayers();
+                if (e.shiftKey) {
+                    this.redo();
+                } else {
+                    this.undo();
+                }
+                return;
+            }
+            if (e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.redo();
+                return;
+            }
+            if (e.key.toLowerCase() === 'c') {
+                if (this.selectedLayers.length > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.copySelectedLayers();
+                }
+                return;
+            }
+            if (e.key.toLowerCase() === 'v') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.handlePaste();
                 return;
             }
         }
-        if (e.ctrlKey && e.key.toLowerCase() === 'v') {
-            e.preventDefault();
-            e.stopPropagation();
-            this.handlePaste();
-            return;
-        }
+        
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
                 e.preventDefault();
                 e.stopPropagation();
+                this.saveState();
                 this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
                 this.updateSelection([]);
                 this.render();
@@ -444,6 +548,7 @@ export class Canvas {
 
             if (needsRender) {
                 this.render();
+                this.saveState();
             }
         }
     }
@@ -906,6 +1011,7 @@ export class Canvas {
     }
 
     updateCanvasSize(width, height) {
+        this.saveState();
         this.width = width;
         this.height = height;
 
@@ -1531,6 +1637,7 @@ export class Canvas {
         });
         this.layers.forEach((layer, i) => layer.zIndex = i);
         this.render();
+        this.saveState();
     }
 
     moveLayerDown() {
@@ -1548,6 +1655,7 @@ export class Canvas {
         });
         this.layers.forEach((layer, i) => layer.zIndex = i);
         this.render();
+        this.saveState();
     }
 
 
@@ -1619,6 +1727,7 @@ export class Canvas {
             newImage.onload = () => {
                 layer.image = newImage;
                 this.render();
+                this.saveState();
             };
             newImage.src = tempCanvas.toDataURL();
         });
@@ -1641,6 +1750,7 @@ export class Canvas {
             newImage.onload = () => {
                 layer.image = newImage;
                 this.render();
+                this.saveState();
             };
             newImage.src = tempCanvas.toDataURL();
         });

@@ -519,6 +519,18 @@ async function createCanvasWidget(node, widget, app) {
                 }
             }),
 
+            $el("button.painter-button", {
+                id: `undo-button-${node.id}`,
+                textContent: "Undo",
+                disabled: true,
+                onclick: () => canvas.undo()
+            }),
+            $el("button.painter-button", {
+                id: `redo-button-${node.id}`,
+                textContent: "Redo",
+                disabled: true,
+                onclick: () => canvas.redo()
+            }),
             $el("button.painter-button.requires-selection.matting-button", {
                 textContent: "Matting",
                 onclick: async () => {
@@ -600,7 +612,18 @@ async function createCanvasWidget(node, widget, app) {
     };
 
     canvas.onSelectionChange = updateButtonStates;
+    
+    const undoButton = controlPanel.querySelector(`#undo-button-${node.id}`);
+    const redoButton = controlPanel.querySelector(`#redo-button-${node.id}`);
+
+    canvas.onHistoryChange = ({ canUndo, canRedo }) => {
+        if(undoButton) undoButton.disabled = !canUndo;
+        if(redoButton) redoButton.disabled = !canRedo;
+    };
+    
     updateButtonStates();
+    canvas.updateHistoryButtons();
+
 
     const resizeObserver = new ResizeObserver((entries) => {
         const controlsHeight = entries[0].target.offsetHeight;
@@ -621,9 +644,14 @@ async function createCanvasWidget(node, widget, app) {
     };
 
     const addUpdateToButton = (button) => {
+        if (button.textContent === "Undo" || button.textContent === "Redo") {
+            return;
+        }
         const origClick = button.onclick;
         button.onclick = async (...args) => {
-            await origClick?.(...args);
+            if (origClick) {
+               await origClick(...args);
+            }
             await updateOutput();
         };
     };
