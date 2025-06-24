@@ -324,7 +324,7 @@ async function createCanvasWidget(node, widget, app) {
                     id: `open-editor-btn-${node.id}`,
                     textContent: "⛶",
                     title: "Open in Editor",
-                    style: { minWidth: "30px", maxWidth: "30px", fontWeight: "bold" },
+                    style: { minWidth: "40px", maxWidth: "40px", fontWeight: "bold" },
                  }),
                  $el("button.painter-button", {
                     textContent: "?",
@@ -682,6 +682,7 @@ async function createCanvasWidget(node, widget, app) {
         modalContent.appendChild(mainContainer);
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
+        openEditorBtn.disabled = true;
 
         canvas.render();
         if (node.onResize) {
@@ -694,6 +695,7 @@ async function createCanvasWidget(node, widget, app) {
             onclick: () => {
                 originalParent.appendChild(mainContainer);
                 document.body.removeChild(backdrop);
+                openEditorBtn.disabled = false;
                 canvas.render();
                 if (node.onResize) {
                     node.onResize();
