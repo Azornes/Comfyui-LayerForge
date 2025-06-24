@@ -232,6 +232,32 @@ async function createCanvasWidget(node, widget, app) {
             }
         }
     `;
+    style.textContent += `
+        .painter-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .painter-modal-content {
+            width: 90vw;
+            height: 90vh;
+            background-color: #353535;
+            border: 1px solid #222;
+            border-radius: 8px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+    `;
     document.head.appendChild(style);
 
     const helpTooltip = $el("div.painter-tooltip", {
@@ -294,6 +320,12 @@ async function createCanvasWidget(node, widget, app) {
         }, [
             // --- Group: Help & I/O ---
             $el("div.painter-button-group", {}, [
+                 $el("button.painter-button", {
+                    id: `open-editor-btn-${node.id}`,
+                    textContent: "⛶",
+                    title: "Open in Editor",
+                    style: { minWidth: "30px", maxWidth: "30px", fontWeight: "bold" },
+                 }),
                  $el("button.painter-button", {
                     textContent: "?",
                     title: "Show shortcuts",
@@ -511,16 +543,13 @@ async function createCanvasWidget(node, widget, app) {
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
-
         await canvas.saveToServer(widget.value);
-
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
-
         app.graph.runStep();
     };
 
     const addUpdateToButton = (button) => {
-        if (button.textContent === "Undo" || button.textContent === "Redo") {
+        if (button.textContent === "Undo" || button.textContent === "Redo" || button.title === "Open in Editor") {
             return;
         }
         const origClick = button.onclick;
@@ -639,6 +668,41 @@ async function createCanvasWidget(node, widget, app) {
     const mainWidget = node.addDOMWidget("mainContainer", "widget", mainContainer);
 
     node.size = [500, 500];
+
+    const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
+    openEditorBtn.onclick = () => {
+        const originalParent = mainContainer.parentNode;
+        if (!originalParent) {
+            console.error("Could not find original parent of the canvas container!");
+            return;
+        }
+        const backdrop = $el("div.painter-modal-backdrop");
+        const modalContent = $el("div.painter-modal-content");
+        
+        modalContent.appendChild(mainContainer);
+        backdrop.appendChild(modalContent);
+        document.body.appendChild(backdrop);
+
+        canvas.render();
+        if (node.onResize) {
+            node.onResize();
+        }
+
+        const closeButton = $el("button", {
+            textContent: "Close",
+            style: { position: 'absolute', top: '10px', right: '10px', zIndex: 100 },
+            onclick: () => {
+                originalParent.appendChild(mainContainer);
+                document.body.removeChild(backdrop);
+                canvas.render();
+                if (node.onResize) {
+                    node.onResize();
+                }
+            }
+        });
+        modalContent.appendChild(closeButton);
+    };
+
     api.addEventListener("execution_start", async () => {
 
         await canvas.saveToServer(widget.value);
@@ -879,6 +943,13 @@ app.registerExtension({
                 if (tooltip) {
                     tooltip.remove();
                 }
+
+                // If modal is open when node is removed, ensure it's cleaned up
+                const backdrop = document.querySelector('.painter-modal-backdrop');
+                if (backdrop && backdrop.contains(this.canvasWidget.canvas)) {
+                     document.body.removeChild(backdrop);
+                }
+                
                 return onRemoved?.apply(this, arguments);
             };
 
