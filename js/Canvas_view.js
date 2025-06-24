@@ -158,7 +158,7 @@ async function createCanvasWidget(node, widget, app) {
             border: 1px solid #555;
             border-radius: 8px;
             padding: 12px 18px;
-            z-index: 1001; /* Wyżej niż inne elementy UI */
+            z-index: 9999; /* Wyżej niż modal backdrop */
             font-size: 13px;
             line-height: 1.7;
             max-width: 400px;
