@@ -487,9 +487,11 @@ async function createCanvasWidget(node, widget, app) {
                 textContent: "Remove Layer",
                 onclick: () => {
                     if (canvas.selectedLayers.length > 0) {
+                        canvas.saveState();
                         canvas.layers = canvas.layers.filter(l => !canvas.selectedLayers.includes(l));
                         canvas.updateSelection([]);
                         canvas.render();
+                        canvas.saveState();
                     }
                 }
             }),
@@ -548,70 +550,79 @@ async function createCanvasWidget(node, widget, app) {
                 disabled: true,
                 onclick: () => canvas.redo()
             }),
-            $el("button.painter-button.requires-selection.matting-button", {
-                textContent: "Matting",
-                onclick: async () => {
-                    const statusIndicator = MattingStatusIndicator.getInstance(controlPanel.querySelector('.controls'));
-
-                    try {
-                        if (canvas.selectedLayers.length !== 1) {
-                            throw new Error("Please select exactly one image layer for matting.");
-                        }
-                        statusIndicator.setStatus('processing');
-
-                        const selectedLayer = canvas.selectedLayers[0];
-                        const imageData = await canvas.getLayerImageData(selectedLayer);
-
-                        console.log("Sending image to server for matting...");
-
-                        const response = await fetch("/matting", {
-                            method: "POST",
-                            headers: {"Content-Type": "application/json"},
-                            body: JSON.stringify({image: imageData})
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(`Server error: ${response.status} - ${response.statusText}`);
-                        }
-
-                        const result = await response.json();
-                        console.log("Creating new layer with matting result...");
-
-                        const mattedImage = new Image();
-                        mattedImage.onload = async () => {
-                            const newImage = new Image();
-                            newImage.onload = async () => {
-                                const newLayer = {
-                                    image: newImage,
-                                    x: selectedLayer.x,
-                                    y: selectedLayer.y,
-                                    width: selectedLayer.width,
-                                    height: selectedLayer.height,
-                                    rotation: selectedLayer.rotation,
-                                    zIndex: canvas.layers.length + 1
-                                };
-                                canvas.layers.push(newLayer);
-                                canvas.updateSelection([newLayer]);
-                                canvas.render();
-
-                                await canvas.saveToServer(widget.value);
-                                app.graph.runStep();
-                                statusIndicator.setStatus('completed');
-                            };
-                            newImage.src = result.matted_image;
-                        };
-                        mattedImage.onerror = () => {
-                            throw new Error("Failed to load the matted image from server response.");
-                        };
-                        mattedImage.src = result.matted_image;
-
-                    } catch (error) {
-                        console.error("Matting error:", error);
-                        alert(`Error during matting process: ${error.message}`);
-                        statusIndicator.setStatus('error');
-                    }
+            $el("div", {
+                style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
                 }
-            }),
+            }, [
+                $el("button.painter-button.requires-selection.matting-button", {
+                    textContent: "Matting",
+                    onclick: async (e) => {
+                        const statusIndicator = MattingStatusIndicator.getInstance(e.target.parentElement);
+
+                        try {
+                            if (canvas.selectedLayers.length !== 1) {
+                                throw new Error("Please select exactly one image layer for matting.");
+                            }
+                            statusIndicator.setStatus('processing');
+
+                            const selectedLayer = canvas.selectedLayers[0];
+                            const imageData = await canvas.getLayerImageData(selectedLayer);
+
+                            console.log("Sending image to server for matting...");
+
+                            const response = await fetch("/matting", {
+                                method: "POST",
+                                headers: {"Content-Type": "application/json"},
+                                body: JSON.stringify({image: imageData})
+                            });
+
+                            if (!response.ok) {
+                                throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+                            }
+
+                            const result = await response.json();
+                            console.log("Creating new layer with matting result...");
+
+                            const mattedImage = new Image();
+                            mattedImage.onload = async () => {
+                                const newImage = new Image();
+                                newImage.onload = async () => {
+                                    const newLayer = {
+                                        image: newImage,
+                                        x: selectedLayer.x,
+                                        y: selectedLayer.y,
+                                        width: selectedLayer.width,
+                                        height: selectedLayer.height,
+                                        rotation: selectedLayer.rotation,
+                                        zIndex: canvas.layers.length + 1
+                                    };
+                                    canvas.layers.push(newLayer);
+                                    canvas.updateSelection([newLayer]);
+                                    canvas.render();
+                                    canvas.saveState();
+
+                                    await canvas.saveToServer(widget.value);
+                                    app.graph.runStep();
+                                    statusIndicator.setStatus('completed');
+                                };
+                                newImage.src = result.matted_image;
+                            };
+                            mattedImage.onerror = () => {
+                                throw new Error("Failed to load the matted image from server response.");
+                            };
+                            mattedImage.src = result.matted_image;
+
+                        } catch (error) {
+                            console.error("Matting error:", error);
+                            alert(`Error during matting process: ${error.message}`);
+                            statusIndicator.setStatus('error');
+                        }
+                    }
+                })
+            ]),
             $el("button.painter-button", {
                 textContent: "Clear Cache",
                 style: {

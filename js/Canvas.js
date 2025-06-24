@@ -1111,6 +1111,7 @@ export class Canvas {
             layer.height *= scale;
         });
         this.render();
+        this.saveState();
     }
 
     rotateLayer(angle) {
@@ -1118,6 +1119,7 @@ export class Canvas {
             layer.rotation += angle;
         });
         this.render();
+        this.saveState();
     }
 
     updateCanvasSize(width, height, saveHistory = true) {
