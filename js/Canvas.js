@@ -1,3 +1,5 @@
+import { getCanvasState, setCanvasState, removeCanvasState } from "./db.js";
+
 export class Canvas {
     constructor(node, widget) {
         this.node = node;
@@ -82,28 +84,20 @@ export class Canvas {
         // this.saveState(); // Wywołanie przeniesione do loadInitialState
     }
 
-    getLocalStorageKey() {
+    async loadStateFromDB() {
+        console.log("Attempting to load state from IndexedDB for node:", this.node.id);
         if (!this.node.id) {
-            console.error("Node ID is not available for generating localStorage key.");
-            return null;
+            console.error("Node ID is not available for loading state from DB.");
+            return false;
         }
-        return `canvas-state-${this.node.id}`;
-    }
-
-    async loadStateFromLocalStorage() {
-        console.log("Attempting to load state from localStorage for node:", this.node.id);
-        const key = this.getLocalStorageKey();
-        if (!key) return false;
 
         try {
-            const savedStateJSON = localStorage.getItem(key);
-            if (!savedStateJSON) {
-                console.log("No saved state found in localStorage for key:", key);
+            const savedState = await getCanvasState(this.node.id);
+            if (!savedState) {
+                console.log("No saved state found in IndexedDB for node:", this.node.id);
                 return false;
             }
-            console.log("Found saved state in localStorage:", savedStateJSON.substring(0, 200) + "...");
-
-            const savedState = JSON.parse(savedStateJSON);
+            console.log("Found saved state in IndexedDB.");
 
             this.width = savedState.width || 512;
             this.height = savedState.height || 512;
@@ -144,16 +138,18 @@ export class Canvas {
             console.log("Canvas state loaded successfully from localStorage for node", this.node.id);
             return true;
         } catch (e) {
-            console.error("Error loading canvas state from localStorage:", e);
-            localStorage.removeItem(key);
+            console.error("Error loading canvas state from IndexedDB:", e);
+            await removeCanvasState(this.node.id).catch(err => console.error("Failed to remove corrupted state:", err));
             return false;
         }
     }
-    
-    saveStateToLocalStorage() {
-        console.log("Attempting to save state to localStorage for node:", this.node.id);
-        const key = this.getLocalStorageKey();
-        if (!key) return;
+
+    async saveStateToDB() {
+        console.log("Attempting to save state to IndexedDB for node:", this.node.id);
+        if (!this.node.id) {
+            console.error("Node ID is not available for saving state to DB.");
+            return;
+        }
 
         try {
             const state = {
@@ -172,17 +168,16 @@ export class Canvas {
                 width: this.width,
                 height: this.height,
             };
-            const stateJSON = JSON.stringify(state);
-            localStorage.setItem(key, stateJSON);
-            console.log("Canvas state saved to localStorage:", stateJSON.substring(0, 200) + "...");
+            await setCanvasState(this.node.id, state);
+            console.log("Canvas state saved to IndexedDB.");
         } catch (e) {
-            console.error("Error saving canvas state to localStorage:", e);
+            console.error("Error saving canvas state to IndexedDB:", e);
         }
     }
 
     async loadInitialState() {
         console.log("Loading initial state for node:", this.node.id);
-        const loaded = await this.loadStateFromLocalStorage();
+        const loaded = await this.loadStateFromDB();
         if (!loaded) {
             console.log("No saved state found, initializing from node data.");
             await this.initNodeData();
@@ -220,7 +215,7 @@ export class Canvas {
         }
         this.redoStack = [];
         this.updateHistoryButtons();
-        this.saveStateToLocalStorage();
+        this.saveStateToDB();
     }
 
     undo() {
@@ -1138,7 +1133,7 @@ export class Canvas {
         this.render();
 
         if (saveHistory) {
-            this.saveStateToLocalStorage();
+            this.saveStateToDB();
         }
     }
 
