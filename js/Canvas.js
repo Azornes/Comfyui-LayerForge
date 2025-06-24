@@ -194,6 +194,17 @@ export class Canvas {
         });
     }
 
+    getStateSignature(layers) {
+        return JSON.stringify(layers.map(layer => {
+            const sig = { ...layer };
+            if (sig.image instanceof HTMLImageElement) {
+                sig.imageSrc = sig.image.src;
+            }
+            delete sig.image;
+            return sig;
+        }));
+    }
+
     saveState(replaceLast = false) {
         if (replaceLast && this.undoStack.length > 0) {
             this.undoStack.pop();
@@ -203,7 +214,7 @@ export class Canvas {
 
         if (this.undoStack.length > 0) {
             const lastState = this.undoStack[this.undoStack.length - 1];
-            if (JSON.stringify(currentState) === JSON.stringify(lastState)) {
+            if (this.getStateSignature(currentState) === this.getStateSignature(lastState)) {
                 return;
             }
         }
@@ -1817,50 +1828,60 @@ export class Canvas {
         return null;
     }
 
-    mirrorHorizontal() {
+    async mirrorHorizontal() {
         if (this.selectedLayers.length === 0) return;
 
-        this.selectedLayers.forEach(layer => {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = layer.image.width;
-            tempCanvas.height = layer.image.height;
+        const promises = this.selectedLayers.map(layer => {
+            return new Promise(resolve => {
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = layer.image.width;
+                tempCanvas.height = layer.image.height;
 
-            tempCtx.translate(tempCanvas.width, 0);
-            tempCtx.scale(-1, 1);
-            tempCtx.drawImage(layer.image, 0, 0);
+                tempCtx.translate(tempCanvas.width, 0);
+                tempCtx.scale(-1, 1);
+                tempCtx.drawImage(layer.image, 0, 0);
 
-            const newImage = new Image();
-            newImage.onload = () => {
-                layer.image = newImage;
-                this.render();
-                this.saveState();
-            };
-            newImage.src = tempCanvas.toDataURL();
+                const newImage = new Image();
+                newImage.onload = () => {
+                    layer.image = newImage;
+                    resolve();
+                };
+                newImage.src = tempCanvas.toDataURL();
+            });
         });
+
+        await Promise.all(promises);
+        this.render();
+        this.saveState();
     }
 
-    mirrorVertical() {
+    async mirrorVertical() {
         if (this.selectedLayers.length === 0) return;
 
-        this.selectedLayers.forEach(layer => {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = layer.image.width;
-            tempCanvas.height = layer.image.height;
+        const promises = this.selectedLayers.map(layer => {
+            return new Promise(resolve => {
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = layer.image.width;
+                tempCanvas.height = layer.image.height;
 
-            tempCtx.translate(0, tempCanvas.height);
-            tempCtx.scale(1, -1);
-            tempCtx.drawImage(layer.image, 0, 0);
+                tempCtx.translate(0, tempCanvas.height);
+                tempCtx.scale(1, -1);
+                tempCtx.drawImage(layer.image, 0, 0);
 
-            const newImage = new Image();
-            newImage.onload = () => {
-                layer.image = newImage;
-                this.render();
-                this.saveState();
-            };
-            newImage.src = tempCanvas.toDataURL();
+                const newImage = new Image();
+                newImage.onload = () => {
+                    layer.image = newImage;
+                    resolve();
+                };
+                newImage.src = tempCanvas.toDataURL();
+            });
         });
+
+        await Promise.all(promises);
+        this.render();
+        this.saveState();
     }
 
     async getLayerImageData(layer) {
