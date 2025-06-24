@@ -196,8 +196,6 @@ async function createCanvasWidget(node, widget, app) {
             </ul>
             <h4>Clipboard & I/O</h4>
             <ul>
-                <li><kbd>Ctrl + Z</kbd> - Undo last action</li>
-                <li><kbd>Ctrl + Y</kbd> / <kbd>Ctrl + Shift + Z</kbd> - Redo last action</li>
                 <li><kbd>Ctrl + C</kbd> - Copy selected layer(s)</li>
                 <li><kbd>Ctrl + V</kbd> - Paste from clipboard (image or internal layers)</li>
                 <li><kbd>Drag & Drop Image File</kbd> - Add image as a new layer</li>
