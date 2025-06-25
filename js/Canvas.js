@@ -668,6 +668,13 @@ export class Canvas {
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.width, this.height);
 
+            // Tworzymy tymczasowy canvas do renderowania warstw i maski
+            const visibilityCanvas = document.createElement('canvas');
+            visibilityCanvas.width = this.width;
+            visibilityCanvas.height = this.height;
+            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            
+            // Czarne tło (całkowicie przezroczyste w masce)
             maskCtx.fillStyle = '#ffffff'; // Białe tło dla wolnych przestrzeni
             maskCtx.fillRect(0, 0, this.width, this.height);
             
@@ -677,6 +684,7 @@ export class Canvas {
             const sortedLayers = this.layers.sort((a, b) => a.zIndex - b.zIndex);
             log.debug(`Processing ${sortedLayers.length} layers in order`);
             
+            // Najpierw renderujemy wszystkie warstwy do głównego obrazu
             sortedLayers.forEach((layer, index) => {
                 log.debug(`Processing layer ${index}: zIndex=${layer.zIndex}, size=${layer.width}x${layer.height}, pos=(${layer.x},${layer.y})`);
                 log.debug(`Layer ${index}: blendMode=${layer.blendMode || 'normal'}, opacity=${layer.opacity !== undefined ? layer.opacity : 1}`);
@@ -691,62 +699,31 @@ export class Canvas {
                 
                 log.debug(`Layer ${index} rendered successfully`);
 
-                maskCtx.save();
-                maskCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
-                maskCtx.rotate(layer.rotation * Math.PI / 180);
-                maskCtx.globalCompositeOperation = 'source-over'; // Używamy source-over, aby uwzględnić stopniową przezroczystość
-
-                if (layer.mask) {
-                    // Jeśli warstwa ma maskę, używamy jej jako alpha kanału
-                    const layerCanvas = document.createElement('canvas');
-                    layerCanvas.width = layer.width;
-                    layerCanvas.height = layer.height;
-                    const layerCtx = layerCanvas.getContext('2d');
-                    layerCtx.drawImage(layer.mask, 0, 0, layer.width, layer.height);
-                    const imageData = layerCtx.getImageData(0, 0, layer.width, layer.height);
-
-                    const alphaCanvas = document.createElement('canvas');
-                    alphaCanvas.width = layer.width;
-                    alphaCanvas.height = layer.height;
-                    const alphaCtx = alphaCanvas.getContext('2d');
-                    const alphaData = alphaCtx.createImageData(layer.width, layer.height);
-
-                    for (let i = 0; i < imageData.data.length; i += 4) {
-                        const alpha = imageData.data[i + 3] * (layer.opacity !== undefined ? layer.opacity : 1);
-                        // Odwracamy alpha, aby przezroczyste obszary warstwy były nieprzezroczyste na masce
-                        alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = 255 - alpha;
-                        alphaData.data[i + 3] = 255;
-                    }
-
-                    alphaCtx.putImageData(alphaData, 0, 0);
-                    maskCtx.drawImage(alphaCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                } else {
-                    // Jeśli warstwa nie ma maski, używamy jej alpha kanału
-                    const layerCanvas = document.createElement('canvas');
-                    layerCanvas.width = layer.width;
-                    layerCanvas.height = layer.height;
-                    const layerCtx = layerCanvas.getContext('2d');
-                    layerCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-                    const imageData = layerCtx.getImageData(0, 0, layer.width, layer.height);
-
-                    const alphaCanvas = document.createElement('canvas');
-                    alphaCanvas.width = layer.width;
-                    alphaCanvas.height = layer.height;
-                    const alphaCtx = alphaCanvas.getContext('2d');
-                    const alphaData = alphaCtx.createImageData(layer.width, layer.height);
-
-                    for (let i = 0; i < imageData.data.length; i += 4) {
-                        const alpha = imageData.data[i + 3] * (layer.opacity !== undefined ? layer.opacity : 1);
-                        // Odwracamy alpha, aby przezroczyste obszary warstwy były nieprzezroczyste na masce
-                        alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = 255 - alpha;
-                        alphaData.data[i + 3] = 255;
-                    }
-
-                    alphaCtx.putImageData(alphaData, 0, 0);
-                    maskCtx.drawImage(alphaCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                }
-                maskCtx.restore();
+                // Renderujemy również do canvas widoczności, aby śledzić, które piksele są widoczne
+                visibilityCtx.save();
+                visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                visibilityCtx.rotate(layer.rotation * Math.PI / 180);
+                visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                visibilityCtx.restore();
             });
+            
+            // Teraz tworzymy maskę na podstawie widoczności pikseli, zachowując stopień przezroczystości
+            const visibilityData = visibilityCtx.getImageData(0, 0, this.width, this.height);
+            const maskData = maskCtx.getImageData(0, 0, this.width, this.height);
+            
+            // Używamy wartości alpha do określenia stopnia przezroczystości w masce
+            for (let i = 0; i < visibilityData.data.length; i += 4) {
+                const alpha = visibilityData.data[i + 3];
+                // Odwracamy wartość alpha (255 - alpha), aby zachować logikę maski:
+                // - Przezroczyste piksele w obrazie (alpha = 0) -> białe w masce (255)
+                // - Nieprzezroczyste piksele w obrazie (alpha = 255) -> czarne w masce (0)
+                // - Częściowo przezroczyste piksele zachowują proporcjonalną wartość
+                const maskValue = 255 - alpha;
+                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
+                maskData.data[i + 3] = 255; // Maska zawsze ma pełną nieprzezroczystość
+            }
+            
+            maskCtx.putImageData(maskData, 0, 0);
 
             // Nałóż maskę z narzędzia MaskTool, uwzględniając przezroczystość pędzla
             const toolMaskCanvas = this.maskTool.getMask();
