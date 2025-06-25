@@ -1,15 +1,8 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
+import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu ImageUtils
-const log = {
-    debug: (...args) => logger.debug('ImageUtils', ...args),
-    info: (...args) => logger.info('ImageUtils', ...args),
-    warn: (...args) => logger.warn('ImageUtils', ...args),
-    error: (...args) => logger.error('ImageUtils', ...args)
-};
-
-// Konfiguracja loggera dla modułu ImageUtils
-logger.setModuleLevel('ImageUtils', LogLevel.DEBUG);
+const log = createModuleLogger('ImageUtils');
 
 export function validateImageData(data) {
     log.debug("Validating data structure:", {
@@ -123,49 +116,269 @@ export function applyMaskToImageData(imageData, maskData) {
     };
 }
 
-export function prepareImageForCanvas(inputImage) {
+export const prepareImageForCanvas = withErrorHandling(function(inputImage) {
     log.info("Preparing image for canvas:", inputImage);
 
-    try {
-        if (Array.isArray(inputImage)) {
-            inputImage = inputImage[0];
-        }
-
-        if (!inputImage || !inputImage.shape || !inputImage.data) {
-            throw new Error("Invalid input image format");
-        }
-
-        const shape = inputImage.shape;
-        const height = shape[1];
-        const width = shape[2];
-        const channels = shape[3];
-        const floatData = new Float32Array(inputImage.data);
-
-        log.debug("Image dimensions:", {height, width, channels});
-
-        const rgbaData = new Uint8ClampedArray(width * height * 4);
-
-        for (let h = 0; h < height; h++) {
-            for (let w = 0; w < width; w++) {
-                const pixelIndex = (h * width + w) * 4;
-                const tensorIndex = (h * width + w) * channels;
-
-                for (let c = 0; c < channels; c++) {
-                    const value = floatData[tensorIndex + c];
-                    rgbaData[pixelIndex + c] = Math.max(0, Math.min(255, Math.round(value * 255)));
-                }
-
-                rgbaData[pixelIndex + 3] = 255;
-            }
-        }
-
-        return {
-            data: rgbaData,
-            width: width,
-            height: height
-        };
-    } catch (error) {
-        log.error("Error preparing image:", error);
-        throw new Error(`Failed to prepare image: ${error.message}`);
+    if (Array.isArray(inputImage)) {
+        inputImage = inputImage[0];
     }
+
+    if (!inputImage || !inputImage.shape || !inputImage.data) {
+        throw createValidationError("Invalid input image format", { inputImage });
+    }
+
+    const shape = inputImage.shape;
+    const height = shape[1];
+    const width = shape[2];
+    const channels = shape[3];
+    const floatData = new Float32Array(inputImage.data);
+
+    log.debug("Image dimensions:", {height, width, channels});
+
+    const rgbaData = new Uint8ClampedArray(width * height * 4);
+
+    for (let h = 0; h < height; h++) {
+        for (let w = 0; w < width; w++) {
+            const pixelIndex = (h * width + w) * 4;
+            const tensorIndex = (h * width + w) * channels;
+
+            for (let c = 0; c < channels; c++) {
+                const value = floatData[tensorIndex + c];
+                rgbaData[pixelIndex + c] = Math.max(0, Math.min(255, Math.round(value * 255)));
+            }
+
+            rgbaData[pixelIndex + 3] = 255;
+        }
+    }
+
+    return {
+        data: rgbaData,
+        width: width,
+        height: height
+    };
+}, 'prepareImageForCanvas');
+
+/**
+ * Konwertuje obraz PIL/Canvas na tensor
+ * @param {HTMLImageElement|HTMLCanvasElement} image - Obraz do konwersji
+ * @returns {Promise<Object>} Tensor z danymi obrazu
+ */
+export const imageToTensor = withErrorHandling(async function(image) {
+    if (!image) {
+        throw createValidationError("Image is required");
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = image.width || image.naturalWidth;
+    canvas.height = image.height || image.naturalHeight;
+    
+    ctx.drawImage(image, 0, 0);
+    
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = new Float32Array(canvas.width * canvas.height * 3);
+    
+    for (let i = 0; i < imageData.data.length; i += 4) {
+        const pixelIndex = i / 4;
+        data[pixelIndex * 3] = imageData.data[i] / 255;     // R
+        data[pixelIndex * 3 + 1] = imageData.data[i + 1] / 255; // G
+        data[pixelIndex * 3 + 2] = imageData.data[i + 2] / 255; // B
+    }
+    
+    return {
+        data: data,
+        shape: [1, canvas.height, canvas.width, 3],
+        width: canvas.width,
+        height: canvas.height
+    };
+}, 'imageToTensor');
+
+/**
+ * Konwertuje tensor na obraz HTML
+ * @param {Object} tensor - Tensor z danymi obrazu
+ * @returns {Promise<HTMLImageElement>} Obraz HTML
+ */
+export const tensorToImage = withErrorHandling(async function(tensor) {
+    if (!tensor || !tensor.data || !tensor.shape) {
+        throw createValidationError("Invalid tensor format", { tensor });
+    }
+
+    const [, height, width, channels] = tensor.shape;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    const imageData = ctx.createImageData(width, height);
+    const data = tensor.data;
+    
+    for (let i = 0; i < width * height; i++) {
+        const pixelIndex = i * 4;
+        const tensorIndex = i * channels;
+        
+        imageData.data[pixelIndex] = Math.round(data[tensorIndex] * 255);     // R
+        imageData.data[pixelIndex + 1] = Math.round(data[tensorIndex + 1] * 255); // G
+        imageData.data[pixelIndex + 2] = Math.round(data[tensorIndex + 2] * 255); // B
+        imageData.data[pixelIndex + 3] = 255; // A
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = canvas.toDataURL();
+    });
+}, 'tensorToImage');
+
+/**
+ * Zmienia rozmiar obrazu z zachowaniem proporcji
+ * @param {HTMLImageElement} image - Obraz do przeskalowania
+ * @param {number} maxWidth - Maksymalna szerokość
+ * @param {number} maxHeight - Maksymalna wysokość
+ * @returns {Promise<HTMLImageElement>} Przeskalowany obraz
+ */
+export const resizeImage = withErrorHandling(async function(image, maxWidth, maxHeight) {
+    if (!image) {
+        throw createValidationError("Image is required");
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    const originalWidth = image.width || image.naturalWidth;
+    const originalHeight = image.height || image.naturalHeight;
+    
+    // Oblicz nowe wymiary z zachowaniem proporcji
+    const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
+    const newWidth = Math.round(originalWidth * scale);
+    const newHeight = Math.round(originalHeight * scale);
+    
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    
+    // Użyj wysokiej jakości skalowania
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    ctx.drawImage(image, 0, 0, newWidth, newHeight);
+    
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = canvas.toDataURL();
+    });
+}, 'resizeImage');
+
+/**
+ * Tworzy miniaturę obrazu
+ * @param {HTMLImageElement} image - Obraz źródłowy
+ * @param {number} size - Rozmiar miniatury (kwadrat)
+ * @returns {Promise<HTMLImageElement>} Miniatura
+ */
+export const createThumbnail = withErrorHandling(async function(image, size = 128) {
+    return resizeImage(image, size, size);
+}, 'createThumbnail');
+
+/**
+ * Konwertuje obraz na base64
+ * @param {HTMLImageElement|HTMLCanvasElement} image - Obraz do konwersji
+ * @param {string} format - Format obrazu (png, jpeg, webp)
+ * @param {number} quality - Jakość (0-1) dla formatów stratnych
+ * @returns {string} Base64 string
+ */
+export const imageToBase64 = withErrorHandling(function(image, format = 'png', quality = 0.9) {
+    if (!image) {
+        throw createValidationError("Image is required");
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = image.width || image.naturalWidth;
+    canvas.height = image.height || image.naturalHeight;
+    
+    ctx.drawImage(image, 0, 0);
+    
+    const mimeType = `image/${format}`;
+    return canvas.toDataURL(mimeType, quality);
+}, 'imageToBase64');
+
+/**
+ * Konwertuje base64 na obraz
+ * @param {string} base64 - Base64 string
+ * @returns {Promise<HTMLImageElement>} Obraz
+ */
+export const base64ToImage = withErrorHandling(function(base64) {
+    if (!base64) {
+        throw createValidationError("Base64 string is required");
+    }
+
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("Failed to load image from base64"));
+        img.src = base64;
+    });
+}, 'base64ToImage');
+
+/**
+ * Sprawdza czy obraz jest prawidłowy
+ * @param {HTMLImageElement} image - Obraz do sprawdzenia
+ * @returns {boolean} Czy obraz jest prawidłowy
+ */
+export function isValidImage(image) {
+    return image && 
+           (image instanceof HTMLImageElement || image instanceof HTMLCanvasElement) &&
+           image.width > 0 && 
+           image.height > 0;
 }
+
+/**
+ * Pobiera informacje o obrazie
+ * @param {HTMLImageElement} image - Obraz
+ * @returns {Object} Informacje o obrazie
+ */
+export function getImageInfo(image) {
+    if (!isValidImage(image)) {
+        return null;
+    }
+
+    return {
+        width: image.width || image.naturalWidth,
+        height: image.height || image.naturalHeight,
+        aspectRatio: (image.width || image.naturalWidth) / (image.height || image.naturalHeight),
+        area: (image.width || image.naturalWidth) * (image.height || image.naturalHeight)
+    };
+}
+
+/**
+ * Tworzy pusty obraz o podanych wymiarach
+ * @param {number} width - Szerokość
+ * @param {number} height - Wysokość
+ * @param {string} color - Kolor tła (CSS color)
+ * @returns {Promise<HTMLImageElement>} Pusty obraz
+ */
+export const createEmptyImage = withErrorHandling(function(width, height, color = 'transparent') {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    if (color !== 'transparent') {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, width, height);
+    }
+    
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = canvas.toDataURL();
+    });
+}, 'createEmptyImage');

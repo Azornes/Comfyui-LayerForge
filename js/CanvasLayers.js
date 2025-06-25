@@ -1,16 +1,10 @@
 import {saveImage, getImage, removeImage} from "./db.js";
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
+import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./CommonUtils.js";
+import {withErrorHandling, createValidationError, safeExecute} from "./ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu CanvasLayers
-const log = {
-    debug: (...args) => logger.debug('CanvasLayers', ...args),
-    info: (...args) => logger.info('CanvasLayers', ...args),
-    warn: (...args) => logger.warn('CanvasLayers', ...args),
-    error: (...args) => logger.error('CanvasLayers', ...args)
-};
-
-// Konfiguracja loggera dla modułu CanvasLayers
-logger.setModuleLevel('CanvasLayers', LogLevel.DEBUG); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
+const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
     constructor(canvas) {
@@ -35,13 +29,6 @@ export class CanvasLayers {
         this.internalClipboard = [];
     }
 
-    // Generowanie unikalnego identyfikatora
-    generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        });
-    }
 
     // Operacje na warstwach
     async copySelectedLayers() {
@@ -124,41 +111,40 @@ export class CanvasLayers {
         }
     }
 
-    async addLayerWithImage(image, layerProps = {}) {
-        try {
-            log.debug("Adding layer with image:", image);
-
-            // Wygeneruj unikalny identyfikator dla obrazu i zapisz go do IndexedDB
-            const imageId = this.generateUUID();
-            await saveImage(imageId, image.src);
-            this.canvas.imageCache.set(imageId, image.src); // Zapisz w pamięci podręcznej jako imageSrc
-
-            const layer = {
-                image: image,
-                imageId: imageId, // Dodaj imageId do warstwy
-                x: (this.canvas.width - image.width) / 2,
-                y: (this.canvas.height - image.height) / 2,
-                width: image.width,
-                height: image.height,
-                rotation: 0,
-                zIndex: this.canvas.layers.length,
-                blendMode: 'normal',
-                opacity: 1,
-                ...layerProps // Nadpisz domyślne właściwości, jeśli podano
-            };
-
-            this.canvas.layers.push(layer);
-            this.canvas.updateSelection([layer]);
-            this.canvas.render();
-            this.canvas.saveState();
-
-            log.info("Layer added successfully");
-            return layer;
-        } catch (error) {
-            log.error("Error adding layer:", error);
-            throw error;
+    addLayerWithImage = withErrorHandling(async (image, layerProps = {}) => {
+        if (!image) {
+            throw createValidationError("Image is required for layer creation");
         }
-    }
+
+        log.debug("Adding layer with image:", image);
+
+        // Wygeneruj unikalny identyfikator dla obrazu i zapisz go do IndexedDB
+        const imageId = generateUUID();
+        await saveImage(imageId, image.src);
+        this.canvas.imageCache.set(imageId, image.src);
+
+        const layer = {
+            image: image,
+            imageId: imageId,
+            x: (this.canvas.width - image.width) / 2,
+            y: (this.canvas.height - image.height) / 2,
+            width: image.width,
+            height: image.height,
+            rotation: 0,
+            zIndex: this.canvas.layers.length,
+            blendMode: 'normal',
+            opacity: 1,
+            ...layerProps
+        };
+
+        this.canvas.layers.push(layer);
+        this.canvas.updateSelection([layer]);
+        this.canvas.render();
+        this.canvas.saveState();
+
+        log.info("Layer added successfully");
+        return layer;
+    }, 'CanvasLayers.addLayerWithImage');
 
     async addLayer(image) {
         return this.addLayerWithImage(image);
@@ -361,43 +347,6 @@ export class CanvasLayers {
         }
     }
 
-    snapToGrid(value, gridSize = 64) {
-        return Math.round(value / gridSize) * gridSize;
-    }
-
-    getSnapAdjustment(layer, gridSize = 64, snapThreshold = 10) {
-        if (!layer) {
-            return {dx: 0, dy: 0};
-        }
-
-        const layerEdges = {
-            left: layer.x,
-            right: layer.x + layer.width,
-            top: layer.y,
-            bottom: layer.y + layer.height
-        };
-        const x_adjustments = [
-            {type: 'x', delta: this.snapToGrid(layerEdges.left, gridSize) - layerEdges.left},
-            {type: 'x', delta: this.snapToGrid(layerEdges.right, gridSize) - layerEdges.right}
-        ];
-
-        const y_adjustments = [
-            {type: 'y', delta: this.snapToGrid(layerEdges.top, gridSize) - layerEdges.top},
-            {type: 'y', delta: this.snapToGrid(layerEdges.bottom, gridSize) - layerEdges.bottom}
-        ];
-        x_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
-        y_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
-        const bestXSnap = x_adjustments
-            .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
-            .sort((a, b) => a.abs - b.abs)[0];
-        const bestYSnap = y_adjustments
-            .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
-            .sort((a, b) => a.abs - b.abs)[0];
-        return {
-            dx: bestXSnap ? bestXSnap.delta : 0,
-            dy: bestYSnap ? bestYSnap.delta : 0
-        };
-    }
 
     updateCanvasSize(width, height, saveHistory = true) {
         if (saveHistory) {
@@ -521,29 +470,6 @@ export class CanvasLayers {
         return null;
     }
 
-    worldToLocal(worldX, worldY, layerProps) {
-        const dx = worldX - layerProps.centerX;
-        const dy = worldY - layerProps.centerY;
-        const rad = -layerProps.rotation * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-
-        return {
-            x: dx * cos - dy * sin,
-            y: dx * sin + dy * cos
-        };
-    }
-
-    localToWorld(localX, localY, layerProps) {
-        const rad = layerProps.rotation * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-
-        return {
-            x: layerProps.centerX + localX * cos - localY * sin,
-            y: layerProps.centerY + localX * sin + localY * cos
-        };
-    }
 
     // Funkcje związane z blend mode i opacity
     showBlendModeMenu(x, y) {

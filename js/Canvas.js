@@ -5,18 +5,12 @@ import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
+import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./CommonUtils.js";
+import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu Canvas
-const log = {
-    debug: (...args) => logger.debug('Canvas', ...args),
-    info: (...args) => logger.info('Canvas', ...args),
-    warn: (...args) => logger.warn('Canvas', ...args),
-    error: (...args) => logger.error('Canvas', ...args)
-};
-
-// Konfiguracja loggera dla modułu Canvas
-logger.setModuleLevel('Canvas', LogLevel.DEBUG); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
+const log = createModuleLogger('Canvas');
 
 export class Canvas {
     constructor(node, widget) {
@@ -221,9 +215,6 @@ export class Canvas {
         return this.canvasLayers.addLayerWithImage(image, layerProps);
     }
 
-    generateUUID() {
-        return this.canvasLayers.generateUUID();
-    }
 
     async addLayer(image) {
         return this.addLayerWithImage(image);
@@ -264,13 +255,6 @@ export class Canvas {
         return {x: worldX, y: worldY};
     }
 
-    snapToGrid(value, gridSize = 64) {
-        return this.canvasLayers.snapToGrid(value, gridSize);
-    }
-
-    getSnapAdjustment(layer, gridSize = 64, snapThreshold = 10) {
-        return this.canvasLayers.getSnapAdjustment(layer, gridSize, snapThreshold);
-    }
 
     moveLayer(fromIndex, toIndex) {
         return this.canvasLayers.moveLayer(fromIndex, toIndex);
@@ -312,13 +296,6 @@ export class Canvas {
         return this.canvasLayers.getHandleAtPosition(worldX, worldY);
     }
 
-    worldToLocal(worldX, worldY, layerProps) {
-        return this.canvasLayers.worldToLocal(worldX, worldY, layerProps);
-    }
-
-    localToWorld(localX, localY, layerProps) {
-        return this.canvasLayers.localToWorld(localX, localY, layerProps);
-    }
 
 
     async saveToServer(fileName) {

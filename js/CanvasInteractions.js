@@ -1,15 +1,8 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
+import {snapToGrid, getSnapAdjustment} from "./CommonUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasInteractions
-const log = {
-    debug: (...args) => logger.debug('CanvasInteractions', ...args),
-    info: (...args) => logger.info('CanvasInteractions', ...args),
-    warn: (...args) => logger.warn('CanvasInteractions', ...args),
-    error: (...args) => logger.error('CanvasInteractions', ...args)
-};
-
-// Konfiguracja loggera dla modułu CanvasInteractions
-logger.setModuleLevel('CanvasInteractions', LogLevel.DEBUG);
+const log = createModuleLogger('CanvasInteractions');
 
 export class CanvasInteractions {
     constructor(canvas) {
@@ -564,7 +557,7 @@ export class CanvasInteractions {
                     x: originalPos.x + totalDx,
                     y: originalPos.y + totalDy
                 };
-                const snapAdjustment = this.canvas.getSnapAdjustment(tempLayerForSnap);
+                const snapAdjustment = getSnapAdjustment(tempLayerForSnap);
                 finalDx += snapAdjustment.dx;
                 finalDy += snapAdjustment.dy;
             }
