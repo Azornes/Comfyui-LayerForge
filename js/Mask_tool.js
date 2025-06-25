@@ -9,7 +9,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu Mask_tool
-logger.setModuleLevel('Mask_tool', LogLevel.INFO);
+logger.setModuleLevel('Mask_tool', LogLevel.DEBUG);
 
 export class MaskTool {
     constructor(canvasInstance) {

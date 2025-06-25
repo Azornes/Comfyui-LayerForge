@@ -10,7 +10,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu CanvasLayers
-logger.setModuleLevel('CanvasLayers', LogLevel.INFO); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
+logger.setModuleLevel('CanvasLayers', LogLevel.DEBUG); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
 
 export class CanvasLayers {
     constructor(canvas) {
@@ -628,7 +628,32 @@ export class CanvasLayers {
                     this.canvas.selectedLayer.opacity = slider.value / 100;
                     this.canvas.render();
 
-                    await this.canvas.saveToServer(this.canvas.widget.value);
+                    // Funkcja fallback do zapisu
+                    const saveWithFallback = async (fileName) => {
+                        try {
+                            const getUniqueFileName = (baseName) => {
+                                // Sprawdź czy nazwa już zawiera identyfikator node-a (zapobiega nieskończonej pętli)
+                                const nodePattern = new RegExp(`_node_${this.canvas.node.id}(?:_node_\\d+)*`);
+                                if (nodePattern.test(baseName)) {
+                                    // Usuń wszystkie poprzednie identyfikatory node-ów i dodaj tylko jeden
+                                    const cleanName = baseName.replace(/_node_\d+/g, '');
+                                    const extension = cleanName.split('.').pop();
+                                    const nameWithoutExt = cleanName.replace(`.${extension}`, '');
+                                    return `${nameWithoutExt}_node_${this.canvas.node.id}.${extension}`;
+                                }
+                                const extension = baseName.split('.').pop();
+                                const nameWithoutExt = baseName.replace(`.${extension}`, '');
+                                return `${nameWithoutExt}_node_${this.canvas.node.id}.${extension}`;
+                            };
+                            const uniqueFileName = getUniqueFileName(fileName);
+                            return await this.canvas.saveToServer(uniqueFileName);
+                        } catch (error) {
+                            console.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);
+                            return await this.canvas.saveToServer(fileName);
+                        }
+                    };
+                    
+                    await saveWithFallback(this.canvas.widget.value);
                     if (this.canvas.node) {
                         app.graph.runStep();
                     }

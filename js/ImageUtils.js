@@ -9,7 +9,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu ImageUtils
-logger.setModuleLevel('ImageUtils', LogLevel.INFO);
+logger.setModuleLevel('ImageUtils', LogLevel.DEBUG);
 
 export function validateImageData(data) {
     log.debug("Validating data structure:", {

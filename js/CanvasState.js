@@ -10,7 +10,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu CanvasState
-logger.setModuleLevel('CanvasState', LogLevel.INFO);
+logger.setModuleLevel('CanvasState', LogLevel.DEBUG);
 
 // Prosta funkcja generująca UUID
 function generateUUID() {

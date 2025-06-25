@@ -9,7 +9,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu ImageCache
-logger.setModuleLevel('ImageCache', LogLevel.INFO);
+logger.setModuleLevel('ImageCache', LogLevel.DEBUG);
 
 export class ImageCache {
     constructor() {

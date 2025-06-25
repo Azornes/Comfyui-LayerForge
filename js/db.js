@@ -9,7 +9,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu db
-logger.setModuleLevel('db', LogLevel.INFO);
+logger.setModuleLevel('db', LogLevel.DEBUG);
 
 const DB_NAME = 'CanvasNodeDB';
 const STATE_STORE_NAME = 'CanvasState';

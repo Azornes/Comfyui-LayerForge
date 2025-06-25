@@ -9,7 +9,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu CanvasInteractions
-logger.setModuleLevel('CanvasInteractions', LogLevel.INFO);
+logger.setModuleLevel('CanvasInteractions', LogLevel.DEBUG);
 
 export class CanvasInteractions {
     constructor(canvas) {

@@ -604,31 +604,55 @@ export class Canvas {
 
 
     async saveToServer(fileName) {
-        // Sprawdź czy już trwa zapis
-        if (this._saveInProgress) {
-            log.warn(`Save already in progress, waiting...`);
-            return this._saveInProgress;
+        // Globalna mapa do śledzenia zapisów dla wszystkich node-ów
+        if (!window.canvasSaveStates) {
+            window.canvasSaveStates = new Map();
+        }
+        
+        const nodeId = this.node.id;
+        const saveKey = `${nodeId}_${fileName}`;
+        
+        // Sprawdź czy już trwa zapis dla tego node-a i pliku
+        if (this._saveInProgress || window.canvasSaveStates.get(saveKey)) {
+            log.warn(`Save already in progress for node ${nodeId}, waiting...`);
+            return this._saveInProgress || window.canvasSaveStates.get(saveKey);
         }
 
-        log.info(`Starting saveToServer with fileName: ${fileName}`);
+        log.info(`Starting saveToServer with fileName: ${fileName} for node: ${nodeId}`);
         log.debug(`Canvas dimensions: ${this.width}x${this.height}`);
         log.debug(`Number of layers: ${this.layers.length}`);
         
         // Utwórz Promise dla aktualnego zapisu
         this._saveInProgress = this._performSave(fileName);
+        window.canvasSaveStates.set(saveKey, this._saveInProgress);
         
         try {
             const result = await this._saveInProgress;
             return result;
         } finally {
             this._saveInProgress = null;
-            log.debug(`Save completed, lock released`);
+            window.canvasSaveStates.delete(saveKey);
+            log.debug(`Save completed for node ${nodeId}, lock released`);
         }
     }
 
     async _performSave(fileName) {
+        // Sprawdź czy są warstwy do zapisania
+        if (this.layers.length === 0) {
+            log.warn(`Node ${this.node.id} has no layers, creating empty canvas`);
+            // Zwróć sukces ale nie zapisuj pustego canvas-a na serwer
+            return Promise.resolve(true);
+        }
+
         // Zapisz stan do IndexedDB przed zapisem na serwer
         await this.saveStateToDB(true);
+
+        // Dodaj krótkie opóźnienie dla różnych node-ów, aby uniknąć konfliktów
+        const nodeId = this.node.id;
+        const delay = (nodeId % 10) * 50; // 0-450ms opóźnienia w zależności od ID node-a
+        if (delay > 0) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
 
         return new Promise((resolve) => {
             const tempCanvas = document.createElement('canvas');
@@ -803,8 +827,10 @@ export class Canvas {
 
                                 if (maskResp.status === 200) {
                                     const data = await resp.json();
-                                    this.widget.value = data.name;
-                                    log.info(`All files saved successfully, widget value set to: ${data.name}`);
+                                    // Ustaw widget.value na rzeczywistą nazwę zapisanego pliku (unikalną)
+                                    // aby node zwracał właściwy plik
+                                    this.widget.value = fileName;
+                                    log.info(`All files saved successfully, widget value set to: ${fileName}`);
                                     resolve(true);
                                 } else {
                                     log.error(`Error saving mask: ${maskResp.status}`);

@@ -307,9 +307,25 @@ class CanvasNode:
 
             try:
                 # Wczytaj obraz bez maski
-                path_image_without_mask = folder_paths.get_annotated_filepath(
-                    canvas_image.replace('.png', '_without_mask.png'))
-                log_debug(f"Loading image without mask from: {path_image_without_mask}")
+                image_without_mask_name = canvas_image.replace('.png', '_without_mask.png')
+                path_image_without_mask = folder_paths.get_annotated_filepath(image_without_mask_name)
+                log_debug(f"Canvas image name: {canvas_image}")
+                log_debug(f"Looking for image without mask: {image_without_mask_name}")
+                log_debug(f"Full path: {path_image_without_mask}")
+                
+                # Sprawdź czy plik istnieje
+                if not os.path.exists(path_image_without_mask):
+                    log_warn(f"Image without mask not found at: {path_image_without_mask}")
+                    # Spróbuj znaleźć plik w katalogu input
+                    input_dir = folder_paths.get_input_directory()
+                    alternative_path = os.path.join(input_dir, image_without_mask_name)
+                    log_debug(f"Trying alternative path: {alternative_path}")
+                    if os.path.exists(alternative_path):
+                        path_image_without_mask = alternative_path
+                        log_info(f"Found image at alternative path: {alternative_path}")
+                    else:
+                        raise FileNotFoundError(f"Image file not found: {image_without_mask_name}")
+                
                 i = Image.open(path_image_without_mask)
                 i = ImageOps.exif_transpose(i)
                 if i.mode not in ['RGB', 'RGBA']:
@@ -330,7 +346,21 @@ class CanvasNode:
                 # Wczytaj maskę
                 path_image = folder_paths.get_annotated_filepath(canvas_image)
                 path_mask = path_image.replace('.png', '_mask.png')
+                log_debug(f"Canvas image path: {path_image}")
                 log_debug(f"Looking for mask at: {path_mask}")
+                
+                # Sprawdź czy plik maski istnieje
+                if not os.path.exists(path_mask):
+                    log_warn(f"Mask not found at: {path_mask}")
+                    # Spróbuj znaleźć plik w katalogu input
+                    input_dir = folder_paths.get_input_directory()
+                    mask_name = canvas_image.replace('.png', '_mask.png')
+                    alternative_mask_path = os.path.join(input_dir, mask_name)
+                    log_debug(f"Trying alternative mask path: {alternative_mask_path}")
+                    if os.path.exists(alternative_mask_path):
+                        path_mask = alternative_mask_path
+                        log_info(f"Found mask at alternative path: {alternative_mask_path}")
+                
                 if os.path.exists(path_mask):
                     log_debug(f"Mask file exists, loading...")
                     mask = Image.open(path_mask).convert('L')

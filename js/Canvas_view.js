@@ -17,7 +17,7 @@ const log = {
 };
 
 // Konfiguracja loggera dla modułu Canvas_view
-logger.setModuleLevel('Canvas_view', LogLevel.INFO); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
+logger.setModuleLevel('Canvas_view', LogLevel.DEBUG); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
 
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget);
@@ -387,7 +387,7 @@ async function createCanvasWidget(node, widget, app) {
                                     const img = new Image();
                                     img.onload = async () => {
                                         canvas.addLayer(img);
-                                        await canvas.saveToServer(widget.value);
+                                        await saveWithFallback(widget.value);
                                         app.graph.runStep();
                                     };
                                     img.src = event.target.result;
@@ -402,7 +402,7 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Import Input",
                     onclick: async () => {
                         if (await canvas.importLatestImage()) {
-                            await canvas.saveToServer(widget.value);
+                            await saveWithFallback(widget.value);
                             app.graph.runStep();
                         }
                     }
@@ -589,7 +589,7 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
-                            await canvas.saveToServer(widget.value);
+                            await saveWithFallback(widget.value);
                             app.graph.runStep();
                         } catch (error) {
                             log.error("Matting error:", error);
@@ -743,7 +743,8 @@ async function createCanvasWidget(node, widget, app) {
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
-        await canvas.saveToServer(widget.value);
+        // Użyj funkcji fallback do zapisu
+        await saveWithFallback(widget.value);
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         app.graph.runStep();
     };
@@ -918,26 +919,73 @@ async function createCanvasWidget(node, widget, app) {
         }
     };
 
-    // Zmienna do śledzenia czy wykonanie jest w trakcie
-    let executionInProgress = false;
+    // Globalna mapa do śledzenia wykonania dla każdego node-a
+    if (!window.canvasExecutionStates) {
+        window.canvasExecutionStates = new Map();
+    }
     
-    api.addEventListener("execution_start", async () => {
-        log.info(`Execution start event for node ${node.id}`);
+    // Unikalna nazwa pliku dla każdego node-a
+    const getUniqueFileName = (baseName) => {
+        // Sprawdź czy nazwa już zawiera identyfikator node-a (zapobiega nieskończonej pętli)
+        const nodePattern = new RegExp(`_node_${node.id}(?:_node_\\d+)*`);
+        if (nodePattern.test(baseName)) {
+            // Usuń wszystkie poprzednie identyfikatory node-ów i dodaj tylko jeden
+            const cleanName = baseName.replace(/_node_\d+/g, '');
+            const extension = cleanName.split('.').pop();
+            const nameWithoutExt = cleanName.replace(`.${extension}`, '');
+            return `${nameWithoutExt}_node_${node.id}.${extension}`;
+        }
+        const extension = baseName.split('.').pop();
+        const nameWithoutExt = baseName.replace(`.${extension}`, '');
+        return `${nameWithoutExt}_node_${node.id}.${extension}`;
+    };
+    
+    // Funkcja do czyszczenia nazwy pliku z identyfikatorów node-ów
+    const getCleanFileName = (fileName) => {
+        return fileName.replace(/_node_\d+/g, '');
+    };
+    
+    // Funkcja fallback w przypadku problemów z unikalną nazwą
+    const saveWithFallback = async (fileName) => {
+        try {
+            const uniqueFileName = getUniqueFileName(fileName);
+            log.debug(`Attempting to save with unique name: ${uniqueFileName}`);
+            return await canvas.saveToServer(uniqueFileName);
+        } catch (error) {
+            log.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);
+            return await canvas.saveToServer(fileName);
+        }
+    };
+    
+    api.addEventListener("execution_start", async (event) => {
+        // Sprawdź czy event dotyczy tego konkretnego node-a
+        const executionData = event.detail || {};
+        const currentPromptId = executionData.prompt_id;
+        
+        log.info(`Execution start event for node ${node.id}, prompt_id: ${currentPromptId}`);
         log.debug(`Widget value: ${widget.value}`);
         log.debug(`Node inputs: ${node.inputs?.length || 0}`);
+        log.debug(`Canvas layers count: ${canvas.layers.length}`);
         
-        // Sprawdź czy już trwa wykonanie
-        if (executionInProgress) {
-            log.warn(`Execution already in progress, skipping...`);
+        // Sprawdź czy już trwa wykonanie dla tego node-a
+        if (window.canvasExecutionStates.get(node.id)) {
+            log.warn(`Execution already in progress for node ${node.id}, skipping...`);
             return;
         }
         
-        // Ustaw flagę wykonania
-        executionInProgress = true;
+        // Ustaw flagę wykonania dla tego node-a
+        window.canvasExecutionStates.set(node.id, true);
         
         try {
-            await canvas.saveToServer(widget.value);
-            log.info(`Canvas saved to server`);
+            // Sprawdź czy canvas ma jakiekolwiek warstwy przed zapisem
+            if (canvas.layers.length === 0) {
+                log.warn(`Node ${node.id} has no layers, skipping save to server`);
+                // Nie zapisuj pustego canvas-a, ale nadal przetwórz dane wejściowe
+            } else {
+                // Użyj funkcji fallback do zapisu tylko jeśli są warstwy
+                await saveWithFallback(widget.value);
+                log.info(`Canvas saved to server for node ${node.id}`);
+            }
 
             if (node.inputs[0]?.link) {
                 const linkId = node.inputs[0].link;
@@ -951,11 +999,11 @@ async function createCanvasWidget(node, widget, app) {
                 log.debug(`No input link found`);
             }
         } catch (error) {
-            log.error(`Error during execution:`, error);
+            log.error(`Error during execution for node ${node.id}:`, error);
         } finally {
-            // Zwolnij flagę wykonania
-            executionInProgress = false;
-            log.debug(`Execution completed, flag released`);
+            // Zwolnij flagę wykonania dla tego node-a
+            window.canvasExecutionStates.set(node.id, false);
+            log.debug(`Execution completed for node ${node.id}, flag released`);
         }
     });
 
