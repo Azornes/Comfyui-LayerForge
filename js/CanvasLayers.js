@@ -1,7 +1,8 @@
 import {saveImage, getImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./LoggerUtils.js";
-import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./CommonUtils.js";
+import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld, createCanvas, generateUniqueFileName} from "./CommonUtils.js";
 import {withErrorHandling, createValidationError, safeExecute} from "./ErrorHandler.js";
+import {createImageFromSource} from "./ImageUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasLayers
 const log = createModuleLogger('CanvasLayers');
@@ -557,21 +558,7 @@ export class CanvasLayers {
                     // Funkcja fallback do zapisu
                     const saveWithFallback = async (fileName) => {
                         try {
-                            const getUniqueFileName = (baseName) => {
-                                // Sprawdź czy nazwa już zawiera identyfikator node-a (zapobiega nieskończonej pętli)
-                                const nodePattern = new RegExp(`_node_${this.canvas.node.id}(?:_node_\\d+)*`);
-                                if (nodePattern.test(baseName)) {
-                                    // Usuń wszystkie poprzednie identyfikatory node-ów i dodaj tylko jeden
-                                    const cleanName = baseName.replace(/_node_\d+/g, '');
-                                    const extension = cleanName.split('.').pop();
-                                    const nameWithoutExt = cleanName.replace(`.${extension}`, '');
-                                    return `${nameWithoutExt}_node_${this.canvas.node.id}.${extension}`;
-                                }
-                                const extension = baseName.split('.').pop();
-                                const nameWithoutExt = baseName.replace(`.${extension}`, '');
-                                return `${nameWithoutExt}_node_${this.canvas.node.id}.${extension}`;
-                            };
-                            const uniqueFileName = getUniqueFileName(fileName);
+                            const uniqueFileName = generateUniqueFileName(fileName, this.canvas.node.id);
                             return await this.canvas.saveToServer(uniqueFileName);
                         } catch (error) {
                             console.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);

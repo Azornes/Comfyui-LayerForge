@@ -5,7 +5,8 @@ import {$el} from "../../scripts/ui.js";
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
-import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas} from "./ImageUtils.js";
+import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas, createImageFromSource} from "./ImageUtils.js";
+import {generateUniqueFileName} from "./CommonUtils.js";
 import {logger, LogLevel} from "./logger.js";
 
 // Inicjalizacja loggera dla modułu Canvas_view
@@ -930,31 +931,10 @@ async function createCanvasWidget(node, widget, app) {
         window.canvasExecutionStates = new Map();
     }
     
-    // Unikalna nazwa pliku dla każdego node-a
-    const getUniqueFileName = (baseName) => {
-        // Sprawdź czy nazwa już zawiera identyfikator node-a (zapobiega nieskończonej pętli)
-        const nodePattern = new RegExp(`_node_${node.id}(?:_node_\\d+)*`);
-        if (nodePattern.test(baseName)) {
-            // Usuń wszystkie poprzednie identyfikatory node-ów i dodaj tylko jeden
-            const cleanName = baseName.replace(/_node_\d+/g, '');
-            const extension = cleanName.split('.').pop();
-            const nameWithoutExt = cleanName.replace(`.${extension}`, '');
-            return `${nameWithoutExt}_node_${node.id}.${extension}`;
-        }
-        const extension = baseName.split('.').pop();
-        const nameWithoutExt = baseName.replace(`.${extension}`, '');
-        return `${nameWithoutExt}_node_${node.id}.${extension}`;
-    };
-    
-    // Funkcja do czyszczenia nazwy pliku z identyfikatorów node-ów
-    const getCleanFileName = (fileName) => {
-        return fileName.replace(/_node_\d+/g, '');
-    };
-    
     // Funkcja fallback w przypadku problemów z unikalną nazwą
     const saveWithFallback = async (fileName) => {
         try {
-            const uniqueFileName = getUniqueFileName(fileName);
+            const uniqueFileName = generateUniqueFileName(fileName, node.id);
             log.debug(`Attempting to save with unique name: ${uniqueFileName}`);
             return await canvas.saveToServer(uniqueFileName);
         } catch (error) {

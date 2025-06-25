@@ -357,6 +357,20 @@ export function getImageInfo(image) {
 }
 
 /**
+ * Tworzy obraz z podanego źródła - eliminuje duplikaty w kodzie
+ * @param {string} source - Źródło obrazu (URL, data URL, etc.)
+ * @returns {Promise<HTMLImageElement>} Promise z obrazem
+ */
+export function createImageFromSource(source) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = source;
+    });
+}
+
+/**
  * Tworzy pusty obraz o podanych wymiarach
  * @param {number} width - Szerokość
  * @param {number} height - Wysokość

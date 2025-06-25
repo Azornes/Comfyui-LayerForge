@@ -1,5 +1,7 @@
 import {saveImage, getImage, removeImage} from "./db.js";
 import {logger, LogLevel} from "./logger.js";
+import {createCanvas, normalizeToUint8} from "./CommonUtils.js";
+import {createImageFromSource} from "./ImageUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasIO
 const log = {
@@ -70,15 +72,8 @@ export class CanvasIO {
         }
 
         return new Promise((resolve) => {
-            const tempCanvas = document.createElement('canvas');
-            const maskCanvas = document.createElement('canvas');
-            tempCanvas.width = this.canvas.width;
-            tempCanvas.height = this.canvas.height;
-            maskCanvas.width = this.canvas.width;
-            maskCanvas.height = this.canvas.height;
-
-            const tempCtx = tempCanvas.getContext('2d');
-            const maskCtx = maskCanvas.getContext('2d');
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
+            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
 
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -249,10 +244,7 @@ export class CanvasIO {
         try {
             log.debug("Adding input to canvas:", {inputImage});
 
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = inputImage.width;
-            tempCanvas.height = inputImage.height;
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(inputImage.width, inputImage.height);
 
             const imgData = new ImageData(
                 inputImage.data,

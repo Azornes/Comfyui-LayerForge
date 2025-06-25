@@ -175,17 +175,6 @@ export function throttle(func, limit) {
 }
 
 /**
- * Sprawdza czy wartość jest w zakresie
- * @param {number} value - Wartość do sprawdzenia
- * @param {number} min - Minimalna wartość
- * @param {number} max - Maksymalna wartość
- * @returns {boolean} Czy wartość jest w zakresie
- */
-export function isInRange(value, min, max) {
-    return value >= min && value <= max;
-}
-
-/**
  * Ogranicza wartość do zakresu
  * @param {number} value - Wartość do ograniczenia
  * @param {number} min - Minimalna wartość
@@ -226,15 +215,47 @@ export function radiansToDegrees(radians) {
 }
 
 /**
- * Oblicza odległość między dwoma punktami
- * @param {number} x1 - X pierwszego punktu
- * @param {number} y1 - Y pierwszego punktu
- * @param {number} x2 - X drugiego punktu
- * @param {number} y2 - Y drugiego punktu
- * @returns {number} Odległość
+ * Tworzy canvas z kontekstem - eliminuje duplikaty w kodzie
+ * @param {number} width - Szerokość canvas
+ * @param {number} height - Wysokość canvas
+ * @param {string} contextType - Typ kontekstu (domyślnie '2d')
+ * @param {Object} contextOptions - Opcje kontekstu
+ * @returns {Object} Obiekt z canvas i ctx
  */
-export function distance(x1, y1, x2, y2) {
-    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+export function createCanvas(width, height, contextType = '2d', contextOptions = {}) {
+    const canvas = document.createElement('canvas');
+    if (width) canvas.width = width;
+    if (height) canvas.height = height;
+    const ctx = canvas.getContext(contextType, contextOptions);
+    return { canvas, ctx };
+}
+
+/**
+ * Normalizuje wartość do zakresu Uint8 (0-255)
+ * @param {number} value - Wartość do znormalizowania (0-1)
+ * @returns {number} Wartość w zakresie 0-255
+ */
+export function normalizeToUint8(value) {
+    return Math.max(0, Math.min(255, Math.round(value * 255)));
+}
+
+/**
+ * Generuje unikalną nazwę pliku z identyfikatorem node-a
+ * @param {string} baseName - Podstawowa nazwa pliku
+ * @param {string|number} nodeId - Identyfikator node-a
+ * @returns {string} Unikalna nazwa pliku
+ */
+export function generateUniqueFileName(baseName, nodeId) {
+    const nodePattern = new RegExp(`_node_${nodeId}(?:_node_\\d+)*`);
+    if (nodePattern.test(baseName)) {
+        const cleanName = baseName.replace(/_node_\d+/g, '');
+        const extension = cleanName.split('.').pop();
+        const nameWithoutExt = cleanName.replace(`.${extension}`, '');
+        return `${nameWithoutExt}_node_${nodeId}.${extension}`;
+    }
+    const extension = baseName.split('.').pop();
+    const nameWithoutExt = baseName.replace(`.${extension}`, '');
+    return `${nameWithoutExt}_node_${nodeId}.${extension}`;
 }
 
 /**
