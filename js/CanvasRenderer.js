@@ -1,15 +1,7 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasRenderer
-const log = {
-    debug: (...args) => logger.debug('CanvasRenderer', ...args),
-    info: (...args) => logger.info('CanvasRenderer', ...args),
-    warn: (...args) => logger.warn('CanvasRenderer', ...args),
-    error: (...args) => logger.error('CanvasRenderer', ...args)
-};
-
-// Konfiguracja loggera dla modułu CanvasRenderer
-logger.setModuleLevel('CanvasRenderer', LogLevel.DEBUG);
+const log = createModuleLogger('CanvasRenderer');
 
 export class CanvasRenderer {
     constructor(canvas) {

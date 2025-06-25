@@ -1,15 +1,7 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
 // Inicjalizacja loggera dla modułu db
-const log = {
-    debug: (...args) => logger.debug('db', ...args),
-    info: (...args) => logger.info('db', ...args),
-    warn: (...args) => logger.warn('db', ...args),
-    error: (...args) => logger.error('db', ...args)
-};
-
-// Konfiguracja loggera dla modułu db
-logger.setModuleLevel('db', LogLevel.DEBUG);
+const log = createModuleLogger('db');
 
 const DB_NAME = 'CanvasNodeDB';
 const STATE_STORE_NAME = 'CanvasState';

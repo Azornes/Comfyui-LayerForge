@@ -1,15 +1,7 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
 // Inicjalizacja loggera dla modułu Mask_tool
-const log = {
-    debug: (...args) => logger.debug('Mask_tool', ...args),
-    info: (...args) => logger.info('Mask_tool', ...args),
-    warn: (...args) => logger.warn('Mask_tool', ...args),
-    error: (...args) => logger.error('Mask_tool', ...args)
-};
-
-// Konfiguracja loggera dla modułu Mask_tool
-logger.setModuleLevel('Mask_tool', LogLevel.DEBUG);
+const log = createModuleLogger('Mask_tool');
 
 export class MaskTool {
     constructor(canvasInstance) {

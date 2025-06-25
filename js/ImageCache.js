@@ -1,15 +1,7 @@
-import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
 // Inicjalizacja loggera dla modułu ImageCache
-const log = {
-    debug: (...args) => logger.debug('ImageCache', ...args),
-    info: (...args) => logger.info('ImageCache', ...args),
-    warn: (...args) => logger.warn('ImageCache', ...args),
-    error: (...args) => logger.error('ImageCache', ...args)
-};
-
-// Konfiguracja loggera dla modułu ImageCache
-logger.setModuleLevel('ImageCache', LogLevel.DEBUG);
+const log = createModuleLogger('ImageCache');
 
 export class ImageCache {
     constructor() {
