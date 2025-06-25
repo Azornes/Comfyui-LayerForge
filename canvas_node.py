@@ -16,6 +16,45 @@ import time
 import base64
 from PIL import Image
 import io
+import sys
+import os
+
+# Dodaj ścieżkę do katalogu python/ do sys.path
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'python'))
+
+# Importuj logger
+try:
+    from python.logger import logger, LogLevel, debug, info, warn, error, exception
+    
+    # Konfiguracja loggera dla modułu canvas_node
+    logger.set_module_level('canvas_node', LogLevel.INFO)  # Domyślnie INFO, można zmienić na DEBUG
+    
+    # Włącz logowanie do pliku
+    logger.configure({
+        'log_to_file': True,
+        'log_dir': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+    })
+    
+    # Funkcje pomocnicze dla modułu
+    log_debug = lambda *args, **kwargs: debug('canvas_node', *args, **kwargs)
+    log_info = lambda *args, **kwargs: info('canvas_node', *args, **kwargs)
+    log_warn = lambda *args, **kwargs: warn('canvas_node', *args, **kwargs)
+    log_error = lambda *args, **kwargs: error('canvas_node', *args, **kwargs)
+    log_exception = lambda *args: exception('canvas_node', *args)
+    
+    log_info("Logger initialized for canvas_node")
+except ImportError as e:
+    # Fallback jeśli logger nie jest dostępny
+    print(f"Warning: Logger module not available: {e}")
+    
+    # Proste funkcje zastępcze
+    def log_debug(*args): print("[DEBUG]", *args)
+    def log_info(*args): print("[INFO]", *args)
+    def log_warn(*args): print("[WARN]", *args)
+    def log_error(*args): print("[ERROR]", *args)
+    def log_exception(*args):
+        print("[ERROR]", *args)
+        traceback.print_exc()
 
 torch.set_float32_matmul_precision('high')
 
@@ -74,7 +113,7 @@ class CanvasNode:
             current_execution = self.get_execution_id()
 
             if current_execution != self.__class__._canvas_cache['last_execution_id']:
-                print(f"New execution detected: {current_execution}")
+                log_info(f"New execution detected: {current_execution}")
                 self.__class__._canvas_cache['image'] = None
                 self.__class__._canvas_cache['mask'] = None
                 self.__class__._canvas_cache['last_execution_id'] = current_execution
@@ -82,12 +121,12 @@ class CanvasNode:
 
                 if persistent.get('image') is not None:
                     self.__class__._canvas_cache['image'] = persistent['image']
-                    print("Restored image from persistent cache")
+                    log_info("Restored image from persistent cache")
                 if persistent.get('mask') is not None:
                     self.__class__._canvas_cache['mask'] = persistent['mask']
-                    print("Restored mask from persistent cache")
+                    log_info("Restored mask from persistent cache")
         except Exception as e:
-            print(f"Error restoring cache: {str(e)}")
+            log_error(f"Error restoring cache: {str(e)}")
 
     def get_execution_id(self):
 
@@ -95,7 +134,7 @@ class CanvasNode:
 
             return str(int(time.time() * 1000))
         except Exception as e:
-            print(f"Error getting execution ID: {str(e)}")
+            log_error(f"Error getting execution ID: {str(e)}")
             return None
 
     def update_persistent_cache(self):
@@ -105,9 +144,9 @@ class CanvasNode:
                 'image': self.__class__._canvas_cache['image'],
                 'mask': self.__class__._canvas_cache['mask']
             }
-            print("Updated persistent cache")
+            log_debug("Updated persistent cache")
         except Exception as e:
-            print(f"Error updating persistent cache: {str(e)}")
+            log_error(f"Error updating persistent cache: {str(e)}")
 
     def track_data_flow(self, stage, status, data_info=None):
 
@@ -117,9 +156,9 @@ class CanvasNode:
             'status': status,
             'data_info': data_info
         }
-        print(f"Data Flow [{self.flow_id}] - Stage: {stage}, Status: {status}")
+        log_debug(f"Data Flow [{self.flow_id}] - Stage: {stage}, Status: {status}")
         if data_info:
-            print(f"Data Info: {data_info}")
+            log_debug(f"Data Info: {data_info}")
 
         self.__class__._canvas_cache['data_flow_status'][self.flow_id] = flow_status
 
@@ -159,7 +198,7 @@ class CanvasNode:
             return input_image
 
         except Exception as e:
-            print(f"Error in add_image_to_canvas: {str(e)}")
+            log_error(f"Error in add_image_to_canvas: {str(e)}")
             return None
 
     def add_mask_to_canvas(self, input_mask, input_image):
@@ -187,7 +226,7 @@ class CanvasNode:
             return input_mask
 
         except Exception as e:
-            print(f"Error in add_mask_to_canvas: {str(e)}")
+            log_error(f"Error in add_mask_to_canvas: {str(e)}")
             return None
 
     # Zmienna blokująca równoczesne wykonania
@@ -198,30 +237,30 @@ class CanvasNode:
         try:
             # Sprawdź czy już trwa przetwarzanie
             if self.__class__._processing_lock is not None:
-                print(f"[OUTPUT_LOG] Process already in progress, waiting for completion...")
+                log_warn(f"Process already in progress, waiting for completion...")
                 return ()  # Zwróć pusty wynik, aby uniknąć równoczesnych przetworzeń
                 
             # Ustaw blokadę
             self.__class__._processing_lock = True
             
             current_execution = self.get_execution_id()
-            print(f"[OUTPUT_LOG] Starting process_canvas_image - execution ID: {current_execution}, trigger: {trigger}")
-            print(f"[OUTPUT_LOG] Canvas image filename: {canvas_image}")
-            print(f"[OUTPUT_LOG] Output switch: {output_switch}, Cache enabled: {cache_enabled}")
-            print(f"[OUTPUT_LOG] Input image provided: {input_image is not None}")
-            print(f"[OUTPUT_LOG] Input mask provided: {input_mask is not None}")
+            log_info(f"Starting process_canvas_image - execution ID: {current_execution}, trigger: {trigger}")
+            log_debug(f"Canvas image filename: {canvas_image}")
+            log_debug(f"Output switch: {output_switch}, Cache enabled: {cache_enabled}")
+            log_debug(f"Input image provided: {input_image is not None}")
+            log_debug(f"Input mask provided: {input_mask is not None}")
 
             if current_execution != self.__class__._canvas_cache['last_execution_id']:
-                print(f"[OUTPUT_LOG] New execution detected: {current_execution} (previous: {self.__class__._canvas_cache['last_execution_id']})")
+                log_info(f"New execution detected: {current_execution} (previous: {self.__class__._canvas_cache['last_execution_id']})")
 
                 self.__class__._canvas_cache['image'] = None
                 self.__class__._canvas_cache['mask'] = None
                 self.__class__._canvas_cache['last_execution_id'] = current_execution
             else:
-                print(f"[OUTPUT_LOG] Same execution ID, using cached data")
+                log_debug(f"Same execution ID, using cached data")
 
             if input_image is not None:
-                print("Input image received, converting to PIL Image...")
+                log_info("Input image received, converting to PIL Image...")
 
                 if isinstance(input_image, torch.Tensor):
                     if input_image.dim() == 4:
@@ -240,17 +279,17 @@ class CanvasNode:
                     try:
 
                         pil_image = Image.fromarray(image_array, 'RGB')
-                        print("Successfully converted to PIL Image")
+                        log_debug("Successfully converted to PIL Image")
 
                         self.__class__._canvas_cache['image'] = pil_image
-                        print(f"Image stored in cache with size: {pil_image.size}")
+                        log_debug(f"Image stored in cache with size: {pil_image.size}")
                     except Exception as e:
-                        print(f"Error converting to PIL Image: {str(e)}")
-                        print(f"Array shape: {image_array.shape}, dtype: {image_array.dtype}")
+                        log_error(f"Error converting to PIL Image: {str(e)}")
+                        log_debug(f"Array shape: {image_array.shape}, dtype: {image_array.dtype}")
                         raise
 
             if input_mask is not None:
-                print("Input mask received, converting to PIL Image...")
+                log_info("Input mask received, converting to PIL Image...")
                 if isinstance(input_mask, torch.Tensor):
                     if input_mask.dim() == 4:
                         input_mask = input_mask.squeeze(0)
@@ -259,10 +298,10 @@ class CanvasNode:
 
                     mask_array = (input_mask.cpu().numpy() * 255).astype(np.uint8)
                     pil_mask = Image.fromarray(mask_array, 'L')
-                    print("Successfully converted mask to PIL Image")
+                    log_debug("Successfully converted mask to PIL Image")
 
                     self.__class__._canvas_cache['mask'] = pil_mask
-                    print(f"Mask stored in cache with size: {pil_mask.size}")
+                    log_debug(f"Mask stored in cache with size: {pil_mask.size}")
 
             self.__class__._canvas_cache['cache_enabled'] = cache_enabled
 
@@ -270,7 +309,7 @@ class CanvasNode:
                 # Wczytaj obraz bez maski
                 path_image_without_mask = folder_paths.get_annotated_filepath(
                     canvas_image.replace('.png', '_without_mask.png'))
-                print(f"[OUTPUT_LOG] Loading image without mask from: {path_image_without_mask}")
+                log_debug(f"Loading image without mask from: {path_image_without_mask}")
                 i = Image.open(path_image_without_mask)
                 i = ImageOps.exif_transpose(i)
                 if i.mode not in ['RGB', 'RGBA']:
@@ -281,56 +320,55 @@ class CanvasNode:
                     alpha = image[..., 3:]
                     image = rgb * alpha + (1 - alpha) * 0.5
                 processed_image = torch.from_numpy(image)[None,]
-                print(f"[OUTPUT_LOG] Successfully loaded image without mask, shape: {processed_image.shape}")
+                log_debug(f"Successfully loaded image without mask, shape: {processed_image.shape}")
             except Exception as e:
-                print(f"[OUTPUT_LOG] Error loading image without mask: {str(e)}")
+                log_error(f"Error loading image without mask: {str(e)}")
                 processed_image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
-                print(f"[OUTPUT_LOG] Using default image, shape: {processed_image.shape}")
+                log_debug(f"Using default image, shape: {processed_image.shape}")
 
             try:
                 # Wczytaj maskę
                 path_image = folder_paths.get_annotated_filepath(canvas_image)
                 path_mask = path_image.replace('.png', '_mask.png')
-                print(f"[OUTPUT_LOG] Looking for mask at: {path_mask}")
+                log_debug(f"Looking for mask at: {path_mask}")
                 if os.path.exists(path_mask):
-                    print(f"[OUTPUT_LOG] Mask file exists, loading...")
+                    log_debug(f"Mask file exists, loading...")
                     mask = Image.open(path_mask).convert('L')
                     mask = np.array(mask).astype(np.float32) / 255.0
                     processed_mask = torch.from_numpy(mask)[None,]
-                    print(f"[OUTPUT_LOG] Successfully loaded mask, shape: {processed_mask.shape}")
+                    log_debug(f"Successfully loaded mask, shape: {processed_mask.shape}")
                 else:
-                    print(f"[OUTPUT_LOG] Mask file does not exist, creating default mask")
+                    log_debug(f"Mask file does not exist, creating default mask")
                     processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                                 dtype=torch.float32)
-                    print(f"[OUTPUT_LOG] Default mask created, shape: {processed_mask.shape}")
+                    log_debug(f"Default mask created, shape: {processed_mask.shape}")
             except Exception as e:
-                print(f"[OUTPUT_LOG] Error loading mask: {str(e)}")
+                log_error(f"Error loading mask: {str(e)}")
                 processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                             dtype=torch.float32)
-                print(f"[OUTPUT_LOG] Fallback mask created, shape: {processed_mask.shape}")
+                log_debug(f"Fallback mask created, shape: {processed_mask.shape}")
 
             if not output_switch:
-                print(f"[OUTPUT_LOG] Output switch is OFF, returning empty tuple")
+                log_debug(f"Output switch is OFF, returning empty tuple")
                 return ()
 
-            print(f"[OUTPUT_LOG] About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
-            print(f"[OUTPUT_LOG] Image tensor info - dtype: {processed_image.dtype}, device: {processed_image.device}")
-            print(f"[OUTPUT_LOG] Mask tensor info - dtype: {processed_mask.dtype}, device: {processed_mask.device}")
+            log_debug(f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
+            log_debug(f"Image tensor info - dtype: {processed_image.dtype}, device: {processed_image.device}")
+            log_debug(f"Mask tensor info - dtype: {processed_mask.dtype}, device: {processed_mask.device}")
             
             self.update_persistent_cache()
             
-            print(f"[OUTPUT_LOG] Successfully returning processed image and mask")
+            log_info(f"Successfully returning processed image and mask")
             return (processed_image, processed_mask)
 
         except Exception as e:
-            print(f"Error in process_canvas_image: {str(e)}")
-            traceback.print_exc()
+            log_exception(f"Error in process_canvas_image: {str(e)}")
             return ()
             
         finally:
             # Zwolnij blokadę
             self.__class__._processing_lock = None
-            print(f"[OUTPUT_LOG] Process completed, lock released")
+            log_debug(f"Process completed, lock released")
 
     def get_cached_data(self):
         return {
@@ -378,11 +416,11 @@ class CanvasNode:
         async def get_canvas_data(request):
             try:
                 node_id = request.match_info["node_id"]
-                print(f"Received request for node: {node_id}")
+                log_debug(f"Received request for node: {node_id}")
 
                 cache_data = cls._canvas_cache
-                print(f"Cache content: {cache_data}")
-                print(f"Image in cache: {cache_data['image'] is not None}")
+                log_debug(f"Cache content: {cache_data}")
+                log_debug(f"Image in cache: {cache_data['image'] is not None}")
 
                 response_data = {
                     'success': True,
@@ -409,7 +447,7 @@ class CanvasNode:
                 return web.json_response(response_data)
 
             except Exception as e:
-                print(f"Error in get_canvas_data: {str(e)}")
+                log_error(f"Error in get_canvas_data: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -471,7 +509,7 @@ class BiRefNetMatting:
 
                 full_model_path = os.path.join(self.base_path, "BiRefNet")
 
-                print(f"Loading BiRefNet model from {full_model_path}...")
+                log_info(f"Loading BiRefNet model from {full_model_path}...")
 
                 try:
 
@@ -486,23 +524,23 @@ class BiRefNetMatting:
                         self.model = self.model.cuda()
 
                     self.model_cache[model_path] = self.model
-                    print("Model loaded successfully from Hugging Face")
-                    print(f"Model type: {type(self.model)}")
-                    print(f"Model device: {next(self.model.parameters()).device}")
+                    log_info("Model loaded successfully from Hugging Face")
+                    log_debug(f"Model type: {type(self.model)}")
+                    log_debug(f"Model device: {next(self.model.parameters()).device}")
 
                 except Exception as e:
-                    print(f"Failed to load model: {str(e)}")
+                    log_error(f"Failed to load model: {str(e)}")
                     raise
 
             else:
                 self.model = self.model_cache[model_path]
-                print("Using cached model")
+                log_debug("Using cached model")
 
             return True
 
         except Exception as e:
-            print(f"Error loading model: {str(e)}")
-            traceback.print_exc()
+            log_error(f"Error loading model: {str(e)}")
+            log_exception("Model loading failed")
             return False
 
     def preprocess_image(self, image):
@@ -528,7 +566,7 @@ class BiRefNetMatting:
 
             return image_tensor
         except Exception as e:
-            print(f"Error preprocessing image: {str(e)}")
+            log_error(f"Error preprocessing image: {str(e)}")
             return None
 
     def execute(self, image, model_path, threshold=0.5, refinement=1):
@@ -544,25 +582,25 @@ class BiRefNetMatting:
             else:
                 original_size = image.size[::-1]
 
-            print(f"Original size: {original_size}")
+            log_debug(f"Original size: {original_size}")
 
             processed_image = self.preprocess_image(image)
             if processed_image is None:
                 raise Exception("Failed to preprocess image")
 
-            print(f"Processed image shape: {processed_image.shape}")
+            log_debug(f"Processed image shape: {processed_image.shape}")
 
             with torch.no_grad():
                 outputs = self.model(processed_image)
                 result = outputs[-1].sigmoid().cpu()
-                print(f"Model output shape: {result.shape}")
+                log_debug(f"Model output shape: {result.shape}")
 
                 if result.dim() == 3:
                     result = result.unsqueeze(1)  # 添加通道维度
                 elif result.dim() == 2:
                     result = result.unsqueeze(0).unsqueeze(0)  # 添加batch和通道维度
 
-                print(f"Reshaped result shape: {result.shape}")
+                log_debug(f"Reshaped result shape: {result.shape}")
 
                 result = F.interpolate(
                     result,
@@ -570,7 +608,7 @@ class BiRefNetMatting:
                     mode='bilinear',
                     align_corners=True
                 )
-                print(f"Resized result shape: {result.shape}")
+                log_debug(f"Resized result shape: {result.shape}")
 
                 result = result.squeeze()  # 移除多余的维度
                 ma = torch.max(result)
@@ -618,7 +656,7 @@ async def matting(request):
     
     # Sprawdź czy już trwa przetwarzanie
     if _matting_lock is not None:
-        print("Matting already in progress, rejecting request")
+        log_warn("Matting already in progress, rejecting request")
         return web.json_response({
             "error": "Another matting operation is in progress",
             "details": "Please wait for the current operation to complete"
@@ -628,13 +666,13 @@ async def matting(request):
     _matting_lock = True
     
     try:
-        print("Received matting request")
+        log_info("Received matting request")
         data = await request.json()
 
         matting = BiRefNetMatting()
 
         image_tensor, original_alpha = convert_base64_to_tensor(data["image"])
-        print(f"Input image shape: {image_tensor.shape}")
+        log_debug(f"Input image shape: {image_tensor.shape}")
 
         matted_image, alpha_mask = matting.execute(
             image_tensor,
@@ -652,9 +690,7 @@ async def matting(request):
         })
 
     except Exception as e:
-        print(f"Error in matting endpoint: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        log_exception(f"Error in matting endpoint: {str(e)}")
         return web.json_response({
             "error": str(e),
             "details": traceback.format_exc()
@@ -662,7 +698,7 @@ async def matting(request):
     finally:
         # Zwolnij blokadę
         _matting_lock = None
-        print("Matting lock released")
+        log_debug("Matting lock released")
 
 
 def convert_base64_to_tensor(base64_str):
@@ -695,7 +731,7 @@ def convert_base64_to_tensor(base64_str):
         return img_tensor, None
 
     except Exception as e:
-        print(f"Error in convert_base64_to_tensor: {str(e)}")
+        log_error(f"Error in convert_base64_to_tensor: {str(e)}")
         raise
 
 
@@ -742,6 +778,6 @@ def convert_tensor_to_base64(tensor, alpha_mask=None, original_alpha=None):
         return f"data:image/png;base64,{img_str}"
 
     except Exception as e:
-        print(f"Error in convert_tensor_to_base64: {str(e)}")
-        print(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
+        log_error(f"Error in convert_tensor_to_base64: {str(e)}")
+        log_debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
         raise

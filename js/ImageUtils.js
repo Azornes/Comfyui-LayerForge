@@ -1,5 +1,18 @@
+import {logger, LogLevel} from "./logger.js";
+
+// Inicjalizacja loggera dla modułu ImageUtils
+const log = {
+    debug: (...args) => logger.debug('ImageUtils', ...args),
+    info: (...args) => logger.info('ImageUtils', ...args),
+    warn: (...args) => logger.warn('ImageUtils', ...args),
+    error: (...args) => logger.error('ImageUtils', ...args)
+};
+
+// Konfiguracja loggera dla modułu ImageUtils
+logger.setModuleLevel('ImageUtils', LogLevel.INFO);
+
 export function validateImageData(data) {
-    console.log("Validating data structure:", {
+    log.debug("Validating data structure:", {
         hasData: !!data,
         type: typeof data,
         isArray: Array.isArray(data),
@@ -10,22 +23,22 @@ export function validateImageData(data) {
     });
 
     if (!data) {
-        console.log("Data is null or undefined");
+        log.info("Data is null or undefined");
         return false;
     }
 
     if (Array.isArray(data)) {
-        console.log("Data is array, getting first element");
+        log.debug("Data is array, getting first element");
         data = data[0];
     }
 
     if (!data || typeof data !== 'object') {
-        console.log("Invalid data type");
+        log.info("Invalid data type");
         return false;
     }
 
     if (!data.data) {
-        console.log("Missing data property");
+        log.info("Missing data property");
         return false;
     }
 
@@ -33,7 +46,7 @@ export function validateImageData(data) {
         try {
             data.data = new Float32Array(data.data);
         } catch (e) {
-            console.log("Failed to convert data to Float32Array:", e);
+            log.error("Failed to convert data to Float32Array:", e);
             return false;
         }
     }
@@ -42,7 +55,7 @@ export function validateImageData(data) {
 }
 
 export function convertImageData(data) {
-    console.log("Converting image data:", data);
+    log.info("Converting image data:", data);
 
     if (Array.isArray(data)) {
         data = data[0];
@@ -54,7 +67,7 @@ export function convertImageData(data) {
     const channels = shape[3];
     const floatData = new Float32Array(data.data);
 
-    console.log("Processing dimensions:", {height, width, channels});
+    log.debug("Processing dimensions:", {height, width, channels});
 
     const rgbaData = new Uint8ClampedArray(width * height * 4);
 
@@ -80,7 +93,7 @@ export function convertImageData(data) {
 }
 
 export function applyMaskToImageData(imageData, maskData) {
-    console.log("Applying mask to image data");
+    log.info("Applying mask to image data");
 
     const rgbaData = new Uint8ClampedArray(imageData.data);
     const width = imageData.width;
@@ -89,7 +102,7 @@ export function applyMaskToImageData(imageData, maskData) {
     const maskShape = maskData.shape;
     const maskFloatData = new Float32Array(maskData.data);
 
-    console.log(`Applying mask of shape: ${maskShape}`);
+    log.debug(`Applying mask of shape: ${maskShape}`);
 
     for (let h = 0; h < height; h++) {
         for (let w = 0; w < width; w++) {
@@ -101,7 +114,7 @@ export function applyMaskToImageData(imageData, maskData) {
         }
     }
 
-    console.log("Mask application completed");
+    log.info("Mask application completed");
 
     return {
         data: rgbaData,
@@ -111,7 +124,7 @@ export function applyMaskToImageData(imageData, maskData) {
 }
 
 export function prepareImageForCanvas(inputImage) {
-    console.log("Preparing image for canvas:", inputImage);
+    log.info("Preparing image for canvas:", inputImage);
 
     try {
         if (Array.isArray(inputImage)) {
@@ -128,7 +141,7 @@ export function prepareImageForCanvas(inputImage) {
         const channels = shape[3];
         const floatData = new Float32Array(inputImage.data);
 
-        console.log("Image dimensions:", {height, width, channels});
+        log.debug("Image dimensions:", {height, width, channels});
 
         const rgbaData = new Uint8ClampedArray(width * height * 4);
 
@@ -152,7 +165,7 @@ export function prepareImageForCanvas(inputImage) {
             height: height
         };
     } catch (error) {
-        console.error("Error preparing image:", error);
+        log.error("Error preparing image:", error);
         throw new Error(`Failed to prepare image: ${error.message}`);
     }
 }

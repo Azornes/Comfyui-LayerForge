@@ -1,3 +1,16 @@
+import {logger, LogLevel} from "./logger.js";
+
+// Inicjalizacja loggera dla modułu Mask_tool
+const log = {
+    debug: (...args) => logger.debug('Mask_tool', ...args),
+    info: (...args) => logger.info('Mask_tool', ...args),
+    warn: (...args) => logger.warn('Mask_tool', ...args),
+    error: (...args) => logger.error('Mask_tool', ...args)
+};
+
+// Konfiguracja loggera dla modułu Mask_tool
+logger.setModuleLevel('Mask_tool', LogLevel.INFO);
+
 export class MaskTool {
     constructor(canvasInstance) {
         this.canvasInstance = canvasInstance;
@@ -28,13 +41,13 @@ export class MaskTool {
     activate() {
         this.isActive = true;
         this.canvasInstance.interaction.mode = 'drawingMask';
-        console.log("Mask tool activated");
+        log.info("Mask tool activated");
     }
 
     deactivate() {
         this.isActive = false;
         this.canvasInstance.interaction.mode = 'none';
-        console.log("Mask tool deactivated");
+        log.info("Mask tool deactivated");
     }
 
     setBrushSize(size) {

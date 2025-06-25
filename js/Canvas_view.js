@@ -5,7 +5,19 @@ import {$el} from "../../scripts/ui.js";
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
-import { validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas } from "./ImageUtils.js";
+import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas} from "./ImageUtils.js";
+import {logger, LogLevel} from "./logger.js";
+
+// Inicjalizacja loggera dla modułu Canvas_view
+const log = {
+    debug: (...args) => logger.debug('Canvas_view', ...args),
+    info: (...args) => logger.info('Canvas_view', ...args),
+    warn: (...args) => logger.warn('Canvas_view', ...args),
+    error: (...args) => logger.error('Canvas_view', ...args)
+};
+
+// Konfiguracja loggera dla modułu Canvas_view
+logger.setModuleLevel('Canvas_view', LogLevel.INFO); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
 
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget);
@@ -580,7 +592,7 @@ async function createCanvasWidget(node, widget, app) {
                             await canvas.saveToServer(widget.value);
                             app.graph.runStep();
                         } catch (error) {
-                            console.error("Matting error:", error);
+                            log.error("Matting error:", error);
                             alert(`Error during matting process: ${error.message}`);
                         } finally {
                             button.classList.remove('loading');
@@ -683,7 +695,7 @@ async function createCanvasWidget(node, widget, app) {
                                 await clearAllCanvasStates();
                                 alert("Canvas cache cleared successfully!");
                             } catch (e) {
-                                console.error("Failed to clear canvas cache:", e);
+                                log.error("Failed to clear canvas cache:", e);
                                 alert("Error clearing canvas cache. Check the console for details.");
                             }
                         }
@@ -788,18 +800,18 @@ async function createCanvasWidget(node, widget, app) {
         }
     }, [controlPanel, canvasContainer]);
     const handleFileLoad = async (file) => {
-        console.log("File dropped:", file.name);
+        log.info("File dropped:", file.name);
         if (!file.type.startsWith('image/')) {
-            console.log("Dropped file is not an image.");
+            log.info("Dropped file is not an image.");
             return;
         }
 
         const reader = new FileReader();
         reader.onload = async (event) => {
-            console.log("FileReader finished loading dropped file as data:URL.");
+            log.debug("FileReader finished loading dropped file as data:URL.");
             const img = new Image();
             img.onload = async () => {
-                console.log("Image object loaded from dropped data:URL.");
+                log.debug("Image object loaded from dropped data:URL.");
                 const scale = Math.min(
                     canvas.width / img.width,
                     canvas.height / img.height
@@ -821,7 +833,7 @@ async function createCanvasWidget(node, widget, app) {
                 canvas.updateSelection([layer]);
                 canvas.render();
                 canvas.saveState();
-                console.log("Dropped layer added and state saved.");
+                log.info("Dropped layer added and state saved.");
                 await updateOutput();
             };
             img.src = event.target.result;
@@ -885,7 +897,7 @@ async function createCanvasWidget(node, widget, app) {
 
         originalParent = mainContainer.parentNode;
         if (!originalParent) {
-            console.error("Could not find original parent of the canvas container!");
+            log.error("Could not find original parent of the canvas container!");
             return;
         }
 
@@ -910,13 +922,13 @@ async function createCanvasWidget(node, widget, app) {
     let executionInProgress = false;
     
     api.addEventListener("execution_start", async () => {
-        console.log(`[CANVAS_VIEW_LOG] Execution start event for node ${node.id}`);
-        console.log(`[CANVAS_VIEW_LOG] Widget value: ${widget.value}`);
-        console.log(`[CANVAS_VIEW_LOG] Node inputs: ${node.inputs?.length || 0}`);
+        log.info(`Execution start event for node ${node.id}`);
+        log.debug(`Widget value: ${widget.value}`);
+        log.debug(`Node inputs: ${node.inputs?.length || 0}`);
         
         // Sprawdź czy już trwa wykonanie
         if (executionInProgress) {
-            console.log(`[CANVAS_VIEW_LOG] Execution already in progress, skipping...`);
+            log.warn(`Execution already in progress, skipping...`);
             return;
         }
         
@@ -925,34 +937,34 @@ async function createCanvasWidget(node, widget, app) {
         
         try {
             await canvas.saveToServer(widget.value);
-            console.log(`[CANVAS_VIEW_LOG] Canvas saved to server`);
+            log.info(`Canvas saved to server`);
 
             if (node.inputs[0]?.link) {
                 const linkId = node.inputs[0].link;
                 const inputData = app.nodeOutputs[linkId];
-                console.log(`[CANVAS_VIEW_LOG] Input link ${linkId} has data: ${!!inputData}`);
+                log.debug(`Input link ${linkId} has data: ${!!inputData}`);
                 if (inputData) {
                     imageCache.set(linkId, inputData);
-                    console.log(`[CANVAS_VIEW_LOG] Input data cached for link ${linkId}`);
+                    log.debug(`Input data cached for link ${linkId}`);
                 }
             } else {
-                console.log(`[CANVAS_VIEW_LOG] No input link found`);
+                log.debug(`No input link found`);
             }
         } catch (error) {
-            console.error(`[CANVAS_VIEW_LOG] Error during execution:`, error);
+            log.error(`Error during execution:`, error);
         } finally {
             // Zwolnij flagę wykonania
             executionInProgress = false;
-            console.log(`[CANVAS_VIEW_LOG] Execution completed, flag released`);
+            log.debug(`Execution completed, flag released`);
         }
     });
 
     const originalSaveToServer = canvas.saveToServer;
     canvas.saveToServer = async function (fileName) {
-        console.log(`[CANVAS_VIEW_LOG] saveToServer called with fileName: ${fileName}`);
-        console.log(`[CANVAS_VIEW_LOG] Current execution context - node ID: ${node.id}`);
+        log.debug(`saveToServer called with fileName: ${fileName}`);
+        log.debug(`Current execution context - node ID: ${node.id}`);
         const result = await originalSaveToServer.call(this, fileName);
-        console.log(`[CANVAS_VIEW_LOG] saveToServer completed, result: ${result}`);
+        log.debug(`saveToServer completed, result: ${result}`);
         return result;
     };
 
@@ -975,11 +987,11 @@ app.registerExtension({
         if (nodeType.comfyClass === "CanvasNode") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = async function () {
-                console.log("CanvasNode created, ID:", this.id);
+                log.info("CanvasNode created, ID:", this.id);
                 const r = onNodeCreated?.apply(this, arguments);
 
                 const widget = this.widgets.find(w => w.name === "canvas_image");
-                console.log("Found canvas_image widget:", widget);
+                log.debug("Found canvas_image widget:", widget);
                 await createCanvasWidget(this, widget, app);
 
                 return r;
@@ -1017,7 +1029,7 @@ app.registerExtension({
                                 window.open(url, '_blank');
                                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                             } catch (e) {
-                                console.error("Error opening image:", e);
+                                log.error("Error opening image:", e);
                             }
                         },
                     },
@@ -1028,9 +1040,9 @@ app.registerExtension({
                                 const blob = await self.canvasWidget.getFlattenedCanvasAsBlob();
                                 const item = new ClipboardItem({'image/png': blob});
                                 await navigator.clipboard.write([item]);
-                                console.log("Image copied to clipboard.");
+                                log.info("Image copied to clipboard.");
                             } catch (e) {
-                                console.error("Error copying image:", e);
+                                log.error("Error copying image:", e);
                                 alert("Failed to copy image to clipboard.");
                             }
                         },
@@ -1049,7 +1061,7 @@ app.registerExtension({
                                 document.body.removeChild(a);
                                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                             } catch (e) {
-                                console.error("Error saving image:", e);
+                                log.error("Error saving image:", e);
                             }
                         },
                     },
