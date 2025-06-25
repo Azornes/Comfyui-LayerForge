@@ -1,5 +1,13 @@
-import {getCanvasState, setCanvasState, removeCanvasState} from "./db.js";
+import {getCanvasState, setCanvasState, removeCanvasState, saveImage, getImage, removeImage} from "./db.js";
 import {MaskTool} from "./Mask_tool.js";
+
+// Prosta funkcja generująca UUID
+function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
 
 export class Canvas {
     constructor(node, widget) {
@@ -83,6 +91,10 @@ export class Canvas {
         this.redoStack = [];
         this.historyLimit = 100;
 
+        this.saveTimeout = null; // Timer dla debouncingu zapisu do IndexedDB
+        this.lastSavedStateSignature = null; // Sygnatura ostatniego zapisanego stanu
+        this.imageCache = new Map(); // Pamięć podręczna dla obrazów (imageId -> imageSrc)
+
         // this.saveState(); // Wywołanie przeniesione do loadInitialState
     }
 
@@ -110,23 +122,77 @@ export class Canvas {
 
             const imagePromises = savedState.layers.map((layerData, index) => {
                 return new Promise((resolve) => {
-                    if (layerData.imageSrc) {
-                        console.log(`Layer ${index}: Loading image from data:URL...`);
-                        const img = new Image();
-                        img.onload = () => {
-                            console.log(`Layer ${index}: Image loaded successfully.`);
-                            const newLayer = {...layerData, image: img};
-                            delete newLayer.imageSrc;
-                            resolve(newLayer);
-                        };
-                        img.onerror = () => {
-                            console.error(`Layer ${index}: Failed to load image from src.`);
+                    if (layerData.imageId) {
+                        console.log(`Layer ${index}: Loading image with id: ${layerData.imageId}`);
+                        // Sprawdź, czy obraz jest już w pamięci podręcznej
+                        if (this.imageCache.has(layerData.imageId)) {
+                            console.log(`Layer ${index}: Image found in cache.`);
+                            const imageSrc = this.imageCache.get(layerData.imageId);
+                            const img = new Image();
+                            img.onload = () => {
+                                console.log(`Layer ${index}: Image loaded successfully.`);
+                                const newLayer = {...layerData, image: img};
+                                delete newLayer.imageId;
+                                resolve(newLayer);
+                            };
+                            img.onerror = () => {
+                                console.error(`Layer ${index}: Failed to load image from src.`);
+                                resolve(null);
+                            };
+                            img.src = imageSrc;
+                        } else {
+                            // Wczytaj obraz z IndexedDB
+                            getImage(layerData.imageId).then(imageSrc => {
+                                if (imageSrc) {
+                                    console.log(`Layer ${index}: Loading image from data:URL...`);
+                                    const img = new Image();
+                                    img.onload = () => {
+                                        console.log(`Layer ${index}: Image loaded successfully.`);
+                                        this.imageCache.set(layerData.imageId, imageSrc); // Zapisz w pamięci podręcznej jako imageSrc
+                                        const newLayer = {...layerData, image: img};
+                                        delete newLayer.imageId;
+                                        resolve(newLayer);
+                                    };
+                                    img.onerror = () => {
+                                        console.error(`Layer ${index}: Failed to load image from src.`);
+                                        resolve(null);
+                                    };
+                                    img.src = imageSrc;
+                                } else {
+                                    console.error(`Layer ${index}: Image not found in IndexedDB.`);
+                                    resolve(null);
+                                }
+                            }).catch(err => {
+                                console.error(`Layer ${index}: Error loading image from IndexedDB:`, err);
+                                resolve(null);
+                            });
+                        }
+                    } else if (layerData.imageSrc) {
+                        // Obsługa starego formatu z imageSrc
+                        console.log(`Layer ${index}: Found imageSrc, converting to new format with imageId.`);
+                        const imageId = generateUUID();
+                        saveImage(imageId, layerData.imageSrc).then(() => {
+                            console.log(`Layer ${index}: Image saved to IndexedDB with id: ${imageId}`);
+                            this.imageCache.set(imageId, layerData.imageSrc); // Zapisz w pamięci podręcznej jako imageSrc
+                            const img = new Image();
+                            img.onload = () => {
+                                console.log(`Layer ${index}: Image loaded successfully from imageSrc.`);
+                                const newLayer = {...layerData, image: img, imageId};
+                                delete newLayer.imageSrc;
+                                resolve(newLayer);
+                            };
+                            img.onerror = () => {
+                                console.error(`Layer ${index}: Failed to load image from imageSrc.`);
+                                resolve(null);
+                            };
+                            img.src = layerData.imageSrc;
+                        }).catch(err => {
+                            console.error(`Layer ${index}: Error saving image to IndexedDB:`, err);
                             resolve(null);
-                        };
-                        img.src = layerData.imageSrc;
+                        });
                     } else {
-                        console.log(`Layer ${index}: No imageSrc found, resolving layer data.`);
-                        resolve({...layerData});
+                        console.error(`Layer ${index}: No imageId or imageSrc found, skipping layer.`);
+                        resolve(null); // Pomiń warstwy bez obrazu
                     }
                 });
             });
@@ -135,9 +201,14 @@ export class Canvas {
             this.layers = loadedLayers.filter(l => l !== null);
             console.log(`Loaded ${this.layers.length} layers.`);
 
+            if (this.layers.length === 0) {
+                console.warn("No valid layers loaded, state may be corrupted.");
+                return false;
+            }
+
             this.updateSelectionAfterHistory();
             this.render();
-            console.log("Canvas state loaded successfully from localStorage for node", this.node.id);
+            console.log("Canvas state loaded successfully from IndexedDB for node", this.node.id);
             return true;
         } catch (e) {
             console.error("Error loading canvas state from IndexedDB:", e);
@@ -146,34 +217,70 @@ export class Canvas {
         }
     }
 
-    async saveStateToDB() {
-        console.log("Attempting to save state to IndexedDB for node:", this.node.id);
+    async saveStateToDB(immediate = false) {
+        console.log("Preparing to save state to IndexedDB for node:", this.node.id);
         if (!this.node.id) {
             console.error("Node ID is not available for saving state to DB.");
             return;
         }
 
-        try {
-            const state = {
-                layers: this.layers.map((layer, index) => {
-                    const newLayer = {...layer};
-                    if (layer.image instanceof HTMLImageElement) {
-                        console.log(`Layer ${index}: Serializing image to data:URL.`);
-                        newLayer.imageSrc = layer.image.src;
-                    } else {
-                        console.log(`Layer ${index}: No HTMLImageElement found.`);
-                    }
-                    delete newLayer.image;
-                    return newLayer;
-                }),
-                viewport: this.viewport,
-                width: this.width,
-                height: this.height,
-            };
-            await setCanvasState(this.node.id, state);
-            console.log("Canvas state saved to IndexedDB.");
-        } catch (e) {
-            console.error("Error saving canvas state to IndexedDB:", e);
+        // Oblicz sygnaturę obecnego stanu
+        const currentStateSignature = this.getStateSignature(this.layers);
+        if (this.lastSavedStateSignature === currentStateSignature) {
+            console.log("State unchanged, skipping save to IndexedDB.");
+            return;
+        }
+
+        // Anuluj poprzedni timer, jeśli istnieje
+        if (this.saveTimeout) {
+            clearTimeout(this.saveTimeout);
+        }
+
+        const saveFunction = async () => {
+            try {
+                const state = {
+                    layers: await Promise.all(this.layers.map(async (layer, index) => {
+                        const newLayer = {...layer};
+                        if (layer.image instanceof HTMLImageElement) {
+                            console.log(`Layer ${index}: Using imageId instead of serializing image.`);
+                            if (!layer.imageId) {
+                                // Jeśli obraz nie ma jeszcze imageId, zapisz go do IndexedDB
+                                layer.imageId = generateUUID();
+                                await saveImage(layer.imageId, layer.image.src);
+                                this.imageCache.set(layer.imageId, layer.image.src); // Zapisz w pamięci podręcznej jako imageSrc
+                            }
+                            newLayer.imageId = layer.imageId;
+                        } else if (!layer.imageId) {
+                            console.error(`Layer ${index}: No image or imageId found, skipping layer.`);
+                            return null; // Pomiń warstwy bez obrazu
+                        }
+                        delete newLayer.image;
+                        return newLayer;
+                    })),
+                    viewport: this.viewport,
+                    width: this.width,
+                    height: this.height,
+                };
+                // Filtruj warstwy, które nie mają obrazu
+                state.layers = state.layers.filter(layer => layer !== null);
+                if (state.layers.length === 0) {
+                    console.warn("No valid layers to save, skipping save to IndexedDB.");
+                    return;
+                }
+                await setCanvasState(this.node.id, state);
+                console.log("Canvas state saved to IndexedDB.");
+                this.lastSavedStateSignature = currentStateSignature; // Zaktualizuj sygnaturę zapisanego stanu
+            } catch (e) {
+                console.error("Error saving canvas state to IndexedDB:", e);
+            }
+        };
+
+        if (immediate) {
+            // Wykonaj zapis natychmiast
+            await saveFunction();
+        } else {
+            // Zaplanuj zapis z opóźnieniem (debouncing)
+            this.saveTimeout = setTimeout(saveFunction, 1000); // Opóźnienie 1000 ms
         }
     }
 
@@ -199,8 +306,8 @@ export class Canvas {
     getStateSignature(layers) {
         return JSON.stringify(layers.map(layer => {
             const sig = {...layer};
-            if (sig.image instanceof HTMLImageElement) {
-                sig.imageSrc = sig.image.src;
+            if (sig.imageId) {
+                sig.imageId = sig.imageId; // Zachowaj imageId w sygnaturze
             }
             delete sig.image;
             return sig;
@@ -440,22 +547,11 @@ export class Canvas {
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         const img = new Image();
-                        img.onload = () => {
-                            const newLayer = {
-                                image: img,
+                        img.onload = async () => {
+                            await this.addLayerWithImage(img, {
                                 x: this.lastMousePosition.x - img.width / 2,
                                 y: this.lastMousePosition.y - img.height / 2,
-                                width: img.width,
-                                height: img.height,
-                                rotation: 0,
-                                zIndex: this.layers.length,
-                                blendMode: 'normal',
-                                opacity: 1
-                            };
-                            this.layers.push(newLayer);
-                            this.updateSelection([newLayer]);
-                            this.render();
-                            this.saveState();
+                            });
                         };
                         img.src = event.target.result;
                     };
@@ -540,6 +636,7 @@ export class Canvas {
 
         if (interactionEnded) {
             this.saveState();
+            this.saveStateToDB(true); // Zapisz stan natychmiast po zakończeniu interakcji
         }
     }
 
@@ -1086,12 +1183,18 @@ export class Canvas {
         return Math.sqrt(Math.pow(x - handleX, 2) + Math.pow(y - handleY, 2)) <= handleRadius;
     }
 
-    addLayer(image) {
+    async addLayerWithImage(image, layerProps = {}) {
         try {
             console.log("Adding layer with image:", image);
 
+            // Wygeneruj unikalny identyfikator dla obrazu i zapisz go do IndexedDB
+            const imageId = generateUUID();
+            await saveImage(imageId, image.src);
+            this.imageCache.set(imageId, image.src); // Zapisz w pamięci podręcznej jako imageSrc
+
             const layer = {
                 image: image,
+                imageId: imageId, // Dodaj imageId do warstwy
                 x: (this.width - image.width) / 2,
                 y: (this.height - image.height) / 2,
                 width: image.width,
@@ -1099,7 +1202,8 @@ export class Canvas {
                 rotation: 0,
                 zIndex: this.layers.length,
                 blendMode: 'normal',
-                opacity: 1
+                opacity: 1,
+                ...layerProps // Nadpisz domyślne właściwości, jeśli podano
             };
 
             this.layers.push(layer);
@@ -1108,14 +1212,28 @@ export class Canvas {
             this.saveState();
 
             console.log("Layer added successfully");
+            return layer;
         } catch (error) {
             console.error("Error adding layer:", error);
             throw error;
         }
     }
 
-    removeLayer(index) {
+    async addLayer(image) {
+        return this.addLayerWithImage(image);
+    }
+
+    async removeLayer(index) {
         if (index >= 0 && index < this.layers.length) {
+            const layer = this.layers[index];
+            if (layer.imageId) {
+                // Usuń obraz z IndexedDB, jeśli nie jest używany przez inne warstwy
+                const isImageUsedElsewhere = this.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
+                if (!isImageUsedElsewhere) {
+                    await removeImage(layer.imageId);
+                    this.imageCache.delete(layer.imageId); // Usuń z pamięci podręcznej
+                }
+            }
             this.layers.splice(index, 1);
             this.selectedLayer = this.layers[this.layers.length - 1] || null;
             this.render();
@@ -1595,6 +1713,9 @@ export class Canvas {
 
 
     async saveToServer(fileName) {
+        // Zapisz stan do IndexedDB przed zapisem na serwer
+        await this.saveStateToDB(true);
+
         return new Promise((resolve) => {
             const tempCanvas = document.createElement('canvas');
             const maskCanvas = document.createElement('canvas');
@@ -2133,26 +2254,18 @@ export class Canvas {
                 this.height / inputImage.height * 0.8
             );
 
-            const layer = {
-                image: image,
+            const layer = await this.addLayerWithImage(image, {
                 x: (this.width - inputImage.width * scale) / 2,
                 y: (this.height - inputImage.height * scale) / 2,
                 width: inputImage.width * scale,
                 height: inputImage.height * scale,
-                rotation: 0,
-                zIndex: this.layers.length
-            };
+            });
 
             if (inputMask) {
                 layer.mask = inputMask.data;
             }
 
-            this.layers.push(layer);
-            this.selectedLayer = layer;
-
-            this.render();
             console.log("Layer added successfully");
-
             return true;
 
         } catch (error) {
@@ -2512,22 +2625,12 @@ export class Canvas {
                     img.src = result.image_data;
                 });
 
-                const layer = {
-                    image: img,
+                await this.addLayerWithImage(img, {
                     x: 0,
                     y: 0,
                     width: this.width,
                     height: this.height,
-                    rotation: 0,
-                    zIndex: this.layers.length,
-                    blendMode: 'normal',
-                    opacity: 1
-                };
-
-                this.layers.push(layer);
-                this.selectedLayers = [layer];
-                this.selectedLayer = layer;
-                this.render();
+                });
                 console.log("Latest image imported and placed on canvas successfully.");
                 return true;
             } else {
