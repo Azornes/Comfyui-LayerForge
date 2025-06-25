@@ -99,12 +99,29 @@ export class Canvas {
     }
 
     async loadStateFromDB() {
+        // Sprawdź czy już trwa ładowanie
+        if (this._loadInProgress) {
+            console.log("Load already in progress, waiting...");
+            return this._loadInProgress;
+        }
+
         console.log("Attempting to load state from IndexedDB for node:", this.node.id);
         if (!this.node.id) {
             console.error("Node ID is not available for loading state from DB.");
             return false;
         }
 
+        this._loadInProgress = this._performLoad();
+        
+        try {
+            const result = await this._loadInProgress;
+            return result;
+        } finally {
+            this._loadInProgress = null;
+        }
+    }
+
+    async _performLoad() {
         try {
             const savedState = await getCanvasState(this.node.id);
             if (!savedState) {
@@ -1713,6 +1730,28 @@ export class Canvas {
 
 
     async saveToServer(fileName) {
+        // Sprawdź czy już trwa zapis
+        if (this._saveInProgress) {
+            console.log(`[CANVAS_OUTPUT_LOG] Save already in progress, waiting...`);
+            return this._saveInProgress;
+        }
+
+        console.log(`[CANVAS_OUTPUT_LOG] Starting saveToServer with fileName: ${fileName}`);
+        console.log(`[CANVAS_OUTPUT_LOG] Canvas dimensions: ${this.width}x${this.height}`);
+        console.log(`[CANVAS_OUTPUT_LOG] Number of layers: ${this.layers.length}`);
+        
+        // Utwórz Promise dla aktualnego zapisu
+        this._saveInProgress = this._performSave(fileName);
+        
+        try {
+            const result = await this._saveInProgress;
+            return result;
+        } finally {
+            this._saveInProgress = null;
+        }
+    }
+
+    async _performSave(fileName) {
         // Zapisz stan do IndexedDB przed zapisem na serwer
         await this.saveStateToDB(true);
 
@@ -1732,9 +1771,17 @@ export class Canvas {
 
             maskCtx.fillStyle = '#ffffff'; // Białe tło dla wolnych przestrzeni
             maskCtx.fillRect(0, 0, this.width, this.height);
+            
+            console.log(`[CANVAS_OUTPUT_LOG] Canvas contexts created, starting layer rendering`);
 
             // Rysowanie warstw
-            this.layers.sort((a, b) => a.zIndex - b.zIndex).forEach(layer => {
+            const sortedLayers = this.layers.sort((a, b) => a.zIndex - b.zIndex);
+            console.log(`[CANVAS_OUTPUT_LOG] Processing ${sortedLayers.length} layers in order`);
+            
+            sortedLayers.forEach((layer, index) => {
+                console.log(`[CANVAS_OUTPUT_LOG] Processing layer ${index}: zIndex=${layer.zIndex}, size=${layer.width}x${layer.height}, pos=(${layer.x},${layer.y})`);
+                console.log(`[CANVAS_OUTPUT_LOG] Layer ${index}: blendMode=${layer.blendMode || 'normal'}, opacity=${layer.opacity !== undefined ? layer.opacity : 1}`);
+                
                 tempCtx.save();
                 tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
                 tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
@@ -1742,6 +1789,8 @@ export class Canvas {
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
                 tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 tempCtx.restore();
+                
+                console.log(`[CANVAS_OUTPUT_LOG] Layer ${index} rendered successfully`);
 
                 maskCtx.save();
                 maskCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
@@ -1826,23 +1875,29 @@ export class Canvas {
 
             // Zapisz obraz bez maski
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
+            console.log(`[CANVAS_OUTPUT_LOG] Saving image without mask as: ${fileNameWithoutMask}`);
+            
             tempCanvas.toBlob(async (blobWithoutMask) => {
+                console.log(`[CANVAS_OUTPUT_LOG] Created blob for image without mask, size: ${blobWithoutMask.size} bytes`);
                 const formDataWithoutMask = new FormData();
                 formDataWithoutMask.append("image", blobWithoutMask, fileNameWithoutMask);
                 formDataWithoutMask.append("overwrite", "true");
 
                 try {
-                    await fetch("/upload/image", {
+                    const response = await fetch("/upload/image", {
                         method: "POST",
                         body: formDataWithoutMask,
                     });
+                    console.log(`[CANVAS_OUTPUT_LOG] Image without mask upload response: ${response.status}`);
                 } catch (error) {
-                    console.error("Error uploading image without mask:", error);
+                    console.error(`[CANVAS_OUTPUT_LOG] Error uploading image without mask:`, error);
                 }
             }, "image/png");
 
             // Zapisz obraz z maską
+            console.log(`[CANVAS_OUTPUT_LOG] Saving main image as: ${fileName}`);
             tempCanvas.toBlob(async (blob) => {
+                console.log(`[CANVAS_OUTPUT_LOG] Created blob for main image, size: ${blob.size} bytes`);
                 const formData = new FormData();
                 formData.append("image", blob, fileName);
                 formData.append("overwrite", "true");
@@ -1852,11 +1907,15 @@ export class Canvas {
                         method: "POST",
                         body: formData,
                     });
+                    console.log(`[CANVAS_OUTPUT_LOG] Main image upload response: ${resp.status}`);
 
                     if (resp.status === 200) {
+                        const maskFileName = fileName.replace('.png', '_mask.png');
+                        console.log(`[CANVAS_OUTPUT_LOG] Saving mask as: ${maskFileName}`);
+                        
                         maskCanvas.toBlob(async (maskBlob) => {
+                            console.log(`[CANVAS_OUTPUT_LOG] Created blob for mask, size: ${maskBlob.size} bytes`);
                             const maskFormData = new FormData();
-                            const maskFileName = fileName.replace('.png', '_mask.png');
                             maskFormData.append("image", maskBlob, maskFileName);
                             maskFormData.append("overwrite", "true");
 
@@ -1865,26 +1924,28 @@ export class Canvas {
                                     method: "POST",
                                     body: maskFormData,
                                 });
+                                console.log(`[CANVAS_OUTPUT_LOG] Mask upload response: ${maskResp.status}`);
 
                                 if (maskResp.status === 200) {
                                     const data = await resp.json();
                                     this.widget.value = data.name;
+                                    console.log(`[CANVAS_OUTPUT_LOG] All files saved successfully, widget value set to: ${data.name}`);
                                     resolve(true);
                                 } else {
-                                    console.error("Error saving mask: " + maskResp.status);
+                                    console.error(`[CANVAS_OUTPUT_LOG] Error saving mask: ${maskResp.status}`);
                                     resolve(false);
                                 }
                             } catch (error) {
-                                console.error("Error saving mask:", error);
+                                console.error(`[CANVAS_OUTPUT_LOG] Error saving mask:`, error);
                                 resolve(false);
                             }
                         }, "image/png");
                     } else {
-                        console.error(resp.status + " - " + resp.statusText);
+                        console.error(`[CANVAS_OUTPUT_LOG] Main image upload failed: ${resp.status} - ${resp.statusText}`);
                         resolve(false);
                     }
                 } catch (error) {
-                    console.error(error);
+                    console.error(`[CANVAS_OUTPUT_LOG] Error uploading main image:`, error);
                     resolve(false);
                 }
             }, "image/png");

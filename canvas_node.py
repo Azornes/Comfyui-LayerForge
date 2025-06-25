@@ -190,18 +190,35 @@ class CanvasNode:
             print(f"Error in add_mask_to_canvas: {str(e)}")
             return None
 
+    # Zmienna blokująca równoczesne wykonania
+    _processing_lock = None
+    
     def process_canvas_image(self, canvas_image, trigger, output_switch, cache_enabled, input_image=None,
                              input_mask=None):
         try:
+            # Sprawdź czy już trwa przetwarzanie
+            if self.__class__._processing_lock is not None:
+                print(f"[OUTPUT_LOG] Process already in progress, waiting for completion...")
+                return ()  # Zwróć pusty wynik, aby uniknąć równoczesnych przetworzeń
+                
+            # Ustaw blokadę
+            self.__class__._processing_lock = True
+            
             current_execution = self.get_execution_id()
-            print(f"Processing canvas image, execution ID: {current_execution}")
+            print(f"[OUTPUT_LOG] Starting process_canvas_image - execution ID: {current_execution}, trigger: {trigger}")
+            print(f"[OUTPUT_LOG] Canvas image filename: {canvas_image}")
+            print(f"[OUTPUT_LOG] Output switch: {output_switch}, Cache enabled: {cache_enabled}")
+            print(f"[OUTPUT_LOG] Input image provided: {input_image is not None}")
+            print(f"[OUTPUT_LOG] Input mask provided: {input_mask is not None}")
 
             if current_execution != self.__class__._canvas_cache['last_execution_id']:
-                print(f"New execution detected: {current_execution}")
+                print(f"[OUTPUT_LOG] New execution detected: {current_execution} (previous: {self.__class__._canvas_cache['last_execution_id']})")
 
                 self.__class__._canvas_cache['image'] = None
                 self.__class__._canvas_cache['mask'] = None
                 self.__class__._canvas_cache['last_execution_id'] = current_execution
+            else:
+                print(f"[OUTPUT_LOG] Same execution ID, using cached data")
 
             if input_image is not None:
                 print("Input image received, converting to PIL Image...")
@@ -253,6 +270,7 @@ class CanvasNode:
                 # Wczytaj obraz bez maski
                 path_image_without_mask = folder_paths.get_annotated_filepath(
                     canvas_image.replace('.png', '_without_mask.png'))
+                print(f"[OUTPUT_LOG] Loading image without mask from: {path_image_without_mask}")
                 i = Image.open(path_image_without_mask)
                 i = ImageOps.exif_transpose(i)
                 if i.mode not in ['RGB', 'RGBA']:
@@ -263,37 +281,56 @@ class CanvasNode:
                     alpha = image[..., 3:]
                     image = rgb * alpha + (1 - alpha) * 0.5
                 processed_image = torch.from_numpy(image)[None,]
+                print(f"[OUTPUT_LOG] Successfully loaded image without mask, shape: {processed_image.shape}")
             except Exception as e:
-                print(f"Error loading image without mask: {str(e)}")
+                print(f"[OUTPUT_LOG] Error loading image without mask: {str(e)}")
                 processed_image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
+                print(f"[OUTPUT_LOG] Using default image, shape: {processed_image.shape}")
 
             try:
                 # Wczytaj maskę
                 path_image = folder_paths.get_annotated_filepath(canvas_image)
                 path_mask = path_image.replace('.png', '_mask.png')
+                print(f"[OUTPUT_LOG] Looking for mask at: {path_mask}")
                 if os.path.exists(path_mask):
+                    print(f"[OUTPUT_LOG] Mask file exists, loading...")
                     mask = Image.open(path_mask).convert('L')
                     mask = np.array(mask).astype(np.float32) / 255.0
                     processed_mask = torch.from_numpy(mask)[None,]
+                    print(f"[OUTPUT_LOG] Successfully loaded mask, shape: {processed_mask.shape}")
                 else:
+                    print(f"[OUTPUT_LOG] Mask file does not exist, creating default mask")
                     processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                                 dtype=torch.float32)
+                    print(f"[OUTPUT_LOG] Default mask created, shape: {processed_mask.shape}")
             except Exception as e:
-                print(f"Error loading mask: {str(e)}")
+                print(f"[OUTPUT_LOG] Error loading mask: {str(e)}")
                 processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                             dtype=torch.float32)
+                print(f"[OUTPUT_LOG] Fallback mask created, shape: {processed_mask.shape}")
 
             if not output_switch:
+                print(f"[OUTPUT_LOG] Output switch is OFF, returning empty tuple")
                 return ()
 
+            print(f"[OUTPUT_LOG] About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
+            print(f"[OUTPUT_LOG] Image tensor info - dtype: {processed_image.dtype}, device: {processed_image.device}")
+            print(f"[OUTPUT_LOG] Mask tensor info - dtype: {processed_mask.dtype}, device: {processed_mask.device}")
+            
             self.update_persistent_cache()
-
+            
+            print(f"[OUTPUT_LOG] Successfully returning processed image and mask")
             return (processed_image, processed_mask)
 
         except Exception as e:
             print(f"Error in process_canvas_image: {str(e)}")
             traceback.print_exc()
             return ()
+            
+        finally:
+            # Zwolnij blokadę
+            self.__class__._processing_lock = None
+            print(f"[OUTPUT_LOG] Process completed, lock released")
 
     def get_cached_data(self):
         return {
@@ -572,8 +609,24 @@ class BiRefNetMatting:
         return m.hexdigest()
 
 
+# Zmienna blokująca równoczesne wywołania matting
+_matting_lock = None
+
 @PromptServer.instance.routes.post("/matting")
 async def matting(request):
+    global _matting_lock
+    
+    # Sprawdź czy już trwa przetwarzanie
+    if _matting_lock is not None:
+        print("Matting already in progress, rejecting request")
+        return web.json_response({
+            "error": "Another matting operation is in progress",
+            "details": "Please wait for the current operation to complete"
+        }, status=429)  # 429 Too Many Requests
+        
+    # Ustaw blokadę
+    _matting_lock = True
+    
     try:
         print("Received matting request")
         data = await request.json()
@@ -606,6 +659,10 @@ async def matting(request):
             "error": str(e),
             "details": traceback.format_exc()
         }, status=500)
+    finally:
+        # Zwolnij blokadę
+        _matting_lock = None
+        print("Matting lock released")
 
 
 def convert_base64_to_tensor(base64_str):

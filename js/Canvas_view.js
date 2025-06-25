@@ -906,22 +906,53 @@ async function createCanvasWidget(node, widget, app) {
         }
     };
 
+    // Zmienna do śledzenia czy wykonanie jest w trakcie
+    let executionInProgress = false;
+    
     api.addEventListener("execution_start", async () => {
+        console.log(`[CANVAS_VIEW_LOG] Execution start event for node ${node.id}`);
+        console.log(`[CANVAS_VIEW_LOG] Widget value: ${widget.value}`);
+        console.log(`[CANVAS_VIEW_LOG] Node inputs: ${node.inputs?.length || 0}`);
+        
+        // Sprawdź czy już trwa wykonanie
+        if (executionInProgress) {
+            console.log(`[CANVAS_VIEW_LOG] Execution already in progress, skipping...`);
+            return;
+        }
+        
+        // Ustaw flagę wykonania
+        executionInProgress = true;
+        
+        try {
+            await canvas.saveToServer(widget.value);
+            console.log(`[CANVAS_VIEW_LOG] Canvas saved to server`);
 
-        await canvas.saveToServer(widget.value);
-
-        if (node.inputs[0].link) {
-            const linkId = node.inputs[0].link;
-            const inputData = app.nodeOutputs[linkId];
-            if (inputData) {
-                imageCache.set(linkId, inputData);
+            if (node.inputs[0]?.link) {
+                const linkId = node.inputs[0].link;
+                const inputData = app.nodeOutputs[linkId];
+                console.log(`[CANVAS_VIEW_LOG] Input link ${linkId} has data: ${!!inputData}`);
+                if (inputData) {
+                    imageCache.set(linkId, inputData);
+                    console.log(`[CANVAS_VIEW_LOG] Input data cached for link ${linkId}`);
+                }
+            } else {
+                console.log(`[CANVAS_VIEW_LOG] No input link found`);
             }
+        } catch (error) {
+            console.error(`[CANVAS_VIEW_LOG] Error during execution:`, error);
+        } finally {
+            // Zwolnij flagę wykonania
+            executionInProgress = false;
+            console.log(`[CANVAS_VIEW_LOG] Execution completed, flag released`);
         }
     });
 
     const originalSaveToServer = canvas.saveToServer;
     canvas.saveToServer = async function (fileName) {
+        console.log(`[CANVAS_VIEW_LOG] saveToServer called with fileName: ${fileName}`);
+        console.log(`[CANVAS_VIEW_LOG] Current execution context - node ID: ${node.id}`);
         const result = await originalSaveToServer.call(this, fileName);
+        console.log(`[CANVAS_VIEW_LOG] saveToServer completed, result: ${result}`);
         return result;
     };
 
