@@ -570,6 +570,7 @@ async function createCanvasWidget(node, widget, app) {
                             if (canvas.selectedLayers.length !== 1) throw new Error("Please select exactly one image layer for matting.");
 
                             const selectedLayer = canvas.selectedLayers[0];
+                            const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
                             const imageData = await canvas.getLayerImageData(selectedLayer);
                             const response = await fetch("/matting", {
                                 method: "POST",
@@ -584,8 +585,13 @@ async function createCanvasWidget(node, widget, app) {
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
 
-                            const newLayer = {...selectedLayer, image: mattedImage, zIndex: canvas.layers.length};
-                            canvas.layers.push(newLayer);
+                            // Zastąp starą warstwę nową warstwą z obrazem bez tła
+                            const newLayer = {...selectedLayer, image: mattedImage};
+                            // Usuń starą imageId, aby wymusić zapisanie nowego obrazu
+                            delete newLayer.imageId;
+                            
+                            // Zastąp warstwę w tablicy zamiast dodawać nową
+                            canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
