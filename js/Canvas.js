@@ -1,4 +1,5 @@
 import { getCanvasState, setCanvasState, removeCanvasState } from "./db.js";
+import { MaskTool } from "./Mask_tool.js";
 
 export class Canvas {
     constructor(node, widget) {
@@ -50,6 +51,7 @@ export class Canvas {
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;
+        this.maskTool = new MaskTool(this);
         this.initCanvas();
         this.setupEventListeners();
         this.initNodeData();
@@ -325,9 +327,20 @@ export class Canvas {
 
     handleMouseDown(e) {
         this.canvas.focus();
+        const worldCoords = this.getMouseWorldCoordinates(e);
+
+        if (this.maskTool.isActive) {
+            if (e.button === 1) { // Środkowy przycisk myszy (kółko)
+                this.startPanning(e);
+                this.render();
+                return;
+            }
+            this.maskTool.handleMouseDown(worldCoords);
+            this.render();
+            return;
+        }
 
         const currentTime = Date.now();
-        const worldCoords = this.getMouseWorldCoordinates(e);
         if (e.shiftKey && e.ctrlKey) {
             this.startCanvasMove(worldCoords);
             this.render();
@@ -466,6 +479,16 @@ export class Canvas {
         const worldCoords = this.getMouseWorldCoordinates(e);
         this.lastMousePosition = worldCoords;
 
+        if (this.maskTool.isActive) {
+            if (this.interaction.mode === 'panning') {
+                this.panViewport(e);
+                return;
+            }
+            this.maskTool.handleMouseMove(worldCoords);
+            if (this.maskTool.isDrawing) this.render();
+            return;
+        }
+
         switch (this.interaction.mode) {
             case 'panning':
                 this.panViewport(e);
@@ -493,6 +516,18 @@ export class Canvas {
 
 
     handleMouseUp(e) {
+        if (this.maskTool.isActive) {
+            if (this.interaction.mode === 'panning') {
+                this.resetInteractionState();
+                this.render();
+                return;
+            }
+            this.maskTool.handleMouseUp();
+            this.saveState();
+            this.render();
+            return;
+        }
+
         const interactionEnded = this.interaction.mode !== 'none' && this.interaction.mode !== 'panning';
 
         if (this.interaction.mode === 'resizingCanvas') {
@@ -510,6 +545,11 @@ export class Canvas {
 
 
     handleMouseLeave(e) {
+        if (this.maskTool.isActive) {
+            this.maskTool.handleMouseUp();
+            this.render();
+            return;
+        }
         if (this.interaction.mode !== 'none') {
             this.resetInteractionState();
             this.render();
@@ -519,7 +559,20 @@ export class Canvas {
 
     handleWheel(e) {
         e.preventDefault();
-        if (this.selectedLayer) {
+        if (this.maskTool.isActive) {
+            // W trybie maski zezwalaj tylko na zoom i przesuwanie canvasu
+            const worldCoords = this.getMouseWorldCoordinates(e);
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseBufferX = (e.clientX - rect.left) * (this.offscreenCanvas.width / rect.width);
+            const mouseBufferY = (e.clientY - rect.top) * (this.offscreenCanvas.height / rect.height);
+
+            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            const newZoom = this.viewport.zoom * zoomFactor;
+
+            this.viewport.zoom = Math.max(0.1, Math.min(10, newZoom));
+            this.viewport.x = worldCoords.x - (mouseBufferX / this.viewport.zoom);
+            this.viewport.y = worldCoords.y - (mouseBufferY / this.viewport.zoom);
+        } else if (this.selectedLayer) {
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
 
             this.selectedLayers.forEach(layer => {
@@ -593,6 +646,35 @@ export class Canvas {
     }
 
     handleKeyDown(e) {
+        if (this.maskTool.isActive) {
+            // W trybie maski zezwalaj tylko na podstawowe skróty (np. cofnij/powtórz)
+            if (e.key === 'Control') this.interaction.isCtrlPressed = true;
+            if (e.key === 'Alt') {
+                this.interaction.isAltPressed = true;
+                e.preventDefault();
+            }
+
+            if (e.ctrlKey) {
+                if (e.key.toLowerCase() === 'z') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.shiftKey) {
+                        this.redo();
+                    } else {
+                        this.undo();
+                    }
+                    return;
+                }
+                if (e.key.toLowerCase() === 'y') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.redo();
+                    return;
+                }
+            }
+            return; // Blokuj inne interakcje klawiaturowe w trybie maski
+        }
+
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
@@ -1128,6 +1210,7 @@ export class Canvas {
         }
         this.width = width;
         this.height = height;
+        this.maskTool.resize(width, height);
 
         this.canvas.width = width;
         this.canvas.height = height;
@@ -1210,6 +1293,23 @@ export class Canvas {
         });
 
         this.drawCanvasOutline(ctx);
+
+        // Renderowanie maski w zależności od trybu
+        const maskImage = this.maskTool.getMask();
+        if (this.maskTool.isActive) {
+            // W trybie maski pokazuj maskę z przezroczystością 0.5
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(maskImage, 0, 0);
+            ctx.globalAlpha = 1.0;
+        } else if (maskImage) {
+            // W trybie warstw pokazuj maskę jako widoczną, ale nieedytowalną
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1.0;
+            ctx.drawImage(maskImage, 0, 0);
+            ctx.globalAlpha = 1.0;
+        }
+
         if (this.interaction.mode === 'resizingCanvas' && this.interaction.canvasResizeRect) {
             const rect = this.interaction.canvasResizeRect;
             ctx.save();
@@ -1496,7 +1596,6 @@ export class Canvas {
 
     async saveToServer(fileName) {
         return new Promise((resolve) => {
-
             const tempCanvas = document.createElement('canvas');
             const maskCanvas = document.createElement('canvas');
             tempCanvas.width = this.width;
@@ -1510,36 +1609,50 @@ export class Canvas {
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.width, this.height);
 
-            maskCtx.fillStyle = '#000000';
+            maskCtx.fillStyle = '#ffffff'; // Białe tło dla wolnych przestrzeni
             maskCtx.fillRect(0, 0, this.width, this.height);
 
+            // Rysowanie warstw
             this.layers.sort((a, b) => a.zIndex - b.zIndex).forEach(layer => {
-
                 tempCtx.save();
-
                 tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
                 tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-
                 tempCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(
-                    layer.image,
-                    -layer.width / 2,
-                    -layer.height / 2,
-                    layer.width,
-                    layer.height
-                );
+                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 tempCtx.restore();
 
                 maskCtx.save();
                 maskCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 maskCtx.rotate(layer.rotation * Math.PI / 180);
-                maskCtx.globalCompositeOperation = 'lighter';
+                maskCtx.globalCompositeOperation = 'source-over'; // Używamy source-over, aby uwzględnić stopniową przezroczystość
 
                 if (layer.mask) {
-                    maskCtx.drawImage(layer.mask, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                } else {
+                    // Jeśli warstwa ma maskę, używamy jej jako alpha kanału
+                    const layerCanvas = document.createElement('canvas');
+                    layerCanvas.width = layer.width;
+                    layerCanvas.height = layer.height;
+                    const layerCtx = layerCanvas.getContext('2d');
+                    layerCtx.drawImage(layer.mask, 0, 0, layer.width, layer.height);
+                    const imageData = layerCtx.getImageData(0, 0, layer.width, layer.height);
 
+                    const alphaCanvas = document.createElement('canvas');
+                    alphaCanvas.width = layer.width;
+                    alphaCanvas.height = layer.height;
+                    const alphaCtx = alphaCanvas.getContext('2d');
+                    const alphaData = alphaCtx.createImageData(layer.width, layer.height);
+
+                    for (let i = 0; i < imageData.data.length; i += 4) {
+                        const alpha = imageData.data[i + 3] * (layer.opacity !== undefined ? layer.opacity : 1);
+                        // Odwracamy alpha, aby przezroczyste obszary warstwy były nieprzezroczyste na masce
+                        alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = 255 - alpha;
+                        alphaData.data[i + 3] = 255;
+                    }
+
+                    alphaCtx.putImageData(alphaData, 0, 0);
+                    maskCtx.drawImage(alphaCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                } else {
+                    // Jeśli warstwa nie ma maski, używamy jej alpha kanału
                     const layerCanvas = document.createElement('canvas');
                     layerCanvas.width = layer.width;
                     layerCanvas.height = layer.height;
@@ -1555,7 +1668,8 @@ export class Canvas {
 
                     for (let i = 0; i < imageData.data.length; i += 4) {
                         const alpha = imageData.data[i + 3] * (layer.opacity !== undefined ? layer.opacity : 1);
-                        alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = alpha;
+                        // Odwracamy alpha, aby przezroczyste obszary warstwy były nieprzezroczyste na masce
+                        alphaData.data[i] = alphaData.data[i + 1] = alphaData.data[i + 2] = 255 - alpha;
                         alphaData.data[i + 3] = 255;
                     }
 
@@ -1565,15 +1679,48 @@ export class Canvas {
                 maskCtx.restore();
             });
 
-            const finalMaskData = maskCtx.getImageData(0, 0, this.width, this.height);
-            for (let i = 0; i < finalMaskData.data.length; i += 4) {
-                finalMaskData.data[i] =
-                    finalMaskData.data[i + 1] =
-                        finalMaskData.data[i + 2] = 255 - finalMaskData.data[i];
-                finalMaskData.data[i + 3] = 255;
-            }
-            maskCtx.putImageData(finalMaskData, 0, 0);
+            // Nałóż maskę z narzędzia MaskTool, uwzględniając przezroczystość pędzla
+            const toolMaskCanvas = this.maskTool.getMask();
+            if (toolMaskCanvas) {
+                // Utwórz tymczasowy canvas, aby zachować wartości alpha maski z MaskTool
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.width;
+                tempMaskCanvas.height = this.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                tempMaskCtx.drawImage(toolMaskCanvas, 0, 0);
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.width, this.height);
 
+                // Zachowaj wartości alpha, aby obszary narysowane pędzlem były nieprzezroczyste na masce
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                    tempMaskData.data[i + 3] = alpha; // Zachowaj oryginalną przezroczystość pędzla
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+
+                // Nałóż maskę z MaskTool na maskę główną
+                maskCtx.globalCompositeOperation = 'source-over'; // Dodaje nieprzezroczystość tam, gdzie pędzel był użyty
+                maskCtx.drawImage(tempMaskCanvas, 0, 0);
+            }
+
+            // Zapisz obraz bez maski
+            const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
+            tempCanvas.toBlob(async (blobWithoutMask) => {
+                const formDataWithoutMask = new FormData();
+                formDataWithoutMask.append("image", blobWithoutMask, fileNameWithoutMask);
+                formDataWithoutMask.append("overwrite", "true");
+
+                try {
+                    await fetch("/upload/image", {
+                        method: "POST",
+                        body: formDataWithoutMask,
+                    });
+                } catch (error) {
+                    console.error("Error uploading image without mask:", error);
+                }
+            }, "image/png");
+
+            // Zapisz obraz z maską
             tempCanvas.toBlob(async (blob) => {
                 const formData = new FormData();
                 formData.append("image", blob, fileName);
@@ -1586,7 +1733,6 @@ export class Canvas {
                     });
 
                     if (resp.status === 200) {
-
                         maskCanvas.toBlob(async (maskBlob) => {
                             const maskFormData = new FormData();
                             const maskFileName = fileName.replace('.png', '_mask.png');

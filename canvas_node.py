@@ -250,9 +250,9 @@ class CanvasNode:
             self.__class__._canvas_cache['cache_enabled'] = cache_enabled
 
             try:
-
-                path_image = folder_paths.get_annotated_filepath(canvas_image)
-                i = Image.open(path_image)
+                # Wczytaj obraz bez maski
+                path_image_without_mask = folder_paths.get_annotated_filepath(canvas_image.replace('.png', '_without_mask.png'))
+                i = Image.open(path_image_without_mask)
                 i = ImageOps.exif_transpose(i)
                 if i.mode not in ['RGB', 'RGBA']:
                     i = i.convert('RGB')
@@ -263,23 +263,22 @@ class CanvasNode:
                     image = rgb * alpha + (1 - alpha) * 0.5
                 processed_image = torch.from_numpy(image)[None,]
             except Exception as e:
-
+                print(f"Error loading image without mask: {str(e)}")
                 processed_image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
 
             try:
-
+                # Wczytaj maskę
+                path_image = folder_paths.get_annotated_filepath(canvas_image)
                 path_mask = path_image.replace('.png', '_mask.png')
                 if os.path.exists(path_mask):
                     mask = Image.open(path_mask).convert('L')
                     mask = np.array(mask).astype(np.float32) / 255.0
                     processed_mask = torch.from_numpy(mask)[None,]
                 else:
-
                     processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                                 dtype=torch.float32)
             except Exception as e:
                 print(f"Error loading mask: {str(e)}")
-
                 processed_mask = torch.ones((1, processed_image.shape[1], processed_image.shape[2]),
                                             dtype=torch.float32)
 

@@ -65,6 +65,19 @@ async function createCanvasWidget(node, widget, app) {
             justify-content: flex-start;
         }
 
+       .painter-slider-container {
+           display: flex;
+           align-items: center;
+           gap: 8px;
+           color: #fff;
+           font-size: 12px;
+       }
+
+       .painter-slider-container input[type="range"] {
+           width: 80px;
+       }
+
+
         .painter-button-group {
             display: flex;
             align-items: center;
@@ -388,12 +401,89 @@ async function createCanvasWidget(node, widget, app) {
 
             // --- Group: Canvas & Layers ---
             $el("div.painter-button-group", {}, [
-                $el("button.painter-button", {
-                    textContent: "Canvas Size",
-                    onclick: () => {
-                        // Dialog logic remains the same
-                    }
-                }),
+            $el("button.painter-button", {
+                textContent: "Canvas Size",
+                onclick: () => {
+                    const dialog = $el("div.painter-dialog", {
+                        style: {
+                            position: 'fixed',
+                            left: '50%',
+                            top: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: '1000'
+                        }
+                    }, [
+                        $el("div", {
+                            style: {
+                                color: "white",
+                                marginBottom: "10px"
+                            }
+                        }, [
+                            $el("label", {
+                                style: {
+                                    marginRight: "5px"
+                                }
+                            }, [
+                                $el("span", {}, ["Width: "])
+                            ]),
+                            $el("input", {
+                                type: "number",
+                                id: "canvas-width",
+                                value: canvas.width,
+                                min: "1",
+                                max: "4096"
+                            })
+                        ]),
+                        $el("div", {
+                            style: {
+                                color: "white",
+                                marginBottom: "10px"
+                            }
+                        }, [
+                            $el("label", {
+                                style: {
+                                    marginRight: "5px"
+                                }
+                            }, [
+                                $el("span", {}, ["Height: "])
+                            ]),
+                            $el("input", {
+                                type: "number",
+                                id: "canvas-height",
+                                value: canvas.height,
+                                min: "1",
+                                max: "4096"
+                            })
+                        ]),
+                        $el("div", {
+                            style: {
+                                textAlign: "right"
+                            }
+                        }, [
+                            $el("button", {
+                                id: "cancel-size",
+                                textContent: "Cancel"
+                            }),
+                            $el("button", {
+                                id: "confirm-size",
+                                textContent: "OK"
+                            })
+                        ])
+                    ]);
+                    document.body.appendChild(dialog);
+
+                    document.getElementById('confirm-size').onclick = () => {
+                        const width = parseInt(document.getElementById('canvas-width').value) || canvas.width;
+                        const height = parseInt(document.getElementById('canvas-height').value) || canvas.height;
+                        canvas.updateCanvasSize(width, height);
+                        document.body.removeChild(dialog);
+                    };
+
+                    document.getElementById('cancel-size').onclick = () => {
+                        document.body.removeChild(dialog);
+                    };
+                }
+            }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Remove Layer",
                     onclick: () => {
@@ -485,10 +575,128 @@ async function createCanvasWidget(node, widget, app) {
             
             $el("div.painter-separator"),
 
-            // --- Group: Cache ---
-             $el("div.painter-button-group", {}, [
-                $el("button.painter-button", {
-                    textContent: "Clear Cache",
+            // --- Group: Tools & History ---
+            $el("div.painter-button-group", {}, [
+               $el("button.painter-button.requires-selection.matting-button", {
+                   textContent: "Matting",
+                    onclick: async (e) => {
+                       const button = e.target.closest('.matting-button');
+                       if (button.classList.contains('loading')) return;
+                       const spinner = $el("div.matting-spinner");
+                       button.appendChild(spinner);
+                       button.classList.add('loading');
+                       
+                       try {
+                           if (canvas.selectedLayers.length !== 1) throw new Error("Please select exactly one image layer for matting.");
+                           
+                           const selectedLayer = canvas.selectedLayers[0];
+                           const imageData = await canvas.getLayerImageData(selectedLayer);
+                           const response = await fetch("/matting", {
+                               method: "POST",
+                               headers: {"Content-Type": "application/json"},
+                               body: JSON.stringify({image: imageData})
+                           });
+                           if (!response.ok) throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+                           
+                           const result = await response.json();
+                           const mattedImage = new Image();
+                           mattedImage.src = result.matted_image;
+                           await mattedImage.decode();
+                           const newLayer = { ...selectedLayer, image: mattedImage, zIndex: canvas.layers.length };
+                           canvas.layers.push(newLayer);
+                           canvas.updateSelection([newLayer]);
+                           canvas.render();
+                           canvas.saveState();
+                           await canvas.saveToServer(widget.value);
+                           app.graph.runStep();
+                       } catch (error) {
+                           console.error("Matting error:", error);
+                           alert(`Error during matting process: ${error.message}`);
+                       } finally {
+                           button.classList.remove('loading');
+                           button.removeChild(spinner);
+                       }
+                   }
+               }),
+               $el("button.painter-button", { id: `undo-button-${node.id}`, textContent: "Undo", disabled: true, onclick: () => canvas.undo() }),
+               $el("button.painter-button", { id: `redo-button-${node.id}`, textContent: "Redo", disabled: true, onclick: () => canvas.redo() }),
+           ]),
+           
+           $el("div.painter-separator"),
+
+           // --- Group: Masking ---
+           $el("div.painter-button-group", { id: "mask-controls" }, [
+               $el("button.painter-button", {
+                   id: "mask-mode-btn",
+                   textContent: "Draw Mask",
+                   onclick: () => {
+                       const maskBtn = controlPanel.querySelector('#mask-mode-btn');
+                       const maskControls = controlPanel.querySelector('#mask-controls');
+                       
+                       if (canvas.maskTool.isActive) {
+                           canvas.maskTool.deactivate();
+                           maskBtn.classList.remove('primary');
+                           maskControls.querySelectorAll('.mask-control').forEach(c => c.style.display = 'none');
+                       } else {
+                           canvas.maskTool.activate();
+                           maskBtn.classList.add('primary');
+                           maskControls.querySelectorAll('.mask-control').forEach(c => c.style.display = 'flex');
+                       }
+                   }
+               }),
+               $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                   $el("label", { for: "brush-size-slider", textContent: "Size:" }),
+                   $el("input", {
+                       id: "brush-size-slider",
+                       type: "range",
+                       min: "1",
+                       max: "200",
+                       value: "20",
+                       oninput: (e) => canvas.maskTool.setBrushSize(parseInt(e.target.value))
+                   })
+               ]),
+               $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                   $el("label", { for: "brush-strength-slider", textContent: "Strength:" }),
+                   $el("input", {
+                       id: "brush-strength-slider",
+                       type: "range",
+                       min: "0",
+                       max: "1",
+                       step: "0.05",
+                       value: "0.5",
+                       oninput: (e) => canvas.maskTool.setBrushStrength(parseFloat(e.target.value))
+                   })
+               ]),
+               $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                   $el("label", { for: "brush-softness-slider", textContent: "Softness:" }),
+                   $el("input", {
+                       id: "brush-softness-slider",
+                       type: "range",
+                       min: "0",
+                       max: "1",
+                       step: "0.05",
+                       value: "0.5",
+                       oninput: (e) => canvas.maskTool.setBrushSoftness(parseFloat(e.target.value))
+                   })
+               ]),
+               $el("button.painter-button.mask-control", {
+                   textContent: "Clear Mask",
+                   style: { display: 'none' },
+                   onclick: () => {
+                       if (confirm("Are you sure you want to clear the mask?")) {
+                           canvas.maskTool.clear();
+                           canvas.render();
+                       }
+                   }
+               })
+           ]),
+
+           $el("div.painter-separator"),
+
+           // --- Group: Cache ---
+            $el("div.painter-button-group", {}, [
+               $el("button.painter-button", {
+                   textContent: "Clear Cache",
                     style: { backgroundColor: "#c54747", borderColor: "#a53737" },
                     onclick: async () => {
                         if (confirm("Are you sure you want to clear all saved canvas states? This action cannot be undone.")) {
@@ -503,7 +711,8 @@ async function createCanvasWidget(node, widget, app) {
                     }
                 })
             ])
-        ])
+        ]),
+           $el("div.painter-separator")
     ]);
 
 
