@@ -1,6 +1,7 @@
 import {saveImage, getImage, removeImage} from "./db.js";
 import {MaskTool} from "./Mask_tool.js";
 import {CanvasState} from "./CanvasState.js";
+import {CanvasInteractions} from "./CanvasInteractions.js";
 import {logger, LogLevel} from "./logger.js";
 
 // Inicjalizacja loggera dla modułu Canvas
@@ -33,23 +34,7 @@ export class Canvas {
             y: -(this.height / 4),
             zoom: 0.8,
         };
-        this.interaction = {
-            mode: 'none',
-            panStart: {x: 0, y: 0},
-            dragStart: {x: 0, y: 0},
-            transformOrigin: {},
-            resizeHandle: null,
-            resizeAnchor: {x: 0, y: 0},
-            canvasResizeStart: {x: 0, y: 0},
-            isCtrlPressed: false,
-            isAltPressed: false,
-            hasClonedInDrag: false,
-            lastClickTime: 0,
-            transformingLayer: null,
-        };
-        this.originalLayerPositions = new Map();
-        this.interaction.canvasResizeRect = null;
-        this.interaction.canvasMoveRect = null;
+        // Interaction state will be managed by CanvasInteractions module
 
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
@@ -66,6 +51,12 @@ export class Canvas {
         this.pendingDataCheck = null;
         this.maskTool = new MaskTool(this);
         this.initCanvas();
+        this.canvasState = new CanvasState(this); // Nowy moduł zarządzania stanem
+        this.canvasInteractions = new CanvasInteractions(this); // Nowy moduł obsługi interakcji
+        
+        // Po utworzeniu CanvasInteractions, użyj jego interaction state
+        this.interaction = this.canvasInteractions.interaction;
+        
         this.setupEventListeners();
         this.initNodeData();
 
@@ -93,7 +84,6 @@ export class Canvas {
         }));
 
         this.imageCache = new Map(); // Pamięć podręczna dla obrazów (imageId -> imageSrc)
-        this.canvasState = new CanvasState(this); // Nowy moduł zarządzania stanem
 
         // this.saveState(); // Wywołanie przeniesione do loadInitialState
     }
@@ -163,22 +153,7 @@ export class Canvas {
     }
 
     setupEventListeners() {
-        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
-        this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-        this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
-        this.canvas.addEventListener('wheel', this.handleWheel.bind(this), {passive: false});
-
-
-        this.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
-        this.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
-
-        this.canvas.addEventListener('mouseenter', () => {
-            this.isMouseOver = true;
-        });
-        this.canvas.addEventListener('mouseleave', () => {
-            this.isMouseOver = false;
-        });
+        this.canvasInteractions.setupEventListeners();
     }
 
     updateSelection(newSelection) {
@@ -190,71 +165,7 @@ export class Canvas {
     }
 
 
-    resetInteractionState() {
-        this.interaction.mode = 'none';
-        this.interaction.resizeHandle = null;
-        this.originalLayerPositions.clear();
-        this.interaction.canvasResizeRect = null;
-        this.interaction.canvasMoveRect = null;
-        this.interaction.hasClonedInDrag = false;
-        this.interaction.transformingLayer = null;
-        this.canvas.style.cursor = 'default';
-    }
-
-    handleMouseDown(e) {
-        this.canvas.focus();
-        const worldCoords = this.getMouseWorldCoordinates(e);
-
-        if (this.maskTool.isActive) {
-            if (e.button === 1) { // Środkowy przycisk myszy (kółko)
-                this.startPanning(e);
-                this.render();
-                return;
-            }
-            this.maskTool.handleMouseDown(worldCoords);
-            this.render();
-            return;
-        }
-
-        const currentTime = Date.now();
-        if (e.shiftKey && e.ctrlKey) {
-            this.startCanvasMove(worldCoords);
-            this.render();
-            return;
-        }
-
-        if (currentTime - this.interaction.lastClickTime < 300) {
-            this.updateSelection([]);
-            this.selectedLayer = null;
-            this.resetInteractionState();
-            this.render();
-            return;
-        }
-        this.interaction.lastClickTime = currentTime;
-
-        const transformTarget = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
-        if (transformTarget) {
-            this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
-            return;
-        }
-
-        const clickedLayerResult = this.getLayerAtPosition(worldCoords.x, worldCoords.y);
-        if (clickedLayerResult) {
-            if (e.shiftKey && this.selectedLayers.includes(clickedLayerResult.layer)) {
-                this.showBlendModeMenu(e.clientX, e.clientY);
-                return;
-            }
-            this.startLayerDrag(clickedLayerResult.layer, worldCoords);
-            return;
-        }
-        if (e.shiftKey) {
-            this.startCanvasResize(worldCoords);
-        } else {
-            this.startPanning(e);
-        }
-
-        this.render();
-    }
+    // Interaction methods moved to CanvasInteractions module
 
 
     async copySelectedLayers() {
@@ -341,605 +252,40 @@ export class Canvas {
 
 
     handleMouseMove(e) {
-        const worldCoords = this.getMouseWorldCoordinates(e);
-        this.lastMousePosition = worldCoords;
-
-        if (this.maskTool.isActive) {
-            if (this.interaction.mode === 'panning') {
-                this.panViewport(e);
-                return;
-            }
-            this.maskTool.handleMouseMove(worldCoords);
-            if (this.maskTool.isDrawing) this.render();
-            return;
-        }
-
-        switch (this.interaction.mode) {
-            case 'panning':
-                this.panViewport(e);
-                break;
-            case 'dragging':
-                this.dragLayers(worldCoords);
-                break;
-            case 'resizing':
-                this.resizeLayerFromHandle(worldCoords, e.shiftKey);
-                break;
-            case 'rotating':
-                this.rotateLayerFromHandle(worldCoords, e.shiftKey);
-                break;
-            case 'resizingCanvas':
-                this.updateCanvasResize(worldCoords);
-                break;
-            case 'movingCanvas':
-                this.updateCanvasMove(worldCoords);
-                break;
-            default:
-                this.updateCursor(worldCoords);
-                break;
-        }
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleMouseMove(e);
     }
 
 
     handleMouseUp(e) {
-        if (this.maskTool.isActive) {
-            if (this.interaction.mode === 'panning') {
-                this.resetInteractionState();
-                this.render();
-                return;
-            }
-            this.maskTool.handleMouseUp();
-            this.saveState();
-            this.render();
-            return;
-        }
-
-        const interactionEnded = this.interaction.mode !== 'none' && this.interaction.mode !== 'panning';
-
-        if (this.interaction.mode === 'resizingCanvas') {
-            this.finalizeCanvasResize();
-        } else if (this.interaction.mode === 'movingCanvas') {
-            this.finalizeCanvasMove();
-        }
-        this.resetInteractionState();
-        this.render();
-
-        if (interactionEnded) {
-            this.saveState();
-            this.saveStateToDB(true); // Zapisz stan natychmiast po zakończeniu interakcji
-        }
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleMouseUp(e);
     }
 
 
     handleMouseLeave(e) {
-        if (this.maskTool.isActive) {
-            this.maskTool.handleMouseUp();
-            this.render();
-            return;
-        }
-        if (this.interaction.mode !== 'none') {
-            this.resetInteractionState();
-            this.render();
-        }
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleMouseLeave(e);
     }
 
 
     handleWheel(e) {
-        e.preventDefault();
-        if (this.maskTool.isActive) {
-            // W trybie maski zezwalaj tylko na zoom i przesuwanie canvasu
-            const worldCoords = this.getMouseWorldCoordinates(e);
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseBufferX = (e.clientX - rect.left) * (this.offscreenCanvas.width / rect.width);
-            const mouseBufferY = (e.clientY - rect.top) * (this.offscreenCanvas.height / rect.height);
-
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            const newZoom = this.viewport.zoom * zoomFactor;
-
-            this.viewport.zoom = Math.max(0.1, Math.min(10, newZoom));
-            this.viewport.x = worldCoords.x - (mouseBufferX / this.viewport.zoom);
-            this.viewport.y = worldCoords.y - (mouseBufferY / this.viewport.zoom);
-        } else if (this.selectedLayer) {
-            const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
-
-            this.selectedLayers.forEach(layer => {
-                if (e.shiftKey) {
-                    layer.rotation += rotationStep;
-                } else {
-                    const oldWidth = layer.width;
-                    const oldHeight = layer.height;
-                    let scaleFactor;
-
-                    if (e.ctrlKey) {
-
-                        const direction = e.deltaY > 0 ? -1 : 1;
-
-                        const baseDimension = Math.max(layer.width, layer.height);
-                        const newBaseDimension = baseDimension + direction;
-                        if (newBaseDimension < 10) {
-                            return;
-                        }
-
-                        scaleFactor = newBaseDimension / baseDimension;
-
-                    } else {
-
-                        const gridSize = 64;
-                        const direction = e.deltaY > 0 ? -1 : 1;
-                        let targetHeight;
-
-                        if (direction > 0) {
-
-                            targetHeight = (Math.floor(oldHeight / gridSize) + 1) * gridSize;
-                        } else {
-
-                            targetHeight = (Math.ceil(oldHeight / gridSize) - 1) * gridSize;
-                        }
-                        if (targetHeight < gridSize / 2) {
-                            targetHeight = gridSize / 2;
-                        }
-                        if (Math.abs(oldHeight - targetHeight) < 1) {
-                            if (direction > 0) targetHeight += gridSize;
-                            else targetHeight -= gridSize;
-
-                            if (targetHeight < gridSize / 2) return;
-                        }
-
-                        scaleFactor = targetHeight / oldHeight;
-                    }
-                    if (scaleFactor && isFinite(scaleFactor)) {
-                        layer.width *= scaleFactor;
-                        layer.height *= scaleFactor;
-                        layer.x += (oldWidth - layer.width) / 2;
-                        layer.y += (oldHeight - layer.height) / 2;
-                    }
-                }
-            });
-        } else {
-            const worldCoords = this.getMouseWorldCoordinates(e);
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseBufferX = (e.clientX - rect.left) * (this.offscreenCanvas.width / rect.width);
-            const mouseBufferY = (e.clientY - rect.top) * (this.offscreenCanvas.height / rect.height);
-
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            const newZoom = this.viewport.zoom * zoomFactor;
-
-            this.viewport.zoom = Math.max(0.1, Math.min(10, newZoom));
-            this.viewport.x = worldCoords.x - (mouseBufferX / this.viewport.zoom);
-            this.viewport.y = worldCoords.y - (mouseBufferY / this.viewport.zoom);
-        }
-        this.render();
-        this.saveState(true);
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleWheel(e);
     }
 
     handleKeyDown(e) {
-        if (this.maskTool.isActive) {
-            // W trybie maski zezwalaj tylko na podstawowe skróty (np. cofnij/powtórz)
-            if (e.key === 'Control') this.interaction.isCtrlPressed = true;
-            if (e.key === 'Alt') {
-                this.interaction.isAltPressed = true;
-                e.preventDefault();
-            }
-
-            if (e.ctrlKey) {
-                if (e.key.toLowerCase() === 'z') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.shiftKey) {
-                        this.redo();
-                    } else {
-                        this.undo();
-                    }
-                    return;
-                }
-                if (e.key.toLowerCase() === 'y') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.redo();
-                    return;
-                }
-            }
-            return; // Blokuj inne interakcje klawiaturowe w trybie maski
-        }
-
-        if (e.key === 'Control') this.interaction.isCtrlPressed = true;
-        if (e.key === 'Alt') {
-            this.interaction.isAltPressed = true;
-            e.preventDefault();
-        }
-
-        if (e.ctrlKey) {
-            if (e.key.toLowerCase() === 'z') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.shiftKey) {
-                    this.redo();
-                } else {
-                    this.undo();
-                }
-                return;
-            }
-            if (e.key.toLowerCase() === 'y') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.redo();
-                return;
-            }
-            if (e.key.toLowerCase() === 'c') {
-                if (this.selectedLayers.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.copySelectedLayers();
-                }
-                return;
-            }
-            if (e.key.toLowerCase() === 'v') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.handlePaste();
-                return;
-            }
-        }
-
-        if (this.selectedLayer) {
-            if (e.key === 'Delete') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.saveState();
-                this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
-                this.updateSelection([]);
-                this.render();
-                return;
-            }
-
-            const step = e.shiftKey ? 10 : 1;
-            let needsRender = false;
-            switch (e.code) {
-                case 'ArrowLeft':
-                case 'ArrowRight':
-                case 'ArrowUp':
-                case 'ArrowDown':
-                case 'BracketLeft':
-                case 'BracketRight':
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if (e.code === 'ArrowLeft') this.selectedLayers.forEach(l => l.x -= step);
-                    if (e.code === 'ArrowRight') this.selectedLayers.forEach(l => l.x += step);
-                    if (e.code === 'ArrowUp') this.selectedLayers.forEach(l => l.y -= step);
-                    if (e.code === 'ArrowDown') this.selectedLayers.forEach(l => l.y += step);
-                    if (e.code === 'BracketLeft') this.selectedLayers.forEach(l => l.rotation -= step);
-                    if (e.code === 'BracketRight') this.selectedLayers.forEach(l => l.rotation += step);
-
-                    needsRender = true;
-                    break;
-            }
-
-            if (needsRender) {
-                this.render();
-                this.saveState();
-            }
-        }
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleKeyDown(e);
     }
 
     handleKeyUp(e) {
-        if (e.key === 'Control') this.interaction.isCtrlPressed = false;
-        if (e.key === 'Alt') this.interaction.isAltPressed = false;
+        // Deleguj do CanvasInteractions
+        this.canvasInteractions.handleKeyUp(e);
     }
 
-    updateCursor(worldCoords) {
-        const transformTarget = this.getHandleAtPosition(worldCoords.x, worldCoords.y);
-
-        if (transformTarget) {
-            const handleName = transformTarget.handle;
-            const cursorMap = {
-                'n': 'ns-resize', 's': 'ns-resize', 'e': 'ew-resize', 'w': 'ew-resize',
-                'nw': 'nwse-resize', 'se': 'nwse-resize', 'ne': 'nesw-resize', 'sw': 'nesw-resize',
-                'rot': 'grab'
-            };
-            this.canvas.style.cursor = cursorMap[handleName];
-        } else if (this.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
-            this.canvas.style.cursor = 'move';
-        } else {
-            this.canvas.style.cursor = 'default';
-        }
-    }
-
-    startLayerTransform(layer, handle, worldCoords) {
-        this.interaction.transformingLayer = layer;
-        this.interaction.transformOrigin = {
-            x: layer.x, y: layer.y,
-            width: layer.width, height: layer.height,
-            rotation: layer.rotation,
-            centerX: layer.x + layer.width / 2,
-            centerY: layer.y + layer.height / 2
-        };
-        this.interaction.dragStart = {...worldCoords};
-
-        if (handle === 'rot') {
-            this.interaction.mode = 'rotating';
-        } else {
-            this.interaction.mode = 'resizing';
-            this.interaction.resizeHandle = handle;
-            const handles = this.getHandles(layer);
-            const oppositeHandleKey = {
-                'n': 's', 's': 'n', 'e': 'w', 'w': 'e',
-                'nw': 'se', 'se': 'nw', 'ne': 'sw', 'sw': 'ne'
-            }[handle];
-            this.interaction.resizeAnchor = handles[oppositeHandleKey];
-        }
-        this.render();
-    }
-
-    startLayerDrag(layer, worldCoords) {
-        this.interaction.mode = 'dragging';
-        this.interaction.dragStart = {...worldCoords};
-
-        let currentSelection = [...this.selectedLayers];
-
-        if (this.interaction.isCtrlPressed) {
-            const index = currentSelection.indexOf(layer);
-            if (index === -1) {
-                currentSelection.push(layer);
-            } else {
-                currentSelection.splice(index, 1);
-            }
-        } else {
-            if (!currentSelection.includes(layer)) {
-                currentSelection = [layer];
-            }
-        }
-
-        this.updateSelection(currentSelection);
-
-        this.originalLayerPositions.clear();
-        this.selectedLayers.forEach(l => {
-            this.originalLayerPositions.set(l, {x: l.x, y: l.y});
-        });
-    }
-
-    startCanvasResize(worldCoords) {
-        this.interaction.mode = 'resizingCanvas';
-        const startX = this.snapToGrid(worldCoords.x);
-        const startY = this.snapToGrid(worldCoords.y);
-        this.interaction.canvasResizeStart = {x: startX, y: startY};
-        this.interaction.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
-        this.render();
-    }
-
-    startCanvasMove(worldCoords) {
-        this.interaction.mode = 'movingCanvas';
-        this.interaction.dragStart = {...worldCoords};
-        const initialX = this.snapToGrid(worldCoords.x - this.width / 2);
-        const initialY = this.snapToGrid(worldCoords.y - this.height / 2);
-
-        this.interaction.canvasMoveRect = {
-            x: initialX,
-            y: initialY,
-            width: this.width,
-            height: this.height
-        };
-
-        this.canvas.style.cursor = 'grabbing';
-        this.render();
-    }
-
-
-    updateCanvasMove(worldCoords) {
-        if (!this.interaction.canvasMoveRect) return;
-        const dx = worldCoords.x - this.interaction.dragStart.x;
-        const dy = worldCoords.y - this.interaction.dragStart.y;
-        const initialRectX = this.snapToGrid(this.interaction.dragStart.x - this.width / 2);
-        const initialRectY = this.snapToGrid(this.interaction.dragStart.y - this.height / 2);
-        this.interaction.canvasMoveRect.x = this.snapToGrid(initialRectX + dx);
-        this.interaction.canvasMoveRect.y = this.snapToGrid(initialRectY + dy);
-
-        this.render();
-    }
-
-
-    finalizeCanvasMove() {
-        const moveRect = this.interaction.canvasMoveRect;
-
-        if (moveRect && (moveRect.x !== 0 || moveRect.y !== 0)) {
-            const finalX = moveRect.x;
-            const finalY = moveRect.y;
-
-            this.layers.forEach(layer => {
-                layer.x -= finalX;
-                layer.y -= finalY;
-            });
-            this.viewport.x -= finalX;
-            this.viewport.y -= finalY;
-        }
-        this.render();
-    }
-
-    startPanning(e) {
-        if (!this.interaction.isCtrlPressed) {
-            this.updateSelection([]);
-        }
-        this.interaction.mode = 'panning';
-        this.interaction.panStart = {x: e.clientX, y: e.clientY};
-    }
-
-    panViewport(e) {
-        const dx = e.clientX - this.interaction.panStart.x;
-        const dy = e.clientY - this.interaction.panStart.y;
-        this.viewport.x -= dx / this.viewport.zoom;
-        this.viewport.y -= dy / this.viewport.zoom;
-        this.interaction.panStart = {x: e.clientX, y: e.clientY};
-        this.render();
-    }
-
-    dragLayers(worldCoords) {
-        if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.selectedLayers.length > 0) {
-            const newLayers = [];
-            this.selectedLayers.forEach(layer => {
-                const newLayer = {
-                    ...layer,
-                    zIndex: this.layers.length,
-                };
-                this.layers.push(newLayer);
-                newLayers.push(newLayer);
-            });
-            this.updateSelection(newLayers);
-            this.selectedLayer = newLayers.length > 0 ? newLayers[newLayers.length - 1] : null;
-            this.originalLayerPositions.clear();
-            this.selectedLayers.forEach(l => {
-                this.originalLayerPositions.set(l, {x: l.x, y: l.y});
-            });
-            this.interaction.hasClonedInDrag = true;
-        }
-        const totalDx = worldCoords.x - this.interaction.dragStart.x;
-        const totalDy = worldCoords.y - this.interaction.dragStart.y;
-        let finalDx = totalDx, finalDy = totalDy;
-
-        if (this.interaction.isCtrlPressed && this.selectedLayer) {
-            const originalPos = this.originalLayerPositions.get(this.selectedLayer);
-            if (originalPos) {
-                const tempLayerForSnap = {
-                    ...this.selectedLayer,
-                    x: originalPos.x + totalDx,
-                    y: originalPos.y + totalDy
-                };
-                const snapAdjustment = this.getSnapAdjustment(tempLayerForSnap);
-                finalDx += snapAdjustment.dx;
-                finalDy += snapAdjustment.dy;
-            }
-        }
-
-        this.selectedLayers.forEach(layer => {
-            const originalPos = this.originalLayerPositions.get(layer);
-            if (originalPos) {
-                layer.x = originalPos.x + finalDx;
-                layer.y = originalPos.y + finalDy;
-            }
-        });
-        this.render();
-    }
-
-    resizeLayerFromHandle(worldCoords, isShiftPressed) {
-        const layer = this.interaction.transformingLayer;
-        if (!layer) return;
-
-        let mouseX = worldCoords.x;
-        let mouseY = worldCoords.y;
-
-        if (this.interaction.isCtrlPressed) {
-            const snapThreshold = 10 / this.viewport.zoom;
-            const snappedMouseX = this.snapToGrid(mouseX);
-            if (Math.abs(mouseX - snappedMouseX) < snapThreshold) mouseX = snappedMouseX;
-            const snappedMouseY = this.snapToGrid(mouseY);
-            if (Math.abs(mouseY - snappedMouseY) < snapThreshold) mouseY = snappedMouseY;
-        }
-
-        const o = this.interaction.transformOrigin;
-        const handle = this.interaction.resizeHandle;
-        const anchor = this.interaction.resizeAnchor;
-
-        const rad = o.rotation * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-
-        const vecX = mouseX - anchor.x;
-        const vecY = mouseY - anchor.y;
-
-        let newWidth = vecX * cos + vecY * sin;
-        let newHeight = vecY * cos - vecX * sin;
-
-        if (isShiftPressed) {
-            const originalAspectRatio = o.width / o.height;
-            const newAspectRatio = Math.abs(newWidth / newHeight);
-
-            if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
-                newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
-            } else {
-                newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
-            }
-        }
-
-
-        let signX = handle.includes('e') ? 1 : (handle.includes('w') ? -1 : 0);
-        let signY = handle.includes('s') ? 1 : (handle.includes('n') ? -1 : 0);
-
-        newWidth *= signX;
-        newHeight *= signY;
-
-        if (signX === 0) newWidth = o.width;
-        if (signY === 0) newHeight = o.height;
-
-        if (newWidth < 10) newWidth = 10;
-        if (newHeight < 10) newHeight = 10;
-
-        layer.width = newWidth;
-        layer.height = newHeight;
-
-        const deltaW = newWidth - o.width;
-        const deltaH = newHeight - o.height;
-
-        const shiftX = (deltaW / 2) * signX;
-        const shiftY = (deltaH / 2) * signY;
-
-        const worldShiftX = shiftX * cos - shiftY * sin;
-        const worldShiftY = shiftX * sin + shiftY * cos;
-
-        const newCenterX = o.centerX + worldShiftX;
-        const newCenterY = o.centerY + worldShiftY;
-
-        layer.x = newCenterX - layer.width / 2;
-        layer.y = newCenterY - layer.height / 2;
-        this.render();
-    }
-
-
-    rotateLayerFromHandle(worldCoords, isShiftPressed) {
-        const layer = this.interaction.transformingLayer;
-        if (!layer) return;
-
-        const o = this.interaction.transformOrigin;
-        const startAngle = Math.atan2(this.interaction.dragStart.y - o.centerY, this.interaction.dragStart.x - o.centerX);
-        const currentAngle = Math.atan2(worldCoords.y - o.centerY, worldCoords.x - o.centerX);
-        let angleDiff = (currentAngle - startAngle) * 180 / Math.PI;
-        let newRotation = o.rotation + angleDiff;
-
-        if (isShiftPressed) {
-            newRotation = Math.round(newRotation / 15) * 15;
-        }
-
-        layer.rotation = newRotation;
-        this.render();
-    }
-
-    updateCanvasResize(worldCoords) {
-        const snappedMouseX = this.snapToGrid(worldCoords.x);
-        const snappedMouseY = this.snapToGrid(worldCoords.y);
-        const start = this.interaction.canvasResizeStart;
-
-        this.interaction.canvasResizeRect.x = Math.min(snappedMouseX, start.x);
-        this.interaction.canvasResizeRect.y = Math.min(snappedMouseY, start.y);
-        this.interaction.canvasResizeRect.width = Math.abs(snappedMouseX - start.x);
-        this.interaction.canvasResizeRect.height = Math.abs(snappedMouseY - start.y);
-        this.render();
-    }
-
-    finalizeCanvasResize() {
-        if (this.interaction.canvasResizeRect && this.interaction.canvasResizeRect.width > 1 && this.interaction.canvasResizeRect.height > 1) {
-            const newWidth = Math.round(this.interaction.canvasResizeRect.width);
-            const newHeight = Math.round(this.interaction.canvasResizeRect.height);
-            const rectX = this.interaction.canvasResizeRect.x;
-            const rectY = this.interaction.canvasResizeRect.y;
-
-            this.updateCanvasSize(newWidth, newHeight);
-
-            this.layers.forEach(layer => {
-                layer.x -= rectX;
-                layer.y -= rectY;
-            });
-
-            this.viewport.x -= rectX;
-            this.viewport.y -= rectY;
-        }
-    }
+    // Wszystkie metody interakcji zostały przeniesione do CanvasInteractions
+    // Pozostawiamy tylko metody pomocnicze używane przez CanvasInteractions
 
 
     isRotationHandle(x, y) {
