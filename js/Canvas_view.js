@@ -1,6 +1,7 @@
 import {app} from "../../scripts/app.js";
 import {api} from "../../scripts/api.js";
 import {$el} from "../../scripts/ui.js";
+
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates} from "./db.js";
 
@@ -597,66 +598,6 @@ async function createCanvasWidget(node, widget, app) {
                     onclick: () => canvas.redo()
                 }),
             ]),
-
-            $el("div.painter-separator"),
-
-            // --- Group: Tools & History ---
-            $el("div.painter-button-group", {}, [
-                $el("button.painter-button.requires-selection.matting-button", {
-                    textContent: "Matting",
-                    onclick: async (e) => {
-                        const button = e.target.closest('.matting-button');
-                        if (button.classList.contains('loading')) return;
-                        const spinner = $el("div.matting-spinner");
-                        button.appendChild(spinner);
-                        button.classList.add('loading');
-
-                        try {
-                            if (canvas.selectedLayers.length !== 1) throw new Error("Please select exactly one image layer for matting.");
-
-                            const selectedLayer = canvas.selectedLayers[0];
-                            const imageData = await canvas.getLayerImageData(selectedLayer);
-                            const response = await fetch("/matting", {
-                                method: "POST",
-                                headers: {"Content-Type": "application/json"},
-                                body: JSON.stringify({image: imageData})
-                            });
-                            if (!response.ok) throw new Error(`Server error: ${response.status} - ${response.statusText}`);
-
-                            const result = await response.json();
-                            const mattedImage = new Image();
-                            mattedImage.src = result.matted_image;
-                            await mattedImage.decode();
-                            const newLayer = {...selectedLayer, image: mattedImage, zIndex: canvas.layers.length};
-                            canvas.layers.push(newLayer);
-                            canvas.updateSelection([newLayer]);
-                            canvas.render();
-                            canvas.saveState();
-                            await canvas.saveToServer(widget.value);
-                            app.graph.runStep();
-                        } catch (error) {
-                            console.error("Matting error:", error);
-                            alert(`Error during matting process: ${error.message}`);
-                        } finally {
-                            button.classList.remove('loading');
-                            button.removeChild(spinner);
-                        }
-                    }
-                }),
-                $el("button.painter-button", {
-                    id: `undo-button-${node.id}`,
-                    textContent: "Undo",
-                    disabled: true,
-                    onclick: () => canvas.undo()
-                }),
-                $el("button.painter-button", {
-                    id: `redo-button-${node.id}`,
-                    textContent: "Redo",
-                    disabled: true,
-                    onclick: () => canvas.redo()
-                }),
-            ]),
-
             $el("div.painter-separator"),
 
             // --- Group: Masking ---
