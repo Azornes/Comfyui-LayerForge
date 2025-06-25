@@ -29,7 +29,7 @@ function openDB() {
             console.log("Upgrading IndexedDB...");
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                db.createObjectStore(STORE_NAME, {keyPath: 'id'});
                 console.log("Object store created:", STORE_NAME);
             }
         };
@@ -62,7 +62,7 @@ export async function setCanvasState(id, state) {
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
-        const request = store.put({ id, state });
+        const request = store.put({id, state});
 
         request.onerror = (event) => {
             console.error("DB: Error setting canvas state:", event.target.error);

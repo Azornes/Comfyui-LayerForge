@@ -1,5 +1,5 @@
-import { getCanvasState, setCanvasState, removeCanvasState } from "./db.js";
-import { MaskTool } from "./Mask_tool.js";
+import {getCanvasState, setCanvasState, removeCanvasState} from "./db.js";
+import {MaskTool} from "./Mask_tool.js";
 
 export class Canvas {
     constructor(node, widget) {
@@ -103,8 +103,8 @@ export class Canvas {
 
             this.width = savedState.width || 512;
             this.height = savedState.height || 512;
-            this.viewport = savedState.viewport || { x: -(this.width / 4), y: -(this.height / 4), zoom: 0.8 };
-            
+            this.viewport = savedState.viewport || {x: -(this.width / 4), y: -(this.height / 4), zoom: 0.8};
+
             this.updateCanvasSize(this.width, this.height, false);
             console.log(`Canvas resized to ${this.width}x${this.height} and viewport set.`);
 
@@ -115,7 +115,7 @@ export class Canvas {
                         const img = new Image();
                         img.onload = () => {
                             console.log(`Layer ${index}: Image loaded successfully.`);
-                            const newLayer = { ...layerData, image: img };
+                            const newLayer = {...layerData, image: img};
                             delete newLayer.imageSrc;
                             resolve(newLayer);
                         };
@@ -126,7 +126,7 @@ export class Canvas {
                         img.src = layerData.imageSrc;
                     } else {
                         console.log(`Layer ${index}: No imageSrc found, resolving layer data.`);
-                        resolve({ ...layerData });
+                        resolve({...layerData});
                     }
                 });
             });
@@ -134,7 +134,7 @@ export class Canvas {
             const loadedLayers = await Promise.all(imagePromises);
             this.layers = loadedLayers.filter(l => l !== null);
             console.log(`Loaded ${this.layers.length} layers.`);
-            
+
             this.updateSelectionAfterHistory();
             this.render();
             console.log("Canvas state loaded successfully from localStorage for node", this.node.id);
@@ -156,7 +156,7 @@ export class Canvas {
         try {
             const state = {
                 layers: this.layers.map((layer, index) => {
-                    const newLayer = { ...layer };
+                    const newLayer = {...layer};
                     if (layer.image instanceof HTMLImageElement) {
                         console.log(`Layer ${index}: Serializing image to data:URL.`);
                         newLayer.imageSrc = layer.image.src;
@@ -189,7 +189,7 @@ export class Canvas {
 
     cloneLayers(layers) {
         return layers.map(layer => {
-            const newLayer = { ...layer };
+            const newLayer = {...layer};
             // Obiekty Image nie są klonowane, aby oszczędzać pamięć.
             // Zakładamy, że same dane obrazu się nie zmieniają.
             return newLayer;
@@ -198,7 +198,7 @@ export class Canvas {
 
     getStateSignature(layers) {
         return JSON.stringify(layers.map(layer => {
-            const sig = { ...layer };
+            const sig = {...layer};
             if (sig.image instanceof HTMLImageElement) {
                 sig.imageSrc = sig.image.src;
             }
@@ -251,13 +251,13 @@ export class Canvas {
         this.render();
         this.updateHistoryButtons();
     }
-    
+
     updateSelectionAfterHistory() {
         const newSelectedLayers = [];
         if (this.selectedLayers) {
             this.selectedLayers.forEach(sl => {
                 const found = this.layers.find(l => l.id === sl.id);
-                if(found) newSelectedLayers.push(found);
+                if (found) newSelectedLayers.push(found);
             });
         }
         this.updateSelection(newSelectedLayers);
@@ -713,7 +713,7 @@ export class Canvas {
                 return;
             }
         }
-        
+
         if (this.selectedLayer) {
             if (e.key === 'Delete') {
                 e.preventDefault();
@@ -986,9 +986,9 @@ export class Canvas {
             const newAspectRatio = Math.abs(newWidth / newHeight);
 
             if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
-                 newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
+                newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
             } else {
-                 newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
+                newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
             }
         }
 

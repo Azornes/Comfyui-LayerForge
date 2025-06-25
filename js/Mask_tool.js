@@ -68,11 +68,11 @@ export class MaskTool {
         if (!this.lastPosition) {
             this.lastPosition = worldCoords;
         }
-        
+
         this.maskCtx.beginPath();
         this.maskCtx.moveTo(this.lastPosition.x, this.lastPosition.y);
         this.maskCtx.lineTo(worldCoords.x, worldCoords.y);
-        
+
         // Utwórz gradient radialny dla miękkości pędzla
         const gradientRadius = this.brushSize / 2;
         const softnessFactor = this.brushSoftness * gradientRadius;
@@ -82,16 +82,16 @@ export class MaskTool {
         );
         gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
         gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
-        
+
         this.maskCtx.strokeStyle = gradient;
         this.maskCtx.lineWidth = this.brushSize;
         this.maskCtx.lineCap = 'round';
         this.maskCtx.lineJoin = 'round';
-        
+
         this.maskCtx.globalCompositeOperation = 'source-over';
         this.maskCtx.stroke();
     }
-    
+
     clear() {
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
     }
@@ -131,7 +131,7 @@ export class MaskTool {
         return maskImage;
     }
 
-    resize(width, height){
+    resize(width, height) {
         const oldMask = this.maskCanvas;
         this.maskCanvas = document.createElement('canvas');
         this.maskCanvas.width = width;

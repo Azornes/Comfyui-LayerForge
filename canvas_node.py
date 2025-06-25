@@ -251,7 +251,8 @@ class CanvasNode:
 
             try:
                 # Wczytaj obraz bez maski
-                path_image_without_mask = folder_paths.get_annotated_filepath(canvas_image.replace('.png', '_without_mask.png'))
+                path_image_without_mask = folder_paths.get_annotated_filepath(
+                    canvas_image.replace('.png', '_without_mask.png'))
                 i = Image.open(path_image_without_mask)
                 i = ImageOps.exif_transpose(i)
                 if i.mode not in ['RGB', 'RGBA']:
