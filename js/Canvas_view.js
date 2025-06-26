@@ -8,17 +8,9 @@ import {ImageCache} from "./ImageCache.js";
 import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas, createImageFromSource} from "./ImageUtils.js";
 import {generateUniqueFileName} from "./CommonUtils.js";
 import {logger, LogLevel} from "./logger.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
-// Inicjalizacja loggera dla modułu Canvas_view
-const log = {
-    debug: (...args) => logger.debug('Canvas_view', ...args),
-    info: (...args) => logger.info('Canvas_view', ...args),
-    warn: (...args) => logger.warn('Canvas_view', ...args),
-    error: (...args) => logger.error('Canvas_view', ...args)
-};
-
-// Konfiguracja loggera dla modułu Canvas_view
-logger.setModuleLevel('Canvas_view', LogLevel.DEBUG); // Domyślnie INFO, można zmienić na DEBUG dla szczegółowych logów
+const log = createModuleLogger('Canvas_view');
 
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget);

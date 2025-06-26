@@ -2,17 +2,9 @@ import {saveImage, getImage, removeImage} from "./db.js";
 import {logger, LogLevel} from "./logger.js";
 import {createCanvas, normalizeToUint8} from "./CommonUtils.js";
 import {createImageFromSource} from "./ImageUtils.js";
+import {createModuleLogger} from "./LoggerUtils.js";
 
-// Inicjalizacja loggera dla modułu CanvasIO
-const log = {
-    debug: (...args) => logger.debug('CanvasIO', ...args),
-    info: (...args) => logger.info('CanvasIO', ...args),
-    warn: (...args) => logger.warn('CanvasIO', ...args),
-    error: (...args) => logger.error('CanvasIO', ...args)
-};
-
-// Konfiguracja loggera dla modułu CanvasIO
-logger.setModuleLevel('CanvasIO', LogLevel.DEBUG);
+const log = createModuleLogger('CanvasIO');
 
 export class CanvasIO {
     constructor(canvas) {
