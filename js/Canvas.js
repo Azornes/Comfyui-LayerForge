@@ -18,7 +18,7 @@ export class Canvas {
         this.widget = widget;
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.width = 1024;
+        this.width = 512;
         this.height = 512;
         this.layers = [];
         this.selectedLayer = null;
