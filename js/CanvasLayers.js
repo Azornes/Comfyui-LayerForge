@@ -1,8 +1,7 @@
-import {saveImage, getImage, removeImage} from "./db.js";
+import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld, createCanvas, generateUniqueFileName} from "./utils/CommonUtils.js";
-import {withErrorHandling, createValidationError, safeExecute} from "./ErrorHandler.js";
-import {createImageFromSource} from "./utils/ImageUtils.js";
+import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
+import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
@@ -610,14 +609,6 @@ export class CanvasLayers {
         if (modeElement) {
             modeElement.appendChild(slider);
         }
-    }
-
-    applyBlendMode(mode, opacity) {
-        this.currentLayer.style.mixBlendMode = mode;
-        this.currentLayer.style.opacity = opacity / 100;
-
-        this.selectedBlendMode = null;
-        this.isAdjustingOpacity = false;
     }
     async getFlattenedCanvasAsBlob() {
         return new Promise((resolve, reject) => {

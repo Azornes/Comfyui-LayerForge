@@ -372,8 +372,4 @@ export class Canvas {
     showOpacitySlider(mode) {
         return this.canvasLayers.showOpacitySlider(mode);
     }
-
-    applyBlendMode(mode, opacity) {
-        return this.canvasLayers.applyBlendMode(mode, opacity);
-    }
 }
