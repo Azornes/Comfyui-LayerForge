@@ -1,7 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {snapToGrid, getSnapAdjustment} from "./utils/CommonUtils.js";
-
-// Inicjalizacja loggera dla modułu CanvasInteractions
 const log = createModuleLogger('CanvasInteractions');
 
 export class CanvasInteractions {
@@ -59,7 +57,7 @@ export class CanvasInteractions {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
 
         if (this.canvas.maskTool.isActive) {
-            if (e.button === 1) { // Środkowy przycisk myszy (kółko)
+            if (e.button === 1) {
                 this.startPanning(e);
                 this.canvas.render();
                 return;
@@ -156,7 +154,6 @@ export class CanvasInteractions {
                 return;
             }
             this.canvas.maskTool.handleMouseUp();
-            // Nie wywołujemy saveState - to już jest obsługiwane w MaskTool
             this.canvas.render();
             return;
         }
@@ -266,8 +263,6 @@ export class CanvasInteractions {
             this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
         }
         this.canvas.render();
-        
-        // Nie zapisujemy stanu podczas scrollowania w trybie maski
         if (!this.canvas.maskTool.isActive) {
             this.canvas.saveState(true);
         }

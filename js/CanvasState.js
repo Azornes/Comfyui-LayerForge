@@ -2,14 +2,11 @@ import {getCanvasState, setCanvasState, removeCanvasState, saveImage, getImage, 
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce} from "./utils/CommonUtils.js";
 import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
-
-// Inicjalizacja loggera dla modułu CanvasState
 const log = createModuleLogger('CanvasState');
 
 export class CanvasState {
     constructor(canvas) {
         this.canvas = canvas;
-        // Osobne stosy dla trybu warstw i trybu maski
         this.layersUndoStack = [];
         this.layersRedoStack = [];
         this.maskUndoStack = [];
@@ -50,8 +47,6 @@ export class CanvasState {
             return false;
         }
         log.info("Found saved state in IndexedDB.");
-
-        // Przywróć wymiary canvas
         this.canvas.width = savedState.width || 512;
         this.canvas.height = savedState.height || 512;
         this.canvas.viewport = savedState.viewport || {
@@ -62,8 +57,6 @@ export class CanvasState {
 
         this.canvas.updateCanvasSize(this.canvas.width, this.canvas.height, false);
         log.debug(`Canvas resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
-
-        // Załaduj warstwy
         const loadedLayers = await this._loadLayers(savedState.layers);
         this.canvas.layers = loadedLayers.filter(l => l !== null);
         log.info(`Loaded ${this.canvas.layers.length} layers.`);
@@ -256,7 +249,6 @@ export class CanvasState {
     }
 
     saveState(replaceLast = false) {
-        // Sprawdź czy jesteśmy w trybie maski
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
             this.saveMaskState(replaceLast);
         } else {
@@ -285,8 +277,6 @@ export class CanvasState {
         }
         this.layersRedoStack = [];
         this.canvas.updateHistoryButtons();
-        
-        // Użyj debounce dla częstych zapisów
         this._debouncedSave = this._debouncedSave || debounce(() => this.saveStateToDB(), 500);
         this._debouncedSave();
     }
@@ -297,8 +287,6 @@ export class CanvasState {
         if (replaceLast && this.maskUndoStack.length > 0) {
             this.maskUndoStack.pop();
         }
-
-        // Klonuj aktualny stan maski
         const maskCanvas = this.canvas.maskTool.getMask();
         const clonedCanvas = document.createElement('canvas');
         clonedCanvas.width = maskCanvas.width;
@@ -316,7 +304,6 @@ export class CanvasState {
     }
 
     undo() {
-        // Sprawdź czy jesteśmy w trybie maski
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
             this.undoMaskState();
         } else {
@@ -325,7 +312,6 @@ export class CanvasState {
     }
 
     redo() {
-        // Sprawdź czy jesteśmy w trybie maski
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
             this.redoMaskState();
         } else {
@@ -364,13 +350,9 @@ export class CanvasState {
         
         if (this.maskUndoStack.length > 0) {
             const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
-            // Przywróć poprzedni stan maski
             const maskCanvas = this.canvas.maskTool.getMask();
             const maskCtx = maskCanvas.getContext('2d');
-            
-            // Wyczyść obecną maskę
             maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-            // Przywróć poprzedni stan
             maskCtx.drawImage(prevState, 0, 0);
             
             this.canvas.render();
@@ -384,14 +366,9 @@ export class CanvasState {
         
         const nextState = this.maskRedoStack.pop();
         this.maskUndoStack.push(nextState);
-        
-        // Przywróć następny stan maski
         const maskCanvas = this.canvas.maskTool.getMask();
         const maskCtx = maskCanvas.getContext('2d');
-        
-        // Wyczyść obecną maskę
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-        // Przywróć następny stan
         maskCtx.drawImage(nextState, 0, 0);
         
         this.canvas.render();
@@ -418,7 +395,6 @@ export class CanvasState {
      * @returns {Object} Informacje o historii
      */
     getHistoryInfo() {
-        // Zwraca dane historii w zależności od aktywnego trybu
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
             return {
                 undoCount: this.maskUndoStack.length,

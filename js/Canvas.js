@@ -8,8 +8,6 @@ import {CanvasIO} from "./CanvasIO.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./utils/CommonUtils.js";
 import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
-
-// Inicjalizacja loggera dla modułu Canvas
 const log = createModuleLogger('Canvas');
 
 export class Canvas {
@@ -31,7 +29,6 @@ export class Canvas {
             y: -(this.height / 4),
             zoom: 0.8,
         };
-        // Interaction state will be managed by CanvasInteractions module
 
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
@@ -48,19 +45,15 @@ export class Canvas {
         this.pendingDataCheck = null;
         this.maskTool = new MaskTool(this);
         this.initCanvas();
-        this.canvasState = new CanvasState(this); // Nowy moduł zarządzania stanem
-        this.canvasInteractions = new CanvasInteractions(this); // Nowy moduł obsługi interakcji
-        this.canvasLayers = new CanvasLayers(this); // Nowy moduł operacji na warstwach
-        this.canvasRenderer = new CanvasRenderer(this); // Nowy moduł renderowania
-        this.canvasIO = new CanvasIO(this); // Nowy moduł operacji I/O
-        
-        // Po utworzeniu CanvasInteractions, użyj jego interaction state
+        this.canvasState = new CanvasState(this);
+        this.canvasInteractions = new CanvasInteractions(this);
+        this.canvasLayers = new CanvasLayers(this);
+        this.canvasRenderer = new CanvasRenderer(this);
+        this.canvasIO = new CanvasIO(this);
         this.interaction = this.canvasInteractions.interaction;
         
         this.setupEventListeners();
         this.initNodeData();
-
-        // Przeniesione do CanvasLayers
         this.blendModes = this.canvasLayers.blendModes;
         this.selectedBlendMode = this.canvasLayers.selectedBlendMode;
         this.blendOpacity = this.canvasLayers.blendOpacity;
@@ -71,9 +64,7 @@ export class Canvas {
             opacity: 1
         }));
 
-        this.imageCache = new Map(); // Pamięć podręczna dla obrazów (imageId -> imageSrc)
-
-        // this.saveState(); // Wywołanie przeniesione do loadInitialState
+        this.imageCache = new Map();
     }
 
     async loadStateFromDB() {
@@ -91,7 +82,7 @@ export class Canvas {
             log.info("No saved state found, initializing from node data.");
             await this.initNodeData();
         }
-        this.saveState(); // Save initial state to undo stack
+        this.saveState();
     }
 
     saveState(replaceLast = false) {
@@ -119,7 +110,6 @@ export class Canvas {
 
     updateHistoryButtons() {
         if (this.onHistoryChange) {
-            // Pobierz informacje o historii odpowiednią dla aktualnego trybu
             const historyInfo = this.canvasState.getHistoryInfo();
             this.onHistoryChange({
                 canUndo: historyInfo.canUndo,
@@ -153,12 +143,6 @@ export class Canvas {
             this.onSelectionChange();
         }
     }
-
-
-    // Interaction methods moved to CanvasInteractions module
-
-
-    // Delegacja metod operacji na warstwach do CanvasLayers
     async copySelectedLayers() {
         return this.canvasLayers.copySelectedLayers();
     }
@@ -173,40 +157,31 @@ export class Canvas {
 
 
     handleMouseMove(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleMouseMove(e);
     }
 
 
     handleMouseUp(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleMouseUp(e);
     }
 
 
     handleMouseLeave(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleMouseLeave(e);
     }
 
 
     handleWheel(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleWheel(e);
     }
 
     handleKeyDown(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleKeyDown(e);
     }
 
     handleKeyUp(e) {
-        // Deleguj do CanvasInteractions
         this.canvasInteractions.handleKeyUp(e);
     }
-
-    // Wszystkie metody interakcji zostały przeniesione do CanvasInteractions
-    // Pozostawiamy tylko metody pomocnicze używane przez CanvasInteractions
 
 
     isRotationHandle(x, y) {
@@ -226,11 +201,10 @@ export class Canvas {
         if (index >= 0 && index < this.layers.length) {
             const layer = this.layers[index];
             if (layer.imageId) {
-                // Usuń obraz z IndexedDB, jeśli nie jest używany przez inne warstwy
                 const isImageUsedElsewhere = this.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
                 if (!isImageUsedElsewhere) {
                     await removeImage(layer.imageId);
-                    this.imageCache.delete(layer.imageId); // Usuń z pamięci podręcznej
+                    this.imageCache.delete(layer.imageId);
                 }
             }
             this.layers.splice(index, 1);
@@ -286,8 +260,6 @@ export class Canvas {
     render() {
         this.canvasRenderer.render();
     }
-
-    // Rendering methods moved to CanvasRenderer
 
 
     getHandles(layer) {

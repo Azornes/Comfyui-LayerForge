@@ -115,7 +115,6 @@ export function localToWorld(localX, localY, layerProps) {
 export function cloneLayers(layers) {
     return layers.map(layer => {
         const newLayer = {...layer};
-        // Obiekty Image nie są klonowane, aby oszczędzać pamięć
         return newLayer;
     });
 }

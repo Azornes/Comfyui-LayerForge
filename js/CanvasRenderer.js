@@ -1,6 +1,4 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-
-// Inicjalizacja loggera dla modułu CanvasRenderer
 const log = createModuleLogger('CanvasRenderer');
 
 export class CanvasRenderer {
@@ -83,21 +81,15 @@ export class CanvasRenderer {
         });
 
         this.drawCanvasOutline(ctx);
-
-        // Renderowanie maski w zależności od trybu
         const maskImage = this.canvas.maskTool.getMask();
         if (this.canvas.maskTool.isActive) {
-            // W trybie maski pokazuj maskę z przezroczystością 0.5
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = 0.5;
-            // Rysuj maskę w pozycji (0,0) - będzie dopasowana do obszaru canvasu
             ctx.drawImage(maskImage, 0, 0);
             ctx.globalAlpha = 1.0;
         } else if (maskImage) {
-            // W trybie warstw pokazuj maskę jako widoczną, ale nieedytowalną
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = 1.0;
-            // Rysuj maskę w pozycji (0,0) - będzie dopasowana do obszaru canvasu
             ctx.drawImage(maskImage, 0, 0);
             ctx.globalAlpha = 1.0;
         }

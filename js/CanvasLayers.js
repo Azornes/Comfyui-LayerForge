@@ -3,8 +3,6 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld, createCanvas, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError, safeExecute} from "./ErrorHandler.js";
 import {createImageFromSource} from "./utils/ImageUtils.js";
-
-// Inicjalizacja loggera dla modułu CanvasLayers
 const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
@@ -29,9 +27,6 @@ export class CanvasLayers {
         this.isAdjustingOpacity = false;
         this.internalClipboard = [];
     }
-
-
-    // Operacje na warstwach
     async copySelectedLayers() {
         if (this.canvas.selectedLayers.length === 0) return;
         this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
@@ -118,8 +113,6 @@ export class CanvasLayers {
         }
 
         log.debug("Adding layer with image:", image);
-
-        // Wygeneruj unikalny identyfikator dla obrazu i zapisz go do IndexedDB
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
         this.canvas.imageCache.set(imageId, image.src);
@@ -155,11 +148,10 @@ export class CanvasLayers {
         if (index >= 0 && index < this.canvas.layers.length) {
             const layer = this.canvas.layers[index];
             if (layer.imageId) {
-                // Usuń obraz z IndexedDB, jeśli nie jest używany przez inne warstwy
                 const isImageUsedElsewhere = this.canvas.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
                 if (!isImageUsedElsewhere) {
                     await removeImage(layer.imageId);
-                    this.canvas.imageCache.delete(layer.imageId); // Usuń z pamięci podręcznej
+                    this.canvas.imageCache.delete(layer.imageId);
                 }
             }
             this.canvas.layers.splice(index, 1);
@@ -383,8 +375,6 @@ export class CanvasLayers {
         this.canvas.selectedLayer = layer;
         this.canvas.render();
     }
-
-    // Funkcje pomocnicze dla transformacji warstw
     isRotationHandle(x, y) {
         if (!this.canvas.selectedLayer) return false;
 
@@ -470,9 +460,6 @@ export class CanvasLayers {
         }
         return null;
     }
-
-
-    // Funkcje związane z blend mode i opacity
     showBlendModeMenu(x, y) {
         const existingMenu = document.getElementById('blend-mode-menu');
         if (existingMenu) {
@@ -554,8 +541,6 @@ export class CanvasLayers {
                 if (this.canvas.selectedLayer) {
                     this.canvas.selectedLayer.opacity = slider.value / 100;
                     this.canvas.render();
-
-                    // Funkcja fallback do zapisu
                     const saveWithFallback = async (fileName) => {
                         try {
                             const uniqueFileName = generateUniqueFileName(fileName, this.canvas.node.id);
@@ -634,8 +619,6 @@ export class CanvasLayers {
         this.selectedBlendMode = null;
         this.isAdjustingOpacity = false;
     }
-
-    // Funkcje do generowania blob z canvasu
     async getFlattenedCanvasAsBlob() {
         return new Promise((resolve, reject) => {
             const tempCanvas = document.createElement('canvas');
@@ -675,8 +658,6 @@ export class CanvasLayers {
             }, 'image/png');
         });
     }
-
-    // Funkcja do generowania blob z zaznaczonych warstw
     async getFlattenedSelectionAsBlob() {
         if (this.canvas.selectedLayers.length === 0) {
             return null;

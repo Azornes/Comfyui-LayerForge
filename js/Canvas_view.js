@@ -340,7 +340,6 @@ async function createCanvasWidget(node, widget, app) {
                 canvasContainer.style.top = (controlsHeight + 10) + "px";
             }
         }, [
-            // --- Group: Help & I/O ---
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
                     id: `open-editor-btn-${node.id}`,
@@ -407,8 +406,6 @@ async function createCanvasWidget(node, widget, app) {
             ]),
 
             $el("div.painter-separator"),
-
-            // --- Group: Canvas & Layers ---
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
                     textContent: "Canvas Size",
@@ -520,8 +517,6 @@ async function createCanvasWidget(node, widget, app) {
             ]),
 
             $el("div.painter-separator"),
-
-            // --- Group: Transform ---
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
@@ -546,8 +541,6 @@ async function createCanvasWidget(node, widget, app) {
             ]),
 
             $el("div.painter-separator"),
-
-            // --- Group: Tools & History ---
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button.requires-selection.matting-button", {
                     textContent: "Matting",
@@ -577,13 +570,8 @@ async function createCanvasWidget(node, widget, app) {
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
-
-                            // Zastąp starą warstwę nową warstwą z obrazem bez tła
                             const newLayer = {...selectedLayer, image: mattedImage};
-                            // Usuń starą imageId, aby wymusić zapisanie nowego obrazu
                             delete newLayer.imageId;
-                            
-                            // Zastąp warstwę w tablicy zamiast dodawać nową
                             canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.updateSelection([newLayer]);
                             canvas.render();
@@ -613,8 +601,6 @@ async function createCanvasWidget(node, widget, app) {
                 }),
             ]),
             $el("div.painter-separator"),
-
-            // --- Group: Masking ---
             $el("div.painter-button-group", {id: "mask-controls"}, [
                 $el("button.painter-button", {
                     id: "mask-mode-btn",
@@ -682,8 +668,6 @@ async function createCanvasWidget(node, widget, app) {
             ]),
 
             $el("div.painter-separator"),
-
-            // --- Group: Cache ---
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
                     textContent: "Clear Cache",
@@ -742,7 +726,6 @@ async function createCanvasWidget(node, widget, app) {
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
-        // Użyj funkcji fallback do zapisu
         await saveWithFallback(widget.value);
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         app.graph.runStep();
@@ -917,13 +900,9 @@ async function createCanvasWidget(node, widget, app) {
             node.onResize();
         }
     };
-
-    // Globalna mapa do śledzenia wykonania dla każdego node-a
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-    
-    // Funkcja fallback w przypadku problemów z unikalną nazwą
     const saveWithFallback = async (fileName) => {
         try {
             const uniqueFileName = generateUniqueFileName(fileName, node.id);
@@ -936,7 +915,6 @@ async function createCanvasWidget(node, widget, app) {
     };
     
     api.addEventListener("execution_start", async (event) => {
-        // Sprawdź czy event dotyczy tego konkretnego node-a
         const executionData = event.detail || {};
         const currentPromptId = executionData.prompt_id;
         
@@ -944,23 +922,16 @@ async function createCanvasWidget(node, widget, app) {
         log.debug(`Widget value: ${widget.value}`);
         log.debug(`Node inputs: ${node.inputs?.length || 0}`);
         log.debug(`Canvas layers count: ${canvas.layers.length}`);
-        
-        // Sprawdź czy już trwa wykonanie dla tego node-a
         if (window.canvasExecutionStates.get(node.id)) {
             log.warn(`Execution already in progress for node ${node.id}, skipping...`);
             return;
         }
-        
-        // Ustaw flagę wykonania dla tego node-a
         window.canvasExecutionStates.set(node.id, true);
         
         try {
-            // Sprawdź czy canvas ma jakiekolwiek warstwy przed zapisem
             if (canvas.layers.length === 0) {
                 log.warn(`Node ${node.id} has no layers, skipping save to server`);
-                // Nie zapisuj pustego canvas-a, ale nadal przetwórz dane wejściowe
             } else {
-                // Użyj funkcji fallback do zapisu tylko jeśli są warstwy
                 await saveWithFallback(widget.value);
                 log.info(`Canvas saved to server for node ${node.id}`);
             }
@@ -979,7 +950,6 @@ async function createCanvasWidget(node, widget, app) {
         } catch (error) {
             log.error(`Error during execution for node ${node.id}:`, error);
         } finally {
-            // Zwolnij flagę wykonania dla tego node-a
             window.canvasExecutionStates.set(node.id, false);
             log.debug(`Execution completed for node ${node.id}, flag released`);
         }
@@ -1029,8 +999,6 @@ app.registerExtension({
                 if (tooltip) {
                     tooltip.remove();
                 }
-
-                // If modal is open when node is removed, ensure it's cleaned up
                 const backdrop = document.querySelector('.painter-modal-backdrop');
                 if (backdrop && backdrop.contains(this.canvasWidget.canvas)) {
                     document.body.removeChild(backdrop);
