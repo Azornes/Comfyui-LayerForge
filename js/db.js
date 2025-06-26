@@ -1,12 +1,10 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-
-// Inicjalizacja loggera dla modułu db
 const log = createModuleLogger('db');
 
 const DB_NAME = 'CanvasNodeDB';
 const STATE_STORE_NAME = 'CanvasState';
 const IMAGE_STORE_NAME = 'CanvasImages';
-const DB_VERSION = 2; // Zwiększono wersję, aby wymusić aktualizację schematu
+const DB_VERSION = 2;
 
 let db;
 
@@ -21,8 +19,6 @@ let db;
 function createDBRequest(store, operation, data, errorMessage) {
     return new Promise((resolve, reject) => {
         let request;
-        
-        // Wybierz odpowiednią operację
         switch (operation) {
             case 'get':
                 request = store.get(data);

@@ -8,8 +8,6 @@
  * - Możliwość zapisywania logów do localStorage
  * - Możliwość eksportu logów
  */
-
-// Poziomy logowania
 export const LogLevel = {
     DEBUG: 0,
     INFO: 1,
@@ -17,27 +15,21 @@ export const LogLevel = {
     ERROR: 3,
     NONE: 4
 };
-
-// Konfiguracja domyślna
 const DEFAULT_CONFIG = {
-    globalLevel: LogLevel.INFO,  // Domyślny poziom logowania
-    moduleSettings: {},          // Ustawienia per moduł
-    useColors: true,             // Kolorowe logi w konsoli
-    saveToStorage: false,        // Zapisywanie logów do localStorage
-    maxStoredLogs: 1000,         // Maksymalna liczba przechowywanych logów
-    timestampFormat: 'HH:mm:ss', // Format znacznika czasu
-    storageKey: 'layerforge_logs' // Klucz localStorage
+    globalLevel: LogLevel.INFO,
+    moduleSettings: {},
+    useColors: true,
+    saveToStorage: false,
+    maxStoredLogs: 1000,
+    timestampFormat: 'HH:mm:ss',
+    storageKey: 'layerforge_logs'
 };
-
-// Kolory dla różnych poziomów logowania
 const COLORS = {
-    [LogLevel.DEBUG]: '#9e9e9e', // Szary
-    [LogLevel.INFO]: '#2196f3',  // Niebieski
-    [LogLevel.WARN]: '#ff9800',  // Pomarańczowy
-    [LogLevel.ERROR]: '#f44336', // Czerwony
+    [LogLevel.DEBUG]: '#9e9e9e',
+    [LogLevel.INFO]: '#2196f3',
+    [LogLevel.WARN]: '#ff9800',
+    [LogLevel.ERROR]: '#f44336',
 };
-
-// Nazwy poziomów logowania
 const LEVEL_NAMES = {
     [LogLevel.DEBUG]: 'DEBUG',
     [LogLevel.INFO]: 'INFO',
@@ -50,8 +42,6 @@ class Logger {
         this.config = { ...DEFAULT_CONFIG };
         this.logs = [];
         this.enabled = true;
-        
-        // Załaduj konfigurację z localStorage, jeśli istnieje
         this.loadConfig();
     }
 
@@ -103,13 +93,9 @@ class Logger {
      */
     isLevelEnabled(module, level) {
         if (!this.enabled) return false;
-        
-        // Sprawdź ustawienia modułu, jeśli istnieją
         if (this.config.moduleSettings[module] !== undefined) {
             return level >= this.config.moduleSettings[module];
         }
-        
-        // W przeciwnym razie użyj globalnego poziomu
         return level >= this.config.globalLevel;
     }
 
@@ -120,8 +106,6 @@ class Logger {
     formatTimestamp() {
         const now = new Date();
         const format = this.config.timestampFormat;
-        
-        // Prosty formatter - można rozszerzyć o więcej opcji
         return format
             .replace('HH', String(now.getHours()).padStart(2, '0'))
             .replace('mm', String(now.getMinutes()).padStart(2, '0'))
@@ -140,8 +124,6 @@ class Logger {
 
         const timestamp = this.formatTimestamp();
         const levelName = LEVEL_NAMES[level];
-        
-        // Przygotuj dane logu
         const logData = {
             timestamp,
             module,
@@ -150,21 +132,13 @@ class Logger {
             args,
             time: new Date()
         };
-        
-        // Dodaj do pamięci, jeśli zapisywanie jest włączone
         if (this.config.saveToStorage) {
             this.logs.push(logData);
-            
-            // Ogranicz liczbę przechowywanych logów
             if (this.logs.length > this.config.maxStoredLogs) {
                 this.logs.shift();
             }
-            
-            // Zapisz do localStorage
             this.saveLogs();
         }
-        
-        // Wyświetl w konsoli
         this.printToConsole(logData);
     }
 
@@ -174,18 +148,12 @@ class Logger {
      */
     printToConsole(logData) {
         const { timestamp, module, level, levelName, args } = logData;
-        
-        // Przygotuj prefix logu
         const prefix = `[${timestamp}] [${module}] [${levelName}]`;
-        
-        // Użyj kolorów, jeśli są włączone
         if (this.config.useColors && typeof console.log === 'function') {
             const color = COLORS[level] || '#000000';
             console.log(`%c${prefix}`, `color: ${color}; font-weight: bold;`, ...args);
             return;
         }
-        
-        // Fallback bez kolorów
         console.log(prefix, ...args);
     }
 
@@ -195,13 +163,11 @@ class Logger {
     saveLogs() {
         if (typeof localStorage !== 'undefined' && this.config.saveToStorage) {
             try {
-                // Zapisz tylko niezbędne informacje
                 const simplifiedLogs = this.logs.map(log => ({
                     t: log.timestamp,
                     m: log.module,
                     l: log.level,
                     a: log.args.map(arg => {
-                        // Konwertuj obiekty na stringi
                         if (typeof arg === 'object') {
                             try {
                                 return JSON.stringify(arg);
@@ -295,15 +261,12 @@ class Logger {
             mimeType = 'application/json';
             extension = 'json';
         } else {
-            // Format tekstowy
             content = this.logs.map(log => 
                 `[${log.timestamp}] [${log.module}] [${log.levelName}] ${log.args.join(' ')}`
             ).join('\n');
             mimeType = 'text/plain';
             extension = 'txt';
         }
-        
-        // Utwórz link do pobrania
         const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -314,8 +277,6 @@ class Logger {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-
-    // Metody pomocnicze dla różnych poziomów logowania
     
     /**
      * Log na poziomie DEBUG
@@ -353,17 +314,11 @@ class Logger {
         this.log(module, LogLevel.ERROR, ...args);
     }
 }
-
-// Eksportuj singleton
 export const logger = new Logger();
-
-// Eksportuj funkcje pomocnicze
 export const debug = (module, ...args) => logger.debug(module, ...args);
 export const info = (module, ...args) => logger.info(module, ...args);
 export const warn = (module, ...args) => logger.warn(module, ...args);
 export const error = (module, ...args) => logger.error(module, ...args);
-
-// Dodaj do window dla łatwego dostępu z konsoli
 if (typeof window !== 'undefined') {
     window.LayerForgeLogger = logger;
 }

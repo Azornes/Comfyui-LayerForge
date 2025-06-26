@@ -32,8 +32,6 @@ export class AppError extends Error {
         this.details = details;
         this.originalError = originalError;
         this.timestamp = new Date().toISOString();
-        
-        // Zachowaj stack trace
         if (Error.captureStackTrace) {
             Error.captureStackTrace(this, AppError);
         }
@@ -59,14 +57,8 @@ export class ErrorHandler {
      */
     handle(error, context = 'Unknown', additionalInfo = {}) {
         const normalizedError = this.normalizeError(error, context, additionalInfo);
-        
-        // Loguj błąd
         this.logError(normalizedError, context);
-        
-        // Zapisz w historii
         this.recordError(normalizedError);
-        
-        // Zwiększ licznik
         this.incrementErrorCount(normalizedError.type);
         
         return normalizedError;
@@ -117,38 +109,26 @@ export class ErrorHandler {
      */
     categorizeError(error, context) {
         const message = error.message.toLowerCase();
-        
-        // Błędy sieciowe
         if (message.includes('fetch') || message.includes('network') || 
             message.includes('connection') || message.includes('timeout')) {
             return ErrorTypes.NETWORK;
         }
-        
-        // Błędy plików
         if (message.includes('file') || message.includes('read') || 
             message.includes('write') || message.includes('path')) {
             return ErrorTypes.FILE_IO;
         }
-        
-        // Błędy walidacji
         if (message.includes('invalid') || message.includes('required') || 
             message.includes('validation') || message.includes('format')) {
             return ErrorTypes.VALIDATION;
         }
-        
-        // Błędy przetwarzania obrazów
         if (message.includes('image') || message.includes('canvas') || 
             message.includes('blob') || message.includes('tensor')) {
             return ErrorTypes.IMAGE_PROCESSING;
         }
-        
-        // Błędy stanu
         if (message.includes('state') || message.includes('cache') || 
             message.includes('storage')) {
             return ErrorTypes.STATE_MANAGEMENT;
         }
-        
-        // Na podstawie kontekstu
         if (context.toLowerCase().includes('canvas')) {
             return ErrorTypes.CANVAS;
         }
@@ -169,8 +149,6 @@ export class ErrorHandler {
             details: error.details,
             stack: error.stack
         };
-        
-        // Różne poziomy logowania w zależności od typu błędu
         switch (error.type) {
             case ErrorTypes.VALIDATION:
             case ErrorTypes.USER_INPUT:
@@ -195,8 +173,6 @@ export class ErrorHandler {
             message: error.message,
             context: error.details?.context
         });
-        
-        // Ogranicz rozmiar historii
         if (this.errorHistory.length > this.maxHistorySize) {
             this.errorHistory.shift();
         }
@@ -248,8 +224,6 @@ export class ErrorHandler {
         log.info('Error history cleared');
     }
 }
-
-// Singleton instance
 const errorHandler = new ErrorHandler();
 
 /**
@@ -372,7 +346,5 @@ export async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 10
     
     throw errorHandler.handle(lastError, context, { attempts: maxRetries + 1 });
 }
-
-// Eksportuj singleton
 export { errorHandler };
 export default errorHandler;

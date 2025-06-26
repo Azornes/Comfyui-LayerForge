@@ -1,6 +1,4 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-
-// Inicjalizacja loggera dla modułu ImageCache
 const log = createModuleLogger('ImageCache');
 
 export class ImageCache {

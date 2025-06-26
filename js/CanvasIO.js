@@ -13,15 +13,12 @@ export class CanvasIO {
     }
 
     async saveToServer(fileName) {
-        // Globalna mapa do śledzenia zapisów dla wszystkich node-ów
         if (!window.canvasSaveStates) {
             window.canvasSaveStates = new Map();
         }
         
         const nodeId = this.canvas.node.id;
         const saveKey = `${nodeId}_${fileName}`;
-        
-        // Sprawdź czy już trwa zapis dla tego node-a i pliku
         if (this._saveInProgress || window.canvasSaveStates.get(saveKey)) {
             log.warn(`Save already in progress for node ${nodeId}, waiting...`);
             return this._saveInProgress || window.canvasSaveStates.get(saveKey);
@@ -30,8 +27,6 @@ export class CanvasIO {
         log.info(`Starting saveToServer with fileName: ${fileName} for node: ${nodeId}`);
         log.debug(`Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
         log.debug(`Number of layers: ${this.canvas.layers.length}`);
-        
-        // Utwórz Promise dla aktualnego zapisu
         this._saveInProgress = this._performSave(fileName);
         window.canvasSaveStates.set(saveKey, this._saveInProgress);
         
@@ -46,19 +41,13 @@ export class CanvasIO {
     }
 
     async _performSave(fileName) {
-        // Sprawdź czy są warstwy do zapisania
         if (this.canvas.layers.length === 0) {
             log.warn(`Node ${this.canvas.node.id} has no layers, creating empty canvas`);
-            // Zwróć sukces ale nie zapisuj pustego canvas-a na serwer
             return Promise.resolve(true);
         }
-
-        // Zapisz stan do IndexedDB przed zapisem na serwer
         await this.canvas.saveStateToDB(true);
-
-        // Dodaj krótkie opóźnienie dla różnych node-ów, aby uniknąć konfliktów
         const nodeId = this.canvas.node.id;
-        const delay = (nodeId % 10) * 50; // 0-450ms opóźnienia w zależności od ID node-a
+        const delay = (nodeId % 10) * 50;
         if (delay > 0) {
             await new Promise(resolve => setTimeout(resolve, delay));
         }
@@ -69,24 +58,16 @@ export class CanvasIO {
 
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-            // Tworzymy tymczasowy canvas do renderowania warstw i maski
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
             const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
-            
-            // Czarne tło (całkowicie przezroczyste w masce)
-            maskCtx.fillStyle = '#ffffff'; // Białe tło dla wolnych przestrzeni
+            maskCtx.fillStyle = '#ffffff';
             maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             
             log.debug(`Canvas contexts created, starting layer rendering`);
-
-            // Rysowanie warstw
             const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
             log.debug(`Processing ${sortedLayers.length} layers in order`);
-            
-            // Najpierw renderujemy wszystkie warstwy do głównego obrazu
             sortedLayers.forEach((layer, index) => {
                 log.debug(`Processing layer ${index}: zIndex=${layer.zIndex}, size=${layer.width}x${layer.height}, pos=(${layer.x},${layer.y})`);
                 log.debug(`Layer ${index}: blendMode=${layer.blendMode || 'normal'}, opacity=${layer.opacity !== undefined ? layer.opacity : 1}`);
@@ -100,58 +81,39 @@ export class CanvasIO {
                 tempCtx.restore();
                 
                 log.debug(`Layer ${index} rendered successfully`);
-
-                // Renderujemy również do canvas widoczności, aby śledzić, które piksele są widoczne
                 visibilityCtx.save();
                 visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 visibilityCtx.rotate(layer.rotation * Math.PI / 180);
                 visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 visibilityCtx.restore();
             });
-            
-            // Teraz tworzymy maskę na podstawie widoczności pikseli, zachowując stopień przezroczystości
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            
-            // Używamy wartości alpha do określenia stopnia przezroczystości w masce
             for (let i = 0; i < visibilityData.data.length; i += 4) {
                 const alpha = visibilityData.data[i + 3];
-                // Odwracamy wartość alpha (255 - alpha), aby zachować logikę maski:
-                // - Przezroczyste piksele w obrazie (alpha = 0) -> białe w masce (255)
-                // - Nieprzezroczyste piksele w obrazie (alpha = 255) -> czarne w masce (0)
-                // - Częściowo przezroczyste piksele zachowują proporcjonalną wartość
                 const maskValue = 255 - alpha;
                 maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
-                maskData.data[i + 3] = 255; // Maska zawsze ma pełną nieprzezroczystość
+                maskData.data[i + 3] = 255;
             }
             
             maskCtx.putImageData(maskData, 0, 0);
-
-            // Nałóż maskę z narzędzia MaskTool, uwzględniając przezroczystość pędzla
             const toolMaskCanvas = this.canvas.maskTool.getMask();
             if (toolMaskCanvas) {
-                // Utwórz tymczasowy canvas, aby zachować wartości alpha maski z MaskTool
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
                 const tempMaskCtx = tempMaskCanvas.getContext('2d');
                 tempMaskCtx.drawImage(toolMaskCanvas, 0, 0);
                 const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-
-                // Zachowaj wartości alpha, aby obszary narysowane pędzlem były nieprzezroczyste na masce
                 for (let i = 0; i < tempMaskData.data.length; i += 4) {
                     const alpha = tempMaskData.data[i + 3];
                     tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
-                    tempMaskData.data[i + 3] = alpha; // Zachowaj oryginalną przezroczystość pędzla
+                    tempMaskData.data[i + 3] = alpha;
                 }
                 tempMaskCtx.putImageData(tempMaskData, 0, 0);
-
-                // Nałóż maskę z MaskTool na maskę główną
-                maskCtx.globalCompositeOperation = 'source-over'; // Dodaje nieprzezroczystość tam, gdzie pędzel był użyty
+                maskCtx.globalCompositeOperation = 'source-over';
                 maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
-
-            // Zapisz obraz bez maski
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
             log.info(`Saving image without mask as: ${fileNameWithoutMask}`);
             
@@ -171,8 +133,6 @@ export class CanvasIO {
                     log.error(`Error uploading image without mask:`, error);
                 }
             }, "image/png");
-
-            // Zapisz obraz z maską
             log.info(`Saving main image as: ${fileName}`);
             tempCanvas.toBlob(async (blob) => {
                 log.debug(`Created blob for main image, size: ${blob.size} bytes`);
@@ -206,8 +166,6 @@ export class CanvasIO {
 
                                 if (maskResp.status === 200) {
                                     const data = await resp.json();
-                                    // Ustaw widget.value na rzeczywistą nazwę zapisanego pliku (unikalną)
-                                    // aby node zwracał właściwy plik
                                     this.canvas.widget.value = fileName;
                                     log.info(`All files saved successfully, widget value set to: ${fileName}`);
                                     resolve(true);

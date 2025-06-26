@@ -12,7 +12,6 @@ import {logger, LogLevel} from "../logger.js";
  * @returns {Object} Obiekt z metodami logowania
  */
 export function createModuleLogger(moduleName, level = LogLevel.DEBUG) {
-    // Konfiguracja loggera dla modułu
     logger.setModuleLevel(moduleName, level);
     
     return {
@@ -29,7 +28,6 @@ export function createModuleLogger(moduleName, level = LogLevel.DEBUG) {
  * @returns {Object} Obiekt z metodami logowania
  */
 export function createAutoLogger(level = LogLevel.DEBUG) {
-    // Próba automatycznego wykrycia nazwy modułu z stack trace
     const stack = new Error().stack;
     const match = stack.match(/\/([^\/]+)\.js/);
     const moduleName = match ? match[1] : 'Unknown';

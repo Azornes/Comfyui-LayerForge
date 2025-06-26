@@ -228,13 +228,13 @@ class Canvas {
         this.width = 512;
         this.height = 512;
     }
-    
+
     render() {
         log.debug(`Renderowanie canvas o wymiarach ${this.width}x${this.height}`);
         // Kod renderowania...
         log.info("Renderowanie zakończone");
     }
-    
+
     saveToServer(fileName) {
         log.info(`Zapisywanie do serwera: ${fileName}`);
         try {

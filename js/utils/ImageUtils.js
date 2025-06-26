@@ -1,7 +1,5 @@
 import {createModuleLogger} from "./LoggerUtils.js";
 import {withErrorHandling, createValidationError} from "../ErrorHandler.js";
-
-// Inicjalizacja loggera dla modułu ImageUtils
 const log = createModuleLogger('ImageUtils');
 
 export function validateImageData(data) {
@@ -181,9 +179,9 @@ export const imageToTensor = withErrorHandling(async function(image) {
     
     for (let i = 0; i < imageData.data.length; i += 4) {
         const pixelIndex = i / 4;
-        data[pixelIndex * 3] = imageData.data[i] / 255;     // R
-        data[pixelIndex * 3 + 1] = imageData.data[i + 1] / 255; // G
-        data[pixelIndex * 3 + 2] = imageData.data[i + 2] / 255; // B
+        data[pixelIndex * 3] = imageData.data[i] / 255;
+        data[pixelIndex * 3 + 1] = imageData.data[i + 1] / 255;
+        data[pixelIndex * 3 + 2] = imageData.data[i + 2] / 255;
     }
     
     return {
@@ -218,10 +216,10 @@ export const tensorToImage = withErrorHandling(async function(tensor) {
         const pixelIndex = i * 4;
         const tensorIndex = i * channels;
         
-        imageData.data[pixelIndex] = Math.round(data[tensorIndex] * 255);     // R
-        imageData.data[pixelIndex + 1] = Math.round(data[tensorIndex + 1] * 255); // G
-        imageData.data[pixelIndex + 2] = Math.round(data[tensorIndex + 2] * 255); // B
-        imageData.data[pixelIndex + 3] = 255; // A
+        imageData.data[pixelIndex] = Math.round(data[tensorIndex] * 255);
+        imageData.data[pixelIndex + 1] = Math.round(data[tensorIndex + 1] * 255);
+        imageData.data[pixelIndex + 2] = Math.round(data[tensorIndex + 2] * 255);
+        imageData.data[pixelIndex + 3] = 255;
     }
     
     ctx.putImageData(imageData, 0, 0);
@@ -251,16 +249,12 @@ export const resizeImage = withErrorHandling(async function(image, maxWidth, max
     
     const originalWidth = image.width || image.naturalWidth;
     const originalHeight = image.height || image.naturalHeight;
-    
-    // Oblicz nowe wymiary z zachowaniem proporcji
     const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
     const newWidth = Math.round(originalWidth * scale);
     const newHeight = Math.round(originalHeight * scale);
     
     canvas.width = newWidth;
     canvas.height = newHeight;
-    
-    // Użyj wysokiej jakości skalowania
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     
