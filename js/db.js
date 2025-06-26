@@ -4,7 +4,7 @@ const log = createModuleLogger('db');
 const DB_NAME = 'CanvasNodeDB';
 const STATE_STORE_NAME = 'CanvasState';
 const IMAGE_STORE_NAME = 'CanvasImages';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let db;
 
