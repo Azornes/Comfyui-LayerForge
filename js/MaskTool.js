@@ -23,8 +23,8 @@ export class MaskTool {
     }
 
     initMaskCanvas() {
-        this.maskCanvas.width = this.mainCanvas.width;
-        this.maskCanvas.height = this.mainCanvas.height;
+        this.maskCanvas.width = this.canvasInstance.width;
+        this.maskCanvas.height = this.canvasInstance.height;
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
     }
 
