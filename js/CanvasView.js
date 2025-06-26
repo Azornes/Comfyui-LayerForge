@@ -668,6 +668,27 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
+                    textContent: "Run GC",
+                    title: "Run Garbage Collection to clean unused images",
+                    style: {backgroundColor: "#4a7c59", borderColor: "#3a6c49"},
+                    onclick: async () => {
+                        try {
+                            const stats = canvas.getGarbageCollectionStats();
+                            log.info("GC Stats before cleanup:", stats);
+                            
+                            await canvas.runGarbageCollection();
+                            
+                            const newStats = canvas.getGarbageCollectionStats();
+                            log.info("GC Stats after cleanup:", newStats);
+                            
+                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}`);
+                        } catch (e) {
+                            log.error("Failed to run garbage collection:", e);
+                            alert("Error running garbage collection. Check the console for details.");
+                        }
+                    }
+                }),
+                $el("button.painter-button", {
                     textContent: "Clear Cache",
                     style: {backgroundColor: "#c54747", borderColor: "#a53737"},
                     onclick: async () => {
@@ -1000,6 +1021,11 @@ app.registerExtension({
                 const backdrop = document.querySelector('.painter-modal-backdrop');
                 if (backdrop && backdrop.contains(this.canvasWidget.canvas)) {
                     document.body.removeChild(backdrop);
+                }
+
+                // Cleanup canvas resources including garbage collection
+                if (this.canvasWidget && this.canvasWidget.destroy) {
+                    this.canvasWidget.destroy();
                 }
 
                 return onRemoved?.apply(this, arguments);

@@ -146,6 +146,28 @@ export async function removeImage(imageId) {
     log.debug(`Remove image success for id: ${imageId}`);
 }
 
+export async function getAllImageIds() {
+    log.info("Getting all image IDs...");
+    const db = await openDB();
+    const transaction = db.transaction([IMAGE_STORE_NAME], 'readonly');
+    const store = transaction.objectStore(IMAGE_STORE_NAME);
+    
+    return new Promise((resolve, reject) => {
+        const request = store.getAllKeys();
+        
+        request.onerror = (event) => {
+            log.error("Error getting all image IDs:", event.target.error);
+            reject("Error getting all image IDs");
+        };
+        
+        request.onsuccess = (event) => {
+            const imageIds = event.target.result;
+            log.debug(`Found ${imageIds.length} image IDs in database`);
+            resolve(imageIds);
+        };
+    });
+}
+
 export async function clearAllCanvasStates() {
     log.info("Clearing all canvas states...");
     const db = await openDB();

@@ -5,6 +5,7 @@ import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
+import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('Canvas');
 
@@ -42,6 +43,7 @@ export class Canvas {
         this.canvasLayers = new CanvasLayers(this);
         this.canvasRenderer = new CanvasRenderer(this);
         this.canvasIO = new CanvasIO(this);
+        this.imageReferenceManager = new ImageReferenceManager(this);
         this.interaction = this.canvasInteractions.interaction;
         
         this.setupEventListeners();
@@ -371,5 +373,34 @@ export class Canvas {
 
     showOpacitySlider(mode) {
         return this.canvasLayers.showOpacitySlider(mode);
+    }
+
+    /**
+     * Ręczne uruchomienie garbage collection
+     */
+    async runGarbageCollection() {
+        if (this.imageReferenceManager) {
+            await this.imageReferenceManager.manualGarbageCollection();
+        }
+    }
+
+    /**
+     * Zwraca statystyki garbage collection
+     */
+    getGarbageCollectionStats() {
+        if (this.imageReferenceManager) {
+            return this.imageReferenceManager.getStats();
+        }
+        return null;
+    }
+
+    /**
+     * Czyści zasoby canvas (wywoływane przy usuwaniu)
+     */
+    destroy() {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.destroy();
+        }
+        log.info("Canvas destroyed");
     }
 }
