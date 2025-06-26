@@ -73,6 +73,7 @@ export class Canvas {
             await this.initNodeData();
         }
         this.saveState();
+        this.render();
     }
 
     saveState(replaceLast = false) {
