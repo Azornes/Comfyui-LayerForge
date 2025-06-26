@@ -156,7 +156,7 @@ export class CanvasInteractions {
                 return;
             }
             this.canvas.maskTool.handleMouseUp();
-            this.canvas.saveState();
+            // Nie wywołujemy saveState - to już jest obsługiwane w MaskTool
             this.canvas.render();
             return;
         }
@@ -266,7 +266,11 @@ export class CanvasInteractions {
             this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
         }
         this.canvas.render();
-        this.canvas.saveState(true);
+        
+        // Nie zapisujemy stanu podczas scrollowania w trybie maski
+        if (!this.canvas.maskTool.isActive) {
+            this.canvas.saveState(true);
+        }
     }
 
     handleKeyDown(e) {

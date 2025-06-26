@@ -119,9 +119,11 @@ export class Canvas {
 
     updateHistoryButtons() {
         if (this.onHistoryChange) {
+            // Pobierz informacje o historii odpowiednią dla aktualnego trybu
+            const historyInfo = this.canvasState.getHistoryInfo();
             this.onHistoryChange({
-                canUndo: this.canvasState.undoStack.length > 1,
-                canRedo: this.canvasState.redoStack.length > 0
+                canUndo: historyInfo.canUndo,
+                canRedo: historyInfo.canRedo
             });
         }
     }

@@ -9,8 +9,11 @@ const log = createModuleLogger('CanvasState');
 export class CanvasState {
     constructor(canvas) {
         this.canvas = canvas;
-        this.undoStack = [];
-        this.redoStack = [];
+        // Osobne stosy dla trybu warstw i trybu maski
+        this.layersUndoStack = [];
+        this.layersRedoStack = [];
+        this.maskUndoStack = [];
+        this.maskRedoStack = [];
         this.historyLimit = 100;
         this.saveTimeout = null;
         this.lastSavedStateSignature = null;
@@ -253,25 +256,34 @@ export class CanvasState {
     }
 
     saveState(replaceLast = false) {
-        if (replaceLast && this.undoStack.length > 0) {
-            this.undoStack.pop();
+        // Sprawdź czy jesteśmy w trybie maski
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.saveMaskState(replaceLast);
+        } else {
+            this.saveLayersState(replaceLast);
+        }
+    }
+
+    saveLayersState(replaceLast = false) {
+        if (replaceLast && this.layersUndoStack.length > 0) {
+            this.layersUndoStack.pop();
         }
 
         const currentState = cloneLayers(this.canvas.layers);
 
-        if (this.undoStack.length > 0) {
-            const lastState = this.undoStack[this.undoStack.length - 1];
+        if (this.layersUndoStack.length > 0) {
+            const lastState = this.layersUndoStack[this.layersUndoStack.length - 1];
             if (getStateSignature(currentState) === getStateSignature(lastState)) {
                 return;
             }
         }
 
-        this.undoStack.push(currentState);
+        this.layersUndoStack.push(currentState);
 
-        if (this.undoStack.length > this.historyLimit) {
-            this.undoStack.shift();
+        if (this.layersUndoStack.length > this.historyLimit) {
+            this.layersUndoStack.shift();
         }
-        this.redoStack = [];
+        this.layersRedoStack = [];
         this.canvas.updateHistoryButtons();
         
         // Użyj debounce dla częstych zapisów
@@ -279,23 +291,109 @@ export class CanvasState {
         this._debouncedSave();
     }
 
+    saveMaskState(replaceLast = false) {
+        if (!this.canvas.maskTool) return;
+        
+        if (replaceLast && this.maskUndoStack.length > 0) {
+            this.maskUndoStack.pop();
+        }
+
+        // Klonuj aktualny stan maski
+        const maskCanvas = this.canvas.maskTool.getMask();
+        const clonedCanvas = document.createElement('canvas');
+        clonedCanvas.width = maskCanvas.width;
+        clonedCanvas.height = maskCanvas.height;
+        const clonedCtx = clonedCanvas.getContext('2d');
+        clonedCtx.drawImage(maskCanvas, 0, 0);
+
+        this.maskUndoStack.push(clonedCanvas);
+
+        if (this.maskUndoStack.length > this.historyLimit) {
+            this.maskUndoStack.shift();
+        }
+        this.maskRedoStack = [];
+        this.canvas.updateHistoryButtons();
+    }
+
     undo() {
-        if (this.undoStack.length <= 1) return;
-        const currentState = this.undoStack.pop();
-        this.redoStack.push(currentState);
-        const prevState = this.undoStack[this.undoStack.length - 1];
+        // Sprawdź czy jesteśmy w trybie maski
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.undoMaskState();
+        } else {
+            this.undoLayersState();
+        }
+    }
+
+    redo() {
+        // Sprawdź czy jesteśmy w trybie maski
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.redoMaskState();
+        } else {
+            this.redoLayersState();
+        }
+    }
+
+    undoLayersState() {
+        if (this.layersUndoStack.length <= 1) return;
+        
+        const currentState = this.layersUndoStack.pop();
+        this.layersRedoStack.push(currentState);
+        const prevState = this.layersUndoStack[this.layersUndoStack.length - 1];
         this.canvas.layers = cloneLayers(prevState);
         this.canvas.updateSelectionAfterHistory();
         this.canvas.render();
         this.canvas.updateHistoryButtons();
     }
 
-    redo() {
-        if (this.redoStack.length === 0) return;
-        const nextState = this.redoStack.pop();
-        this.undoStack.push(nextState);
+    redoLayersState() {
+        if (this.layersRedoStack.length === 0) return;
+        
+        const nextState = this.layersRedoStack.pop();
+        this.layersUndoStack.push(nextState);
         this.canvas.layers = cloneLayers(nextState);
         this.canvas.updateSelectionAfterHistory();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
+    }
+
+    undoMaskState() {
+        if (!this.canvas.maskTool || this.maskUndoStack.length <= 1) return;
+        
+        const currentState = this.maskUndoStack.pop();
+        this.maskRedoStack.push(currentState);
+        
+        if (this.maskUndoStack.length > 0) {
+            const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
+            // Przywróć poprzedni stan maski
+            const maskCanvas = this.canvas.maskTool.getMask();
+            const maskCtx = maskCanvas.getContext('2d');
+            
+            // Wyczyść obecną maskę
+            maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            // Przywróć poprzedni stan
+            maskCtx.drawImage(prevState, 0, 0);
+            
+            this.canvas.render();
+        }
+        
+        this.canvas.updateHistoryButtons();
+    }
+
+    redoMaskState() {
+        if (!this.canvas.maskTool || this.maskRedoStack.length === 0) return;
+        
+        const nextState = this.maskRedoStack.pop();
+        this.maskUndoStack.push(nextState);
+        
+        // Przywróć następny stan maski
+        const maskCanvas = this.canvas.maskTool.getMask();
+        const maskCtx = maskCanvas.getContext('2d');
+        
+        // Wyczyść obecną maskę
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+        // Przywróć następny stan
+        maskCtx.drawImage(nextState, 0, 0);
+        
         this.canvas.render();
         this.canvas.updateHistoryButtons();
     }
@@ -304,8 +402,13 @@ export class CanvasState {
      * Czyści historię undo/redo
      */
     clearHistory() {
-        this.undoStack = [];
-        this.redoStack = [];
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.maskUndoStack = [];
+            this.maskRedoStack = [];
+        } else {
+            this.layersUndoStack = [];
+            this.layersRedoStack = [];
+        }
         this.canvas.updateHistoryButtons();
         log.info("History cleared");
     }
@@ -315,12 +418,23 @@ export class CanvasState {
      * @returns {Object} Informacje o historii
      */
     getHistoryInfo() {
-        return {
-            undoCount: this.undoStack.length,
-            redoCount: this.redoStack.length,
-            canUndo: this.undoStack.length > 1,
-            canRedo: this.redoStack.length > 0,
-            historyLimit: this.historyLimit
-        };
+        // Zwraca dane historii w zależności od aktywnego trybu
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            return {
+                undoCount: this.maskUndoStack.length,
+                redoCount: this.maskRedoStack.length,
+                canUndo: this.maskUndoStack.length > 1,
+                canRedo: this.maskRedoStack.length > 0,
+                historyLimit: this.historyLimit
+            };
+        } else {
+            return {
+                undoCount: this.layersUndoStack.length,
+                redoCount: this.layersRedoStack.length,
+                canUndo: this.layersUndoStack.length > 1,
+                canRedo: this.layersRedoStack.length > 0,
+                historyLimit: this.historyLimit
+            };
+        }
     }
 }

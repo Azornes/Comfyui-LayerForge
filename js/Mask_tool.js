@@ -27,18 +27,32 @@ export class MaskTool {
     initMaskCanvas() {
         this.maskCanvas.width = this.mainCanvas.width;
         this.maskCanvas.height = this.mainCanvas.height;
-        this.clear();
+        // Wyczyść canvas bez zapisywania do historii
+        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
     }
 
     activate() {
         this.isActive = true;
         this.canvasInstance.interaction.mode = 'drawingMask';
+        
+        // Zapisz początkowy stan maski tylko jeśli historia jest pusta
+        if (this.canvasInstance.canvasState && this.canvasInstance.canvasState.maskUndoStack.length === 0) {
+            this.canvasInstance.canvasState.saveMaskState();
+        }
+        
+        // Aktualizuj przyciski historii po przełączeniu na tryb maski
+        this.canvasInstance.updateHistoryButtons();
+        
         log.info("Mask tool activated");
     }
 
     deactivate() {
         this.isActive = false;
         this.canvasInstance.interaction.mode = 'none';
+        
+        // Aktualizuj przyciski historii po przełączeniu z trybu maski
+        this.canvasInstance.updateHistoryButtons();
+        
         log.info("Mask tool deactivated");
     }
 
@@ -65,8 +79,18 @@ export class MaskTool {
 
     handleMouseUp() {
         if (!this.isActive) return;
-        this.isDrawing = false;
-        this.lastPosition = null;
+        
+        // Jeśli narzędzie rysowało, zapisz stan maski
+        if (this.isDrawing) {
+            // Zakończ rysowanie
+            this.isDrawing = false;
+            this.lastPosition = null;
+            
+            // Zapisz stan maski do historii
+            if (this.canvasInstance.canvasState) {
+                this.canvasInstance.canvasState.saveMaskState();
+            }
+        }
     }
 
     draw(worldCoords) {
@@ -99,6 +123,11 @@ export class MaskTool {
 
     clear() {
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        
+        // Zapisz stan po wyczyszczeniu maski tylko jeśli narzędzie jest aktywne
+        if (this.isActive && this.canvasInstance.canvasState) {
+            this.canvasInstance.canvasState.saveMaskState();
+        }
     }
 
     getMask() {
@@ -142,6 +171,12 @@ export class MaskTool {
         this.maskCanvas.width = width;
         this.maskCanvas.height = height;
         this.maskCtx = this.maskCanvas.getContext('2d');
-        this.maskCtx.drawImage(oldMask, 0, 0);
+        
+        // Zachowaj zawartość starej maski
+        if (oldMask.width > 0 && oldMask.height > 0) {
+            this.maskCtx.drawImage(oldMask, 0, 0);
+        }
+        
+        log.info(`Mask canvas resized to ${width}x${height}`);
     }
 }
