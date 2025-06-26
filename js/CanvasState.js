@@ -55,8 +55,8 @@ export class CanvasState {
             zoom: 0.8
         };
 
-        this.canvas.updateCanvasSize(this.canvas.width, this.canvas.height, false);
-        log.debug(`Canvas resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
+        this.canvas.updateOutputAreaSize(this.canvas.width, this.canvas.height, false);
+        log.debug(`Output Area resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
         const loadedLayers = await this._loadLayers(savedState.layers);
         this.canvas.layers = loadedLayers.filter(l => l !== null);
         log.info(`Loaded ${this.canvas.layers.length} layers.`);

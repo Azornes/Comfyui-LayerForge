@@ -241,8 +241,8 @@ export class Canvas {
         this.saveState();
     }
 
-    updateCanvasSize(width, height, saveHistory = true) {
-        return this.canvasLayers.updateCanvasSize(width, height, saveHistory);
+    updateOutputAreaSize(width, height, saveHistory = true) {
+        return this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
     }
 
     render() {

@@ -680,7 +680,7 @@ export class CanvasInteractions {
             const rectX = this.interaction.canvasResizeRect.x;
             const rectY = this.interaction.canvasResizeRect.y;
 
-            this.canvas.updateCanvasSize(newWidth, newHeight);
+            this.canvas.updateOutputAreaSize(newWidth, newHeight);
 
             this.canvas.layers.forEach(layer => {
                 layer.x -= rectX;

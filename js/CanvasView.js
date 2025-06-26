@@ -406,7 +406,7 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
-                    textContent: "Canvas Size",
+                    textContent: "Output Area Size",
                     onclick: () => {
                         const dialog = $el("div.painter-dialog", {
                             style: {
@@ -479,7 +479,7 @@ async function createCanvasWidget(node, widget, app) {
                         document.getElementById('confirm-size').onclick = () => {
                             const width = parseInt(document.getElementById('canvas-width').value) || canvas.width;
                             const height = parseInt(document.getElementById('canvas-height').value) || canvas.height;
-                            canvas.updateCanvasSize(width, height);
+                            canvas.updateOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
                         };
 
