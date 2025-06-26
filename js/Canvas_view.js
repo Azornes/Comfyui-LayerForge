@@ -5,10 +5,10 @@ import {$el} from "../../scripts/ui.js";
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
-import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas, createImageFromSource} from "./ImageUtils.js";
-import {generateUniqueFileName} from "./CommonUtils.js";
+import {validateImageData, convertImageData, applyMaskToImageData, prepareImageForCanvas, createImageFromSource} from "./utils/ImageUtils.js";
+import {generateUniqueFileName} from "./utils/CommonUtils.js";
 import {logger, LogLevel} from "./logger.js";
-import {createModuleLogger} from "./LoggerUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
 
 const log = createModuleLogger('Canvas_view');
 

@@ -1,8 +1,8 @@
 import {saveImage, getImage, removeImage} from "./db.js";
-import {createModuleLogger} from "./LoggerUtils.js";
-import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld, createCanvas, generateUniqueFileName} from "./CommonUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld, createCanvas, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError, safeExecute} from "./ErrorHandler.js";
-import {createImageFromSource} from "./ImageUtils.js";
+import {createImageFromSource} from "./utils/ImageUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasLayers
 const log = createModuleLogger('CanvasLayers');

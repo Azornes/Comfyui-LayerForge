@@ -1,5 +1,5 @@
-import {createModuleLogger} from "./LoggerUtils.js";
-import {snapToGrid, getSnapAdjustment} from "./CommonUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {snapToGrid, getSnapAdjustment} from "./utils/CommonUtils.js";
 
 // Inicjalizacja loggera dla modułu CanvasInteractions
 const log = createModuleLogger('CanvasInteractions');

@@ -1,4 +1,4 @@
-import {createModuleLogger} from "./LoggerUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
 
 // Inicjalizacja loggera dla modułu db
 const log = createModuleLogger('db');

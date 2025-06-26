@@ -5,8 +5,8 @@ import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
-import {createModuleLogger} from "./LoggerUtils.js";
-import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./CommonUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./utils/CommonUtils.js";
 import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu Canvas
@@ -18,7 +18,7 @@ export class Canvas {
         this.widget = widget;
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');
-        this.width = 512;
+        this.width = 1024;
         this.height = 512;
         this.layers = [];
         this.selectedLayer = null;

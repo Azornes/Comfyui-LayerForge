@@ -3,7 +3,7 @@
  * Eliminuje powtarzalny kod inicjalizacji loggera w każdym module
  */
 
-import {logger, LogLevel} from "./logger.js";
+import {logger, LogLevel} from "../logger.js";
 
 /**
  * Tworzy obiekt loggera dla modułu z predefiniowanymi metodami

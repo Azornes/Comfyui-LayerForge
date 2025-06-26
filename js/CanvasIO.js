@@ -1,8 +1,8 @@
 import {saveImage, getImage, removeImage} from "./db.js";
 import {logger, LogLevel} from "./logger.js";
-import {createCanvas, normalizeToUint8} from "./CommonUtils.js";
-import {createImageFromSource} from "./ImageUtils.js";
-import {createModuleLogger} from "./LoggerUtils.js";
+import {createCanvas, normalizeToUint8} from "./utils/CommonUtils.js";
+import {createImageFromSource} from "./utils/ImageUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
 
 const log = createModuleLogger('CanvasIO');
 

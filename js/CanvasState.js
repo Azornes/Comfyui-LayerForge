@@ -1,6 +1,6 @@
 import {getCanvasState, setCanvasState, removeCanvasState, saveImage, getImage, removeImage} from "./db.js";
-import {createModuleLogger} from "./LoggerUtils.js";
-import {generateUUID, cloneLayers, getStateSignature, debounce} from "./CommonUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {generateUUID, cloneLayers, getStateSignature, debounce} from "./utils/CommonUtils.js";
 import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu CanvasState

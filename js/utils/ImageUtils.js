@@ -1,5 +1,5 @@
 import {createModuleLogger} from "./LoggerUtils.js";
-import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
+import {withErrorHandling, createValidationError} from "../ErrorHandler.js";
 
 // Inicjalizacja loggera dla modułu ImageUtils
 const log = createModuleLogger('ImageUtils');
