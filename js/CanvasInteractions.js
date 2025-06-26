@@ -456,8 +456,8 @@ export class CanvasInteractions {
 
     startCanvasResize(worldCoords) {
         this.interaction.mode = 'resizingCanvas';
-        const startX = this.canvas.snapToGrid(worldCoords.x);
-        const startY = this.canvas.snapToGrid(worldCoords.y);
+        const startX = snapToGrid(worldCoords.x);
+        const startY = snapToGrid(worldCoords.y);
         this.interaction.canvasResizeStart = {x: startX, y: startY};
         this.interaction.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
         this.canvas.render();
@@ -466,8 +466,8 @@ export class CanvasInteractions {
     startCanvasMove(worldCoords) {
         this.interaction.mode = 'movingCanvas';
         this.interaction.dragStart = {...worldCoords};
-        const initialX = this.canvas.snapToGrid(worldCoords.x - this.canvas.width / 2);
-        const initialY = this.canvas.snapToGrid(worldCoords.y - this.canvas.height / 2);
+        const initialX = snapToGrid(worldCoords.x - this.canvas.width / 2);
+        const initialY = snapToGrid(worldCoords.y - this.canvas.height / 2);
 
         this.interaction.canvasMoveRect = {
             x: initialX,
@@ -484,10 +484,10 @@ export class CanvasInteractions {
         if (!this.interaction.canvasMoveRect) return;
         const dx = worldCoords.x - this.interaction.dragStart.x;
         const dy = worldCoords.y - this.interaction.dragStart.y;
-        const initialRectX = this.canvas.snapToGrid(this.interaction.dragStart.x - this.canvas.width / 2);
-        const initialRectY = this.canvas.snapToGrid(this.interaction.dragStart.y - this.canvas.height / 2);
-        this.interaction.canvasMoveRect.x = this.canvas.snapToGrid(initialRectX + dx);
-        this.interaction.canvasMoveRect.y = this.canvas.snapToGrid(initialRectY + dy);
+        const initialRectX = snapToGrid(this.interaction.dragStart.x - this.canvas.width / 2);
+        const initialRectY = snapToGrid(this.interaction.dragStart.y - this.canvas.height / 2);
+        this.interaction.canvasMoveRect.x = snapToGrid(initialRectX + dx);
+        this.interaction.canvasMoveRect.y = snapToGrid(initialRectY + dy);
 
         this.canvas.render();
     }
@@ -582,9 +582,9 @@ export class CanvasInteractions {
 
         if (this.interaction.isCtrlPressed) {
             const snapThreshold = 10 / this.canvas.viewport.zoom;
-            const snappedMouseX = this.canvas.snapToGrid(mouseX);
+            const snappedMouseX = snapToGrid(mouseX);
             if (Math.abs(mouseX - snappedMouseX) < snapThreshold) mouseX = snappedMouseX;
-            const snappedMouseY = this.canvas.snapToGrid(mouseY);
+            const snappedMouseY = snapToGrid(mouseY);
             if (Math.abs(mouseY - snappedMouseY) < snapThreshold) mouseY = snappedMouseY;
         }
 
@@ -663,8 +663,8 @@ export class CanvasInteractions {
     }
 
     updateCanvasResize(worldCoords) {
-        const snappedMouseX = this.canvas.snapToGrid(worldCoords.x);
-        const snappedMouseY = this.canvas.snapToGrid(worldCoords.y);
+        const snappedMouseX = snapToGrid(worldCoords.x);
+        const snappedMouseY = snapToGrid(worldCoords.y);
         const start = this.interaction.canvasResizeStart;
 
         this.interaction.canvasResizeRect.x = Math.min(snappedMouseX, start.x);
