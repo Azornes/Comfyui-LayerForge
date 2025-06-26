@@ -8,6 +8,10 @@ export class MaskTool {
         this.maskCanvas = document.createElement('canvas');
         this.maskCtx = this.maskCanvas.getContext('2d');
 
+        // Add position coordinates for the mask
+        this.x = 0;
+        this.y = 0;
+
         this.isActive = false;
         this.brushSize = 20;
         this.brushStrength = 0.5;
@@ -23,9 +27,18 @@ export class MaskTool {
     }
 
     initMaskCanvas() {
-        this.maskCanvas.width = this.canvasInstance.width;
-        this.maskCanvas.height = this.canvasInstance.height;
+        // Create a larger mask canvas that can extend beyond the output area
+        const extraSpace = 2000; // Allow for a generous drawing area outside the output area
+        this.maskCanvas.width = this.canvasInstance.width + extraSpace;
+        this.maskCanvas.height = this.canvasInstance.height + extraSpace;
+        
+        // Position the mask's origin point in the center of the expanded canvas
+        // This allows drawing in any direction from the output area
+        this.x = -extraSpace / 2;
+        this.y = -extraSpace / 2;
+        
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        log.info(`Initialized mask canvas with extended size: ${this.maskCanvas.width}x${this.maskCanvas.height}, origin at (${this.x}, ${this.y})`);
     }
 
     activate() {
@@ -84,29 +97,49 @@ export class MaskTool {
             this.lastPosition = worldCoords;
         }
 
-        this.maskCtx.beginPath();
-        this.maskCtx.moveTo(this.lastPosition.x, this.lastPosition.y);
-        this.maskCtx.lineTo(worldCoords.x, worldCoords.y);
-        const gradientRadius = this.brushSize / 2;
-        
-        if (this.brushSoftness === 0) {
-            this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
-        } else {
-            const innerRadius = gradientRadius * this.brushSoftness;
-            const gradient = this.maskCtx.createRadialGradient(
-                worldCoords.x, worldCoords.y, innerRadius,
-                worldCoords.x, worldCoords.y, gradientRadius
-            );
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
-            gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
-            this.maskCtx.strokeStyle = gradient;
-        }
+        // Convert world coordinates to mask canvas coordinates
+        // Account for the mask's position in world space
+        const canvasLastX = this.lastPosition.x - this.x;
+        const canvasLastY = this.lastPosition.y - this.y;
+        const canvasX = worldCoords.x - this.x;
+        const canvasY = worldCoords.y - this.y;
 
-        this.maskCtx.lineWidth = this.brushSize;
-        this.maskCtx.lineCap = 'round';
-        this.maskCtx.lineJoin = 'round';
-        this.maskCtx.globalCompositeOperation = 'source-over';
-        this.maskCtx.stroke();
+        // Check if drawing is within the expanded canvas bounds
+        // Since our canvas is much larger now, this should rarely be an issue
+        const canvasWidth = this.maskCanvas.width;
+        const canvasHeight = this.maskCanvas.height;
+        
+        if (canvasX >= 0 && canvasX < canvasWidth && 
+            canvasY >= 0 && canvasY < canvasHeight &&
+            canvasLastX >= 0 && canvasLastX < canvasWidth && 
+            canvasLastY >= 0 && canvasLastY < canvasHeight) {
+            
+            this.maskCtx.beginPath();
+            this.maskCtx.moveTo(canvasLastX, canvasLastY);
+            this.maskCtx.lineTo(canvasX, canvasY);
+            const gradientRadius = this.brushSize / 2;
+            
+            if (this.brushSoftness === 0) {
+                this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
+            } else {
+                const innerRadius = gradientRadius * this.brushSoftness;
+                const gradient = this.maskCtx.createRadialGradient(
+                    canvasX, canvasY, innerRadius,
+                    canvasX, canvasY, gradientRadius
+                );
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
+                gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+                this.maskCtx.strokeStyle = gradient;
+            }
+
+            this.maskCtx.lineWidth = this.brushSize;
+            this.maskCtx.lineCap = 'round';
+            this.maskCtx.lineJoin = 'round';
+            this.maskCtx.globalCompositeOperation = 'source-over';
+            this.maskCtx.stroke();
+        } else {
+            log.debug(`Drawing outside mask canvas bounds: (${canvasX}, ${canvasY})`);
+        }
     }
 
     clear() {
@@ -143,14 +176,49 @@ export class MaskTool {
 
     resize(width, height) {
         const oldMask = this.maskCanvas;
+        const oldX = this.x;
+        const oldY = this.y;
+        const oldWidth = oldMask.width;
+        const oldHeight = oldMask.height;
+        
+        // Determine if we're increasing or decreasing the canvas size
+        const isIncreasingWidth = width > (this.canvasInstance.width);
+        const isIncreasingHeight = height > (this.canvasInstance.height);
+        
+        // Create a new mask canvas
         this.maskCanvas = document.createElement('canvas');
-        this.maskCanvas.width = width;
-        this.maskCanvas.height = height;
+        
+        // Calculate the new size based on whether we're increasing or decreasing
+        const extraSpace = 2000;
+        
+        // If we're increasing the size, expand the mask canvas
+        // If we're decreasing, keep the current mask canvas size to preserve content
+        const newWidth = isIncreasingWidth ? width + extraSpace : Math.max(oldWidth, width + extraSpace);
+        const newHeight = isIncreasingHeight ? height + extraSpace : Math.max(oldHeight, height + extraSpace);
+        
+        this.maskCanvas.width = newWidth;
+        this.maskCanvas.height = newHeight;
         this.maskCtx = this.maskCanvas.getContext('2d');
+        
         if (oldMask.width > 0 && oldMask.height > 0) {
-            this.maskCtx.drawImage(oldMask, 0, 0);
+            // Calculate offset to maintain the same world position of the mask content
+            const offsetX = this.x - oldX;
+            const offsetY = this.y - oldY;
+            
+            // Draw the old mask at the correct position to maintain world alignment
+            this.maskCtx.drawImage(oldMask, offsetX, offsetY);
+            
+            log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
         }
         
-        log.info(`Mask canvas resized to ${width}x${height}`);
+        log.info(`Mask canvas resized to ${this.maskCanvas.width}x${this.maskCanvas.height}, position (${this.x}, ${this.y})`);
+        log.info(`Canvas size change: width ${isIncreasingWidth ? 'increased' : 'decreased'}, height ${isIncreasingHeight ? 'increased' : 'decreased'}`);
+    }
+    
+    // Add method to update mask position
+    updatePosition(dx, dy) {
+        this.x += dx;
+        this.y += dy;
+        log.info(`Mask position updated to (${this.x}, ${this.y})`);
     }
 }
