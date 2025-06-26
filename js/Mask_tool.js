@@ -102,21 +102,27 @@ export class MaskTool {
         this.maskCtx.moveTo(this.lastPosition.x, this.lastPosition.y);
         this.maskCtx.lineTo(worldCoords.x, worldCoords.y);
 
-        // Utwórz gradient radialny dla miękkości pędzla
+        // Utwórz styl pędzla w zależności od miękkości
         const gradientRadius = this.brushSize / 2;
-        const softnessFactor = this.brushSoftness * gradientRadius;
-        const gradient = this.maskCtx.createRadialGradient(
-            worldCoords.x, worldCoords.y, gradientRadius - softnessFactor,
-            worldCoords.x, worldCoords.y, gradientRadius
-        );
-        gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
-        gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+        
+        if (this.brushSoftness === 0) {
+            // Twardy pędzel - użyj jednolitego koloru
+            this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
+        } else {
+            // Miękki pędzel - użyj gradientu radialnego
+            const innerRadius = gradientRadius * this.brushSoftness;
+            const gradient = this.maskCtx.createRadialGradient(
+                worldCoords.x, worldCoords.y, innerRadius,
+                worldCoords.x, worldCoords.y, gradientRadius
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
+            gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+            this.maskCtx.strokeStyle = gradient;
+        }
 
-        this.maskCtx.strokeStyle = gradient;
         this.maskCtx.lineWidth = this.brushSize;
         this.maskCtx.lineCap = 'round';
         this.maskCtx.lineJoin = 'round';
-
         this.maskCtx.globalCompositeOperation = 'source-over';
         this.maskCtx.stroke();
     }
