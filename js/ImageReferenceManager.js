@@ -13,7 +13,11 @@ export class ImageReferenceManager {
         this.gcTimer = null;
         this.isGcRunning = false;
         
-        // Nie uruchamiamy automatycznego GC
+        // Licznik operacji dla automatycznego GC
+        this.operationCount = 0;
+        this.operationThreshold = 500;   // Uruchom GC po 500 operacjach
+        
+        // Nie uruchamiamy automatycznego GC na czasie
         // this.startGarbageCollection();
     }
 
@@ -239,6 +243,40 @@ export class ImageReferenceManager {
         } finally {
             this.isGcRunning = false;
         }
+    }
+
+    /**
+     * Zwiększa licznik operacji i sprawdza czy uruchomić GC
+     */
+    incrementOperationCount() {
+        this.operationCount++;
+        log.debug(`Operation count: ${this.operationCount}/${this.operationThreshold}`);
+        
+        if (this.operationCount >= this.operationThreshold) {
+            log.info(`Operation threshold reached (${this.operationThreshold}), triggering garbage collection`);
+            this.operationCount = 0; // Reset counter
+            // Uruchom GC asynchronicznie, żeby nie blokować operacji
+            setTimeout(() => {
+                this.performGarbageCollection();
+            }, 100);
+        }
+    }
+
+    /**
+     * Resetuje licznik operacji
+     */
+    resetOperationCount() {
+        this.operationCount = 0;
+        log.debug("Operation count reset");
+    }
+
+    /**
+     * Ustawia próg operacji dla automatycznego GC
+     * @param {number} threshold - Nowy próg operacji
+     */
+    setOperationThreshold(threshold) {
+        this.operationThreshold = Math.max(1, threshold);
+        log.info(`Operation threshold set to: ${this.operationThreshold}`);
     }
 
     /**

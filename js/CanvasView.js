@@ -681,7 +681,7 @@ async function createCanvasWidget(node, widget, app) {
                             const newStats = canvas.getGarbageCollectionStats();
                             log.info("GC Stats after cleanup:", newStats);
                             
-                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}`);
+                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${newStats.operationCount}/${newStats.operationThreshold}`);
                         } catch (e) {
                             log.error("Failed to run garbage collection:", e);
                             alert("Error running garbage collection. Check the console for details.");

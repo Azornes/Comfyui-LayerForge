@@ -78,14 +78,17 @@ export class Canvas {
 
     saveState(replaceLast = false) {
         this.canvasState.saveState(replaceLast);
+        this.incrementOperationCount();
     }
 
     undo() {
         this.canvasState.undo();
+        this.incrementOperationCount();
     }
 
     redo() {
         this.canvasState.redo();
+        this.incrementOperationCount();
     }
 
     updateSelectionAfterHistory() {
@@ -377,6 +380,15 @@ export class Canvas {
     }
 
     /**
+     * Zwiększa licznik operacji (wywoływane przy każdej operacji na canvas)
+     */
+    incrementOperationCount() {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.incrementOperationCount();
+        }
+    }
+
+    /**
      * Ręczne uruchomienie garbage collection
      */
     async runGarbageCollection() {
@@ -390,9 +402,23 @@ export class Canvas {
      */
     getGarbageCollectionStats() {
         if (this.imageReferenceManager) {
-            return this.imageReferenceManager.getStats();
+            const stats = this.imageReferenceManager.getStats();
+            return {
+                ...stats,
+                operationCount: this.imageReferenceManager.operationCount,
+                operationThreshold: this.imageReferenceManager.operationThreshold
+            };
         }
         return null;
+    }
+
+    /**
+     * Ustawia próg operacji dla automatycznego GC
+     */
+    setGarbageCollectionThreshold(threshold) {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.setOperationThreshold(threshold);
+        }
     }
 
     /**
