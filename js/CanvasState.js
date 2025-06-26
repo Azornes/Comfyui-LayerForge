@@ -1,7 +1,7 @@
-import {getCanvasState, setCanvasState, removeCanvasState, saveImage, getImage, removeImage} from "./db.js";
+import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce} from "./utils/CommonUtils.js";
-import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
+import {withErrorHandling} from "./ErrorHandler.js";
 const log = createModuleLogger('CanvasState');
 
 export class CanvasState {

@@ -1,13 +1,11 @@
-import {saveImage, getImage, removeImage} from "./db.js";
-import {MaskTool} from "./Mask_tool.js";
+import {removeImage} from "./db.js";
+import {MaskTool} from "./MaskTool.js";
 import {CanvasState} from "./CanvasState.js";
 import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import {generateUUID, snapToGrid, getSnapAdjustment, worldToLocal, localToWorld} from "./utils/CommonUtils.js";
-import {withErrorHandling, safeExecute} from "./ErrorHandler.js";
 const log = createModuleLogger('Canvas');
 
 export class Canvas {
@@ -34,12 +32,6 @@ export class Canvas {
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
             alpha: false
         });
-        this.renderAnimationFrame = null;
-        this.lastRenderTime = 0;
-        this.internalClipboard = [];
-        this.isMouseOver = false;
-        this.renderInterval = 1000 / 60;
-        this.isDirty = false;
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;
@@ -54,10 +46,6 @@ export class Canvas {
         
         this.setupEventListeners();
         this.initNodeData();
-        this.blendModes = this.canvasLayers.blendModes;
-        this.selectedBlendMode = this.canvasLayers.selectedBlendMode;
-        this.blendOpacity = this.canvasLayers.blendOpacity;
-        this.isAdjustingOpacity = this.canvasLayers.isAdjustingOpacity;
 
         this.layers = this.layers.map(layer => ({
             ...layer,
@@ -315,30 +303,6 @@ export class Canvas {
 
     addMattedLayer(image, mask) {
         return this.canvasLayers.addMattedLayer(image, mask);
-    }
-
-    processInputData(nodeData) {
-        if (nodeData.input_image) {
-            this.addInputImage(nodeData.input_image);
-        }
-        if (nodeData.input_mask) {
-            this.addInputMask(nodeData.input_mask);
-        }
-    }
-
-    addInputImage(imageData) {
-        const layer = new ImageLayer(imageData);
-        this.layers.push(layer);
-        this.updateCanvas();
-    }
-
-    addInputMask(maskData) {
-        if (this.inputImage) {
-            const mask = new MaskLayer(maskData);
-            mask.linkToLayer(this.inputImage);
-            this.masks.push(mask);
-            this.updateCanvas();
-        }
     }
 
     async addInputToCanvas(inputImage, inputMask) {
