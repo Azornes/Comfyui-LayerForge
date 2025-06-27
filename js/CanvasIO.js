@@ -26,7 +26,7 @@ export class CanvasIO {
             log.info(`Starting saveToServer (disk) with fileName: ${fileName} for node: ${nodeId}`);
             this._saveInProgress = this._performSave(fileName, outputMode);
             window.canvasSaveStates.set(saveKey, this._saveInProgress);
-            
+
             try {
                 return await this._saveInProgress;
             } finally {
@@ -54,25 +54,25 @@ export class CanvasIO {
         }
 
         return new Promise((resolve) => {
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
-            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
+            const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(this.canvas.width, this.canvas.height);
+            const {canvas: maskCanvas, ctx: maskCtx} = createCanvas(this.canvas.width, this.canvas.height);
 
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
-            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            const visibilityCtx = visibilityCanvas.getContext('2d', {alpha: true});
             maskCtx.fillStyle = '#ffffff';
             maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            
+
             log.debug(`Canvas contexts created, starting layer rendering`);
             const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
             log.debug(`Processing ${sortedLayers.length} layers in order`);
             sortedLayers.forEach((layer, index) => {
                 log.debug(`Processing layer ${index}: zIndex=${layer.zIndex}, size=${layer.width}x${layer.height}, pos=(${layer.x},${layer.y})`);
                 log.debug(`Layer ${index}: blendMode=${layer.blendMode || 'normal'}, opacity=${layer.opacity !== undefined ? layer.opacity : 1}`);
-                
+
                 tempCtx.save();
                 tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
                 tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
@@ -80,7 +80,7 @@ export class CanvasIO {
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
                 tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 tempCtx.restore();
-                
+
                 log.debug(`Layer ${index} rendered successfully`);
                 visibilityCtx.save();
                 visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
@@ -96,7 +96,7 @@ export class CanvasIO {
                 maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
                 maskData.data[i + 3] = 255;
             }
-            
+
             maskCtx.putImageData(maskData, 0, 0);
             const toolMaskCanvas = this.canvas.maskTool.getMask();
             if (toolMaskCanvas) {
@@ -111,7 +111,7 @@ export class CanvasIO {
 
                 const maskX = this.canvas.maskTool.x;
                 const maskY = this.canvas.maskTool.y;
-                
+
                 log.debug(`Extracting mask from world position (${maskX}, ${maskY}) for output area (0,0) to (${this.canvas.width}, ${this.canvas.height})`);
 
                 const sourceX = Math.max(0, -maskX);  // Where in the mask canvas to start reading
@@ -130,7 +130,7 @@ export class CanvasIO {
 
                 if (copyWidth > 0 && copyHeight > 0) {
                     log.debug(`Copying mask region: source(${sourceX}, ${sourceY}) to dest(${destX}, ${destY}) size(${copyWidth}, ${copyHeight})`);
-                    
+
                     tempMaskCtx.drawImage(
                         toolMaskCanvas,
                         sourceX, sourceY, copyWidth, copyHeight,  // Source rectangle
@@ -153,13 +153,13 @@ export class CanvasIO {
                 const imageData = tempCanvas.toDataURL('image/png');
                 const maskData = maskCanvas.toDataURL('image/png');
                 log.info("Returning image and mask data as base64 for RAM mode.");
-                resolve({ image: imageData, mask: maskData });
+                resolve({image: imageData, mask: maskData});
                 return;
             }
 
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
             log.info(`Saving image without mask as: ${fileNameWithoutMask}`);
-            
+
             tempCanvas.toBlob(async (blobWithoutMask) => {
                 log.debug(`Created blob for image without mask, size: ${blobWithoutMask.size} bytes`);
                 const formDataWithoutMask = new FormData();
@@ -193,7 +193,7 @@ export class CanvasIO {
                     if (resp.status === 200) {
                         const maskFileName = fileName.replace('.png', '_mask.png');
                         log.info(`Saving mask as: ${maskFileName}`);
-                        
+
                         maskCanvas.toBlob(async (maskBlob) => {
                             log.debug(`Created blob for mask, size: ${maskBlob.size} bytes`);
                             const maskFormData = new FormData();
@@ -237,18 +237,18 @@ export class CanvasIO {
 
     async _renderOutputData() {
         return new Promise((resolve) => {
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
-            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
+            const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(this.canvas.width, this.canvas.height);
+            const {canvas: maskCanvas, ctx: maskCtx} = createCanvas(this.canvas.width, this.canvas.height);
 
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
-            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            const visibilityCtx = visibilityCanvas.getContext('2d', {alpha: true});
             maskCtx.fillStyle = '#ffffff'; // Start with a white mask (nothing masked)
             maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            
+
             const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
             sortedLayers.forEach((layer) => {
 
@@ -289,19 +289,19 @@ export class CanvasIO {
 
                 const maskX = this.canvas.maskTool.x;
                 const maskY = this.canvas.maskTool.y;
-                
+
                 log.debug(`[renderOutputData] Extracting mask from world position (${maskX}, ${maskY})`);
 
                 const sourceX = Math.max(0, -maskX);
                 const sourceY = Math.max(0, -maskY);
                 const destX = Math.max(0, maskX);
                 const destY = Math.max(0, maskY);
-                
+
                 const copyWidth = Math.min(toolMaskCanvas.width - sourceX, this.canvas.width - destX);
                 const copyHeight = Math.min(toolMaskCanvas.height - sourceY, this.canvas.height - destY);
-                
+
                 if (copyWidth > 0 && copyHeight > 0) {
-                     tempMaskCtx.drawImage(
+                    tempMaskCtx.drawImage(
                         toolMaskCanvas,
                         sourceX, sourceY, copyWidth, copyHeight,
                         destX, destY, copyWidth, copyHeight
@@ -312,7 +312,7 @@ export class CanvasIO {
                 for (let i = 0; i < tempMaskData.data.length; i += 4) {
                     const alpha = tempMaskData.data[i + 3];
 
-                    tempMaskData.data[i] = tempMaskData.data[i+1] = tempMaskData.data[i+2] = alpha;
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = alpha;
                     tempMaskData.data[i + 3] = 255; // Solid alpha
                 }
                 tempMaskCtx.putImageData(tempMaskData, 0, 0);
@@ -321,18 +321,18 @@ export class CanvasIO {
                 maskCtx.globalCompositeOperation = 'screen';
                 maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
-            
+
             const imageDataUrl = tempCanvas.toDataURL('image/png');
             const maskDataUrl = maskCanvas.toDataURL('image/png');
-            
-            resolve({ image: imageDataUrl, mask: maskDataUrl });
+
+            resolve({image: imageDataUrl, mask: maskDataUrl});
         });
     }
 
     async sendDataViaWebSocket(nodeId) {
         log.info(`Preparing to send data for node ${nodeId} via WebSocket.`);
-        
-        const { image, mask } = await this._renderOutputData();
+
+        const {image, mask} = await this._renderOutputData();
 
         try {
             log.info(`Sending data for node ${nodeId}...`);
@@ -342,7 +342,7 @@ export class CanvasIO {
                 image: image,
                 mask: mask,
             }, true); // `true` requires an acknowledgment
-            
+
             log.info(`Data for node ${nodeId} has been sent and acknowledged by the server.`);
             return true;
         } catch (error) {
@@ -357,7 +357,7 @@ export class CanvasIO {
         try {
             log.debug("Adding input to canvas:", {inputImage});
 
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(inputImage.width, inputImage.height);
+            const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(inputImage.width, inputImage.height);
 
             const imgData = new ImageData(
                 inputImage.data,

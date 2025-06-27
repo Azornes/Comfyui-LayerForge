@@ -1,5 +1,6 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {snapToGrid, getSnapAdjustment} from "./utils/CommonUtils.js";
+
 const log = createModuleLogger('CanvasInteractions');
 
 export class CanvasInteractions {
@@ -504,7 +505,7 @@ export class CanvasInteractions {
             });
 
             this.canvas.maskTool.updatePosition(-finalX, -finalY);
-            
+
             this.canvas.viewport.x -= finalX;
             this.canvas.viewport.y -= finalY;
         }

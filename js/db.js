@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+
 const log = createModuleLogger('db');
 
 const DB_NAME = 'CanvasNodeDB';
@@ -89,7 +90,7 @@ export async function getCanvasState(id) {
     const db = await openDB();
     const transaction = db.transaction([STATE_STORE_NAME], 'readonly');
     const store = transaction.objectStore(STATE_STORE_NAME);
-    
+
     const result = await createDBRequest(store, 'get', id, "Error getting canvas state");
     log.debug(`Get success for id: ${id}`, result ? 'found' : 'not found');
     return result ? result.state : null;
@@ -100,7 +101,7 @@ export async function setCanvasState(id, state) {
     const db = await openDB();
     const transaction = db.transaction([STATE_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STATE_STORE_NAME);
-    
+
     await createDBRequest(store, 'put', {id, state}, "Error setting canvas state");
     log.debug(`Set success for id: ${id}`);
 }
@@ -110,7 +111,7 @@ export async function removeCanvasState(id) {
     const db = await openDB();
     const transaction = db.transaction([STATE_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STATE_STORE_NAME);
-    
+
     await createDBRequest(store, 'delete', id, "Error removing canvas state");
     log.debug(`Remove success for id: ${id}`);
 }
@@ -120,7 +121,7 @@ export async function saveImage(imageId, imageSrc) {
     const db = await openDB();
     const transaction = db.transaction([IMAGE_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE_NAME);
-    
+
     await createDBRequest(store, 'put', {imageId, imageSrc}, "Error saving image");
     log.debug(`Image saved successfully for id: ${imageId}`);
 }
@@ -130,7 +131,7 @@ export async function getImage(imageId) {
     const db = await openDB();
     const transaction = db.transaction([IMAGE_STORE_NAME], 'readonly');
     const store = transaction.objectStore(IMAGE_STORE_NAME);
-    
+
     const result = await createDBRequest(store, 'get', imageId, "Error getting image");
     log.debug(`Get image success for id: ${imageId}`, result ? 'found' : 'not found');
     return result ? result.imageSrc : null;
@@ -141,7 +142,7 @@ export async function removeImage(imageId) {
     const db = await openDB();
     const transaction = db.transaction([IMAGE_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(IMAGE_STORE_NAME);
-    
+
     await createDBRequest(store, 'delete', imageId, "Error removing image");
     log.debug(`Remove image success for id: ${imageId}`);
 }
@@ -151,15 +152,15 @@ export async function getAllImageIds() {
     const db = await openDB();
     const transaction = db.transaction([IMAGE_STORE_NAME], 'readonly');
     const store = transaction.objectStore(IMAGE_STORE_NAME);
-    
+
     return new Promise((resolve, reject) => {
         const request = store.getAllKeys();
-        
+
         request.onerror = (event) => {
             log.error("Error getting all image IDs:", event.target.error);
             reject("Error getting all image IDs");
         };
-        
+
         request.onsuccess = (event) => {
             const imageIds = event.target.result;
             log.debug(`Found ${imageIds.length} image IDs in database`);
@@ -173,7 +174,7 @@ export async function clearAllCanvasStates() {
     const db = await openDB();
     const transaction = db.transaction([STATE_STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STATE_STORE_NAME);
-    
+
     await createDBRequest(store, 'clear', null, "Error clearing canvas states");
     log.info("All canvas states cleared successfully.");
 }

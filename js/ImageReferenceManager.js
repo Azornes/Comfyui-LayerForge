@@ -26,11 +26,11 @@ export class ImageReferenceManager {
         if (this.gcTimer) {
             clearInterval(this.gcTimer);
         }
-        
+
         this.gcTimer = setInterval(() => {
             this.performGarbageCollection();
         }, this.gcInterval);
-        
+
         log.info("Garbage collection started with interval:", this.gcInterval / 1000, "seconds");
     }
 
@@ -51,11 +51,11 @@ export class ImageReferenceManager {
      */
     addReference(imageId) {
         if (!imageId) return;
-        
+
         const currentCount = this.imageReferences.get(imageId) || 0;
         this.imageReferences.set(imageId, currentCount + 1);
         this.imageLastUsed.set(imageId, Date.now());
-        
+
         log.debug(`Added reference to image ${imageId}, count: ${currentCount + 1}`);
     }
 
@@ -65,7 +65,7 @@ export class ImageReferenceManager {
      */
     removeReference(imageId) {
         if (!imageId) return;
-        
+
         const currentCount = this.imageReferences.get(imageId) || 0;
         if (currentCount <= 1) {
             this.imageReferences.delete(imageId);
@@ -86,7 +86,7 @@ export class ImageReferenceManager {
         usedImageIds.forEach(imageId => {
             this.addReference(imageId);
         });
-        
+
         log.info(`Updated references for ${usedImageIds.size} unique images`);
     }
 
@@ -120,7 +120,7 @@ export class ImageReferenceManager {
                 });
             });
         }
-        
+
         log.debug(`Collected ${usedImageIds.size} used image IDs`);
         return usedImageIds;
     }
@@ -136,7 +136,7 @@ export class ImageReferenceManager {
             const allImageIds = await getAllImageIds();
             const unusedImages = [];
             const now = Date.now();
-            
+
             for (const imageId of allImageIds) {
 
                 if (!usedImageIds.has(imageId)) {
@@ -146,11 +146,11 @@ export class ImageReferenceManager {
                     if (age > this.maxAge) {
                         unusedImages.push(imageId);
                     } else {
-                        log.debug(`Image ${imageId} is unused but too young (age: ${Math.round(age/1000)}s)`);
+                        log.debug(`Image ${imageId} is unused but too young (age: ${Math.round(age / 1000)}s)`);
                     }
                 }
             }
-            
+
             log.debug(`Found ${unusedImages.length} unused images ready for cleanup`);
             return unusedImages;
         } catch (error) {
@@ -168,11 +168,11 @@ export class ImageReferenceManager {
             log.debug("No unused images to cleanup");
             return;
         }
-        
+
         log.info(`Starting cleanup of ${unusedImages.length} unused images`);
         let cleanedCount = 0;
         let errorCount = 0;
-        
+
         for (const imageId of unusedImages) {
             try {
 
@@ -184,16 +184,16 @@ export class ImageReferenceManager {
 
                 this.imageReferences.delete(imageId);
                 this.imageLastUsed.delete(imageId);
-                
+
                 cleanedCount++;
                 log.debug(`Cleaned up image: ${imageId}`);
-                
+
             } catch (error) {
                 errorCount++;
                 log.error(`Error cleaning up image ${imageId}:`, error);
             }
         }
-        
+
         log.info(`Garbage collection completed: ${cleanedCount} images cleaned, ${errorCount} errors`);
     }
 
@@ -205,10 +205,10 @@ export class ImageReferenceManager {
             log.debug("Garbage collection already running, skipping");
             return;
         }
-        
+
         this.isGcRunning = true;
         log.info("Starting garbage collection...");
-        
+
         try {
 
             this.updateReferences();
@@ -218,7 +218,7 @@ export class ImageReferenceManager {
             const unusedImages = await this.findUnusedImages(usedImageIds);
 
             await this.cleanupUnusedImages(unusedImages);
-            
+
         } catch (error) {
             log.error("Error during garbage collection:", error);
         } finally {
@@ -232,7 +232,7 @@ export class ImageReferenceManager {
     incrementOperationCount() {
         this.operationCount++;
         log.debug(`Operation count: ${this.operationCount}/${this.operationThreshold}`);
-        
+
         if (this.operationCount >= this.operationThreshold) {
             log.info(`Operation threshold reached (${this.operationThreshold}), triggering garbage collection`);
             this.operationCount = 0; // Reset counter

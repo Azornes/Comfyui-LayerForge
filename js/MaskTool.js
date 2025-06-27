@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+
 const log = createModuleLogger('Mask_tool');
 
 export class MaskTool {
@@ -34,7 +35,7 @@ export class MaskTool {
 
         this.x = -extraSpace / 2;
         this.y = -extraSpace / 2;
-        
+
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
         log.info(`Initialized mask canvas with extended size: ${this.maskCanvas.width}x${this.maskCanvas.height}, origin at (${this.x}, ${this.y})`);
     }
@@ -46,7 +47,7 @@ export class MaskTool {
             this.canvasInstance.canvasState.saveMaskState();
         }
         this.canvasInstance.updateHistoryButtons();
-        
+
         log.info("Mask tool activated");
     }
 
@@ -54,7 +55,7 @@ export class MaskTool {
         this.isActive = false;
         this.canvasInstance.interaction.mode = 'none';
         this.canvasInstance.updateHistoryButtons();
-        
+
         log.info("Mask tool deactivated");
     }
 
@@ -104,17 +105,17 @@ export class MaskTool {
 
         const canvasWidth = this.maskCanvas.width;
         const canvasHeight = this.maskCanvas.height;
-        
-        if (canvasX >= 0 && canvasX < canvasWidth && 
+
+        if (canvasX >= 0 && canvasX < canvasWidth &&
             canvasY >= 0 && canvasY < canvasHeight &&
-            canvasLastX >= 0 && canvasLastX < canvasWidth && 
+            canvasLastX >= 0 && canvasLastX < canvasWidth &&
             canvasLastY >= 0 && canvasLastY < canvasHeight) {
-            
+
             this.maskCtx.beginPath();
             this.maskCtx.moveTo(canvasLastX, canvasLastY);
             this.maskCtx.lineTo(canvasX, canvasY);
             const gradientRadius = this.brushSize / 2;
-            
+
             if (this.brushSoftness === 0) {
                 this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
             } else {
@@ -187,21 +188,21 @@ export class MaskTool {
 
         const newWidth = isIncreasingWidth ? width + extraSpace : Math.max(oldWidth, width + extraSpace);
         const newHeight = isIncreasingHeight ? height + extraSpace : Math.max(oldHeight, height + extraSpace);
-        
+
         this.maskCanvas.width = newWidth;
         this.maskCanvas.height = newHeight;
         this.maskCtx = this.maskCanvas.getContext('2d');
-        
+
         if (oldMask.width > 0 && oldMask.height > 0) {
 
             const offsetX = this.x - oldX;
             const offsetY = this.y - oldY;
 
             this.maskCtx.drawImage(oldMask, offsetX, offsetY);
-            
+
             log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
         }
-        
+
         log.info(`Mask canvas resized to ${this.maskCanvas.width}x${this.maskCanvas.height}, position (${this.x}, ${this.y})`);
         log.info(`Canvas size change: width ${isIncreasingWidth ? 'increased' : 'decreased'}, height ${isIncreasingHeight ? 'increased' : 'decreased'}`);
     }

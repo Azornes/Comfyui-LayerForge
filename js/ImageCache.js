@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+
 const log = createModuleLogger('ImageCache');
 
 export class ImageCache {

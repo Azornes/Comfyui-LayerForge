@@ -672,12 +672,12 @@ async function createCanvasWidget(node, widget, app) {
                         try {
                             const stats = canvas.getGarbageCollectionStats();
                             log.info("GC Stats before cleanup:", stats);
-                            
+
                             await canvas.runGarbageCollection();
-                            
+
                             const newStats = canvas.getGarbageCollectionStats();
                             log.info("GC Stats after cleanup:", newStats);
-                            
+
                             alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${newStats.operationCount}/${newStats.operationThreshold}`);
                         } catch (e) {
                             log.error("Failed to run garbage collection:", e);
@@ -787,9 +787,6 @@ async function createCanvasWidget(node, widget, app) {
     node.onResize = function () {
         canvas.render();
     };
-
-
-
 
 
     const mainContainer = $el("div.painterMainContainer", {
@@ -920,7 +917,6 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-    
 
 
     node.canvasWidget = canvas;
@@ -944,12 +940,12 @@ app.registerExtension({
     init() {
 
         const originalQueuePrompt = app.queuePrompt;
-        app.queuePrompt = async function(number, prompt) {
+        app.queuePrompt = async function (number, prompt) {
             log.info("Preparing to queue prompt...");
-            
+
             if (canvasNodeInstances.size > 0) {
                 log.info(`Found ${canvasNodeInstances.size} CanvasNode(s). Sending data via WebSocket...`);
-                
+
                 const sendPromises = [];
                 for (const [nodeId, canvasWidget] of canvasNodeInstances.entries()) {
 
@@ -976,7 +972,7 @@ app.registerExtension({
                     return; // Stop execution
                 }
             }
-            
+
             log.info("All pre-prompt tasks complete. Proceeding with original queuePrompt.");
 
             return originalQueuePrompt.apply(this, arguments);
@@ -994,7 +990,7 @@ app.registerExtension({
                 return r;
             };
 
-            nodeType.prototype.onAdded = async function() {
+            nodeType.prototype.onAdded = async function () {
                 log.info(`CanvasNode onAdded, ID: ${this.id}`);
                 log.debug(`Available widgets in onAdded:`, this.widgets.map(w => w.name));
 
@@ -1003,6 +999,10 @@ app.registerExtension({
                     return;
                 }
 
+                // Iterate through every widget attached to this node
+                this.widgets.forEach(w => {
+                    log.debug(`Widget name: ${w.name}, type: ${w.type}, value: ${w.value}`);
+                });
 
                 const nodeIdWidget = this.widgets.find(w => w.name === "node_id");
                 if (nodeIdWidget) {
@@ -1028,7 +1028,7 @@ app.registerExtension({
                 if (window.canvasExecutionStates) {
                     window.canvasExecutionStates.delete(this.id);
                 }
-                
+
                 const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
                 if (tooltip) {
                     tooltip.remove();
