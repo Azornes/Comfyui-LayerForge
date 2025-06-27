@@ -64,16 +64,28 @@ class ColoredFormatter(logging.Formatter):
         self.use_colors = use_colors
     
     def format(self, record):
+        # Get the formatted message from the record
+        message = record.getMessage()
+        if record.exc_info:
+            message += "\n" + self.formatException(record.exc_info)
+
         levelname = record.levelname
-        message = super().format(record)
         
+        # Build the log prefix
+        prefix = '[{}] [{}] [{}]'.format(
+            self.formatTime(record, self.datefmt),
+            record.name,
+            record.levelname
+        )
+
+        # Apply color and bold styling to the prefix
         if self.use_colors and hasattr(LogLevel, levelname):
-            level = getattr(LogLevel, levelname)
-            color = COLORS.get(level, '')
-            reset = COLORS['RESET']
-            return f"{color}{message}{reset}"
-        
-        return message
+            level_enum = getattr(LogLevel, levelname)
+            if level_enum in COLORS:
+                # Apply bold (\033[1m) and color, then reset
+                prefix = f"\033[1m{COLORS[level_enum]}{prefix}{COLORS['RESET']}"
+
+        return f"{prefix} {message}"
 
 class LayerForgeLogger:
     """Główna klasa loggera dla LayerForge"""
@@ -96,10 +108,6 @@ class LayerForgeLogger:
         
         # Załaduj konfigurację ze zmiennych środowiskowych
         self._load_config_from_env()
-        
-        # Utwórz katalog logów, jeśli nie istnieje
-        if self.config['log_to_file']:
-            os.makedirs(self.config['log_dir'], exist_ok=True)
         
         self._initialized = True
     
@@ -147,6 +155,18 @@ class LayerForgeLogger:
     def configure(self, config):
         """Konfiguracja loggera"""
         self.config.update(config)
+        
+        # Jeśli włączono logowanie do pliku, upewnij się, że katalog istnieje
+        if self.config.get('log_to_file') and self.config.get('log_dir'):
+            try:
+                os.makedirs(self.config['log_dir'], exist_ok=True)
+            except OSError as e:
+                # To jest sytuacja krytyczna, więc użyjmy print
+                print(f"[CRITICAL] Could not create log directory: {self.config['log_dir']}. Error: {e}")
+                traceback.print_exc()
+                # Wyłącz logowanie do pliku, aby uniknąć dalszych błędów
+                self.config['log_to_file'] = False
+
         return self
     
     def set_enabled(self, enabled):
@@ -202,7 +222,8 @@ class LayerForgeLogger:
             file_handler = RotatingFileHandler(
                 log_file,
                 maxBytes=self.config['max_file_size_mb'] * 1024 * 1024,
-                backupCount=self.config['backup_count']
+                backupCount=self.config['backup_count'],
+                encoding='utf-8'
             )
             file_formatter = logging.Formatter(
                 fmt='[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',

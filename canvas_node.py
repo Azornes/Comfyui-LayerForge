@@ -21,8 +21,6 @@ import io
 import sys
 import os
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'python'))
-
 try:
     from python.logger import logger, LogLevel, debug, info, warn, error, exception
 
@@ -241,8 +239,6 @@ class CanvasNode:
 
     def process_canvas_image(self, trigger, output_switch, cache_enabled, node_id, prompt=None, unique_id=None, input_image=None,
                              input_mask=None):
-        
-        log_info(f"[CanvasNode] 🔍 process_canvas_image wejście – node_id={node_id!r}, unique_id={unique_id!r}, trigger={trigger}, output_switch={output_switch}")
         
         try:
 
