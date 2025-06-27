@@ -27,33 +27,46 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'python
 # Importuj logger
 try:
     from python.logger import logger, LogLevel, debug, info, warn, error, exception
-    
+
     # Konfiguracja loggera dla modułu canvas_node
     logger.set_module_level('canvas_node', LogLevel.INFO)  # Domyślnie INFO, można zmienić na DEBUG
-    
+
     # Włącz logowanie do pliku
     logger.configure({
         'log_to_file': True,
         'log_dir': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
     })
-    
+
     # Funkcje pomocnicze dla modułu
     log_debug = lambda *args, **kwargs: debug('canvas_node', *args, **kwargs)
     log_info = lambda *args, **kwargs: info('canvas_node', *args, **kwargs)
     log_warn = lambda *args, **kwargs: warn('canvas_node', *args, **kwargs)
     log_error = lambda *args, **kwargs: error('canvas_node', *args, **kwargs)
     log_exception = lambda *args: exception('canvas_node', *args)
-    
+
     log_info("Logger initialized for canvas_node")
 except ImportError as e:
     # Fallback jeśli logger nie jest dostępny
     print(f"Warning: Logger module not available: {e}")
-    
+
+
     # Proste funkcje zastępcze
-    def log_debug(*args): print("[DEBUG]", *args)
-    def log_info(*args): print("[INFO]", *args)
-    def log_warn(*args): print("[WARN]", *args)
-    def log_error(*args): print("[ERROR]", *args)
+    def log_debug(*args):
+        print("[DEBUG]", *args)
+
+
+    def log_info(*args):
+        print("[INFO]", *args)
+
+
+    def log_warn(*args):
+        print("[WARN]", *args)
+
+
+    def log_error(*args):
+        print("[ERROR]", *args)
+
+
     def log_exception(*args):
         print("[ERROR]", *args)
         traceback.print_exc()
@@ -95,7 +108,7 @@ class BiRefNet(torch.nn.Module):
 class CanvasNode:
     _canvas_data_storage = {}
     _storage_lock = threading.Lock()
-    
+
     _canvas_cache = {
         'image': None,
         'mask': None,
@@ -104,7 +117,7 @@ class CanvasNode:
         'persistent_cache': {},
         'last_execution_id': None
     }
-    
+
     # Simple in-memory storage for canvas data, keyed by prompt_id
     # WebSocket-based storage for canvas data per node
     _websocket_data = {}
@@ -247,11 +260,13 @@ class CanvasNode:
     # Zmienna blokująca równoczesne wykonania
     _processing_lock = threading.Lock()
 
-    def process_canvas_image(self, trigger, output_switch, cache_enabled, node_id, prompt=None, unique_id=None, input_image=None,
+    def process_canvas_image(self, trigger, output_switch, cache_enabled, node_id, prompt=None, unique_id=None,
+                             input_image=None,
                              input_mask=None):
-        
-        log_info(f"[CanvasNode] 🔍 process_canvas_image wejście – node_id={node_id!r}, unique_id={unique_id!r}, trigger={trigger}, output_switch={output_switch}")
-        
+
+        log_info(
+            f"[CanvasNode] 🔍 process_canvas_image wejście – node_id={node_id!r}, unique_id={unique_id!r}, trigger={trigger}, output_switch={output_switch}")
+
         try:
             # Sprawdź czy już trwa przetwarzanie
             if not self.__class__._processing_lock.acquire(blocking=False):
@@ -259,11 +274,12 @@ class CanvasNode:
                 # Return cached data if available to avoid breaking the flow
                 return self.get_cached_data()
 
-            log_info(f"Lock acquired. Starting process_canvas_image for node_id: {node_id} (fallback unique_id: {unique_id})")
-            
+            log_info(
+                f"Lock acquired. Starting process_canvas_image for node_id: {node_id} (fallback unique_id: {unique_id})")
+
             # Use node_id as the primary key, as unique_id is proving unreliable
             storage_key = node_id
-            
+
             processed_image = None
             processed_mask = None
 
@@ -296,7 +312,6 @@ class CanvasNode:
                     log_info("Using provided input_mask as fallback")
                     processed_mask = input_mask
 
-
             # Fallback to default tensors if nothing is loaded
             if processed_image is None:
                 log_warn(f"Processed image is still None, creating default blank image.")
@@ -305,22 +320,22 @@ class CanvasNode:
                 log_warn(f"Processed mask is still None, creating default blank mask.")
                 processed_mask = torch.zeros((1, 512, 512), dtype=torch.float32)
 
-
             if not output_switch:
                 log_debug(f"Output switch is OFF, returning empty tuple")
                 return (None, None)
 
-            log_debug(f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
-            
+            log_debug(
+                f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
+
             self.update_persistent_cache()
-            
+
             log_info(f"Successfully returning processed image and mask")
             return (processed_image, processed_mask)
 
         except Exception as e:
             log_exception(f"Error in process_canvas_image: {str(e)}")
             return (None, None)
-            
+
         finally:
             # Zwolnij blokadę
             if self.__class__._processing_lock.locked():
@@ -373,26 +388,26 @@ class CanvasNode:
         try:
             current_time = time.time()
             cleanup_threshold = 300  # 5 minutes
-            
+
             nodes_to_remove = []
             for node_id, data in cls._websocket_data.items():
                 # Remove invalid node IDs
                 if node_id < 0:
                     nodes_to_remove.append(node_id)
                     continue
-                
+
                 # Remove old data
                 if current_time - data.get('timestamp', 0) > cleanup_threshold:
                     nodes_to_remove.append(node_id)
                     continue
-            
+
             for node_id in nodes_to_remove:
                 del cls._websocket_data[node_id]
                 log_debug(f"Cleaned up old WebSocket data for node {node_id}")
-            
+
             if nodes_to_remove:
                 log_info(f"Cleaned up {len(nodes_to_remove)} old WebSocket entries")
-                
+
         except Exception as e:
             log_error(f"Error during WebSocket cleanup: {str(e)}")
 
@@ -402,7 +417,7 @@ class CanvasNode:
         async def handle_canvas_websocket(request):
             ws = web.WebSocketResponse()
             await ws.prepare(request)
-            
+
             async for msg in ws:
                 if msg.type == web.WSMsgType.TEXT:
                     try:
@@ -411,17 +426,17 @@ class CanvasNode:
                         if not node_id:
                             await ws.send_json({'status': 'error', 'message': 'nodeId is required'})
                             continue
-                        
+
                         image_data = data.get('image')
                         mask_data = data.get('mask')
-                        
+
                         with cls._storage_lock:
                             cls._canvas_data_storage[node_id] = {
                                 'image': image_data,
                                 'mask': mask_data,
                                 'timestamp': time.time()
                             }
-                        
+
                         log_info(f"Received canvas data for node {node_id} via WebSocket")
                         # Send acknowledgment back to the client
                         ack_payload = {
@@ -431,7 +446,7 @@ class CanvasNode:
                         }
                         await ws.send_json(ack_payload)
                         log_debug(f"Sent ACK for node {node_id}")
-                        
+
                     except Exception as e:
                         log_error(f"Error processing WebSocket message: {e}")
                         await ws.send_json({'status': 'error', 'message': str(e)})
@@ -679,10 +694,11 @@ class BiRefNetMatting:
 # Zmienna blokująca równoczesne wywołania matting
 _matting_lock = None
 
+
 @PromptServer.instance.routes.post("/matting")
 async def matting(request):
     global _matting_lock
-    
+
     # Sprawdź czy już trwa przetwarzanie
     if _matting_lock is not None:
         log_warn("Matting already in progress, rejecting request")
@@ -690,10 +706,10 @@ async def matting(request):
             "error": "Another matting operation is in progress",
             "details": "Please wait for the current operation to complete"
         }, status=429)  # 429 Too Many Requests
-        
+
     # Ustaw blokadę
     _matting_lock = True
-    
+
     try:
         log_info("Received matting request")
         data = await request.json()

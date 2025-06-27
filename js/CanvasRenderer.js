@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+
 const log = createModuleLogger('CanvasRenderer');
 
 export class CanvasRenderer {
@@ -83,10 +84,7 @@ export class CanvasRenderer {
         this.drawCanvasOutline(ctx);
         const maskImage = this.canvas.maskTool.getMask();
         if (maskImage) {
-            // Create a clipping region to only show mask content that overlaps with the output area
             ctx.save();
-            
-            // Only show what's visible inside the output area
             if (this.canvas.maskTool.isActive) {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 0.5;
@@ -94,10 +92,8 @@ export class CanvasRenderer {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             }
-            
-            // Draw the mask at its world space position
             ctx.drawImage(maskImage, this.canvas.maskTool.x, this.canvas.maskTool.y);
-            
+
             ctx.globalAlpha = 1.0;
             ctx.restore();
         }
@@ -107,7 +103,7 @@ export class CanvasRenderer {
 
         ctx.restore();
 
-        if (this.canvas.canvas.width !== this.canvas.offscreenCanvas.width || 
+        if (this.canvas.canvas.width !== this.canvas.offscreenCanvas.width ||
             this.canvas.canvas.height !== this.canvas.offscreenCanvas.height) {
             this.canvas.canvas.width = this.canvas.offscreenCanvas.width;
             this.canvas.canvas.height = this.canvas.offscreenCanvas.height;
@@ -117,7 +113,7 @@ export class CanvasRenderer {
 
     renderInteractionElements(ctx) {
         const interaction = this.canvas.interaction;
-        
+
         if (interaction.mode === 'resizingCanvas' && interaction.canvasResizeRect) {
             const rect = interaction.canvasResizeRect;
             ctx.save();
@@ -149,7 +145,7 @@ export class CanvasRenderer {
                 ctx.restore();
             }
         }
-        
+
         if (interaction.mode === 'movingCanvas' && interaction.canvasMoveRect) {
             const rect = interaction.canvasMoveRect;
             ctx.save();
