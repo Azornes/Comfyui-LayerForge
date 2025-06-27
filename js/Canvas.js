@@ -11,7 +11,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('Canvas');
 
 export class Canvas {
-    constructor(node, widget) {
+    constructor(node, widget, callbacks = {}) {
         this.node = node;
         this.widget = widget;
         this.canvas = document.createElement('canvas');
@@ -22,6 +22,7 @@ export class Canvas {
         this.selectedLayer = null;
         this.selectedLayers = [];
         this.onSelectionChange = null;
+        this.onInteractionEnd = callbacks.onInteractionEnd || null;
         this.lastMousePosition = {x: 0, y: 0};
 
         this.viewport = {

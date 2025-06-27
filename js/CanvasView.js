@@ -11,7 +11,9 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('Canvas_view');
 
 async function createCanvasWidget(node, widget, app) {
-    const canvas = new Canvas(node, widget);
+    const canvas = new Canvas(node, widget, {
+        onInteractionEnd: () => updateOutput()
+    });
     const imageCache = new ImageCache();
 
     const style = document.createElement('style');

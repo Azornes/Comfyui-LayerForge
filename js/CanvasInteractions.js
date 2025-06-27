@@ -172,6 +172,9 @@ export class CanvasInteractions {
         if (interactionEnded) {
             this.canvas.saveState();
             this.canvas.saveStateToDB(true);
+            if (this.canvas.onInteractionEnd) {
+                this.canvas.onInteractionEnd();
+            }
         }
     }
 
