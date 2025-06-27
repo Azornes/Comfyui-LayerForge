@@ -2,7 +2,6 @@ import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce} from "./utils/CommonUtils.js";
 import {withErrorHandling} from "./ErrorHandler.js";
-
 const log = createModuleLogger('CanvasState');
 
 export class CanvasState {
@@ -32,7 +31,7 @@ export class CanvasState {
         }
 
         this._loadInProgress = this._performLoad();
-
+        
         try {
             const result = await this._loadInProgress;
             return result;
@@ -79,7 +78,7 @@ export class CanvasState {
      * @returns {Promise<Array>} Załadowane warstwy
      */
     async _loadLayers(layersData) {
-        const imagePromises = layersData.map((layerData, index) =>
+        const imagePromises = layersData.map((layerData, index) => 
             this._loadSingleLayer(layerData, index)
         );
         return Promise.all(imagePromises);
@@ -112,7 +111,7 @@ export class CanvasState {
      */
     _loadLayerFromImageId(layerData, index, resolve) {
         log.debug(`Layer ${index}: Loading image with id: ${layerData.imageId}`);
-
+        
         if (this.canvas.imageCache.has(layerData.imageId)) {
             log.debug(`Layer ${index}: Image found in cache.`);
             const imageSrc = this.canvas.imageCache.get(layerData.imageId);
@@ -145,7 +144,7 @@ export class CanvasState {
     _convertLegacyLayer(layerData, index, resolve) {
         log.info(`Layer ${index}: Found imageSrc, converting to new format with imageId.`);
         const imageId = generateUUID();
-
+        
         saveImage(imageId, layerData.imageSrc)
             .then(() => {
                 log.info(`Layer ${index}: Image saved to IndexedDB with id: ${imageId}`);
@@ -284,7 +283,7 @@ export class CanvasState {
 
     saveMaskState(replaceLast = false) {
         if (!this.canvas.maskTool) return;
-
+        
         if (replaceLast && this.maskUndoStack.length > 0) {
             this.maskUndoStack.pop();
         }
@@ -322,7 +321,7 @@ export class CanvasState {
 
     undoLayersState() {
         if (this.layersUndoStack.length <= 1) return;
-
+        
         const currentState = this.layersUndoStack.pop();
         this.layersRedoStack.push(currentState);
         const prevState = this.layersUndoStack[this.layersUndoStack.length - 1];
@@ -334,7 +333,7 @@ export class CanvasState {
 
     redoLayersState() {
         if (this.layersRedoStack.length === 0) return;
-
+        
         const nextState = this.layersRedoStack.pop();
         this.layersUndoStack.push(nextState);
         this.canvas.layers = cloneLayers(nextState);
@@ -345,33 +344,33 @@ export class CanvasState {
 
     undoMaskState() {
         if (!this.canvas.maskTool || this.maskUndoStack.length <= 1) return;
-
+        
         const currentState = this.maskUndoStack.pop();
         this.maskRedoStack.push(currentState);
-
+        
         if (this.maskUndoStack.length > 0) {
             const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
             const maskCanvas = this.canvas.maskTool.getMask();
             const maskCtx = maskCanvas.getContext('2d');
             maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
             maskCtx.drawImage(prevState, 0, 0);
-
+            
             this.canvas.render();
         }
-
+        
         this.canvas.updateHistoryButtons();
     }
 
     redoMaskState() {
         if (!this.canvas.maskTool || this.maskRedoStack.length === 0) return;
-
+        
         const nextState = this.maskRedoStack.pop();
         this.maskUndoStack.push(nextState);
         const maskCanvas = this.canvas.maskTool.getMask();
         const maskCtx = maskCanvas.getContext('2d');
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.drawImage(nextState, 0, 0);
-
+        
         this.canvas.render();
         this.canvas.updateHistoryButtons();
     }

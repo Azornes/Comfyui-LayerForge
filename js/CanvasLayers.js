@@ -2,7 +2,6 @@ import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
-
 const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
@@ -359,7 +358,6 @@ export class CanvasLayers {
         this.canvasLayers.selectedLayer = layer;
         this.canvasLayers.render();
     }
-
     isRotationHandle(x, y) {
         if (!this.canvasLayers.selectedLayer) return false;
 
@@ -430,18 +428,12 @@ export class CanvasLayers {
         const handleRadius = 5;
         const handles = {
             'nw': {x: this.canvasLayers.selectedLayer.x, y: this.canvasLayers.selectedLayer.y},
-            'ne': {
-                x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
-                y: this.canvasLayers.selectedLayer.y
-            },
+            'ne': {x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width, y: this.canvasLayers.selectedLayer.y},
             'se': {
                 x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
                 y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
             },
-            'sw': {
-                x: this.canvasLayers.selectedLayer.x,
-                y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
-            }
+            'sw': {x: this.canvasLayers.selectedLayer.x, y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height}
         };
 
         for (const [position, point] of Object.entries(handles)) {
@@ -451,7 +443,6 @@ export class CanvasLayers {
         }
         return null;
     }
-
     showBlendModeMenu(x, y) {
         const existingMenu = document.getElementById('blend-mode-menu');
         if (existingMenu) {
@@ -542,7 +533,7 @@ export class CanvasLayers {
                             return await this.canvasLayers.saveToServer(fileName);
                         }
                     };
-
+                    
                     await saveWithFallback(this.canvasLayers.widget.value);
                     if (this.canvasLayers.node) {
                         app.graph.runStep();
@@ -603,7 +594,6 @@ export class CanvasLayers {
             modeElement.appendChild(slider);
         }
     }
-
     async getFlattenedCanvasAsBlob() {
         return new Promise((resolve, reject) => {
             const tempCanvas = document.createElement('canvas');
@@ -643,7 +633,6 @@ export class CanvasLayers {
             }, 'image/png');
         });
     }
-
     async getFlattenedSelectionAsBlob() {
         if (this.canvasLayers.selectedLayers.length === 0) {
             return null;

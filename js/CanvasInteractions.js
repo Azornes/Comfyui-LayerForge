@@ -1,6 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {snapToGrid, getSnapAdjustment} from "./utils/CommonUtils.js";
-
 const log = createModuleLogger('CanvasInteractions');
 
 export class CanvasInteractions {
@@ -503,8 +502,10 @@ export class CanvasInteractions {
                 layer.x -= finalX;
                 layer.y -= finalY;
             });
+            
+            // Update mask position when moving canvas
             this.canvas.maskTool.updatePosition(-finalX, -finalY);
-
+            
             this.canvas.viewport.x -= finalX;
             this.canvas.viewport.y -= finalY;
         }
@@ -689,6 +690,8 @@ export class CanvasInteractions {
                 layer.x -= rectX;
                 layer.y -= rectY;
             });
+            
+            // Update mask position when resizing canvas
             this.canvas.maskTool.updatePosition(-rectX, -rectY);
 
             this.canvas.viewport.x -= rectX;

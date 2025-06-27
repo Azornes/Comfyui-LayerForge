@@ -7,7 +7,6 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-
 const log = createModuleLogger('Canvas');
 
 export class Canvas {
@@ -46,7 +45,7 @@ export class Canvas {
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
         this.interaction = this.canvasInteractions.interaction;
-
+        
         this.setupEventListeners();
         this.initNodeData();
 
@@ -138,7 +137,6 @@ export class Canvas {
             this.onSelectionChange();
         }
     }
-
     async copySelectedLayers() {
         return this.canvasLayers.copySelectedLayers();
     }
@@ -265,6 +263,8 @@ export class Canvas {
     getHandleAtPosition(worldX, worldY) {
         return this.canvasLayers.getHandleAtPosition(worldX, worldY);
     }
+
+
 
 
     async getFlattenedCanvasAsBlob() {

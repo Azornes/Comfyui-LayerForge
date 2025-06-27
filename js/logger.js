@@ -1,6 +1,6 @@
 /**
  * Logger - Centralny system logowania dla ComfyUI-LayerForge
- *
+ * 
  * Funkcje:
  * - Różne poziomy logowania (DEBUG, INFO, WARN, ERROR)
  * - Możliwość włączania/wyłączania logów globalnie lub per moduł
@@ -39,7 +39,7 @@ const LEVEL_NAMES = {
 
 class Logger {
     constructor() {
-        this.config = {...DEFAULT_CONFIG};
+        this.config = { ...DEFAULT_CONFIG };
         this.logs = [];
         this.enabled = true;
         this.loadConfig();
@@ -50,7 +50,7 @@ class Logger {
      * @param {Object} config - Obiekt konfiguracyjny
      */
     configure(config) {
-        this.config = {...this.config, ...config};
+        this.config = { ...this.config, ...config };
         this.saveConfig();
         return this;
     }
@@ -147,7 +147,7 @@ class Logger {
      * @param {Object} logData - Dane logu
      */
     printToConsole(logData) {
-        const {timestamp, module, level, levelName, args} = logData;
+        const { timestamp, module, level, levelName, args } = logData;
         const prefix = `[${timestamp}] [${module}] [${levelName}]`;
         if (this.config.useColors && typeof console.log === 'function') {
             const color = COLORS[level] || '#000000';
@@ -178,7 +178,7 @@ class Logger {
                         return arg;
                     })
                 }));
-
+                
                 localStorage.setItem(this.config.storageKey, JSON.stringify(simplifiedLogs));
             } catch (e) {
                 console.error('Failed to save logs to localStorage:', e);
@@ -223,7 +223,7 @@ class Logger {
             try {
                 const storedConfig = localStorage.getItem('layerforge_logger_config');
                 if (storedConfig) {
-                    this.config = {...this.config, ...JSON.parse(storedConfig)};
+                    this.config = { ...this.config, ...JSON.parse(storedConfig) };
                 }
             } catch (e) {
                 console.error('Failed to load logger config from localStorage:', e);
@@ -251,23 +251,23 @@ class Logger {
             console.warn('No logs to export');
             return;
         }
-
+        
         let content;
         let mimeType;
         let extension;
-
+        
         if (format === 'json') {
             content = JSON.stringify(this.logs, null, 2);
             mimeType = 'application/json';
             extension = 'json';
         } else {
-            content = this.logs.map(log =>
+            content = this.logs.map(log => 
                 `[${log.timestamp}] [${log.module}] [${log.levelName}] ${log.args.join(' ')}`
             ).join('\n');
             mimeType = 'text/plain';
             extension = 'txt';
         }
-        const blob = new Blob([content], {type: mimeType});
+        const blob = new Blob([content], { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -277,7 +277,7 @@ class Logger {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
-
+    
     /**
      * Log na poziomie DEBUG
      * @param {string} module - Nazwa modułu
@@ -314,7 +314,6 @@ class Logger {
         this.log(module, LogLevel.ERROR, ...args);
     }
 }
-
 export const logger = new Logger();
 export const debug = (module, ...args) => logger.debug(module, ...args);
 export const info = (module, ...args) => logger.info(module, ...args);

@@ -60,7 +60,7 @@ export class ErrorHandler {
         this.logError(normalizedError, context);
         this.recordError(normalizedError);
         this.incrementErrorCount(normalizedError.type);
-
+        
         return normalizedError;
     }
 
@@ -75,29 +75,29 @@ export class ErrorHandler {
         if (error instanceof AppError) {
             return error;
         }
-
+        
         if (error instanceof Error) {
             const type = this.categorizeError(error, context);
             return new AppError(
                 error.message,
                 type,
-                {context, ...additionalInfo},
+                { context, ...additionalInfo },
                 error
             );
         }
-
+        
         if (typeof error === 'string') {
             return new AppError(
                 error,
                 ErrorTypes.SYSTEM,
-                {context, ...additionalInfo}
+                { context, ...additionalInfo }
             );
         }
-
+        
         return new AppError(
             'Unknown error occurred',
             ErrorTypes.SYSTEM,
-            {context, originalError: error, ...additionalInfo}
+            { context, originalError: error, ...additionalInfo }
         );
     }
 
@@ -109,30 +109,30 @@ export class ErrorHandler {
      */
     categorizeError(error, context) {
         const message = error.message.toLowerCase();
-        if (message.includes('fetch') || message.includes('network') ||
+        if (message.includes('fetch') || message.includes('network') || 
             message.includes('connection') || message.includes('timeout')) {
             return ErrorTypes.NETWORK;
         }
-        if (message.includes('file') || message.includes('read') ||
+        if (message.includes('file') || message.includes('read') || 
             message.includes('write') || message.includes('path')) {
             return ErrorTypes.FILE_IO;
         }
-        if (message.includes('invalid') || message.includes('required') ||
+        if (message.includes('invalid') || message.includes('required') || 
             message.includes('validation') || message.includes('format')) {
             return ErrorTypes.VALIDATION;
         }
-        if (message.includes('image') || message.includes('canvas') ||
+        if (message.includes('image') || message.includes('canvas') || 
             message.includes('blob') || message.includes('tensor')) {
             return ErrorTypes.IMAGE_PROCESSING;
         }
-        if (message.includes('state') || message.includes('cache') ||
+        if (message.includes('state') || message.includes('cache') || 
             message.includes('storage')) {
             return ErrorTypes.STATE_MANAGEMENT;
         }
         if (context.toLowerCase().includes('canvas')) {
             return ErrorTypes.CANVAS;
         }
-
+        
         return ErrorTypes.SYSTEM;
     }
 
@@ -224,7 +224,6 @@ export class ErrorHandler {
         log.info('Error history cleared');
     }
 }
-
 const errorHandler = new ErrorHandler();
 
 /**
@@ -234,7 +233,7 @@ const errorHandler = new ErrorHandler();
  * @returns {Function} Opakowana funkcja
  */
 export function withErrorHandling(fn, context) {
-    return async function (...args) {
+    return async function(...args) {
         try {
             return await fn.apply(this, args);
         } catch (error) {
@@ -252,10 +251,10 @@ export function withErrorHandling(fn, context) {
  * @param {string} context - Kontekst wykonania
  */
 export function handleErrors(context) {
-    return function (target, propertyKey, descriptor) {
+    return function(target, propertyKey, descriptor) {
         const originalMethod = descriptor.value;
-
-        descriptor.value = async function (...args) {
+        
+        descriptor.value = async function(...args) {
             try {
                 return await originalMethod.apply(this, args);
             } catch (error) {
@@ -267,7 +266,7 @@ export function handleErrors(context) {
                 throw handledError;
             }
         };
-
+        
         return descriptor;
     };
 }
@@ -328,25 +327,24 @@ export async function safeExecute(operation, fallbackValue = null, context = 'Sa
  */
 export async function retryWithBackoff(operation, maxRetries = 3, baseDelay = 1000, context = 'RetryOperation') {
     let lastError;
-
+    
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
             return await operation();
         } catch (error) {
             lastError = error;
-
+            
             if (attempt === maxRetries) {
                 break;
             }
-
+            
             const delay = baseDelay * Math.pow(2, attempt);
-            log.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms`, {error: error.message, context});
+            log.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms`, { error: error.message, context });
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
-
-    throw errorHandler.handle(lastError, context, {attempts: maxRetries + 1});
+    
+    throw errorHandler.handle(lastError, context, { attempts: maxRetries + 1 });
 }
-
-export {errorHandler};
+export { errorHandler };
 export default errorHandler;
