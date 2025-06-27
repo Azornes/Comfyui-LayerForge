@@ -377,8 +377,7 @@ async function createCanvasWidget(node, widget, app) {
                                     const img = new Image();
                                     img.onload = async () => {
                                         canvas.addLayer(img);
-                                        await saveWithFallback(widget.value);
-                                        app.graph.runStep();
+                                        await updateOutput();
                                     };
                                     img.src = event.target.result;
                                 };
@@ -392,8 +391,7 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Import Input",
                     onclick: async () => {
                         if (await canvas.importLatestImage()) {
-                            await saveWithFallback(widget.value);
-                            app.graph.runStep();
+                            await updateOutput();
                         }
                     }
                 }),
@@ -574,8 +572,7 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
-                            await saveWithFallback(widget.value);
-                            app.graph.runStep();
+                            await updateOutput();
                         } catch (error) {
                             log.error("Matting error:", error);
                             alert(`Error during matting process: ${error.message}`);
@@ -745,7 +742,8 @@ async function createCanvasWidget(node, widget, app) {
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
-        await saveWithFallback(widget.value);
+        // Only increment trigger and run step - don't save to disk here
+        // Saving to disk will happen during execution_start event
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         app.graph.runStep();
     };
@@ -790,8 +788,9 @@ async function createCanvasWidget(node, widget, app) {
         canvas.render();
     };
 
-    canvas.canvas.addEventListener('mouseup', updateOutput);
-    canvas.canvas.addEventListener('mouseleave', updateOutput);
+    // Remove automatic saving on mouse events - only save during execution
+    // canvas.canvas.addEventListener('mouseup', updateOutput);
+    // canvas.canvas.addEventListener('mouseleave', updateOutput);
 
 
     const mainContainer = $el("div.painterMainContainer", {
@@ -922,66 +921,8 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-    const saveWithFallback = async (fileName) => {
-        try {
-            const uniqueFileName = generateUniqueFileName(fileName, node.id);
-            log.debug(`Attempting to save with unique name: ${uniqueFileName}`);
-            return await canvas.saveToServer(uniqueFileName);
-        } catch (error) {
-            log.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);
-            return await canvas.saveToServer(fileName);
-        }
-    };
     
-    api.addEventListener("execution_start", async (event) => {
-        const executionData = event.detail || {};
-        const currentPromptId = executionData.prompt_id;
-        
-        log.info(`Execution start event for node ${node.id}, prompt_id: ${currentPromptId}`);
-        log.debug(`Widget value: ${widget.value}`);
-        log.debug(`Node inputs: ${node.inputs?.length || 0}`);
-        log.debug(`Canvas layers count: ${canvas.layers.length}`);
-        if (window.canvasExecutionStates.get(node.id)) {
-            log.warn(`Execution already in progress for node ${node.id}, skipping...`);
-            return;
-        }
-        window.canvasExecutionStates.set(node.id, true);
-        
-        try {
-            if (canvas.layers.length === 0) {
-                log.warn(`Node ${node.id} has no layers, skipping save to server`);
-            } else {
-                await saveWithFallback(widget.value);
-                log.info(`Canvas saved to server for node ${node.id}`);
-            }
 
-            if (node.inputs[0]?.link) {
-                const linkId = node.inputs[0].link;
-                const inputData = app.nodeOutputs[linkId];
-                log.debug(`Input link ${linkId} has data: ${!!inputData}`);
-                if (inputData) {
-                    imageCache.set(linkId, inputData);
-                    log.debug(`Input data cached for link ${linkId}`);
-                }
-            } else {
-                log.debug(`No input link found`);
-            }
-        } catch (error) {
-            log.error(`Error during execution for node ${node.id}:`, error);
-        } finally {
-            window.canvasExecutionStates.set(node.id, false);
-            log.debug(`Execution completed for node ${node.id}, flag released`);
-        }
-    });
-
-    const originalSaveToServer = canvas.saveToServer;
-    canvas.saveToServer = async function (fileName) {
-        log.debug(`saveToServer called with fileName: ${fileName}`);
-        log.debug(`Current execution context - node ID: ${node.id}`);
-        const result = await originalSaveToServer.call(this, fileName);
-        log.debug(`saveToServer completed, result: ${result}`);
-        return result;
-    };
 
     node.canvasWidget = canvas;
 
@@ -996,30 +937,111 @@ async function createCanvasWidget(node, widget, app) {
 }
 
 
+const canvasNodeInstances = new Map();
+
 app.registerExtension({
     name: "Comfy.CanvasNode",
+
+    init() {
+        // Monkey-patch the queuePrompt function to send canvas data via WebSocket before sending the prompt
+        const originalQueuePrompt = app.queuePrompt;
+        app.queuePrompt = async function(number, prompt) {
+            log.info("Preparing to queue prompt...");
+            
+            if (canvasNodeInstances.size > 0) {
+                log.info(`Found ${canvasNodeInstances.size} CanvasNode(s). Sending data via WebSocket...`);
+                
+                const sendPromises = [];
+                for (const [nodeId, canvasWidget] of canvasNodeInstances.entries()) {
+                    // Ensure the node still exists on the graph before sending data
+                    if (app.graph.getNodeById(nodeId) && canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
+                        log.debug(`Sending data for canvas node ${nodeId}`);
+                        // This now returns a promise that resolves upon server ACK
+                        sendPromises.push(canvasWidget.canvas.canvasIO.sendDataViaWebSocket(nodeId));
+                    } else {
+                        // If node doesn't exist, it might have been deleted, so we can clean up the map
+                        log.warn(`Node ${nodeId} not found in graph, removing from instances map.`);
+                        canvasNodeInstances.delete(nodeId);
+                    }
+                }
+
+                try {
+                    // Wait for all WebSocket messages to be acknowledged
+                    await Promise.all(sendPromises);
+                    log.info("All canvas data has been sent and acknowledged by the server.");
+                } catch (error) {
+                    log.error("Failed to send canvas data for one or more nodes. Aborting prompt.", error);
+                    // IMPORTANT: Stop the prompt from queueing if data transfer fails.
+                    // You might want to show a user-facing error here.
+                    alert(`CanvasNode Error: ${error.message}`);
+                    return; // Stop execution
+                }
+            }
+            
+            log.info("All pre-prompt tasks complete. Proceeding with original queuePrompt.");
+            // Proceed with the original queuePrompt logic
+            return originalQueuePrompt.apply(this, arguments);
+        };
+    },
+
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeType.comfyClass === "CanvasNode") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
-            nodeType.prototype.onNodeCreated = async function () {
-                log.info("CanvasNode created, ID:", this.id);
+            nodeType.prototype.onNodeCreated = function () {
+                log.debug("CanvasNode onNodeCreated: Base widget setup.");
+                // Call original onNodeCreated to ensure widgets are created
                 const r = onNodeCreated?.apply(this, arguments);
-
-                const widget = this.widgets.find(w => w.name === "canvas_image");
-                log.debug("Found canvas_image widget:", widget);
-                await createCanvasWidget(this, widget, app);
-
+                // The main initialization is moved to onAdded
                 return r;
+            };
+
+            // onAdded is the most reliable callback for when a node is fully added to the graph and has an ID
+            nodeType.prototype.onAdded = async function() {
+                log.info(`CanvasNode onAdded, ID: ${this.id}`);
+                log.debug(`Available widgets in onAdded:`, this.widgets.map(w => w.name));
+
+                // Prevent re-initialization if the widget already exists
+                if (this.canvasWidget) {
+                    log.warn(`CanvasNode ${this.id} already initialized. Skipping onAdded setup.`);
+                    return;
+                }
+
+                // Now that we are in onAdded, this.id is guaranteed to be correct.
+                // Set the hidden node_id widget's value for backend communication.
+                const nodeIdWidget = this.widgets.find(w => w.name === "node_id");
+                if (nodeIdWidget) {
+                    nodeIdWidget.value = String(this.id);
+                    log.debug(`Set hidden node_id widget to: ${nodeIdWidget.value}`);
+                } else {
+                    log.error("Could not find the hidden node_id widget!");
+                }
+                
+                // Create the main canvas widget and register it in our global map
+                // We pass `null` for the widget parameter as we are not using a pre-defined widget.
+                const canvasWidget = await createCanvasWidget(this, null, app);
+                canvasNodeInstances.set(this.id, canvasWidget);
+                log.info(`Registered CanvasNode instance for ID: ${this.id}`);
             };
 
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {
+                log.info(`Cleaning up canvas node ${this.id}`);
+                
+                // Clean up from our instance map
+                canvasNodeInstances.delete(this.id);
+                log.info(`Deregistered CanvasNode instance for ID: ${this.id}`);
+
+                // Clean up execution state
+                if (window.canvasExecutionStates) {
+                    window.canvasExecutionStates.delete(this.id);
+                }
+                
                 const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
                 if (tooltip) {
                     tooltip.remove();
                 }
                 const backdrop = document.querySelector('.painter-modal-backdrop');
-                if (backdrop && backdrop.contains(this.canvasWidget.canvas)) {
+                if (backdrop && backdrop.contains(this.canvasWidget?.canvas)) {
                     document.body.removeChild(backdrop);
                 }
 

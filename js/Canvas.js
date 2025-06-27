@@ -266,9 +266,6 @@ export class Canvas {
 
 
 
-    async saveToServer(fileName) {
-        return this.canvasIO.saveToServer(fileName);
-    }
 
     async getFlattenedCanvasAsBlob() {
         return this.canvasLayers.getFlattenedCanvasAsBlob();

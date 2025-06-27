@@ -125,12 +125,29 @@ export function cloneLayers(layers) {
  * @returns {string} Sygnatura JSON
  */
 export function getStateSignature(layers) {
-    return JSON.stringify(layers.map(layer => {
-        const sig = {...layer};
-        if (sig.imageId) {
-            sig.imageId = sig.imageId;
+    return JSON.stringify(layers.map((layer, index) => {
+        const sig = {
+            index: index,
+            x: Math.round(layer.x * 100) / 100, // Round to avoid floating point precision issues
+            y: Math.round(layer.y * 100) / 100,
+            width: Math.round(layer.width * 100) / 100,
+            height: Math.round(layer.height * 100) / 100,
+            rotation: Math.round((layer.rotation || 0) * 100) / 100,
+            zIndex: layer.zIndex,
+            blendMode: layer.blendMode || 'normal',
+            opacity: layer.opacity !== undefined ? Math.round(layer.opacity * 100) / 100 : 1
+        };
+        
+        // Include imageId if available
+        if (layer.imageId) {
+            sig.imageId = layer.imageId;
         }
-        delete sig.image;
+        
+        // Include image src as fallback identifier
+        if (layer.image && layer.image.src) {
+            sig.imageSrc = layer.image.src.substring(0, 100); // First 100 chars to avoid huge signatures
+        }
+        
         return sig;
     }));
 }

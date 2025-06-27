@@ -1,5 +1,6 @@
 import {createCanvas} from "./utils/CommonUtils.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {webSocketManager} from "./utils/WebSocketManager.js";
 
 const log = createModuleLogger('CanvasIO');
 
@@ -9,35 +10,38 @@ export class CanvasIO {
         this._saveInProgress = null;
     }
 
-    async saveToServer(fileName) {
-        if (!window.canvasSaveStates) {
-            window.canvasSaveStates = new Map();
-        }
-        
-        const nodeId = this.canvas.node.id;
-        const saveKey = `${nodeId}_${fileName}`;
-        if (this._saveInProgress || window.canvasSaveStates.get(saveKey)) {
-            log.warn(`Save already in progress for node ${nodeId}, waiting...`);
-            return this._saveInProgress || window.canvasSaveStates.get(saveKey);
-        }
+    async saveToServer(fileName, outputMode = 'disk') {
+        if (outputMode === 'disk') {
+            if (!window.canvasSaveStates) {
+                window.canvasSaveStates = new Map();
+            }
 
-        log.info(`Starting saveToServer with fileName: ${fileName} for node: ${nodeId}`);
-        log.debug(`Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
-        log.debug(`Number of layers: ${this.canvas.layers.length}`);
-        this._saveInProgress = this._performSave(fileName);
-        window.canvasSaveStates.set(saveKey, this._saveInProgress);
-        
-        try {
-            const result = await this._saveInProgress;
-            return result;
-        } finally {
-            this._saveInProgress = null;
-            window.canvasSaveStates.delete(saveKey);
-            log.debug(`Save completed for node ${nodeId}, lock released`);
+            const nodeId = this.canvas.node.id;
+            const saveKey = `${nodeId}_${fileName}`;
+            if (this._saveInProgress || window.canvasSaveStates.get(saveKey)) {
+                log.warn(`Save already in progress for node ${nodeId}, waiting...`);
+                return this._saveInProgress || window.canvasSaveStates.get(saveKey);
+            }
+
+            log.info(`Starting saveToServer (disk) with fileName: ${fileName} for node: ${nodeId}`);
+            this._saveInProgress = this._performSave(fileName, outputMode);
+            window.canvasSaveStates.set(saveKey, this._saveInProgress);
+            
+            try {
+                return await this._saveInProgress;
+            } finally {
+                this._saveInProgress = null;
+                window.canvasSaveStates.delete(saveKey);
+                log.debug(`Save completed for node ${nodeId}, lock released`);
+            }
+        } else {
+            // For RAM mode, we don't need the lock/state management as it's synchronous
+            log.info(`Starting saveToServer (RAM) for node: ${this.canvas.node.id}`);
+            return this._performSave(fileName, outputMode);
         }
     }
 
-    async _performSave(fileName) {
+    async _performSave(fileName, outputMode) {
         if (this.canvas.layers.length === 0) {
             log.warn(`Node ${this.canvas.node.id} has no layers, creating empty canvas`);
             return Promise.resolve(true);
@@ -152,6 +156,15 @@ export class CanvasIO {
                 maskCtx.globalCompositeOperation = 'source-over';
                 maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
+            if (outputMode === 'ram') {
+                const imageData = tempCanvas.toDataURL('image/png');
+                const maskData = maskCanvas.toDataURL('image/png');
+                log.info("Returning image and mask data as base64 for RAM mode.");
+                resolve({ image: imageData, mask: maskData });
+                return;
+            }
+
+            // --- Disk Mode (original logic) ---
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
             log.info(`Saving image without mask as: ${fileNameWithoutMask}`);
             
@@ -204,7 +217,9 @@ export class CanvasIO {
 
                                 if (maskResp.status === 200) {
                                     const data = await resp.json();
-                                    this.canvas.widget.value = fileName;
+                                    if (this.canvas.widget) {
+                                        this.canvas.widget.value = fileName;
+                                    }
                                     log.info(`All files saved successfully, widget value set to: ${fileName}`);
                                     resolve(true);
                                 } else {
@@ -226,6 +241,132 @@ export class CanvasIO {
                 }
             }, "image/png");
         });
+    }
+
+    async _renderOutputData() {
+        return new Promise((resolve) => {
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
+            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
+    
+            // This logic is mostly mirrored from _performSave to ensure consistency
+            tempCtx.fillStyle = '#ffffff';
+            tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            const visibilityCanvas = document.createElement('canvas');
+            visibilityCanvas.width = this.canvas.width;
+            visibilityCanvas.height = this.canvas.height;
+            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            maskCtx.fillStyle = '#ffffff'; // Start with a white mask (nothing masked)
+            maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
+            sortedLayers.forEach((layer) => {
+                // Render layer to main canvas
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                tempCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                tempCtx.restore();
+                
+                // Render layer to visibility canvas for the mask
+                visibilityCtx.save();
+                visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
+                visibilityCtx.rotate(layer.rotation * Math.PI / 180);
+                visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                visibilityCtx.restore();
+            });
+    
+            // Create layer visibility mask
+            const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+            const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+            for (let i = 0; i < visibilityData.data.length; i += 4) {
+                const alpha = visibilityData.data[i + 3];
+                const maskValue = 255 - alpha; // Invert alpha to create the mask
+                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
+                maskData.data[i + 3] = 255; // Solid mask
+            }
+            maskCtx.putImageData(maskData, 0, 0);
+    
+            // Composite the tool mask on top
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
+                // Create a temp canvas for processing the mask
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.canvas.width;
+                tempMaskCanvas.height = this.canvas.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                
+                // Clear the canvas
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                
+                // Calculate the correct position to extract the mask
+                const maskX = this.canvas.maskTool.x;
+                const maskY = this.canvas.maskTool.y;
+                
+                log.debug(`[renderOutputData] Extracting mask from world position (${maskX}, ${maskY})`);
+
+                const sourceX = Math.max(0, -maskX);
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);
+                const destY = Math.max(0, maskY);
+                
+                const copyWidth = Math.min(toolMaskCanvas.width - sourceX, this.canvas.width - destX);
+                const copyHeight = Math.min(toolMaskCanvas.height - sourceY, this.canvas.height - destY);
+                
+                if (copyWidth > 0 && copyHeight > 0) {
+                     tempMaskCtx.drawImage(
+                        toolMaskCanvas,
+                        sourceX, sourceY, copyWidth, copyHeight,
+                        destX, destY, copyWidth, copyHeight
+                    );
+                }
+                
+                // Convert the brush mask (white with alpha) to a solid white mask on black background.
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    // The painted area (alpha > 0) should become white (255).
+                    tempMaskData.data[i] = tempMaskData.data[i+1] = tempMaskData.data[i+2] = alpha;
+                    tempMaskData.data[i + 3] = 255; // Solid alpha
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+                
+                // Use 'screen' blending mode. This correctly adds the white brush mask
+                // to the existing layer visibility mask. (white + anything = white)
+                maskCtx.globalCompositeOperation = 'screen';
+                maskCtx.drawImage(tempMaskCanvas, 0, 0);
+            }
+            
+            const imageDataUrl = tempCanvas.toDataURL('image/png');
+            const maskDataUrl = maskCanvas.toDataURL('image/png');
+            
+            resolve({ image: imageDataUrl, mask: maskDataUrl });
+        });
+    }
+
+    async sendDataViaWebSocket(nodeId) {
+        log.info(`Preparing to send data for node ${nodeId} via WebSocket.`);
+        
+        const { image, mask } = await this._renderOutputData();
+
+        try {
+            log.info(`Sending data for node ${nodeId}...`);
+            await webSocketManager.sendMessage({
+                type: 'canvas_data',
+                nodeId: String(nodeId),
+                image: image,
+                mask: mask,
+            }, true); // `true` requires an acknowledgment
+            
+            log.info(`Data for node ${nodeId} has been sent and acknowledged by the server.`);
+            return true;
+        } catch (error) {
+            log.error(`Failed to send data for node ${nodeId}:`, error);
+            // We can alert the user here or handle it silently.
+            // For now, let's throw to make it clear the process failed.
+            throw new Error(`Failed to get confirmation from server for node ${nodeId}. The workflow might not have the latest canvas data.`);
+        }
     }
 
     async addInputToCanvas(inputImage, inputMask) {
