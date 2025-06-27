@@ -83,10 +83,9 @@ export class CanvasRenderer {
         this.drawCanvasOutline(ctx);
         const maskImage = this.canvas.maskTool.getMask();
         if (maskImage) {
-            // Create a clipping region to only show mask content that overlaps with the output area
+
             ctx.save();
-            
-            // Only show what's visible inside the output area
+
             if (this.canvas.maskTool.isActive) {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 0.5;
@@ -94,8 +93,7 @@ export class CanvasRenderer {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             }
-            
-            // Draw the mask at its world space position
+
             ctx.drawImage(maskImage, this.canvas.maskTool.x, this.canvas.maskTool.y);
             
             ctx.globalAlpha = 1.0;

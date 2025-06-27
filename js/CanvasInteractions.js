@@ -502,8 +502,7 @@ export class CanvasInteractions {
                 layer.x -= finalX;
                 layer.y -= finalY;
             });
-            
-            // Update mask position when moving canvas
+
             this.canvas.maskTool.updatePosition(-finalX, -finalY);
             
             this.canvas.viewport.x -= finalX;
@@ -690,8 +689,7 @@ export class CanvasInteractions {
                 layer.x -= rectX;
                 layer.y -= rectY;
             });
-            
-            // Update mask position when resizing canvas
+
             this.canvas.maskTool.updatePosition(-rectX, -rectY);
 
             this.canvas.viewport.x -= rectX;

@@ -137,13 +137,11 @@ export function getStateSignature(layers) {
             blendMode: layer.blendMode || 'normal',
             opacity: layer.opacity !== undefined ? Math.round(layer.opacity * 100) / 100 : 1
         };
-        
-        // Include imageId if available
+
         if (layer.imageId) {
             sig.imageId = layer.imageId;
         }
-        
-        // Include image src as fallback identifier
+
         if (layer.image && layer.image.src) {
             sig.imageSrc = layer.image.src.substring(0, 100); // First 100 chars to avoid huge signatures
         }

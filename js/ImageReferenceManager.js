@@ -12,13 +12,11 @@ export class ImageReferenceManager {
         this.maxAge = 30 * 60 * 1000;     // 30 minut bez użycia
         this.gcTimer = null;
         this.isGcRunning = false;
-        
-        // Licznik operacji dla automatycznego GC
+
         this.operationCount = 0;
         this.operationThreshold = 500;   // Uruchom GC po 500 operacjach
-        
-        // Nie uruchamiamy automatycznego GC na czasie
-        // this.startGarbageCollection();
+
+
     }
 
     /**
@@ -83,14 +81,8 @@ export class ImageReferenceManager {
      */
     updateReferences() {
         log.debug("Updating image references...");
-        
-        // Wyczyść stare referencje
         this.imageReferences.clear();
-        
-        // Zbierz wszystkie używane imageId
         const usedImageIds = this.collectAllUsedImageIds();
-        
-        // Dodaj referencje dla wszystkich używanych obrazów
         usedImageIds.forEach(imageId => {
             this.addReference(imageId);
         });
@@ -104,15 +96,11 @@ export class ImageReferenceManager {
      */
     collectAllUsedImageIds() {
         const usedImageIds = new Set();
-        
-        // 1. Aktualne warstwy
         this.canvas.layers.forEach(layer => {
             if (layer.imageId) {
                 usedImageIds.add(layer.imageId);
             }
         });
-        
-        // 2. Historia undo
         if (this.canvas.canvasState && this.canvas.canvasState.layersUndoStack) {
             this.canvas.canvasState.layersUndoStack.forEach(layersState => {
                 layersState.forEach(layer => {
@@ -122,8 +110,7 @@ export class ImageReferenceManager {
                 });
             });
         }
-        
-        // 3. Historia redo
+
         if (this.canvas.canvasState && this.canvas.canvasState.layersRedoStack) {
             this.canvas.canvasState.layersRedoStack.forEach(layersState => {
                 layersState.forEach(layer => {
@@ -145,18 +132,17 @@ export class ImageReferenceManager {
      */
     async findUnusedImages(usedImageIds) {
         try {
-            // Pobierz wszystkie imageId z bazy danych
+
             const allImageIds = await getAllImageIds();
             const unusedImages = [];
             const now = Date.now();
             
             for (const imageId of allImageIds) {
-                // Sprawdź czy obraz nie jest używany
+
                 if (!usedImageIds.has(imageId)) {
                     const lastUsed = this.imageLastUsed.get(imageId) || 0;
                     const age = now - lastUsed;
-                    
-                    // Usuń tylko stare obrazy (grace period)
+
                     if (age > this.maxAge) {
                         unusedImages.push(imageId);
                     } else {
@@ -189,15 +175,13 @@ export class ImageReferenceManager {
         
         for (const imageId of unusedImages) {
             try {
-                // Usuń z bazy danych
+
                 await removeImage(imageId);
-                
-                // Usuń z cache
+
                 if (this.canvas.imageCache && this.canvas.imageCache.has(imageId)) {
                     this.canvas.imageCache.delete(imageId);
                 }
-                
-                // Usuń z tracking
+
                 this.imageReferences.delete(imageId);
                 this.imageLastUsed.delete(imageId);
                 
@@ -226,16 +210,13 @@ export class ImageReferenceManager {
         log.info("Starting garbage collection...");
         
         try {
-            // 1. Aktualizuj referencje
+
             this.updateReferences();
-            
-            // 2. Zbierz wszystkie używane imageId
+
             const usedImageIds = this.collectAllUsedImageIds();
-            
-            // 3. Znajdź nieużywane obrazy
+
             const unusedImages = await this.findUnusedImages(usedImageIds);
-            
-            // 4. Wyczyść nieużywane obrazy
+
             await this.cleanupUnusedImages(unusedImages);
             
         } catch (error) {
@@ -255,7 +236,7 @@ export class ImageReferenceManager {
         if (this.operationCount >= this.operationThreshold) {
             log.info(`Operation threshold reached (${this.operationThreshold}), triggering garbage collection`);
             this.operationCount = 0; // Reset counter
-            // Uruchom GC asynchronicznie, żeby nie blokować operacji
+
             setTimeout(() => {
                 this.performGarbageCollection();
             }, 100);

@@ -35,7 +35,7 @@ export class CanvasIO {
                 log.debug(`Save completed for node ${nodeId}, lock released`);
             }
         } else {
-            // For RAM mode, we don't need the lock/state management as it's synchronous
+
             log.info(`Starting saveToServer (RAM) for node: ${this.canvas.node.id}`);
             return this._performSave(fileName, outputMode);
         }
@@ -100,29 +100,25 @@ export class CanvasIO {
             maskCtx.putImageData(maskData, 0, 0);
             const toolMaskCanvas = this.canvas.maskTool.getMask();
             if (toolMaskCanvas) {
-                // Create a temp canvas for processing the mask
+
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
                 const tempMaskCtx = tempMaskCanvas.getContext('2d');
-                
-                // Clear the canvas
+
                 tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-                
-                // Calculate the correct position to extract the mask
-                // The mask's position in world space
+
+
                 const maskX = this.canvas.maskTool.x;
                 const maskY = this.canvas.maskTool.y;
                 
                 log.debug(`Extracting mask from world position (${maskX}, ${maskY}) for output area (0,0) to (${this.canvas.width}, ${this.canvas.height})`);
-                
-                // Calculate the source rectangle in the mask canvas that corresponds to the output area
+
                 const sourceX = Math.max(0, -maskX);  // Where in the mask canvas to start reading
                 const sourceY = Math.max(0, -maskY);
                 const destX = Math.max(0, maskX);     // Where in the output canvas to start writing
                 const destY = Math.max(0, maskY);
-                
-                // Calculate the dimensions of the area to copy
+
                 const copyWidth = Math.min(
                     toolMaskCanvas.width - sourceX,   // Available width in source
                     this.canvas.width - destX         // Available width in destination
@@ -131,8 +127,7 @@ export class CanvasIO {
                     toolMaskCanvas.height - sourceY,  // Available height in source
                     this.canvas.height - destY        // Available height in destination
                 );
-                
-                // Only draw if there's an actual intersection
+
                 if (copyWidth > 0 && copyHeight > 0) {
                     log.debug(`Copying mask region: source(${sourceX}, ${sourceY}) to dest(${destX}, ${destY}) size(${copyWidth}, ${copyHeight})`);
                     
@@ -142,8 +137,7 @@ export class CanvasIO {
                         destX, destY, copyWidth, copyHeight       // Destination rectangle
                     );
                 }
-                
-                // Convert to proper mask format
+
                 const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                 for (let i = 0; i < tempMaskData.data.length; i += 4) {
                     const alpha = tempMaskData.data[i + 3];
@@ -151,8 +145,7 @@ export class CanvasIO {
                     tempMaskData.data[i + 3] = alpha;
                 }
                 tempMaskCtx.putImageData(tempMaskData, 0, 0);
-                
-                // Draw the processed mask to the final mask canvas
+
                 maskCtx.globalCompositeOperation = 'source-over';
                 maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
@@ -164,7 +157,6 @@ export class CanvasIO {
                 return;
             }
 
-            // --- Disk Mode (original logic) ---
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
             log.info(`Saving image without mask as: ${fileNameWithoutMask}`);
             
@@ -247,8 +239,7 @@ export class CanvasIO {
         return new Promise((resolve) => {
             const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
             const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
-    
-            // This logic is mostly mirrored from _performSave to ensure consistency
+
             tempCtx.fillStyle = '#ffffff';
             tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             const visibilityCanvas = document.createElement('canvas');
@@ -260,7 +251,7 @@ export class CanvasIO {
             
             const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
             sortedLayers.forEach((layer) => {
-                // Render layer to main canvas
+
                 tempCtx.save();
                 tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
                 tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
@@ -268,16 +259,14 @@ export class CanvasIO {
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
                 tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 tempCtx.restore();
-                
-                // Render layer to visibility canvas for the mask
+
                 visibilityCtx.save();
                 visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
                 visibilityCtx.rotate(layer.rotation * Math.PI / 180);
                 visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 visibilityCtx.restore();
             });
-    
-            // Create layer visibility mask
+
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             for (let i = 0; i < visibilityData.data.length; i += 4) {
@@ -287,20 +276,17 @@ export class CanvasIO {
                 maskData.data[i + 3] = 255; // Solid mask
             }
             maskCtx.putImageData(maskData, 0, 0);
-    
-            // Composite the tool mask on top
+
             const toolMaskCanvas = this.canvas.maskTool.getMask();
             if (toolMaskCanvas) {
-                // Create a temp canvas for processing the mask
+
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
                 const tempMaskCtx = tempMaskCanvas.getContext('2d');
-                
-                // Clear the canvas
+
                 tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-                
-                // Calculate the correct position to extract the mask
+
                 const maskX = this.canvas.maskTool.x;
                 const maskY = this.canvas.maskTool.y;
                 
@@ -321,19 +307,17 @@ export class CanvasIO {
                         destX, destY, copyWidth, copyHeight
                     );
                 }
-                
-                // Convert the brush mask (white with alpha) to a solid white mask on black background.
+
                 const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                 for (let i = 0; i < tempMaskData.data.length; i += 4) {
                     const alpha = tempMaskData.data[i + 3];
-                    // The painted area (alpha > 0) should become white (255).
+
                     tempMaskData.data[i] = tempMaskData.data[i+1] = tempMaskData.data[i+2] = alpha;
                     tempMaskData.data[i + 3] = 255; // Solid alpha
                 }
                 tempMaskCtx.putImageData(tempMaskData, 0, 0);
-                
-                // Use 'screen' blending mode. This correctly adds the white brush mask
-                // to the existing layer visibility mask. (white + anything = white)
+
+
                 maskCtx.globalCompositeOperation = 'screen';
                 maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
@@ -363,8 +347,8 @@ export class CanvasIO {
             return true;
         } catch (error) {
             log.error(`Failed to send data for node ${nodeId}:`, error);
-            // We can alert the user here or handle it silently.
-            // For now, let's throw to make it clear the process failed.
+
+
             throw new Error(`Failed to get confirmation from server for node ${nodeId}. The workflow might not have the latest canvas data.`);
         }
     }

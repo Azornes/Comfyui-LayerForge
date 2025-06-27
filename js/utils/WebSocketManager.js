@@ -54,7 +54,7 @@ class WebSocketManager {
                             this.ackCallbacks.delete(data.nodeId);
                         }
                     }
-                    // Handle other incoming messages if needed
+
                 } catch (error) {
                     log.error("Error parsing incoming WebSocket message:", error);
                 }
@@ -73,7 +73,7 @@ class WebSocketManager {
             this.socket.onerror = (error) => {
                 this.isConnecting = false;
                 log.error("WebSocket error:", error);
-                // The onclose event will be fired next, which will handle reconnection.
+
             };
         } catch (error) {
             this.isConnecting = false;
@@ -106,7 +106,7 @@ class WebSocketManager {
                 log.debug("Sent message:", data);
                 if (requiresAck) {
                     log.debug(`Message for nodeId ${nodeId} requires ACK. Setting up callback.`);
-                    // Set a timeout for the ACK
+
                     const timeout = setTimeout(() => {
                         this.ackCallbacks.delete(nodeId);
                         reject(new Error(`ACK timeout for nodeId ${nodeId}`));
@@ -128,14 +128,14 @@ class WebSocketManager {
                 }
             } else {
                 log.warn("WebSocket not open. Queuing message.");
-                // Note: The current queueing doesn't support ACK promises well.
-                // For simplicity, we'll focus on the connected case.
-                // A more robust implementation would wrap the queued message in a function.
+
+
+
                 this.messageQueue.push(message);
                 if (!this.isConnecting) {
                     this.connect();
                 }
-                // For now, we reject if not connected and ACK is required.
+
                 if (requiresAck) {
                     reject(new Error("Cannot send message with ACK required while disconnected."));
                 }
@@ -145,9 +145,9 @@ class WebSocketManager {
 
     flushMessageQueue() {
         log.debug(`Flushing ${this.messageQueue.length} queued messages.`);
-        // Note: This simple flush doesn't handle ACKs for queued messages.
-        // This should be acceptable as data is sent right before queueing a prompt,
-        // at which point the socket should ideally be connected.
+
+
+
         while (this.messageQueue.length > 0) {
             const message = this.messageQueue.shift();
             this.socket.send(message);
@@ -155,6 +155,5 @@ class WebSocketManager {
     }
 }
 
-// Create a singleton instance of the WebSocketManager
 const wsUrl = `ws://${window.location.host}/layerforge/canvas_ws`;
 export const webSocketManager = new WebSocketManager(wsUrl);

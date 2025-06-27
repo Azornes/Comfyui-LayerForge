@@ -742,8 +742,8 @@ async function createCanvasWidget(node, widget, app) {
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
-        // Only increment trigger and run step - don't save to disk here
-        // Saving to disk will happen during execution_start event
+
+
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         app.graph.runStep();
     };
@@ -788,9 +788,8 @@ async function createCanvasWidget(node, widget, app) {
         canvas.render();
     };
 
-    // Remove automatic saving on mouse events - only save during execution
-    // canvas.canvas.addEventListener('mouseup', updateOutput);
-    // canvas.canvas.addEventListener('mouseleave', updateOutput);
+
+
 
 
     const mainContainer = $el("div.painterMainContainer", {
@@ -943,7 +942,7 @@ app.registerExtension({
     name: "Comfy.CanvasNode",
 
     init() {
-        // Monkey-patch the queuePrompt function to send canvas data via WebSocket before sending the prompt
+
         const originalQueuePrompt = app.queuePrompt;
         app.queuePrompt = async function(number, prompt) {
             log.info("Preparing to queue prompt...");
@@ -953,33 +952,33 @@ app.registerExtension({
                 
                 const sendPromises = [];
                 for (const [nodeId, canvasWidget] of canvasNodeInstances.entries()) {
-                    // Ensure the node still exists on the graph before sending data
+
                     if (app.graph.getNodeById(nodeId) && canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
                         log.debug(`Sending data for canvas node ${nodeId}`);
-                        // This now returns a promise that resolves upon server ACK
+
                         sendPromises.push(canvasWidget.canvas.canvasIO.sendDataViaWebSocket(nodeId));
                     } else {
-                        // If node doesn't exist, it might have been deleted, so we can clean up the map
+
                         log.warn(`Node ${nodeId} not found in graph, removing from instances map.`);
                         canvasNodeInstances.delete(nodeId);
                     }
                 }
 
                 try {
-                    // Wait for all WebSocket messages to be acknowledged
+
                     await Promise.all(sendPromises);
                     log.info("All canvas data has been sent and acknowledged by the server.");
                 } catch (error) {
                     log.error("Failed to send canvas data for one or more nodes. Aborting prompt.", error);
-                    // IMPORTANT: Stop the prompt from queueing if data transfer fails.
-                    // You might want to show a user-facing error here.
+
+
                     alert(`CanvasNode Error: ${error.message}`);
                     return; // Stop execution
                 }
             }
             
             log.info("All pre-prompt tasks complete. Proceeding with original queuePrompt.");
-            // Proceed with the original queuePrompt logic
+
             return originalQueuePrompt.apply(this, arguments);
         };
     },
@@ -989,25 +988,22 @@ app.registerExtension({
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");
-                // Call original onNodeCreated to ensure widgets are created
+
                 const r = onNodeCreated?.apply(this, arguments);
-                // The main initialization is moved to onAdded
+
                 return r;
             };
 
-            // onAdded is the most reliable callback for when a node is fully added to the graph and has an ID
             nodeType.prototype.onAdded = async function() {
                 log.info(`CanvasNode onAdded, ID: ${this.id}`);
                 log.debug(`Available widgets in onAdded:`, this.widgets.map(w => w.name));
 
-                // Prevent re-initialization if the widget already exists
                 if (this.canvasWidget) {
                     log.warn(`CanvasNode ${this.id} already initialized. Skipping onAdded setup.`);
                     return;
                 }
 
-                // Now that we are in onAdded, this.id is guaranteed to be correct.
-                // Set the hidden node_id widget's value for backend communication.
+
                 const nodeIdWidget = this.widgets.find(w => w.name === "node_id");
                 if (nodeIdWidget) {
                     nodeIdWidget.value = String(this.id);
@@ -1015,9 +1011,8 @@ app.registerExtension({
                 } else {
                     log.error("Could not find the hidden node_id widget!");
                 }
-                
-                // Create the main canvas widget and register it in our global map
-                // We pass `null` for the widget parameter as we are not using a pre-defined widget.
+
+
                 const canvasWidget = await createCanvasWidget(this, null, app);
                 canvasNodeInstances.set(this.id, canvasWidget);
                 log.info(`Registered CanvasNode instance for ID: ${this.id}`);
@@ -1026,12 +1021,10 @@ app.registerExtension({
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {
                 log.info(`Cleaning up canvas node ${this.id}`);
-                
-                // Clean up from our instance map
+
                 canvasNodeInstances.delete(this.id);
                 log.info(`Deregistered CanvasNode instance for ID: ${this.id}`);
 
-                // Clean up execution state
                 if (window.canvasExecutionStates) {
                     window.canvasExecutionStates.delete(this.id);
                 }
@@ -1045,7 +1038,6 @@ app.registerExtension({
                     document.body.removeChild(backdrop);
                 }
 
-                // Cleanup canvas resources including garbage collection
                 if (this.canvasWidget && this.canvasWidget.destroy) {
                     this.canvasWidget.destroy();
                 }

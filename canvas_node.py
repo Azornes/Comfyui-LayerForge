@@ -21,23 +21,18 @@ import io
 import sys
 import os
 
-# Dodaj ścieżkę do katalogu python/ do sys.path
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'python'))
 
-# Importuj logger
 try:
     from python.logger import logger, LogLevel, debug, info, warn, error, exception
-    
-    # Konfiguracja loggera dla modułu canvas_node
+
     logger.set_module_level('canvas_node', LogLevel.INFO)  # Domyślnie INFO, można zmienić na DEBUG
-    
-    # Włącz logowanie do pliku
+
     logger.configure({
         'log_to_file': True,
         'log_dir': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
     })
-    
-    # Funkcje pomocnicze dla modułu
+
     log_debug = lambda *args, **kwargs: debug('canvas_node', *args, **kwargs)
     log_info = lambda *args, **kwargs: info('canvas_node', *args, **kwargs)
     log_warn = lambda *args, **kwargs: warn('canvas_node', *args, **kwargs)
@@ -46,10 +41,9 @@ try:
     
     log_info("Logger initialized for canvas_node")
 except ImportError as e:
-    # Fallback jeśli logger nie jest dostępny
+
     print(f"Warning: Logger module not available: {e}")
-    
-    # Proste funkcje zastępcze
+
     def log_debug(*args): print("[DEBUG]", *args)
     def log_info(*args): print("[INFO]", *args)
     def log_warn(*args): print("[WARN]", *args)
@@ -104,9 +98,8 @@ class CanvasNode:
         'persistent_cache': {},
         'last_execution_id': None
     }
-    
-    # Simple in-memory storage for canvas data, keyed by prompt_id
-    # WebSocket-based storage for canvas data per node
+
+
     _websocket_data = {}
     _websocket_listeners = {}
 
@@ -244,7 +237,6 @@ class CanvasNode:
             log_error(f"Error in add_mask_to_canvas: {str(e)}")
             return None
 
-    # Zmienna blokująca równoczesne wykonania
     _processing_lock = threading.Lock()
 
     def process_canvas_image(self, trigger, output_switch, cache_enabled, node_id, prompt=None, unique_id=None, input_image=None,
@@ -253,15 +245,14 @@ class CanvasNode:
         log_info(f"[CanvasNode] 🔍 process_canvas_image wejście – node_id={node_id!r}, unique_id={unique_id!r}, trigger={trigger}, output_switch={output_switch}")
         
         try:
-            # Sprawdź czy już trwa przetwarzanie
+
             if not self.__class__._processing_lock.acquire(blocking=False):
                 log_warn(f"Process already in progress for node {node_id}, skipping...")
-                # Return cached data if available to avoid breaking the flow
+
                 return self.get_cached_data()
 
             log_info(f"Lock acquired. Starting process_canvas_image for node_id: {node_id} (fallback unique_id: {unique_id})")
-            
-            # Use node_id as the primary key, as unique_id is proving unreliable
+
             storage_key = node_id
             
             processed_image = None
@@ -296,8 +287,6 @@ class CanvasNode:
                     log_info("Using provided input_mask as fallback")
                     processed_mask = input_mask
 
-
-            # Fallback to default tensors if nothing is loaded
             if processed_image is None:
                 log_warn(f"Processed image is still None, creating default blank image.")
                 processed_image = torch.zeros((1, 512, 512, 3), dtype=torch.float32)
@@ -322,7 +311,7 @@ class CanvasNode:
             return (None, None)
             
         finally:
-            # Zwolnij blokadę
+
             if self.__class__._processing_lock.locked():
                 self.__class__._processing_lock.release()
                 log_debug(f"Process completed for node {node_id}, lock released")
@@ -376,12 +365,11 @@ class CanvasNode:
             
             nodes_to_remove = []
             for node_id, data in cls._websocket_data.items():
-                # Remove invalid node IDs
+
                 if node_id < 0:
                     nodes_to_remove.append(node_id)
                     continue
-                
-                # Remove old data
+
                 if current_time - data.get('timestamp', 0) > cleanup_threshold:
                     nodes_to_remove.append(node_id)
                     continue
@@ -423,7 +411,7 @@ class CanvasNode:
                             }
                         
                         log_info(f"Received canvas data for node {node_id} via WebSocket")
-                        # Send acknowledgment back to the client
+
                         ack_payload = {
                             'type': 'ack',
                             'nodeId': node_id,
@@ -675,23 +663,19 @@ class BiRefNetMatting:
         m.update(str(refinement).encode())
         return m.hexdigest()
 
-
-# Zmienna blokująca równoczesne wywołania matting
 _matting_lock = None
 
 @PromptServer.instance.routes.post("/matting")
 async def matting(request):
     global _matting_lock
-    
-    # Sprawdź czy już trwa przetwarzanie
+
     if _matting_lock is not None:
         log_warn("Matting already in progress, rejecting request")
         return web.json_response({
             "error": "Another matting operation is in progress",
             "details": "Please wait for the current operation to complete"
         }, status=429)  # 429 Too Many Requests
-        
-    # Ustaw blokadę
+
     _matting_lock = True
     
     try:
@@ -725,7 +709,7 @@ async def matting(request):
             "details": traceback.format_exc()
         }, status=500)
     finally:
-        # Zwolnij blokadę
+
         _matting_lock = None
         log_debug("Matting lock released")
 
@@ -811,8 +795,6 @@ def convert_tensor_to_base64(tensor, alpha_mask=None, original_alpha=None):
         log_debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
         raise
 
-
-# Setup original API routes when module is loaded
 CanvasNode.setup_routes()
 
 NODE_CLASS_MAPPINGS = {

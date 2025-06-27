@@ -8,7 +8,6 @@ export class MaskTool {
         this.maskCanvas = document.createElement('canvas');
         this.maskCtx = this.maskCanvas.getContext('2d');
 
-        // Add position coordinates for the mask
         this.x = 0;
         this.y = 0;
 
@@ -27,13 +26,12 @@ export class MaskTool {
     }
 
     initMaskCanvas() {
-        // Create a larger mask canvas that can extend beyond the output area
+
         const extraSpace = 2000; // Allow for a generous drawing area outside the output area
         this.maskCanvas.width = this.canvasInstance.width + extraSpace;
         this.maskCanvas.height = this.canvasInstance.height + extraSpace;
-        
-        // Position the mask's origin point in the center of the expanded canvas
-        // This allows drawing in any direction from the output area
+
+
         this.x = -extraSpace / 2;
         this.y = -extraSpace / 2;
         
@@ -97,15 +95,13 @@ export class MaskTool {
             this.lastPosition = worldCoords;
         }
 
-        // Convert world coordinates to mask canvas coordinates
-        // Account for the mask's position in world space
+
         const canvasLastX = this.lastPosition.x - this.x;
         const canvasLastY = this.lastPosition.y - this.y;
         const canvasX = worldCoords.x - this.x;
         const canvasY = worldCoords.y - this.y;
 
-        // Check if drawing is within the expanded canvas bounds
-        // Since our canvas is much larger now, this should rarely be an issue
+
         const canvasWidth = this.maskCanvas.width;
         const canvasHeight = this.maskCanvas.height;
         
@@ -180,19 +176,15 @@ export class MaskTool {
         const oldY = this.y;
         const oldWidth = oldMask.width;
         const oldHeight = oldMask.height;
-        
-        // Determine if we're increasing or decreasing the canvas size
+
         const isIncreasingWidth = width > (this.canvasInstance.width);
         const isIncreasingHeight = height > (this.canvasInstance.height);
-        
-        // Create a new mask canvas
+
         this.maskCanvas = document.createElement('canvas');
-        
-        // Calculate the new size based on whether we're increasing or decreasing
+
         const extraSpace = 2000;
-        
-        // If we're increasing the size, expand the mask canvas
-        // If we're decreasing, keep the current mask canvas size to preserve content
+
+
         const newWidth = isIncreasingWidth ? width + extraSpace : Math.max(oldWidth, width + extraSpace);
         const newHeight = isIncreasingHeight ? height + extraSpace : Math.max(oldHeight, height + extraSpace);
         
@@ -201,11 +193,10 @@ export class MaskTool {
         this.maskCtx = this.maskCanvas.getContext('2d');
         
         if (oldMask.width > 0 && oldMask.height > 0) {
-            // Calculate offset to maintain the same world position of the mask content
+
             const offsetX = this.x - oldX;
             const offsetY = this.y - oldY;
-            
-            // Draw the old mask at the correct position to maintain world alignment
+
             this.maskCtx.drawImage(oldMask, offsetX, offsetY);
             
             log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
@@ -214,8 +205,7 @@ export class MaskTool {
         log.info(`Mask canvas resized to ${this.maskCanvas.width}x${this.maskCanvas.height}, position (${this.x}, ${this.y})`);
         log.info(`Canvas size change: width ${isIncreasingWidth ? 'increased' : 'decreased'}, height ${isIncreasingHeight ? 'increased' : 'decreased'}`);
     }
-    
-    // Add method to update mask position
+
     updatePosition(dx, dy) {
         this.x += dx;
         this.y += dy;
