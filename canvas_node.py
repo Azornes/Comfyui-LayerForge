@@ -91,7 +91,6 @@ class CanvasNode:
     _canvas_cache = {
         'image': None,
         'mask': None,
-        'cache_enabled': True,
         'data_flow_status': {},
         'persistent_cache': {},
         'last_execution_id': None
@@ -169,8 +168,6 @@ class CanvasNode:
         return {
             "required": {
                 "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1, "hidden": True}),
-                "output_switch": ("BOOLEAN", {"default": True}),
-                "cache_enabled": ("BOOLEAN", {"default": True, "label": "Enable Cache"}),
                 "node_id": ("STRING", {"default": "0", "hidden": True}),
             },
             "optional": {
@@ -237,7 +234,7 @@ class CanvasNode:
 
     _processing_lock = threading.Lock()
 
-    def process_canvas_image(self, trigger, output_switch, cache_enabled, node_id, prompt=None, unique_id=None, input_image=None,
+    def process_canvas_image(self, trigger, node_id, prompt=None, unique_id=None, input_image=None,
                              input_mask=None):
         
         try:
@@ -289,11 +286,6 @@ class CanvasNode:
             if processed_mask is None:
                 log_warn(f"Processed mask is still None, creating default blank mask.")
                 processed_mask = torch.zeros((1, 512, 512), dtype=torch.float32)
-
-
-            if not output_switch:
-                log_debug(f"Output switch is OFF, returning empty tuple")
-                return (None, None)
 
             log_debug(f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
             
