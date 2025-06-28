@@ -19,7 +19,7 @@ jobs:
         run: |
           curl --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/Azornes/Comfyui-LayerForge/traffic/clones \
+            https://api.github.com/repos/${{ github.repository }}/traffic/clones \
             > clone.json
 
       - name: create gist and download previous count
@@ -54,7 +54,7 @@ jobs:
       - name: Update gist with latest count
         run: |
           content=$(sed -e 's/\\/\\\\/g' -e 's/\t/\\t/g' -e 's/\"/\\"/g' -e 's/\r//g' "clone.json" | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')
-          echo '{"description": "Azornes/Comfyui-LayerForge clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
+          echo '{"description": "${{ github.repository }} clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
           curl -s -X PATCH \
             --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -71,7 +71,7 @@ jobs:
             ```markdown' >> CLONE.md
             echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
             echo '
-            ```
+            ```'
 
             **HTML**
             ```html' >> CLONE.md
