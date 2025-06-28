@@ -146,12 +146,6 @@ optional feature and requires a model.
 
 ---
 
-## 📜 License
-
-This project is licensed under the MIT License. Feel free to use, modify, and distribute.
-
----
-
 ## 🐞 Known Issue:
 ### `node_id` not auto-filled → black output
 
@@ -170,6 +164,11 @@ As a result, the node may produce a **completely black image** or not work at al
 
 ---
 
+## 📜 License
+
+This project is licensed under the MIT License. Feel free to use, modify, and distribute.
+
+---
 
 Based on the original [**Comfyui-Ycanvas**](https://github.com/yichengup/Comfyui-Ycanvas) by yichengup. This fork
 significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
