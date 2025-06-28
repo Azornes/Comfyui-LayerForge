@@ -1,6 +1,6 @@
 [project]
 name = "layerforge"
-description = "LayerForge is an advanced canvas node for ComfyUI that provides a Photoshop-like, layer-based editing experience. It allows you to composite, mask, and blend multiple images directly within your workflow. It offers full control over transformations (move, scale, rotate), blend modes, and opacity for each layer. The final image and its corresponding mask are provided as outputs, ready for seamless integration with other nodes."
+description = "Photoshop-like layered canvas editor to your ComfyUI workflow. This node is perfect for complex compositing, inpainting, and outpainting, featuring multi-layer support, masking, blend modes, and precise transformations. Includes optional AI-powered background removal for streamlined image editing."
 version = "1.2.2"
 license = {file = "LICENSE"}
 dependencies = ["torch", "torchvision", "transformers", "aiohttp", "numpy", "tqdm", "Pillow"]
