@@ -235,14 +235,14 @@ export class CanvasRenderer {
                 const textMetrics = lines.map(line => ctx.measureText(line));
                 const textBgWidth = Math.max(...textMetrics.map(m => m.width)) + 10;
                 const lineHeight = 18;
-                const textBgHeight = lines.length * lineHeight + (lines.length > 1 ? 5 : 0) + 10;
+                const textBgHeight = lines.length * lineHeight + 4;
 
                 ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
                 ctx.fillRect(screenX - textBgWidth / 2, screenY - textBgHeight / 2, textBgWidth, textBgHeight);
 
                 ctx.fillStyle = "white";
                 lines.forEach((line, index) => {
-                    const yPos = screenY - (textBgHeight / 2) + (lineHeight / 2) + (index * lineHeight) + 5;
+                    const yPos = screenY - (textBgHeight / 2) + (lineHeight / 2) + (index * lineHeight) + 2;
                     ctx.fillText(line, screenX, yPos);
                 });
 
