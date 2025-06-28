@@ -24,7 +24,7 @@
 
 ---
 
-<video src="Showtime/ShowTimeLayerForge.gif" controls width="640">
+<video src="Media/ShowTimeLayerForge.gif" controls width="640">
   Twoja przeglądarka nie wspiera odtwarzania wideo.
 </video>
 
