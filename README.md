@@ -24,8 +24,7 @@
 
 ---
 
-https://github.com/Azornes/Comfyui-LayerForge/blob/main/Media/ShowTimeLayerForge.gif
-
+https://github.com/user-attachments/assets/0f557d87-fd5e-422b-ab7e-dbdd4cab156c
 
 ## ✨ Key Features
 
