@@ -1,0 +1,16 @@
+[project]
+name = "layerforge"
+description = "LayerForge is an advanced canvas node for ComfyUI that provides a Photoshop-like, layer-based editing experience. It allows you to composite, mask, and blend multiple images directly within your workflow. It offers full control over transformations (move, scale, rotate), blend modes, and opacity for each layer. The final image and its corresponding mask are provided as outputs, ready for seamless integration with other nodes."
+version = "1.2.0"
+license = {file = "LICENSE"}
+dependencies = ["torch", "torchvision", "transformers", "aiohttp", "numpy", "tqdm", "Pillow"]
+
+[project.urls]
+Repository = "https://github.com/Azornes/Comfyui-LayerForge"
+#  Used by Comfy Registry https://registry.comfy.org
+
+[tool.comfy]
+PublisherId = "azornes"
+DisplayName = "Comfyui-LayerForge"
+Icon = ""
+includes = []
