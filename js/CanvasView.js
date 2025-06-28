@@ -440,7 +440,7 @@ async function createCanvasWidget(node, widget, app) {
             <tr><td><kbd>Click + Drag</kbd></td><td>Paint on the mask</td></tr>
             <tr><td><kbd>Middle Mouse Button + Drag</kbd></td><td>Pan canvas view</td></tr>
             <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
-            <tr><td><strong>Brush Controls</strong></td><td>Use sliders to control brush <strong>Size</strong>, <strong>Strength</strong>, and <strong>Softness</strong></td></tr>
+            <tr><td><strong>Brush Controls</strong></td><td>Use sliders to control brush <strong>Size</strong>, <strong>Strength</strong>, and <strong>Hardness</strong></td></tr>
             <tr><td><strong>Clear Mask</strong></td><td>Remove the entire mask</td></tr>
             <tr><td><strong>Exit Mode</strong></td><td>Click the "Draw Mask" button again</td></tr>
         </table>
@@ -798,15 +798,15 @@ async function createCanvasWidget(node, widget, app) {
                     })
                 ]),
                 $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
-                    $el("label", {for: "brush-softness-slider", textContent: "Softness:"}),
+                    $el("label", {for: "brush-hardness-slider", textContent: "Hardness:"}),
                     $el("input", {
-                        id: "brush-softness-slider",
+                        id: "brush-hardness-slider",
                         type: "range",
                         min: "0",
                         max: "1",
                         step: "0.05",
                         value: "0.5",
-                        oninput: (e) => canvas.maskTool.setBrushSoftness(parseFloat(e.target.value))
+                        oninput: (e) => canvas.maskTool.setBrushHardness(parseFloat(e.target.value))
                     })
                 ]),
                 $el("button.painter-button.mask-control", {

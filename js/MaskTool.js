@@ -16,7 +16,7 @@ export class MaskTool {
         this.isActive = false;
         this.brushSize = 20;
         this.brushStrength = 0.5;
-        this.brushSoftness = 0.5;
+        this.brushHardness = 0.5;
         this.isDrawing = false;
         this.lastPosition = null;
 
@@ -42,8 +42,8 @@ export class MaskTool {
         this.canvasInstance.canvas.parentElement.appendChild(this.previewCanvas);
     }
 
-    setBrushSoftness(softness) {
-        this.brushSoftness = Math.max(0, Math.min(1, softness));
+    setBrushHardness(hardness) {
+        this.brushHardness = Math.max(0, Math.min(1, hardness));
     }
 
     initMaskCanvas() {
@@ -159,10 +159,11 @@ export class MaskTool {
             this.maskCtx.lineTo(canvasX, canvasY);
             const gradientRadius = this.brushSize / 2;
 
-            if (this.brushSoftness === 0) {
+            if (this.brushHardness === 1) {
                 this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
             } else {
-                const innerRadius = gradientRadius * this.brushSoftness;
+                // hardness: 1 = hard edge, 0 = soft edge
+                const innerRadius = gradientRadius * this.brushHardness;
                 const gradient = this.maskCtx.createRadialGradient(
                     canvasX, canvasY, innerRadius,
                     canvasX, canvasY, gradientRadius
