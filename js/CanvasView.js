@@ -772,6 +772,8 @@ async function createCanvasWidget(node, widget, app) {
                             maskBtn.classList.add('primary');
                             maskControls.querySelectorAll('.mask-control').forEach(c => c.style.display = 'flex');
                         }
+
+                        setTimeout(() => canvas.render(), 0);
                     }
                 }),
                 $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
@@ -1023,10 +1025,12 @@ async function createCanvasWidget(node, widget, app) {
         openEditorBtn.textContent = "⛶";
         openEditorBtn.title = "Open in Editor";
 
-        canvas.render();
-        if (node.onResize) {
-            node.onResize();
-        }
+        setTimeout(() => {
+            canvas.render();
+            if (node.onResize) {
+                node.onResize();
+            }
+        }, 0);
     };
 
     openEditorBtn.onclick = () => {
@@ -1052,10 +1056,12 @@ async function createCanvasWidget(node, widget, app) {
         openEditorBtn.textContent = "X";
         openEditorBtn.title = "Close Editor";
 
-        canvas.render();
-        if (node.onResize) {
-            node.onResize();
-        }
+        setTimeout(() => {
+            canvas.render();
+            if (node.onResize) {
+                node.onResize();
+            }
+        }, 0);
     };
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
