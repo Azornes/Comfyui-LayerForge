@@ -49,6 +49,10 @@ https://github.com/user-attachments/assets/0f557d87-fd5e-422b-ab7e-dbdd4cab156c
 
 ## 🚀 Installation
 
+### Install via ComfyUI-Manager
+* Search `Comfyui-LayerForge` in ComfyUI-Manager and click `Install` button.
+
+### Manual Install
 1. Install [ComfyUi](https://github.com/comfyanonymous/ComfyUI).
 2. Clone this repo into `custom_modules`:
     ```bash
