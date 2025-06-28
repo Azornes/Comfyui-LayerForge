@@ -57,8 +57,6 @@ export class CanvasIO {
             const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(this.canvas.width, this.canvas.height);
             const {canvas: maskCanvas, ctx: maskCtx} = createCanvas(this.canvas.width, this.canvas.height);
 
-            tempCtx.fillStyle = '#ffffff';
-            tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
@@ -240,8 +238,6 @@ export class CanvasIO {
             const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(this.canvas.width, this.canvas.height);
             const {canvas: maskCanvas, ctx: maskCtx} = createCanvas(this.canvas.width, this.canvas.height);
 
-            tempCtx.fillStyle = '#ffffff';
-            tempCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
