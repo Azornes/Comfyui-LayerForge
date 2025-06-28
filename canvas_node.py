@@ -170,10 +170,6 @@ class CanvasNode:
                 "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1, "hidden": True}),
                 "node_id": ("STRING", {"default": "0", "hidden": True}),
             },
-            "optional": {
-                "input_image": ("IMAGE",),
-                "input_mask": ("MASK",)
-            },
             "hidden": {
                 "prompt": ("PROMPT",),
                 "unique_id": ("UNIQUE_ID",),
@@ -234,8 +230,7 @@ class CanvasNode:
 
     _processing_lock = threading.Lock()
 
-    def process_canvas_image(self, trigger, node_id, prompt=None, unique_id=None, input_image=None,
-                             input_mask=None):
+    def process_canvas_image(self, trigger, node_id, prompt=None, unique_id=None):
         
         try:
 
@@ -272,13 +267,7 @@ class CanvasNode:
                     processed_mask = torch.from_numpy(mask_array)[None,]
                     log_debug(f"Mask loaded from WebSocket, shape: {processed_mask.shape}")
             else:
-                log_warn(f"No canvas data found for node {storage_key} in WebSocket cache, using fallbacks.")
-                if input_image is not None:
-                    log_info("Using provided input_image as fallback")
-                    processed_image = input_image
-                if input_mask is not None:
-                    log_info("Using provided input_mask as fallback")
-                    processed_mask = input_mask
+                log_warn(f"No canvas data found for node {storage_key} in WebSocket cache.")
 
             if processed_image is None:
                 log_warn(f"Processed image is still None, creating default blank image.")
