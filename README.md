@@ -24,7 +24,7 @@
 
 ---
 
-<video src="Media/ShowTimeLayerForge.gif" controls width="640">
+<video src="https://github.com/Azornes/Comfyui-LayerForge/blob/main/Media/ShowTimeLayerForge.gif" controls width="640">
   Twoja przeglądarka nie wspiera odtwarzania wideo.
 </video>
 
