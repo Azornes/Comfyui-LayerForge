@@ -17,8 +17,6 @@
 
 - **Full Creative Control:** Move beyond simple image inputs. Composite, mask, and blend multiple elements without
   leaving ComfyUI.
-- **Seamless Integration:** Outputs a final image and a corresponding mask, ready to be piped into any other node (e.g.,
-  `VAEEncode`, `Apply Mask`).
 - **Intuitive UI:** Familiar controls like drag-and-drop, keyboard shortcuts, and a pannable/zoomable viewport make
   editing fast and easy.
 

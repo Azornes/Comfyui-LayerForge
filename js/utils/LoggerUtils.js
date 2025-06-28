@@ -11,7 +11,7 @@ import {logger, LogLevel} from "../logger.js";
  * @param {LogLevel} level - Poziom logowania (domyślnie DEBUG)
  * @returns {Object} Obiekt z metodami logowania
  */
-export function createModuleLogger(moduleName, level = LogLevel.DEBUG) {
+export function createModuleLogger(moduleName, level = LogLevel.NONE) {
     logger.setModuleLevel(moduleName, level);
     
     return {
