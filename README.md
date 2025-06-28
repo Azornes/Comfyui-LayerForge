@@ -3,7 +3,7 @@
 <p align="center"><i>LayerForge is an advanced canvas node for ComfyUI, providing a Photoshop-like layer-based editing experience directly within your workflow. It extends the concept of a simple canvas with multi-layer support, masking, blend modes, precise transformations, and seamless integration with other nodes.</i></p>
 
 <p align="center">
-  <a href="https://github.com/Azornes/ocrTranslator/releases">
+  <a href="https://registry.comfy.org/publishers/azornes/nodes/layerforge">
     <img alt="Downloads" src="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=Downloads&query=$.downloads&url=https://api.comfy.org/nodes/layerforge&style=for-the-badge">
   </a>
   <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-LayerForge">
@@ -135,6 +135,26 @@ optional feature and requires a model.
 This project is licensed under the MIT License. Feel free to use, modify, and distribute.
 
 ---
+
+---
+
+## 🐞 Known Issue:
+### `node_id` not auto-filled → black output
+
+In some cases, **ComfyUI doesn't auto-fill the `node_id`** when adding a node.
+As a result, the node may produce a **completely black image** or not work at all.
+
+**Workaround:**
+
+* Search node ID in ComfyUI settings.
+* In NodesMap check "Enable node ID display"
+* Manually enter the correct `node_id` (match the ID shown in the UI).
+
+⚠️ This is a known issue and not yet fixed.
+Please follow the steps above if your output is black or broken.
+
+---
+
 
 Based on the original [**Comfyui-Ycanvas**](https://github.com/yichengup/Comfyui-Ycanvas) by yichengup. This fork
 significantly enhances the editing capabilities for practical compositing workflows inside ComfyUI.
