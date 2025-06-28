@@ -1,4 +1,4 @@
-name: Auto Release with Version Patch
+name: Auto Release with Version Patch and Commit Message
 
 on:
   push:
@@ -36,6 +36,14 @@ jobs:
 
           echo "final_tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: Get latest commit message
+        id: last_commit
+        run: |
+          msg=$(git log -1 --pretty=%B)
+          # Zamiana nowych linii na \n aby ładnie wyświetlać w release body
+          msg=${msg//$'\n'/\\n}
+          echo "commit_msg=$msg" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -44,5 +52,10 @@ jobs:
           body: |
             📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`
             🔁 Auto-postfix to avoid duplicate tag: `${{ steps.unique_tag.outputs.final_tag }}`
+
+            📝 Last commit message:
+            ```
+            ${{ steps.last_commit.outputs.commit_msg }}
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
