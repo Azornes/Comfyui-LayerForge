@@ -38,7 +38,7 @@ export class Canvas {
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;
-        this.maskTool = new MaskTool(this);
+        this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.initCanvas();
         this.canvasState = new CanvasState(this);
         this.canvasInteractions = new CanvasInteractions(this);

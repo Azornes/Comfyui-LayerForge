@@ -3,9 +3,10 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('Mask_tool');
 
 export class MaskTool {
-    constructor(canvasInstance) {
+    constructor(canvasInstance, callbacks = {}) {
         this.canvasInstance = canvasInstance;
         this.mainCanvas = canvasInstance.canvas;
+        this.onStateChange = callbacks.onStateChange || null;
         this.maskCanvas = document.createElement('canvas');
         this.maskCtx = this.maskCanvas.getContext('2d');
 
@@ -87,6 +88,9 @@ export class MaskTool {
             this.lastPosition = null;
             if (this.canvasInstance.canvasState) {
                 this.canvasInstance.canvasState.saveMaskState();
+            }
+            if (this.onStateChange) {
+                this.onStateChange();
             }
         }
     }
