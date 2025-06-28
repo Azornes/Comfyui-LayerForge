@@ -66,7 +66,7 @@ export class CanvasLayers {
         log.info(`Pasted ${newLayers.length} layer(s).`);
     }
 
-    async handlePaste(pasteMode = 'mouse') {
+    async handlePaste(addMode = 'mouse') {
         try {
             if (!navigator.clipboard?.read) {
                 log.info("Browser does not support clipboard read API. Falling back to internal paste.");
@@ -86,15 +86,7 @@ export class CanvasLayers {
                     reader.onload = (event) => {
                         const img = new Image();
                         img.onload = async () => {
-                            let layerProps = {};
-                            if (pasteMode === 'center') {
-                                layerProps.x = (this.canvasLayers.width - img.width) / 2;
-                                layerProps.y = (this.canvasLayers.height - img.height) / 2;
-                            } else { // 'mouse' or default
-                                layerProps.x = this.canvasLayers.lastMousePosition.x - img.width / 2;
-                                layerProps.y = this.canvasLayers.lastMousePosition.y - img.height / 2;
-                            }
-                            await this.addLayerWithImage(img, layerProps);
+                            await this.addLayerWithImage(img, {}, addMode);
                         };
                         img.src = event.target.result;
                     };
@@ -113,23 +105,41 @@ export class CanvasLayers {
         }
     }
 
-    addLayerWithImage = withErrorHandling(async (image, layerProps = {}) => {
+    addLayerWithImage = withErrorHandling(async (image, layerProps = {}, addMode = 'default') => {
         if (!image) {
             throw createValidationError("Image is required for layer creation");
         }
 
-        log.debug("Adding layer with image:", image);
+        log.debug("Adding layer with image:", image, "with mode:", addMode);
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
         this.canvasLayers.imageCache.set(imageId, image.src);
+        
+        let finalWidth = image.width;
+        let finalHeight = image.height;
+        let finalX, finalY;
+
+        if (addMode === 'fit') {
+            const scale = Math.min(this.canvasLayers.width / image.width, this.canvasLayers.height / image.height);
+            finalWidth = image.width * scale;
+            finalHeight = image.height * scale;
+            finalX = (this.canvasLayers.width - finalWidth) / 2;
+            finalY = (this.canvasLayers.height - finalHeight) / 2;
+        } else if (addMode === 'mouse') {
+            finalX = this.canvasLayers.lastMousePosition.x - finalWidth / 2;
+            finalY = this.canvasLayers.lastMousePosition.y - finalHeight / 2;
+        } else { // 'center' or 'default'
+            finalX = (this.canvasLayers.width - finalWidth) / 2;
+            finalY = (this.canvasLayers.height - finalHeight) / 2;
+        }
 
         const layer = {
             image: image,
             imageId: imageId,
-            x: (this.canvasLayers.width - image.width) / 2,
-            y: (this.canvasLayers.height - image.height) / 2,
-            width: image.width,
-            height: image.height,
+            x: finalX,
+            y: finalY,
+            width: finalWidth,
+            height: finalHeight,
             rotation: 0,
             zIndex: this.canvasLayers.layers.length,
             blendMode: 'normal',

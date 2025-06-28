@@ -157,8 +157,8 @@ export class Canvas {
         return this.canvasLayers.pasteLayers();
     }
 
-    async handlePaste(pasteMode) {
-        return this.canvasLayers.handlePaste(pasteMode);
+    async handlePaste(addMode) {
+        return this.canvasLayers.handlePaste(addMode);
     }
 
 
@@ -194,13 +194,13 @@ export class Canvas {
         return this.canvasLayers.isRotationHandle(x, y);
     }
 
-    async addLayerWithImage(image, layerProps = {}) {
-        return this.canvasLayers.addLayerWithImage(image, layerProps);
+    async addLayerWithImage(image, layerProps = {}, addMode = 'default') {
+        return this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
     }
 
 
-    async addLayer(image) {
-        return this.addLayerWithImage(image);
+    async addLayer(image, addMode = 'default') {
+        return this.addLayerWithImage(image, {}, addMode);
     }
 
     async removeLayer(index) {

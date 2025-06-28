@@ -527,6 +527,8 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Add Image",
                     title: "Add image from file",
                     onclick: () => {
+                        const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
+                        const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*';
@@ -537,7 +539,7 @@ async function createCanvasWidget(node, widget, app) {
                                 reader.onload = (event) => {
                                     const img = new Image();
                                     img.onload = () => {
-                                        canvas.addLayer(img);
+                                        canvas.addLayer(img, addMode);
                                     };
                                     img.src = event.target.result;
                                 };
@@ -555,7 +557,11 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.primary", {
                     textContent: "Paste Image",
                     title: "Paste image from clipboard",
-                    onclick: () => canvas.handlePaste('center')
+                    onclick: () => {
+                        const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
+                        const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                        canvas.handlePaste(addMode);
+                    }
                 }),
             ]),
 

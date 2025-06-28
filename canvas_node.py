@@ -167,6 +167,7 @@ class CanvasNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "fit_on_add": ("BOOLEAN", {"default": False, "label_on": "Fit on Add/Paste", "label_off": "Default Behavior"}),
                 "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1, "hidden": True}),
                 "node_id": ("STRING", {"default": "0", "hidden": True}),
             },
@@ -230,7 +231,7 @@ class CanvasNode:
 
     _processing_lock = threading.Lock()
 
-    def process_canvas_image(self, trigger, node_id, prompt=None, unique_id=None):
+    def process_canvas_image(self, fit_on_add, trigger, node_id, prompt=None, unique_id=None):
         
         try:
 
