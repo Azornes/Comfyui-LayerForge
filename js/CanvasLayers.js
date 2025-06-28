@@ -454,10 +454,7 @@ export class CanvasLayers {
     }
 
     showBlendModeMenu(x, y) {
-        const existingMenu = document.getElementById('blend-mode-menu');
-        if (existingMenu) {
-            document.body.removeChild(existingMenu);
-        }
+        this.closeBlendModeMenu();
 
         const menu = document.createElement('div');
         menu.id = 'blend-mode-menu';
@@ -469,7 +466,7 @@ export class CanvasLayers {
             border: 1px solid #3a3a3a;
             border-radius: 4px;
             padding: 5px;
-            z-index: 1000;
+            z-index: 10000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
 
@@ -556,11 +553,12 @@ export class CanvasLayers {
             menu.appendChild(container);
         });
 
-        document.body.appendChild(menu);
+        const container = this.canvasLayers.canvas.parentElement || document.body;
+        container.appendChild(menu);
 
         const closeMenu = (e) => {
             if (!menu.contains(e.target)) {
-                document.body.removeChild(menu);
+                this.closeBlendModeMenu();
                 document.removeEventListener('mousedown', closeMenu);
             }
         };
@@ -571,8 +569,8 @@ export class CanvasLayers {
 
     closeBlendModeMenu() {
         const menu = document.getElementById('blend-mode-menu');
-        if (menu) {
-            document.body.removeChild(menu);
+        if (menu && menu.parentNode) {
+            menu.parentNode.removeChild(menu);
         }
     }
 
