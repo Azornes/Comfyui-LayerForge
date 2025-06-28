@@ -158,6 +158,7 @@ export class CanvasLayers {
             this.canvasLayers.layers.splice(index, 1);
             this.canvasLayers.selectedLayer = this.canvasLayers.layers[this.canvasLayers.layers.length - 1] || null;
             this.canvasLayers.render();
+            this.canvasLayers.saveState();
         }
     }
 

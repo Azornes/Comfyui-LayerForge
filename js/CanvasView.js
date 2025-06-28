@@ -12,7 +12,7 @@ const log = createModuleLogger('Canvas_view');
 
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget, {
-        onInteractionEnd: () => updateOutput()
+        onStateChange: () => updateOutput()
     });
     const imageCache = new ImageCache();
 
@@ -375,11 +375,10 @@ async function createCanvasWidget(node, widget, app) {
                         input.onchange = async (e) => {
                             for (const file of e.target.files) {
                                 const reader = new FileReader();
-                                reader.onload = async (event) => {
+                                reader.onload = (event) => {
                                     const img = new Image();
-                                    img.onload = async () => {
+                                    img.onload = () => {
                                         canvas.addLayer(img);
-                                        await updateOutput();
                                     };
                                     img.src = event.target.result;
                                 };
@@ -391,11 +390,7 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Import Input",
-                    onclick: async () => {
-                        if (await canvas.importLatestImage()) {
-                            await updateOutput();
-                        }
-                    }
+                    onclick: () => canvas.importLatestImage()
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Paste Image",
@@ -481,6 +476,7 @@ async function createCanvasWidget(node, widget, app) {
                             const height = parseInt(document.getElementById('canvas-height').value) || canvas.height;
                             canvas.updateOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
+                            // updateOutput is triggered by saveState in updateOutputAreaSize
                         };
 
                         document.getElementById('cancel-size').onclick = () => {
@@ -490,27 +486,15 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Remove Layer",
-                    onclick: () => {
-                        if (canvas.selectedLayers.length > 0) {
-                            canvas.saveState();
-                            canvas.layers = canvas.layers.filter(l => !canvas.selectedLayers.includes(l));
-                            canvas.updateSelection([]);
-                            canvas.render();
-                            canvas.saveState();
-                        }
-                    }
+                    onclick: () => canvas.removeSelectedLayers()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Up",
-                    onclick: async () => {
-                        canvas.moveLayerUp();
-                    }
+                    onclick: () => canvas.moveLayerUp()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Down",
-                    onclick: async () => {
-                        canvas.moveLayerDown();
-                    }
+                    onclick: () => canvas.moveLayerDown()
                 }),
             ]),
 
@@ -574,7 +558,6 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
-                            await updateOutput();
                         } catch (error) {
                             log.error("Matting error:", error);
                             alert(`Error during matting process: ${error.message}`);
@@ -743,27 +726,10 @@ async function createCanvasWidget(node, widget, app) {
 
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
-    const updateOutput = async () => {
-
-
+    const updateOutput = () => {
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
-        app.graph.runStep();
+        // app.graph.runStep(); // Potentially not needed if we just want to mark dirty
     };
-
-    const addUpdateToButton = (button) => {
-        if (button.textContent === "Undo" || button.textContent === "Redo" || button.title === "Open in Editor") {
-            return;
-        }
-        const origClick = button.onclick;
-        button.onclick = async (...args) => {
-            if (origClick) {
-                await origClick(...args);
-            }
-            await updateOutput();
-        };
-    };
-
-    controlPanel.querySelectorAll('button').forEach(addUpdateToButton);
 
     const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
         style: {
@@ -833,7 +799,6 @@ async function createCanvasWidget(node, widget, app) {
                 canvas.render();
                 canvas.saveState();
                 log.info("Dropped layer added and state saved.");
-                await updateOutput();
             };
             img.src = event.target.result;
         };

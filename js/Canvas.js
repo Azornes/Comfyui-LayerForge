@@ -22,7 +22,7 @@ export class Canvas {
         this.selectedLayer = null;
         this.selectedLayers = [];
         this.onSelectionChange = null;
-        this.onInteractionEnd = callbacks.onInteractionEnd || null;
+        this.onStateChange = callbacks.onStateChange || null;
         this.lastMousePosition = {x: 0, y: 0};
 
         this.viewport = {
@@ -78,19 +78,28 @@ export class Canvas {
         this.render();
     }
 
+    _notifyStateChange() {
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+    }
+
     saveState(replaceLast = false) {
         this.canvasState.saveState(replaceLast);
         this.incrementOperationCount();
+        this._notifyStateChange();
     }
 
     undo() {
         this.canvasState.undo();
         this.incrementOperationCount();
+        this._notifyStateChange();
     }
 
     redo() {
         this.canvasState.redo();
         this.incrementOperationCount();
+        this._notifyStateChange();
     }
 
     updateSelectionAfterHistory() {
@@ -207,6 +216,16 @@ export class Canvas {
             this.layers.splice(index, 1);
             this.selectedLayer = this.layers[this.layers.length - 1] || null;
             this.render();
+        }
+    }
+
+    removeSelectedLayers() {
+        if (this.selectedLayers.length > 0) {
+            this.saveState();
+            this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
+            this.updateSelection([]);
+            this.render();
+            this.saveState();
         }
     }
 

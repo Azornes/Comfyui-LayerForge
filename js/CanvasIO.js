@@ -727,7 +727,7 @@ export class CanvasIO {
             this.canvas.layers.push(layer);
             this.canvas.selectedLayer = layer;
             this.canvas.render();
-
+            this.canvas.saveState();
         } catch (error) {
             log.error('Error importing image:', error);
         }
