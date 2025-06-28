@@ -42,7 +42,7 @@
     ```
 2.  Clone this repository:
     ```bash
-    git clone https://github.com/YOUR_USERNAME/LayerForge.git
+    git clone https://github.com/Azornes/Comfyui-LayerForge
     ```
 3.  Restart ComfyUI.
 
