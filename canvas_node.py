@@ -24,7 +24,7 @@ import os
 try:
     from python.logger import logger, LogLevel, debug, info, warn, error, exception
 
-    logger.set_module_level('canvas_node', LogLevel.INFO)  # Domyślnie INFO, można zmienić na DEBUG
+    logger.set_module_level('canvas_node', LogLevel.NONE)
 
     logger.configure({
         'log_to_file': True,

@@ -188,13 +188,16 @@ class LayerForgeLogger:
         """Sprawdź, czy dany poziom logowania jest aktywny dla modułu"""
         if not self.enabled:
             return False
-        
-        # Sprawdź ustawienia modułu, jeśli istnieją
-        if module in self.config['module_settings']:
-            return level >= self.config['module_settings'][module]
-        
-        # W przeciwnym razie użyj globalnego poziomu
-        return level >= self.config['global_level']
+
+        # Ustal efektywny poziom logowania, biorąc pod uwagę ustawienia modułu i globalne
+        effective_level = self.config['module_settings'].get(module, self.config['global_level'])
+
+        # Jeśli efektywny poziom to NONE, logowanie jest całkowicie wyłączone
+        if effective_level == LogLevel.NONE:
+            return False
+
+        # W przeciwnym razie sprawdź, czy poziom loga jest wystarczająco wysoki
+        return level >= effective_level
     
     def _get_logger(self, module):
         """Pobierz lub utwórz logger dla modułu"""
