@@ -156,7 +156,7 @@ As a result, the node may produce a **completely black image** or not work at al
 
 * Search node ID in ComfyUI settings.
 * In NodesMap check "Enable node ID display"
-* Manually enter the correct `node_id` (match the ID shown in the UI).
+* Manually enter the correct `node_id` (match the ID Node "LayerForge" shown above the node, on the right side).
 
 > [!WARNING]  
 > This is a known issue and not yet fixed.
