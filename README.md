@@ -152,8 +152,6 @@ This project is licensed under the MIT License. Feel free to use, modify, and di
 
 ---
 
----
-
 ## 🐞 Known Issue:
 ### `node_id` not auto-filled → black output
 
@@ -166,8 +164,9 @@ As a result, the node may produce a **completely black image** or not work at al
 * In NodesMap check "Enable node ID display"
 * Manually enter the correct `node_id` (match the ID shown in the UI).
 
-⚠️ This is a known issue and not yet fixed.
-Please follow the steps above if your output is black or broken.
+> [!WARNING]  
+> This is a known issue and not yet fixed.
+> Please follow the steps above if your output is black or broken.
 
 ---
 
