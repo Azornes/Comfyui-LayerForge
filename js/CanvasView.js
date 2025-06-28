@@ -555,7 +555,7 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.primary", {
                     textContent: "Paste Image",
                     title: "Paste image from clipboard",
-                    onclick: () => canvas.handlePaste()
+                    onclick: () => canvas.handlePaste('center')
                 }),
             ]),
 

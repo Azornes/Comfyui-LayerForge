@@ -66,7 +66,7 @@ export class CanvasLayers {
         log.info(`Pasted ${newLayers.length} layer(s).`);
     }
 
-    async handlePaste() {
+    async handlePaste(pasteMode = 'mouse') {
         try {
             if (!navigator.clipboard?.read) {
                 log.info("Browser does not support clipboard read API. Falling back to internal paste.");
@@ -86,10 +86,15 @@ export class CanvasLayers {
                     reader.onload = (event) => {
                         const img = new Image();
                         img.onload = async () => {
-                            await this.addLayerWithImage(img, {
-                                x: this.canvasLayers.lastMousePosition.x - img.width / 2,
-                                y: this.canvasLayers.lastMousePosition.y - img.height / 2,
-                            });
+                            let layerProps = {};
+                            if (pasteMode === 'center') {
+                                layerProps.x = (this.canvasLayers.width - img.width) / 2;
+                                layerProps.y = (this.canvasLayers.height - img.height) / 2;
+                            } else { // 'mouse' or default
+                                layerProps.x = this.canvasLayers.lastMousePosition.x - img.width / 2;
+                                layerProps.y = this.canvasLayers.lastMousePosition.y - img.height / 2;
+                            }
+                            await this.addLayerWithImage(img, layerProps);
                         };
                         img.src = event.target.result;
                     };

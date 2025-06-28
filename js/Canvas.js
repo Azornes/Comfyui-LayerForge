@@ -157,8 +157,8 @@ export class Canvas {
         return this.canvasLayers.pasteLayers();
     }
 
-    async handlePaste() {
-        return this.canvasLayers.handlePaste();
+    async handlePaste(pasteMode) {
+        return this.canvasLayers.handlePaste(pasteMode);
     }
 
 

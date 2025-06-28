@@ -347,7 +347,7 @@ export class CanvasInteractions {
             if (e.key.toLowerCase() === 'v') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.handlePaste();
+                this.canvas.handlePaste('mouse');
                 return;
             }
         }
