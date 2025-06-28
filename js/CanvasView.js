@@ -367,6 +367,7 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Add Image",
+                    title: "Add image from file",
                     onclick: () => {
                         const input = document.createElement('input');
                         input.type = 'file';
@@ -390,10 +391,12 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Import Input",
+                    title: "Import image from another node",
                     onclick: () => canvas.importLatestImage()
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Paste Image",
+                    title: "Paste image from clipboard",
                     onclick: () => canvas.handlePaste()
                 }),
             ]),
@@ -402,6 +405,7 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button", {
                     textContent: "Output Area Size",
+                    title: "Set the size of the output area",
                     onclick: () => {
                         const dialog = $el("div.painter-dialog", {
                             style: {
@@ -486,14 +490,17 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Remove Layer",
+                    title: "Remove selected layer(s)",
                     onclick: () => canvas.removeSelectedLayers()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Up",
+                    title: "Move selected layer(s) up",
                     onclick: () => canvas.moveLayerUp()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Down",
+                    title: "Move selected layer(s) down",
                     onclick: () => canvas.moveLayerDown()
                 }),
             ]),
@@ -502,22 +509,27 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
+                    title: "Rotate selected layer(s) by +90 degrees",
                     onclick: () => canvas.rotateLayer(90)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale +5%",
+                    title: "Increase size of selected layer(s) by 5%",
                     onclick: () => canvas.resizeLayer(1.05)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale -5%",
+                    title: "Decrease size of selected layer(s) by 5%",
                     onclick: () => canvas.resizeLayer(0.95)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror H",
+                    title: "Mirror selected layer(s) horizontally",
                     onclick: () => canvas.mirrorHorizontal()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror V",
+                    title: "Mirror selected layer(s) vertically",
                     onclick: () => canvas.mirrorVertical()
                 }),
             ]),
@@ -526,6 +538,7 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button.requires-selection.matting-button", {
                     textContent: "Matting",
+                    title: "Perform background removal on the selected layer",
                     onclick: async (e) => {
                         const button = e.target.closest('.matting-button');
                         if (button.classList.contains('loading')) return;
@@ -570,12 +583,14 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button", {
                     id: `undo-button-${node.id}`,
                     textContent: "Undo",
+                    title: "Undo last action",
                     disabled: true,
                     onclick: () => canvas.undo()
                 }),
                 $el("button.painter-button", {
                     id: `redo-button-${node.id}`,
                     textContent: "Redo",
+                    title: "Redo last undone action",
                     disabled: true,
                     onclick: () => canvas.redo()
                 }),
@@ -585,6 +600,7 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button", {
                     id: "mask-mode-btn",
                     textContent: "Draw Mask",
+                    title: "Toggle mask drawing mode",
                     onclick: () => {
                         const maskBtn = controlPanel.querySelector('#mask-mode-btn');
                         const maskControls = controlPanel.querySelector('#mask-controls');
@@ -637,6 +653,7 @@ async function createCanvasWidget(node, widget, app) {
                 ]),
                 $el("button.painter-button.mask-control", {
                     textContent: "Clear Mask",
+                    title: "Clear the entire mask",
                     style: {display: 'none'},
                     onclick: () => {
                         if (confirm("Are you sure you want to clear the mask?")) {
@@ -672,6 +689,7 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button", {
                     textContent: "Clear Cache",
+                    title: "Clear all saved canvas states from browser storage",
                     style: {backgroundColor: "#c54747", borderColor: "#a53737"},
                     onclick: async () => {
                         if (confirm("Are you sure you want to clear all saved canvas states? This action cannot be undone.")) {
