@@ -247,6 +247,20 @@ export class Canvas {
         return {x: worldX, y: worldY};
     }
 
+    getMouseViewCoordinates(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX_DOM = e.clientX - rect.left;
+        const mouseY_DOM = e.clientY - rect.top;
+
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+
+        const mouseX_Canvas = mouseX_DOM * scaleX;
+        const mouseY_Canvas = mouseY_DOM * scaleY;
+
+        return { x: mouseX_Canvas, y: mouseY_Canvas };
+    }
+
 
     moveLayer(fromIndex, toIndex) {
         return this.canvasLayers.moveLayer(fromIndex, toIndex);

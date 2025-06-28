@@ -20,7 +20,26 @@ export class MaskTool {
         this.isDrawing = false;
         this.lastPosition = null;
 
+        this.previewCanvas = document.createElement('canvas');
+        this.previewCtx = this.previewCanvas.getContext('2d');
+        this.previewVisible = false;
+        this.previewCanvasInitialized = false;
+
         this.initMaskCanvas();
+    }
+
+    initPreviewCanvas() {
+        if (this.previewCanvas.parentElement) {
+            this.previewCanvas.parentElement.removeChild(this.previewCanvas);
+        }
+        this.previewCanvas.width = this.canvasInstance.canvas.width;
+        this.previewCanvas.height = this.canvasInstance.canvas.height;
+        this.previewCanvas.style.position = 'absolute';
+        this.previewCanvas.style.left = `${this.canvasInstance.canvas.offsetLeft}px`;
+        this.previewCanvas.style.top = `${this.canvasInstance.canvas.offsetTop}px`;
+        this.previewCanvas.style.pointerEvents = 'none';
+        this.previewCanvas.style.zIndex = '10';
+        this.canvasInstance.canvas.parentElement.appendChild(this.previewCanvas);
     }
 
     setBrushSoftness(softness) {
@@ -42,7 +61,12 @@ export class MaskTool {
     }
 
     activate() {
+        if (!this.previewCanvasInitialized) {
+            this.initPreviewCanvas();
+            this.previewCanvasInitialized = true;
+        }
         this.isActive = true;
+        this.previewCanvas.style.display = 'block';
         this.canvasInstance.interaction.mode = 'drawingMask';
         if (this.canvasInstance.canvasState && this.canvasInstance.canvasState.maskUndoStack.length === 0) {
             this.canvasInstance.canvasState.saveMaskState();
@@ -54,6 +78,7 @@ export class MaskTool {
 
     deactivate() {
         this.isActive = false;
+        this.previewCanvas.style.display = 'none';
         this.canvasInstance.interaction.mode = 'none';
         this.canvasInstance.updateHistoryButtons();
 
@@ -68,20 +93,33 @@ export class MaskTool {
         this.brushStrength = Math.max(0, Math.min(1, strength));
     }
 
-    handleMouseDown(worldCoords) {
+    handleMouseDown(worldCoords, viewCoords) {
         if (!this.isActive) return;
         this.isDrawing = true;
         this.lastPosition = worldCoords;
         this.draw(worldCoords);
+        this.clearPreview();
     }
 
-    handleMouseMove(worldCoords) {
+    handleMouseMove(worldCoords, viewCoords) {
+        if (this.isActive) {
+            this.drawBrushPreview(viewCoords);
+        }
         if (!this.isActive || !this.isDrawing) return;
         this.draw(worldCoords);
         this.lastPosition = worldCoords;
     }
 
-    handleMouseUp() {
+    handleMouseLeave() {
+        this.previewVisible = false;
+        this.clearPreview();
+    }
+
+    handleMouseEnter() {
+        this.previewVisible = true;
+    }
+
+    handleMouseUp(viewCoords) {
         if (!this.isActive) return;
         if (this.isDrawing) {
             this.isDrawing = false;
@@ -92,6 +130,7 @@ export class MaskTool {
             if (this.onStateChange) {
                 this.onStateChange();
             }
+            this.drawBrushPreview(viewCoords);
         }
     }
 
@@ -143,6 +182,28 @@ export class MaskTool {
         }
     }
 
+    drawBrushPreview(viewCoords) {
+        if (!this.previewVisible || this.isDrawing) {
+            this.clearPreview();
+            return;
+        }
+
+        this.clearPreview();
+        const zoom = this.canvasInstance.viewport.zoom;
+        const radius = (this.brushSize / 2) * zoom;
+
+        this.previewCtx.beginPath();
+        this.previewCtx.arc(viewCoords.x, viewCoords.y, radius, 0, 2 * Math.PI);
+        this.previewCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+        this.previewCtx.lineWidth = 1;
+        this.previewCtx.setLineDash([2, 4]);
+        this.previewCtx.stroke();
+    }
+
+    clearPreview() {
+        this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
+    }
+
     clear() {
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
         if (this.isActive && this.canvasInstance.canvasState) {
@@ -176,6 +237,7 @@ export class MaskTool {
     }
 
     resize(width, height) {
+        this.initPreviewCanvas();
         const oldMask = this.maskCanvas;
         const oldX = this.x;
         const oldY = this.y;

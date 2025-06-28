@@ -34,11 +34,13 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
 
-        this.canvas.canvas.addEventListener('mouseenter', () => {
+        this.canvas.canvas.addEventListener('mouseenter', (e) => {
             this.canvas.isMouseOver = true;
+            this.handleMouseEnter(e);
         });
-        this.canvas.canvas.addEventListener('mouseleave', () => {
+        this.canvas.canvas.addEventListener('mouseleave', (e) => {
             this.canvas.isMouseOver = false;
+            this.handleMouseLeave(e);
         });
     }
 
@@ -56,14 +58,14 @@ export class CanvasInteractions {
     handleMouseDown(e) {
         this.canvas.canvas.focus();
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
 
         if (this.canvas.maskTool.isActive) {
             if (e.button === 1) {
                 this.startPanning(e);
-                this.canvas.render();
-                return;
+            } else {
+                this.canvas.maskTool.handleMouseDown(worldCoords, viewCoords);
             }
-            this.canvas.maskTool.handleMouseDown(worldCoords);
             this.canvas.render();
             return;
         }
@@ -110,6 +112,7 @@ export class CanvasInteractions {
 
     handleMouseMove(e) {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
         this.canvas.lastMousePosition = worldCoords;
 
         if (this.canvas.maskTool.isActive) {
@@ -117,8 +120,10 @@ export class CanvasInteractions {
                 this.panViewport(e);
                 return;
             }
-            this.canvas.maskTool.handleMouseMove(worldCoords);
-            if (this.canvas.maskTool.isDrawing) this.canvas.render();
+            this.canvas.maskTool.handleMouseMove(worldCoords, viewCoords);
+            if (this.canvas.maskTool.isDrawing) {
+                this.canvas.render();
+            }
             return;
         }
 
@@ -148,13 +153,13 @@ export class CanvasInteractions {
     }
 
     handleMouseUp(e) {
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
         if (this.canvas.maskTool.isActive) {
             if (this.interaction.mode === 'panning') {
                 this.resetInteractionState();
-                this.canvas.render();
-                return;
+            } else {
+                this.canvas.maskTool.handleMouseUp(viewCoords);
             }
-            this.canvas.maskTool.handleMouseUp();
             this.canvas.render();
             return;
         }
@@ -176,14 +181,24 @@ export class CanvasInteractions {
     }
 
     handleMouseLeave(e) {
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
         if (this.canvas.maskTool.isActive) {
-            this.canvas.maskTool.handleMouseUp();
+            this.canvas.maskTool.handleMouseLeave();
+            if (this.canvas.maskTool.isDrawing) {
+                this.canvas.maskTool.handleMouseUp(viewCoords);
+            }
             this.canvas.render();
             return;
         }
         if (this.interaction.mode !== 'none') {
             this.resetInteractionState();
             this.canvas.render();
+        }
+    }
+
+    handleMouseEnter(e) {
+        if (this.canvas.maskTool.isActive) {
+            this.canvas.maskTool.handleMouseEnter();
         }
     }
 
