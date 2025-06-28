@@ -173,19 +173,125 @@ async function createCanvasWidget(node, widget, app) {
         }
 
         .painter-tooltip {
-            position: fixed; /* Pozycjonowanie względem okna przeglądarki */
-            display: none;   /* Domyślnie ukryty */
+            position: fixed;
+            display: none;
             background: #3a3a3a;
             color: #f0f0f0;
             border: 1px solid #555;
             border-radius: 8px;
             padding: 12px 18px;
-            z-index: 9999; /* Wyżej niż modal backdrop */
+            z-index: 9999;
             font-size: 13px;
             line-height: 1.7;
-            max-width: 400px;
+            width: auto;
+            max-width: min(500px, calc(100vw - 40px));
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            pointer-events: none; /* Zapobiega interakcji myszy z dymkiem */
+            pointer-events: none;
+            transform-origin: top left;
+            transition: transform 0.2s ease;
+            will-change: transform;
+        }
+
+        .painter-tooltip.scale-down {
+            transform: scale(0.9);
+            transform-origin: top;
+        }
+
+        .painter-tooltip.scale-down-more {
+            transform: scale(0.8);
+            transform-origin: top;
+        }
+
+        .painter-tooltip table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8px 0;
+        }
+
+        .painter-tooltip table td {
+            padding: 2px 8px;
+            vertical-align: middle;
+        }
+
+        .painter-tooltip table td:first-child {
+            width: 45%;
+            white-space: nowrap;
+        }
+
+        .painter-tooltip table td:last-child {
+            width: 55%;
+        }
+
+        .painter-tooltip table tr:nth-child(odd) td {
+            background-color: rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 600px) {
+            .painter-tooltip {
+                font-size: 11px;
+                padding: 8px 12px;
+            }
+            .painter-tooltip table td {
+                padding: 2px 4px;
+            }
+            .painter-tooltip kbd {
+                padding: 1px 4px;
+                font-size: 10px;
+            }
+            .painter-tooltip table td:first-child {
+                width: 40%;
+            }
+            .painter-tooltip table td:last-child {
+                width: 60%;
+            }
+            .painter-tooltip h4 {
+                font-size: 12px;
+                margin-top: 8px;
+                margin-bottom: 4px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .painter-tooltip {
+                font-size: 10px;
+                padding: 6px 8px;
+            }
+            .painter-tooltip table td {
+                padding: 1px 3px;
+            }
+            .painter-tooltip kbd {
+                padding: 0px 3px;
+                font-size: 9px;
+            }
+            .painter-tooltip table td:first-child {
+                width: 35%;
+            }
+            .painter-tooltip table td:last-child {
+                width: 65%;
+            }
+            .painter-tooltip h4 {
+                font-size: 11px;
+                margin-top: 6px;
+                margin-bottom: 3px;
+            }
+        }
+
+        .painter-tooltip::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .painter-tooltip::-webkit-scrollbar-track {
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+
+        .painter-tooltip::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+
+        .painter-tooltip::-webkit-scrollbar-thumb:hover {
+            background: #666;
         }
         
         .painter-tooltip h4 {
@@ -288,57 +394,56 @@ async function createCanvasWidget(node, widget, app) {
 
     const standardShortcuts = `
         <h4>Canvas Control</h4>
-        <ul>
-            <li><kbd>Click + Drag</kbd> - Pan canvas view</li>
-            <li><kbd>Mouse Wheel</kbd> - Zoom view in/out</li>
-            <li><kbd>Shift + Click (background)</kbd> - Start resizing canvas area</li>
-            <li><kbd>Shift + Ctrl + Click</kbd> - Start moving entire canvas</li>
-            <li><kbd>Double Click (background)</kbd> - Deselect all layers</li>
-        </ul>
+        <table>
+            <tr><td><kbd>Click + Drag</kbd></td><td>Pan canvas view</td></tr>
+            <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
+            <tr><td><kbd>Shift + Click (background)</kbd></td><td>Start resizing canvas area</td></tr>
+            <tr><td><kbd>Shift + Ctrl + Click</kbd></td><td>Start moving entire canvas</td></tr>
+            <tr><td><kbd>Double Click (background)</kbd></td><td>Deselect all layers</td></tr>
+        </table>
+
         <h4>Clipboard & I/O</h4>
-        <ul>
-            <li><kbd>Ctrl + C</kbd> - Copy selected layer(s)</li>
-            <li><kbd>Ctrl + V</kbd> - Paste from clipboard (image or internal layers)</li>
-            <li><kbd>Drag & Drop Image File</kbd> - Add image as a new layer</li>
-        </ul>
+        <table>
+            <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layer(s)</td></tr>
+            <tr><td><kbd>Ctrl + V</kbd></td><td>Paste from clipboard (image or internal layers)</td></tr>
+            <tr><td><kbd>Drag & Drop Image File</kbd></td><td>Add image as a new layer</td></tr>
+        </table>
+
         <h4>Layer Interaction</h4>
-        <ul>
-            <li><kbd>Click + Drag</kbd> - Move selected layer(s)</li>
-            <li><kbd>Ctrl + Click</kbd> - Add/Remove layer from selection</li>
-            <li><kbd>Alt + Drag</kbd> - Clone selected layer(s)</li>
-            <li><kbd>Shift + Click</kbd> - Show blend mode & opacity menu</li>
-            <li><kbd>Mouse Wheel</kbd> - Scale layer (snaps to grid)</li>
-            <li><kbd>Ctrl + Mouse Wheel</kbd> - Fine-scale layer</li>
-            <li><kbd>Shift + Mouse Wheel</kbd> - Rotate layer by 5°</li>
-            <li><kbd>Arrow Keys</kbd> - Nudge layer by 1px</li>
-            <li><kbd>Shift + Arrow Keys</kbd> - Nudge layer by 10px</li>
-            <li><kbd>[</kbd> or <kbd>]</kbd> - Rotate by 1°</li>
-            <li><kbd>Shift + [</kbd> or <kbd>]</kbd> - Rotate by 10°</li>
-            <li><kbd>Delete</kbd> - Delete selected layer(s)</li>
-        </ul>
+        <table>
+            <tr><td><kbd>Click + Drag</kbd></td><td>Move selected layer(s)</td></tr>
+            <tr><td><kbd>Ctrl + Click</kbd></td><td>Add/Remove layer from selection</td></tr>
+            <tr><td><kbd>Alt + Drag</kbd></td><td>Clone selected layer(s)</td></tr>
+            <tr><td><kbd>Shift + Click</kbd></td><td>Show blend mode & opacity menu</td></tr>
+            <tr><td><kbd>Mouse Wheel</kbd></td><td>Scale layer (snaps to grid)</td></tr>
+            <tr><td><kbd>Ctrl + Mouse Wheel</kbd></td><td>Fine-scale layer</td></tr>
+            <tr><td><kbd>Shift + Mouse Wheel</kbd></td><td>Rotate layer by 5°</td></tr>
+            <tr><td><kbd>Arrow Keys</kbd></td><td>Nudge layer by 1px</td></tr>
+            <tr><td><kbd>Shift + Arrow Keys</kbd></td><td>Nudge layer by 10px</td></tr>
+            <tr><td><kbd>[</kbd> or <kbd>]</kbd></td><td>Rotate by 1°</td></tr>
+            <tr><td><kbd>Shift + [</kbd> or <kbd>]</kbd></td><td>Rotate by 10°</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>Delete selected layer(s)</td></tr>
+        </table>
+
         <h4>Transform Handles (on selected layer)</h4>
-        <ul>
-            <li><kbd>Drag Corner/Side</kbd> - Resize layer</li>
-            <li><kbd>Drag Rotation Handle</kbd> - Rotate layer</li>
-            <li><kbd>Hold Shift</kbd> - Keep aspect ratio / Snap rotation to 15°</li>
-            <li><kbd>Hold Ctrl</kbd> - Snap to grid</li>
-        </ul>
+        <table>
+            <tr><td><kbd>Drag Corner/Side</kbd></td><td>Resize layer</td></tr>
+            <tr><td><kbd>Drag Rotation Handle</kbd></td><td>Rotate layer</td></tr>
+            <tr><td><kbd>Hold Shift</kbd></td><td>Keep aspect ratio / Snap rotation to 15°</td></tr>
+            <tr><td><kbd>Hold Ctrl</kbd></td><td>Snap to grid</td></tr>
+        </table>
     `;
 
     const maskShortcuts = `
-        <h4>Draw Mask Mode</h4>
-        <ul>
-            <li><kbd>Click + Drag</kbd> - Paint on the mask</li>
-            <li>Use the sliders to control brush <strong>Size</strong>, <strong>Strength</strong>, and <strong>Softness</strong>.</li>
-            <li><strong>Clear Mask</strong> will remove the entire mask.</li>
-            <li>The mask is applied to the final image composition.</li>
-            <li><kbd>Middle Mouse Button + Drag</kbd> - Pan canvas view</li>
-            <li><kbd>Mouse Wheel</kbd> - Zoom view in/out</li>
-        </ul>
-         <h4>Exiting Mask Mode</h4>
-        <ul>
-            <li>Click the "Draw Mask" button again to exit the mode.</li>
-        </ul>
+        <h4>Mask Mode</h4>
+        <table>
+            <tr><td><kbd>Click + Drag</kbd></td><td>Paint on the mask</td></tr>
+            <tr><td><kbd>Middle Mouse Button + Drag</kbd></td><td>Pan canvas view</td></tr>
+            <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
+            <tr><td><strong>Brush Controls</strong></td><td>Use sliders to control brush <strong>Size</strong>, <strong>Strength</strong>, and <strong>Softness</strong></td></tr>
+            <tr><td><strong>Clear Mask</strong></td><td>Remove the entire mask</td></tr>
+            <tr><td><strong>Exit Mode</strong></td><td>Click the "Draw Mask" button again</td></tr>
+        </table>
     `;
 
     document.body.appendChild(helpTooltip);
@@ -378,10 +483,41 @@ async function createCanvasWidget(node, widget, app) {
                         } else {
                             helpTooltip.innerHTML = standardShortcuts;
                         }
-                        const rect = e.target.getBoundingClientRect();
-                        helpTooltip.style.left = `${rect.left}px`;
-                        helpTooltip.style.top = `${rect.bottom + 5}px`;
+                        
+                        // Najpierw wyświetlamy tooltip z visibility: hidden aby obliczyć jego wymiary
+                        helpTooltip.style.visibility = 'hidden';
                         helpTooltip.style.display = 'block';
+                        
+                        const buttonRect = e.target.getBoundingClientRect();
+                        const tooltipRect = helpTooltip.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+                        
+                        // Obliczamy pozycję
+                        let left = buttonRect.left;
+                        let top = buttonRect.bottom + 5;
+                        
+                        // Sprawdzamy czy tooltip wychodzi poza prawy brzeg ekranu
+                        if (left + tooltipRect.width > viewportWidth) {
+                            left = viewportWidth - tooltipRect.width - 10;
+                        }
+                        
+                        // Sprawdzamy czy tooltip wychodzi poza dolny brzeg ekranu
+                        if (top + tooltipRect.height > viewportHeight) {
+                            // Wyświetlamy nad przyciskiem zamiast pod
+                            top = buttonRect.top - tooltipRect.height - 5;
+                        }
+                        
+                        // Upewniamy się, że tooltip nie wychodzi poza lewy brzeg
+                        if (left < 10) left = 10;
+                        
+                        // Upewniamy się, że tooltip nie wychodzi poza górny brzeg
+                        if (top < 10) top = 10;
+                        
+                        // Ustawiamy finalną pozycję i pokazujemy tooltip
+                        helpTooltip.style.left = `${left}px`;
+                        helpTooltip.style.top = `${top}px`;
+                        helpTooltip.style.visibility = 'visible';
                     },
                     onmouseleave: () => {
                         helpTooltip.style.display = 'none';
