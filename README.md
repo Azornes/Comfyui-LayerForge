@@ -6,6 +6,9 @@
   <a href="https://registry.comfy.org/publishers/azornes/nodes/layerforge">
     <img alt="Downloads" src="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=Downloads&query=$.downloads&url=https://api.comfy.org/nodes/layerforge&style=for-the-badge">
   </a>
+  <a href="https://github.com/MShawon/github-clone-count-badge">
+    <img alt="GitHub Clones" src="https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/${{ github.actor }}/${{ secrets.GIST_ID }}/raw/clone.json&logo=github">
+  </a>
   <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-LayerForge">
     <img src="https://api.visitorbadge.io/api/combined?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-LayerForge&countColor=%2337d67a&style=for-the-badge&labelStyle=none" />
   </a>
