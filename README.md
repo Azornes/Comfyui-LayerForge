@@ -58,14 +58,15 @@ https://github.com/user-attachments/assets/0f557d87-fd5e-422b-ab7e-dbdd4cab156c
 3. Start up ComfyUI.
 
 ---
-
----
 ## 🧪 Workflow Example
 
 For a quick test of **LayerForge**, you can try the example workflow provided below. It demonstrates a basic compositing setup using the node.
 
 **🔗 Download Example Workflow**
 ![📥 LayerForge\_Example](https://github.com/user-attachments/assets/7572149a-bd5e-4f3b-8379-18bcc9ea3874)
+
+**How to load the workflow:**
+Click on the image above, then drag and drop it into your ComfyUI workflow window in your browser. The workflow should load automatically.
 
 ---
 
