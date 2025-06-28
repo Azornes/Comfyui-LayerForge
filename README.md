@@ -18,15 +18,19 @@
 
 ## ✨ Key Features
 
--   **Multi-Layer Editing:** Add, arrange, and manage multiple image layers.
--   **Full Transformation Controls:** Move, scale, and rotate layers with mouse or keyboard shortcuts.
--   **Blend Modes & Opacity:** Apply 12 common blend modes (`Overlay`, `Multiply`, etc.) and adjust opacity on a per-layer basis.
--   **Drag & Drop:** Drop image files directly onto the canvas to create new layers.
--   **Precise Alignment:** Snap layers to a grid (`Ctrl` key) for perfect positioning.
--   **Dynamic Canvas:** Resize the entire canvas with a live preview of the new dimensions.
--   **Workflow Integration:**
-    -   Import the last generated image directly into a layer.
-    -   Outputs a final composite **image** and a combined alpha **mask**.
+-   **Persistent & Stateful:** Your work is automatically saved to the browser's IndexedDB, preserving your full canvas state (layers, positions, etc.) even after a page reload.
+-   **Multi-Layer Editing:** Add, arrange, and manage multiple image layers with z-ordering.
+-   **Advanced Masking Tool:** A dedicated masking mode with adjustable brush size, strength, and softness. Masks have their own separate undo/redo history.
+-   **Full Transformation Controls:** Precisely move, scale, and rotate layers with mouse or keyboard shortcuts.
+-   **Blend Modes & Opacity:** Apply 12 common blend modes (`Overlay`, `Multiply`, etc.) and adjust opacity on a per-layer basis via a context menu.
+-   **Comprehensive Undo/Redo:** Full history support for both layer manipulations and mask drawing.
+-   **Seamless I/O:**
+    -   **Drag & Drop** image files to create new layers.
+    -   **Copy & Paste** images directly from your system clipboard.
+    -   Import the last generated image from your workflow with one click.
+-   **AI-Powered Matting:** Optional background removal for any layer using the `BiRefNet` model.
+-   **Efficient Memory Management:** An automatic garbage collection system cleans up unused image data to keep the browser's storage footprint low.
+-   **Workflow Integration:** Outputs a final composite **image** and a combined alpha **mask**, ready for any other ComfyUI node.
 
 ---
 
@@ -44,33 +48,62 @@
 
 ---
 
-## 🖱️ Controls
+## 🎮 Controls & Shortcuts
 
-### Layer Controls (When one or more layers are selected)
+### Canvas Control
 
-| Action                    | Description                                                              |
-| ------------------------- | ------------------------------------------------------------------------ |
-| **Mouse Drag**            | Move selected layer(s).                                                  |
-| `Ctrl` + **Mouse Drag**   | Move selected layer(s) with **grid snapping**.                           |
-| `Ctrl` + **Click**        | Add or remove a layer from the current selection.                        |
-| **Mouse Wheel**           | Scale selected layer(s) up or down.                                      |
-| `Shift` + **Mouse Wheel** | Rotate selected layer(s).                                                |
-| `Shift` + **Click**       | Open the **Blend Mode & Opacity** menu for the clicked layer.            |
-| `Delete` Key              | Remove all selected layers.                                              |
-| **Arrow Keys**            | Nudge selected layer(s) by 1 pixel.                                      |
-| `Shift` + **Arrow Keys**  | Nudge selected layer(s) by 10 pixels.                                    |
-| `[` / `]` Keys            | Rotate selected layer(s) by 1 degree.                                    |
-| `Shift` + `[` / `]` Keys  | Rotate selected layer(s) by 10 degrees.                                  |
+| Action | Description |
+|--------|-------------|
+| `Click + Drag` | Pan canvas view |
+| `Mouse Wheel` | Zoom view in/out |
+| `Shift + Click (background)` | Start resizing canvas area |
+| `Shift + Ctrl + Click` | Start moving entire canvas |
+| `Double Click (background)` | Deselect all layers |
 
-### Canvas & Global Controls
+### Clipboard & I/O
 
-| Action                      | Description                                                  |
-| --------------------------- | ------------------------------------------------------------ |
-| **Drag Background**         | Pan the canvas viewport.                                     |
-| **Mouse Wheel**             | Zoom the viewport in or out (centered on the cursor).        |
-| **Drag & Drop Image File**  | Add a new image layer from a file on your disk.              |
-| `Shift` + **Drag Empty Space** | Define a new canvas size with a live preview.              |
-| **Double-Click Empty Space**  | Deselect all layers.                                         |
+| Action | Description |
+|--------|-------------|
+| `Ctrl + C` | Copy selected layer(s) |
+| `Ctrl + V` | Paste from clipboard (image or internal layers) |
+| `Drag & Drop Image File` | Add image as a new layer |
+
+### Layer Interaction
+
+| Action | Description |
+|--------|-------------|
+| `Click + Drag` | Move selected layer(s) |
+| `Ctrl + Click` | Add/Remove layer from selection |
+| `Alt + Drag` | Clone selected layer(s) |
+| `Shift + Click` | Show blend mode & opacity menu |
+| `Mouse Wheel` | Scale layer (snaps to grid) |
+| `Ctrl + Mouse Wheel` | Fine-scale layer |
+| `Shift + Mouse Wheel` | Rotate layer by 5° |
+| `Arrow Keys` | Nudge layer by 1px |
+| `Shift + Arrow Keys` | Nudge layer by 10px |
+| `[` or `]` | Rotate by 1° |
+| `Shift + [` or `]` | Rotate by 10° |
+| `Delete` | Delete selected layer(s) |
+
+### Transform Handles (on selected layer)
+
+| Action | Description |
+|--------|-------------|
+| `Drag Corner/Side` | Resize layer |
+| `Drag Rotation Handle` | Rotate layer |
+| `Hold Shift` | Keep aspect ratio / Snap rotation to 15° |
+| `Hold Ctrl` | Snap to grid |
+
+### Mask Mode
+
+| Action | Description |
+|--------|-------------|
+| `Click + Drag` | Paint on the mask |
+| `Middle Mouse Button + Drag` | Pan canvas view |
+| `Mouse Wheel` | Zoom view in/out |
+| **Brush Controls** | Use sliders to control brush **Size**, **Strength**, and **Softness** |
+| **Clear Mask** | Remove the entire mask |
+| **Exit Mode** | Click the "Draw Mask" button again |
 
 ---
 
