@@ -24,10 +24,9 @@
 
 ---
 
-<!-- 
-    ADD A COMPELLING GIF HERE! 
-    A short screen recording showing layer dragging, resizing, the blend mode menu, and canvas resizing would be perfect.
--->
+<video src="Showtime/ShowTimeLayerForge.webm" controls width="640">
+  Twoja przeglądarka nie wspiera odtwarzania wideo.
+</video>
 
 ## ✨ Key Features
 
