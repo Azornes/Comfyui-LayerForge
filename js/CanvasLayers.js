@@ -140,6 +140,8 @@ export class CanvasLayers {
             y: finalY,
             width: finalWidth,
             height: finalHeight,
+            originalWidth: image.width,
+            originalHeight: image.height,
             rotation: 0,
             zIndex: this.canvasLayers.layers.length,
             blendMode: 'normal',
