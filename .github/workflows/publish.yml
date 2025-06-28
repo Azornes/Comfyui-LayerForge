@@ -1,29 +1,28 @@
-name: "Publish To Registry"
-description: "Publish Custom Nodes to Registry."
-inputs:
-  personal_access_token:
-    description: "Personal Access Token for authenticating to the Registry"
-    required: true
-  skip_checkout:
-    description: "Whether to skip the checkout step (true/false)"
-    required: false
-    default: 'false'
-runs:
-  using: "composite"
-  steps:
-    - name: Checkout Custom Node Repository
-      uses: actions/checkout@v4
-      if: ${{ inputs.skip_checkout != 'true' }}
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-          python-version: '3.10'
-    - name: Install comfy-cli
-      shell: bash
-      run: |
-          pip install comfy-cli
-    - name: Publish Node
-      shell: bash
-      run: |
-          comfy --skip-prompt --no-enable-telemetry env
-          comfy node publish --token ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+name: Publish to Comfy registry
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "pyproject.toml"
+
+permissions:
+  issues: write
+
+jobs:
+  publish-node:
+    name: Publish Custom Node to registry
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'Azornes' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Publish Custom Node
+        uses: Comfy-Org/publish-node-action@v1
+        with:
+          ## Add your own personal access token to your Github Repository secrets and reference it here.
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
