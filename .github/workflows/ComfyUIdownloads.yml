@@ -1,0 +1,87 @@
+name: LayerForge Top Downloads Badge
+
+on:
+  schedule:
+    - cron: "0 * * * *" # co godzinę
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: gh login
+        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
+
+      - name: Query LayerForge API 10 times and find top download
+        run: |
+          echo "[]" > all_nodes.json
+          for i in {1..10}; do
+            curl -s https://api.comfy.org/nodes/layerforge >> tmp_$i.json
+            jq -s 'add' all_nodes.json tmp_$i.json > merged.json && mv merged.json all_nodes.json
+            rm tmp_$i.json
+          done
+          jq -s 'add | sort_by(.downloads) | reverse | .[0]' all_nodes.json > top_layerforge.json
+
+      - name: create or update gist with top download
+        id: set_id
+        run: |
+          if gh secret list | grep -q "LAYERFORGE_GIST_ID"
+          then
+              echo "GIST_ID found"
+              echo "GIST=${{ secrets.LAYERFORGE_GIST_ID }}" >> $GITHUB_OUTPUT
+              curl https://gist.githubusercontent.com/${{ github.actor }}/${{ secrets.LAYERFORGE_GIST_ID }}/raw/top_layerforge.json > before.json
+              if grep -q '404: Not Found' before.json; then
+                gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+                echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+              fi
+          else
+              gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+              echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+          fi
+
+      - name: create badge if needed
+        run: |
+          COUNT=$(jq '.downloads' top_layerforge.json)
+          NAME=$(jq -r '.name' top_layerforge.json)
+          if [ ! -f LAYERFORGE.md ]; then
+            shields="https://img.shields.io/badge/dynamic/json?color=informational&label=TopLayerForge&query=downloads&url="
+            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/top_layerforge.json"
+            repo="https://comfy.org"
+            echo ''> LAYERFORGE.md
+            echo '
+            **Markdown**
+
+            ```markdown' >> LAYERFORGE.md
+            echo "[![Top LayerForge Node]($shields$url)]($repo)" >> LAYERFORGE.md
+            echo '
+            ```
+
+            **HTML**
+            ```html' >> LAYERFORGE.md
+            echo "<a href='$repo'><img alt='Top LayerForge Node' src='$shields$url'></a>" >> LAYERFORGE.md
+            echo '```' >> LAYERFORGE.md
+
+            git add LAYERFORGE.md
+            git config --global user.name "GitHub Action"
+            git config --global user.email "action@github.com"
+            git commit -m "Create LayerForge badge"
+          fi
+
+      - name: Update Gist
+        run: |
+          content=$(cat top_layerforge.json | jq -c .)
+          echo '{"description": "Top LayerForge Node", "files": {"top_layerforge.json": {"content": '"$content"'}}}' > patch.json
+          curl -s -X PATCH \
+            --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
+
+      - name: Push
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
