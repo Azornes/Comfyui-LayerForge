@@ -1,5 +1,6 @@
 <h1 align="center">LayerForge – Advanced Canvas Editor for ComfyUI 🎨</h1>
 
+
 <p align="center"><i>LayerForge is an advanced canvas node for ComfyUI, providing a Photoshop-like layer-based editing experience directly within your workflow. It extends the concept of a simple canvas with multi-layer support, masking, blend modes, precise transformations, and seamless integration with other nodes.</i></p>
 
 <p align="center">
@@ -9,6 +10,8 @@
   <a href="https://github.com/MShawon/github-clone-count-badge">
     <img alt="GitHub Clones" src="https://img.shields.io/badge/dynamic/json?color=success&label=Clones&query=count&url=https://gist.githubusercontent.com/${{ github.actor }}/${{ secrets.GIST_ID }}/raw/clone.json&logo=github">
   </a>
+
+
   <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-LayerForge">
     <img src="https://api.visitorbadge.io/api/combined?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-LayerForge&countColor=%2337d67a&style=for-the-badge&labelStyle=none" />
   </a>
@@ -20,6 +23,7 @@
 
 
 </p>
+
 
 
 
