@@ -917,8 +917,24 @@ async function createCanvasWidget(node, widget, app) {
 
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
-    const updateOutput = () => {
+    const updateOutput = async () => {
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
+        
+        // Aktualizuj podgląd node z maską jako alpha
+        try {
+            const new_preview = new Image();
+            const blob = await canvas.getFlattenedCanvasWithMaskAsBlob();
+            if (blob) {
+                new_preview.src = URL.createObjectURL(blob);
+                await new Promise(r => new_preview.onload = r);
+                node.imgs = [new_preview];
+            } else {
+                node.imgs = [];
+            }
+        } catch (error) {
+            console.error("Error updating node preview:", error);
+        }
+        
         // app.graph.runStep(); // Potentially not needed if we just want to mark dirty
     };
 
@@ -1211,6 +1227,19 @@ app.registerExtension({
                         },
                     },
                     {
+                        content: "Open Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const url = URL.createObjectURL(blob);
+                                window.open(url, '_blank');
+                                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            } catch (e) {
+                                log.error("Error opening image with mask:", e);
+                            }
+                        },
+                    },
+                    {
                         content: "Copy Image",
                         callback: async () => {
                             try {
@@ -1221,6 +1250,20 @@ app.registerExtension({
                             } catch (e) {
                                 log.error("Error copying image:", e);
                                 alert("Failed to copy image to clipboard.");
+                            }
+                        },
+                    },
+                    {
+                        content: "Copy Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const item = new ClipboardItem({'image/png': blob});
+                                await navigator.clipboard.write([item]);
+                                log.info("Image with mask alpha copied to clipboard.");
+                            } catch (e) {
+                                log.error("Error copying image with mask:", e);
+                                alert("Failed to copy image with mask to clipboard.");
                             }
                         },
                     },
@@ -1239,6 +1282,24 @@ app.registerExtension({
                                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                             } catch (e) {
                                 log.error("Error saving image:", e);
+                            }
+                        },
+                    },
+                    {
+                        content: "Save Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'canvas_output_with_mask.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            } catch (e) {
+                                log.error("Error saving image with mask:", e);
                             }
                         },
                     },

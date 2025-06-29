@@ -596,6 +596,84 @@ export class CanvasLayers {
         });
     }
 
+    async getFlattenedCanvasWithMaskAsBlob() {
+        return new Promise((resolve, reject) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Najpierw renderuj wszystkie warstwy
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2,
+                    -layer.height / 2,
+                    layer.width,
+                    layer.height
+                );
+
+                tempCtx.restore();
+            });
+
+            // Pobierz dane obrazu
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+
+            // Pobierz maskę
+            const maskCanvas = this.canvas.maskTool.getMask();
+            
+            if (maskCanvas && maskCanvas.width > 0 && maskCanvas.height > 0) {
+                // Stwórz tymczasowy canvas dla maski w rozmiarze output area
+                const maskTempCanvas = document.createElement('canvas');
+                maskTempCanvas.width = this.canvas.width;
+                maskTempCanvas.height = this.canvas.height;
+                const maskTempCtx = maskTempCanvas.getContext('2d');
+
+                // Narysuj odpowiedni fragment maski (uwzględniając pozycję maskTool)
+                const maskX = -this.canvas.maskTool.x;
+                const maskY = -this.canvas.maskTool.y;
+                maskTempCtx.drawImage(maskCanvas, maskX, maskY);
+
+                // Pobierz dane maski
+                const maskImageData = maskTempCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const maskData = maskImageData.data;
+
+                // Zastosuj maskę jako kanał alpha
+                for (let i = 0; i < data.length; i += 4) {
+                    // Pobierz wartość maski (używamy czerwonego kanału, bo maska jest biała)
+                    const maskValue = maskData[i]; // R kanał maski
+                    
+                    // Maska biała (255) = pełna przezroczystość (alpha = 255)
+                    // Maska czarna (0) = brak przezroczystości (alpha = 0)
+                    data[i + 3] = maskValue; // Ustaw alpha na wartość maski
+                }
+
+                // Zapisz zmodyfikowane dane obrazu
+                tempCtx.putImageData(imageData, 0, 0);
+            }
+
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas toBlob failed.'));
+                }
+            }, 'image/png');
+        });
+    }
+
     async getFlattenedSelectionAsBlob() {
         if (this.canvas.selectedLayers.length === 0) {
             return null;

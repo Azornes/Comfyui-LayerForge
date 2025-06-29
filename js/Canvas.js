@@ -198,6 +198,13 @@ export class Canvas {
     }
 
     /**
+     * Eksportuje spłaszczony canvas z maską jako kanałem alpha
+     */
+    async getFlattenedCanvasWithMaskAsBlob() {
+        return this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+    }
+
+    /**
      * Importuje najnowszy obraz
      */
     async importLatestImage() {
@@ -212,6 +219,7 @@ export class Canvas {
      * Uruchamia edytor masek
      */
     async startMaskEditor() {
+        // Dla edytora masek używamy zwykłego spłaszczonego obrazu bez alpha
         const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");
@@ -446,7 +454,8 @@ export class Canvas {
         this.saveState();
         
         const new_preview = new Image();
-        const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
+        // Użyj nowej metody z maską jako kanałem alpha
+        const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
         if (blob) {
             new_preview.src = URL.createObjectURL(blob);
             await new Promise(r => new_preview.onload = r);
