@@ -19,7 +19,7 @@ jobs:
         run: |
           # Inicjalizacja zmiennych
           max_downloads=0
-          top_node_json=""
+          top_node_json="{}"
           
           # Pętla pobierająca dane z API 20 razy
           for i in {1..20}; do
@@ -32,18 +32,32 @@ jobs:
               continue
             fi
             
-            # Wyodrębnienie liczby pobrań i nazwy węzła
-            downloads=$(jq -r '.downloads // 0' tmp_$i.json)
-            name=$(jq -r '.name // ""' tmp_$i.json)
-            
-            # Wyświetlenie liczby pobrań dla bieżącego zapytania
-            echo "Liczba pobrań dla próby $i: $downloads (węzeł: $name)"
-            
-            # Sprawdzenie czy liczba pobrań jest większa od dotychczasowego maksimum
-            if [ "$downloads" -gt "$max_downloads" ]; then
-              max_downloads=$downloads
-              top_node_json=$(cat tmp_$i.json)
-              echo "Nowe maksimum znalezione: $downloads"
+            # Sprawdzenie czy to tablica
+            if jq -e 'type == "array"' tmp_$i.json >/dev/null; then
+              # Przeszukanie wszystkich węzłów w tablicy
+              node_count=$(jq 'length' tmp_$i.json)
+              echo "Znaleziono $node_count węzłów w próbie $i"
+              
+              for j in $(seq 0 $((node_count - 1))); do
+                downloads=$(jq -r ".[$j].downloads // 0" tmp_$i.json)
+                name=$(jq -r ".[$j].name // \"\"" tmp_$i.json)
+                
+                if [ "$downloads" -gt "$max_downloads" ]; then
+                  max_downloads=$downloads
+                  top_node_json=$(jq ".[$j]" tmp_$i.json)
+                  echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
+                fi
+              done
+            else
+              # Jeśli to pojedynczy obiekt
+              downloads=$(jq -r '.downloads // 0' tmp_$i.json)
+              name=$(jq -r '.name // ""' tmp_$i.json)
+              
+              if [ "$downloads" -gt "$max_downloads" ]; then
+                max_downloads=$downloads
+                top_node_json=$(cat tmp_$i.json)
+                echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
+              fi
             fi
             
             # Usunięcie tymczasowego pliku
@@ -51,14 +65,15 @@ jobs:
           done
           
           # Zapisanie najlepszego wyniku
-          if [ -n "$top_node_json" ]; then
+          if [ "$max_downloads" -gt 0 ]; then
             echo "$top_node_json" > top_layerforge.json
             echo "Najwyższa liczba pobrań: $max_downloads"
             echo "Szczegóły węzła:"
             jq . top_layerforge.json
           else
             echo "Błąd: Nie znaleziono żadnych prawidłowych danych"
-            exit 1
+            # Utworzenie domyślnego JSON-a
+            echo '{"name": "No data", "downloads": 0}' > top_layerforge.json
           fi
 
       - name: create or update gist with top download
@@ -115,12 +130,19 @@ jobs:
 
       - name: Update Gist
         run: |
-          content=$(cat top_layerforge.json | jq -c .)
-          echo '{"description": "Top LayerForge Node", "files": {"top_layerforge.json": {"content": '"$content"'}}}' > patch.json
-          curl -s -X PATCH \
-            --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
+          # Upewnienie się, że JSON jest poprawny
+          if jq empty top_layerforge.json 2>/dev/null; then
+            content=$(jq -c . top_layerforge.json)
+            echo "{\"description\": \"Top LayerForge Node\", \"files\": {\"top_layerforge.json\": {\"content\": $(jq -Rs . <<< "$content")}}}" > patch.json
+            
+            curl -s -X PATCH \
+              --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
+          else
+            echo "Błąd: Nieprawidłowy JSON w top_layerforge.json"
+            exit 1
+          fi
 
       - name: Push
         uses: ad-m/github-push-action@master
