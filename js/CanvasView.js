@@ -539,7 +539,7 @@ async function createCanvasWidget(node, widget, app) {
                                 reader.onload = (event) => {
                                     const img = new Image();
                                     img.onload = () => {
-                                        canvas.addLayer(img, addMode);
+                                        canvas.addLayer(img, {}, addMode);
                                     };
                                     img.src = event.target.result;
                                 };
@@ -968,27 +968,10 @@ async function createCanvasWidget(node, widget, app) {
             const img = new Image();
             img.onload = async () => {
                 log.debug("Image object loaded from dropped data:URL.");
-                const scale = Math.min(
-                    canvas.width / img.width,
-                    canvas.height / img.height
-                );
-
-                const layer = {
-                    image: img,
-                    x: (canvas.width - img.width * scale) / 2,
-                    y: (canvas.height - img.height * scale) / 2,
-                    width: img.width * scale,
-                    height: img.height * scale,
-                    rotation: 0,
-                    zIndex: canvas.layers.length,
-                    blendMode: 'normal',
-                    opacity: 1
-                };
-
-                canvas.layers.push(layer);
-                canvas.updateSelection([layer]);
-                canvas.render();
-                canvas.saveState();
+                const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
+                const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                
+                await canvas.addLayer(img, {}, addMode);
                 log.info("Dropped layer added and state saved.");
             };
             img.src = event.target.result;
