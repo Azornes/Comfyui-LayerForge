@@ -10,108 +10,118 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v2
 
-      - name: Login to GitHub CLI
+      - name: gh login
         run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
-        # SECRET_TOKEN to Personal Access Token (PAT) z uprawnieniami 'gist' i 'workflow'.
-        # Uprawnienie 'workflow' jest potrzebne do tworzenia sekretów repozytorium (gh secret set).
 
-      - name: Query API 20 times and find the top download
+      - name: Query LayerForge API 20 times and find top download
         run: |
-          echo "Pobieranie danych z API 20 razy..."
-          # Ta jedna linia wykonuje całą logikę ze skryptu CMD, ale znacznie wydajniej:
-          # 1. Pętla for wykonuje 20 zapytań curl.
-          # 2. Cały strumień obiektów JSON jest przekazywany do jednego polecenia jq.
-          # 3. jq -s ("slurp") zbiera wszystkie obiekty do jednej tablicy.
-          # 4. Tablica jest sortowana malejąco (.reverse) po kluczu .downloads.
-          # 5. Wybierany jest pierwszy element (.[0]), czyli ten z największą liczbą pobrań.
-          # 6. Wynik jest zapisywany do pliku top_layerforge.json.
-          (for i in {1..20}; do curl -s https://api.comfy.org/nodes/layerforge; done) | jq -s 'sort_by(.downloads) | reverse | .[0]' > top_layerforge.json
+          # Inicjalizacja zmiennych
+          max_downloads=0
+          top_node_json=""
           
-          echo "Znaleziono wpis z największą liczbą pobrań:"
-          cat top_layerforge.json
-
-      - name: Get or Create Gist and save its ID
-        id: gist_handler
-        run: |
-          GIST_SECRET_NAME="LAYERFORGE_GIST_ID"
-          # Sprawdź, czy sekret z ID Gista już istnieje
-          if gh secret list | grep -q "$GIST_SECRET_NAME"; then
-            echo "Znaleziono sekret GIST_ID. Używam istniejącego Gista."
-            # Ustawia GIST_ID jako output kroku, aby można go było używać w kolejnych krokach
-            echo "GIST_ID=${{ secrets.LAYERFORGE_GIST_ID }}" >> $GITHUB_OUTPUT
-          else
-            echo "Sekret GIST_ID nie istnieje. Tworzę nowy Gist i zapisuję jego ID."
-            # Utwórz nowy Gist z plikiem top_layerforge.json i przechwyć jego URL
-            GIST_URL=$(gh gist create top_layerforge.json --public -d "LayerForge Top Download Data")
-            # Wyciągnij samo ID z URL-a
-            GIST_ID=$(basename "$GIST_URL")
-            # Zapisz ID jako sekret w repozytorium, aby nie tworzyć nowego Gista przy każdym uruchomieniu
-            echo "$GIST_ID" | gh secret set "$GIST_SECRET_NAME"
-            echo "Utworzono Gist i zapisano jego ID ($GIST_ID) w sekrecie $GIST_SECRET_NAME."
-            # Ustaw GIST_ID jako output kroku
-            echo "GIST_ID=$GIST_ID" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Update Gist content
-        run: |
-          echo "Aktualizuję zawartość Gista..."
-          # Bezpieczniejsze tworzenie JSON-a do wysłania w PATCH
-          PAYLOAD=$(jq -n --argjson content "$(cat top_layerforge.json)" \
-            '{
-              "description": "Top LayerForge Node (updated automatically)",
-              "files": {
-                "top_layerforge.json": {
-                  "content": $content
-                }
-              }
-            }')
-          
-          curl -s -X PATCH \
-            -H "Authorization: token ${{ secrets.SECRET_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "$PAYLOAD" \
-            "https://api.github.com/gists/${{ steps.gist_handler.outputs.GIST_ID }}"
-
-      - name: Create badge markdown file (if it doesn't exist)
-        run: |
-          if [ ! -f LAYERFORGE.md ]; then
-            echo "Plik LAYERFORGE.md nie istnieje. Tworzę go z kodem plakietki."
-            SHIELDS_URL="https://img.shields.io/badge/dynamic/json?color=informational&label=TopLayerForge&query=downloads&url="
-            GIST_RAW_URL="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.gist_handler.outputs.GIST_ID }}/raw/top_layerforge.json"
-            REPO_URL="https://comfy.org/nodes/layerforge"
+          # Pętla pobierająca dane z API 20 razy
+          for i in {1..20}; do
+            echo "Pobieranie danych z próby $i..."
+            curl -s https://api.comfy.org/nodes/layerforge > tmp_$i.json
             
-            # Tworzenie pliku z czytelnym formatowaniem
-            cat > LAYERFORGE.md << EOF
-            # Plakietka Top LayerForge Node
-
-            Skopiuj poniższy kod i wklej go do swojego pliku `README.md` lub w inne miejsce, gdzie chcesz wyświetlić plakietkę.
-
-            ---
-
-            ### Markdown
-
-            \`\`\`markdown
-            [![Top LayerForge Node]($SHIELDS_URL$GIST_RAW_URL)]($REPO_URL)
-            \`\`\`
-
-            ### HTML
-
-            \`\`\`html
-            <a href="$REPO_URL"><img alt="Top LayerForge Node" src="$SHIELDS_URL$GIST_RAW_URL"></a>
-            \`\`\`
-            EOF
-
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git add LAYERFORGE.md
-            git commit -m "feat: Create LayerForge badge instruction file"
-          else
-            echo "Plik LAYERFORGE.md już istnieje. Pomijam ten krok."
-          fi
+            # Sprawdzenie czy plik JSON istnieje i jest poprawny
+            if [ ! -s tmp_$i.json ] || ! jq empty tmp_$i.json 2>/dev/null; then
+              echo "Błąd: Nieprawidłowy JSON dla próby $i"
+              continue
+            fi
+            
+            # Wyodrębnienie liczby pobrań i nazwy węzła
+            downloads=$(jq -r '.downloads // 0' tmp_$i.json)
+            name=$(jq -r '.name // ""' tmp_$i.json)
+            
+            # Wyświetlenie liczby pobrań dla bieżącego zapytania
+            echo "Liczba pobrań dla próby $i: $downloads (węzeł: $name)"
+            
+            # Sprawdzenie czy liczba pobrań jest większa od dotychczasowego maksimum
+            if [ "$downloads" -gt "$max_downloads" ]; then
+              max_downloads=$downloads
+              top_node_json=$(cat tmp_$i.json)
+              echo "Nowe maksimum znalezione: $downloads"
+            fi
+            
+            # Usunięcie tymczasowego pliku
+            rm -f tmp_$i.json
+          done
           
+          # Zapisanie najlepszego wyniku
+          if [ -n "$top_node_json" ]; then
+            echo "$top_node_json" > top_layerforge.json
+            echo "Najwyższa liczba pobrań: $max_downloads"
+            echo "Szczegóły węzła:"
+            jq . top_layerforge.json
+          else
+            echo "Błąd: Nie znaleziono żadnych prawidłowych danych"
+            exit 1
+          fi
+
+      - name: create or update gist with top download
+        id: set_id
+        run: |
+          if gh secret list | grep -q "LAYERFORGE_GIST_ID"
+          then
+              echo "GIST_ID found"
+              echo "GIST=${{ secrets.LAYERFORGE_GIST_ID }}" >> $GITHUB_OUTPUT
+              
+              # Sprawdzenie czy gist istnieje
+              if gh gist view ${{ secrets.LAYERFORGE_GIST_ID }} &>/dev/null; then
+                echo "Gist istnieje, będzie zaktualizowany"
+              else
+                echo "Gist nie istnieje, tworzenie nowego"
+                gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+                echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "Tworzenie nowego gist"
+              gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+              echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+          fi
+
+      - name: create badge if needed
+        run: |
+          COUNT=$(jq '.downloads' top_layerforge.json)
+          NAME=$(jq -r '.name' top_layerforge.json)
+          if [ ! -f LAYERFORGE.md ]; then
+            shields="https://img.shields.io/badge/dynamic/json?color=informational&label=TopLayerForge&query=downloads&url="
+            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/top_layerforge.json"
+            repo="https://comfy.org"
+            echo ''> LAYERFORGE.md
+            echo '
+            **Markdown**
+
+            ```markdown' >> LAYERFORGE.md
+            echo "[![Top LayerForge Node]($shields$url)]($repo)" >> LAYERFORGE.md
+            echo '
+            ```
+
+            **HTML**
+            ```html' >> LAYERFORGE.md
+            echo "<a href='$repo'><img alt='Top LayerForge Node' src='$shields$url'></a>" >> LAYERFORGE.md
+            echo '```' >> LAYERFORGE.md
+
+            git add LAYERFORGE.md
+            git config --global user.name "GitHub Action"
+            git config --global user.email "action@github.com"
+            git commit -m "Create LayerForge badge"
+          fi
+
+      - name: Update Gist
+        run: |
+          content=$(cat top_layerforge.json | jq -c .)
+          echo '{"description": "Top LayerForge Node", "files": {"top_layerforge.json": {"content": '"$content"'}}}' > patch.json
+          curl -s -X PATCH \
+            --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
+
       - name: Push
         uses: ad-m/github-push-action@master
         with:
