@@ -219,8 +219,9 @@ export class Canvas {
      * Uruchamia edytor masek
      */
     async startMaskEditor() {
-        // Dla edytora masek używamy zwykłego spłaszczonego obrazu bez alpha
-        const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
+        // Używamy specjalnej metody która łączy pełny obraz z istniejącą maską
+        // Dzięki temu edytor masek dostanie pełny obraz z maską jako punkt startowy
+        const blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");
             return;
@@ -446,9 +447,13 @@ export class Canvas {
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
         
-        maskCtx.globalCompositeOperation = 'screen';
-        maskCtx.drawImage(maskAsImage, destX, destY);
+        // Zamiast dodawać maskę (screen), zastąp całą maskę (source-over)
+        // Najpierw wyczyść obszar który będzie zastąpiony
         maskCtx.globalCompositeOperation = 'source-over';
+        maskCtx.clearRect(destX, destY, this.width, this.height);
+        
+        // Teraz narysuj nową maskę
+        maskCtx.drawImage(maskAsImage, destX, destY);
         
         this.render();
         this.saveState();

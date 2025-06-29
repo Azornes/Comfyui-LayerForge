@@ -631,33 +631,173 @@ export class CanvasLayers {
             const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             const data = imageData.data;
 
-            // Pobierz maskę
-            const maskCanvas = this.canvas.maskTool.getMask();
-            
-            if (maskCanvas && maskCanvas.width > 0 && maskCanvas.height > 0) {
+            // Pobierz maskę z maskTool (używając tej samej logiki co w CanvasIO)
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
                 // Stwórz tymczasowy canvas dla maski w rozmiarze output area
-                const maskTempCanvas = document.createElement('canvas');
-                maskTempCanvas.width = this.canvas.width;
-                maskTempCanvas.height = this.canvas.height;
-                const maskTempCtx = maskTempCanvas.getContext('2d');
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.canvas.width;
+                tempMaskCanvas.height = this.canvas.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d');
 
-                // Narysuj odpowiedni fragment maski (uwzględniając pozycję maskTool)
-                const maskX = -this.canvas.maskTool.x;
-                const maskY = -this.canvas.maskTool.y;
-                maskTempCtx.drawImage(maskCanvas, maskX, maskY);
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
 
-                // Pobierz dane maski
-                const maskImageData = maskTempCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                // Użyj tej samej logiki co w CanvasIO
+                const maskX = this.canvas.maskTool.x;
+                const maskY = this.canvas.maskTool.y;
+
+                const sourceX = Math.max(0, -maskX);  // Where in the mask canvas to start reading
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);     // Where in the output canvas to start writing
+                const destY = Math.max(0, maskY);
+
+                const copyWidth = Math.min(
+                    toolMaskCanvas.width - sourceX,   // Available width in source
+                    this.canvas.width - destX         // Available width in destination
+                );
+                const copyHeight = Math.min(
+                    toolMaskCanvas.height - sourceY,  // Available height in source
+                    this.canvas.height - destY        // Available height in destination
+                );
+
+                if (copyWidth > 0 && copyHeight > 0) {
+                    tempMaskCtx.drawImage(
+                        toolMaskCanvas,
+                        sourceX, sourceY, copyWidth, copyHeight,  // Source rectangle
+                        destX, destY, copyWidth, copyHeight       // Destination rectangle
+                    );
+                }
+
+                // Konwertuj maskę do formatu alpha (tak jak w CanvasIO)
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                    tempMaskData.data[i + 3] = alpha;
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+
+                // Zastosuj maskę do obrazu
+                const maskImageData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
                 const maskData = maskImageData.data;
 
-                // Zastosuj maskę jako kanał alpha
                 for (let i = 0; i < data.length; i += 4) {
-                    // Pobierz wartość maski (używamy czerwonego kanału, bo maska jest biała)
-                    const maskValue = maskData[i]; // R kanał maski
+                    const originalAlpha = data[i + 3];
+                    const maskAlpha = maskData[i + 3] / 255; // Użyj kanału alpha maski
                     
-                    // Maska biała (255) = pełna przezroczystość (alpha = 255)
-                    // Maska czarna (0) = brak przezroczystości (alpha = 0)
-                    data[i + 3] = maskValue; // Ustaw alpha na wartość maski
+                    // ODWRÓCONA LOGIKA: Tam gdzie jest maska (alpha = 1) = przezroczysty
+                    // Tam gdzie nie ma maski (alpha = 0) = widoczny
+                    const invertedMaskAlpha = 1 - maskAlpha;
+                    data[i + 3] = originalAlpha * invertedMaskAlpha;
+                }
+
+                // Zapisz zmodyfikowane dane obrazu
+                tempCtx.putImageData(imageData, 0, 0);
+            }
+
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas toBlob failed.'));
+                }
+            }, 'image/png');
+        });
+    }
+
+    async getFlattenedCanvasForMaskEditor() {
+        return new Promise((resolve, reject) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Renderuj wszystkie warstwy (pełny obraz)
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2,
+                    -layer.height / 2,
+                    layer.width,
+                    layer.height
+                );
+
+                tempCtx.restore();
+            });
+
+            // Pobierz dane obrazu
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+
+            // Pobierz maskę z maskTool i zastosuj ją jako kanał alpha
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
+                // Stwórz tymczasowy canvas dla maski w rozmiarze output area
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.canvas.width;
+                tempMaskCanvas.height = this.canvas.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+
+                // Użyj tej samej logiki co w CanvasIO
+                const maskX = this.canvas.maskTool.x;
+                const maskY = this.canvas.maskTool.y;
+
+                const sourceX = Math.max(0, -maskX);
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);
+                const destY = Math.max(0, maskY);
+
+                const copyWidth = Math.min(
+                    toolMaskCanvas.width - sourceX,
+                    this.canvas.width - destX
+                );
+                const copyHeight = Math.min(
+                    toolMaskCanvas.height - sourceY,
+                    this.canvas.height - destY
+                );
+
+                if (copyWidth > 0 && copyHeight > 0) {
+                    tempMaskCtx.drawImage(
+                        toolMaskCanvas,
+                        sourceX, sourceY, copyWidth, copyHeight,
+                        destX, destY, copyWidth, copyHeight
+                    );
+                }
+
+                // Konwertuj maskę do formatu alpha
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                    tempMaskData.data[i + 3] = alpha;
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+
+                // Zastosuj maskę do obrazu - NORMALNA LOGIKA dla edytora masek
+                const maskImageData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const maskData = maskImageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const originalAlpha = data[i + 3];
+                    const maskAlpha = maskData[i + 3] / 255;
+                    
+                    // ODWRÓCONA LOGIKA dla edytora: Tam gdzie jest maska (alpha = 1) = przezroczysty
+                    // Tam gdzie nie ma maski (alpha = 0) = widoczny
+                    const invertedMaskAlpha = 1 - maskAlpha;
+                    data[i + 3] = originalAlpha * invertedMaskAlpha;
                 }
 
                 // Zapisz zmodyfikowane dane obrazu
