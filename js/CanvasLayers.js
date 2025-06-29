@@ -359,7 +359,7 @@ export class CanvasLayers {
         this.canvas.render();
 
         if (saveHistory) {
-            this.canvas.saveStateToDB();
+            this.canvas.canvasState.saveStateToDB();
         }
     }
 

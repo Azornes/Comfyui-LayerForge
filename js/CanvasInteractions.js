@@ -176,7 +176,7 @@ export class CanvasInteractions {
 
         if (interactionEnded) {
             this.canvas.saveState();
-            this.canvas.saveStateToDB(true);
+            this.canvas.canvasState.saveStateToDB(true);
         }
     }
 
@@ -297,16 +297,16 @@ export class CanvasInteractions {
                     e.preventDefault();
                     e.stopPropagation();
                     if (e.shiftKey) {
-                        this.canvas.redo();
+                        this.canvas.canvasState.redo();
                     } else {
-                        this.canvas.undo();
+                        this.canvas.canvasState.undo();
                     }
                     return;
                 }
                 if (e.key.toLowerCase() === 'y') {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.canvas.redo();
+                    this.canvas.canvasState.redo();
                     return;
                 }
             }
@@ -324,30 +324,30 @@ export class CanvasInteractions {
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.shiftKey) {
-                    this.canvas.redo();
+                    this.canvas.canvasState.redo();
                 } else {
-                    this.canvas.undo();
+                    this.canvas.canvasState.undo();
                 }
                 return;
             }
             if (e.key.toLowerCase() === 'y') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.redo();
+                this.canvas.canvasState.redo();
                 return;
             }
             if (e.key.toLowerCase() === 'c') {
                 if (this.canvas.selectedLayers.length > 0) {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.canvas.copySelectedLayers();
+                    this.canvas.canvasLayers.copySelectedLayers();
                 }
                 return;
             }
             if (e.key.toLowerCase() === 'v') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.handlePaste('mouse');
+                this.canvas.canvasLayers.handlePaste('mouse');
                 return;
             }
         }

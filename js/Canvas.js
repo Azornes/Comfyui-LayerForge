@@ -469,10 +469,10 @@ export class Canvas {
      * - this.canvasInteractions dla obsługi interakcji
      * - this.canvasIO dla operacji I/O
      * - this.canvasState dla zarządzania stanem
+     * 
+     * UWAGA: Metody delegujące do CanvasState zostały usunięte.
+     * Używaj: canvas.canvasState.saveStateToDB(), canvas.canvasState.undo(), etc.
      */
-    
-    // Delegacje do CanvasState
-    async saveStateToDB(immediate = false) { return this.canvasState.saveStateToDB(immediate); }
     
     // Delegacje do CanvasLayers  
     async copySelectedLayers() { return this.canvasLayers.copySelectedLayers(); }

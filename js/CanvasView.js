@@ -749,14 +749,14 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Undo",
                     title: "Undo last action",
                     disabled: true,
-                    onclick: () => canvas.undo()
+                    onclick: () => canvas.canvasState.undo()
                 }),
                 $el("button.painter-button", {
                     id: `redo-button-${node.id}`,
                     textContent: "Redo",
                     title: "Redo last undone action",
                     disabled: true,
-                    onclick: () => canvas.redo()
+                    onclick: () => canvas.canvasState.redo()
                 }),
             ]),
             $el("div.painter-separator"),

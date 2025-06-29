@@ -146,7 +146,7 @@ canvas.imageReferenceManager.manualGarbageCollection()
 ### 🎯 Kolejne kroki
 
 1. **Monitorowanie działania** - sprawdzenie czy wszystkie funkcje działają poprawnie ✅
-2. **Usunięcie metod delegujących** - w przyszłych wersjach (po okresie przejściowym)
+2. **Usunięcie metod delegujących do CanvasState** - zakończone ✅
 3. **Rozszerzenie dokumentacji** - dla poszczególnych modułów ✅
 4. **Dodanie testów jednostkowych** - dla modułów
 
@@ -167,6 +167,13 @@ canvas.imageReferenceManager.manualGarbageCollection()
    - Zaktualizowano wszystkie odwołania `this.canvasLayers.` na `this.canvas.` w CanvasLayers.js
    - Poprawiono wywołania w CanvasView.js - `canvas.rotateLayer()` → `canvas.canvasLayers.rotateLayer()`
    - Wszystkie moduły używają teraz spójnej konwencji nazewnictwa
+
+4. **Usunięcie metod delegujących do CanvasState** ✅
+   - Usunięto metodę delegującą `saveStateToDB()` z Canvas.js
+   - Zaktualizowano wszystkie wywołania w CanvasView.js: `canvas.undo()` → `canvas.canvasState.undo()`
+   - Zaktualizowano wszystkie wywołania w CanvasInteractions.js dla operacji undo/redo i copy/paste
+   - Zaktualizowano wywołania w CanvasLayers.js i CanvasIO.js
+   - Wszystkie operacje na stanie używają teraz bezpośrednio modułu `canvasState`
 
 ## Uwagi dla deweloperów
 

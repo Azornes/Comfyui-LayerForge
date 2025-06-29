@@ -46,7 +46,7 @@ export class CanvasIO {
             log.warn(`Node ${this.canvas.node.id} has no layers, creating empty canvas`);
             return Promise.resolve(true);
         }
-        await this.canvas.saveStateToDB(true);
+        await this.canvas.canvasState.saveStateToDB(true);
         const nodeId = this.canvas.node.id;
         const delay = (nodeId % 10) * 50;
         if (delay > 0) {
