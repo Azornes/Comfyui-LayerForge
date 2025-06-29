@@ -2,7 +2,7 @@ name: LayerForge Top Downloads Badge
 
 on:
   schedule:
-    - cron: "0 * * * *" # co godzinę
+    - cron: "0 0,8,16 * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,22 +17,18 @@ jobs:
 
       - name: Query LayerForge API 20 times and find top download
         run: |
-          # Inicjalizacja zmiennych
           max_downloads=0
           top_node_json="{}"
           
-          # Pętla pobierająca dane z API 20 razy
           for i in {1..20}; do
             echo "Pobieranie danych z próby $i..."
             curl -s https://api.comfy.org/nodes/layerforge > tmp_$i.json
             
-            # Sprawdzenie czy plik JSON istnieje i jest poprawny
             if [ ! -s tmp_$i.json ] || ! jq empty tmp_$i.json 2>/dev/null; then
               echo "Błąd: Nieprawidłowy JSON dla próby $i"
               continue
             fi
             
-            # Sprawdzenie czy to tablica
             if jq -e 'type == "array"' tmp_$i.json >/dev/null; then
               # Przeszukanie wszystkich węzłów w tablicy
               node_count=$(jq 'length' tmp_$i.json)
@@ -49,7 +45,6 @@ jobs:
                 fi
               done
             else
-              # Jeśli to pojedynczy obiekt
               downloads=$(jq -r '.downloads // 0' tmp_$i.json)
               name=$(jq -r '.name // ""' tmp_$i.json)
               
@@ -60,11 +55,9 @@ jobs:
               fi
             fi
             
-            # Usunięcie tymczasowego pliku
             rm -f tmp_$i.json
           done
           
-          # Zapisanie najlepszego wyniku
           if [ "$max_downloads" -gt 0 ]; then
             echo "$top_node_json" > top_layerforge.json
             echo "Najwyższa liczba pobrań: $max_downloads"
