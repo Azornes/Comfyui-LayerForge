@@ -374,7 +374,7 @@ export class CanvasIO {
                 this.canvas.height / inputImage.height * 0.8
             );
 
-            const layer = await this.canvas.addLayerWithImage(image, {
+            const layer = await this.canvas.canvasLayers.addLayerWithImage(image, {
                 x: (this.canvas.width - inputImage.width * scale) / 2,
                 y: (this.canvas.height - inputImage.height * scale) / 2,
                 width: inputImage.width * scale,
@@ -744,7 +744,7 @@ export class CanvasIO {
                     img.src = result.image_data;
                 });
 
-                await this.canvas.addLayerWithImage(img, {
+                await this.canvas.canvasLayers.addLayerWithImage(img, {
                     x: 0,
                     y: 0,
                     width: this.canvas.width,

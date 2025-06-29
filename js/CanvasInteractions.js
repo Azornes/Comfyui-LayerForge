@@ -86,16 +86,16 @@ export class CanvasInteractions {
         }
         this.interaction.lastClickTime = currentTime;
 
-        const transformTarget = this.canvas.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
         if (transformTarget) {
             this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
             return;
         }
 
-        const clickedLayerResult = this.canvas.getLayerAtPosition(worldCoords.x, worldCoords.y);
+        const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
         if (clickedLayerResult) {
             if (e.shiftKey && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
-                this.canvas.showBlendModeMenu(e.clientX, e.clientY);
+                this.canvas.canvasLayers.showBlendModeMenu(e.clientX, e.clientY);
                 return;
             }
             this.startLayerDrag(clickedLayerResult.layer, worldCoords);
@@ -399,7 +399,7 @@ export class CanvasInteractions {
     }
 
     updateCursor(worldCoords) {
-        const transformTarget = this.canvas.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
 
         if (transformTarget) {
             const handleName = transformTarget.handle;
@@ -409,7 +409,7 @@ export class CanvasInteractions {
                 'rot': 'grab'
             };
             this.canvas.canvas.style.cursor = cursorMap[handleName];
-        } else if (this.canvas.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
+        } else if (this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
             this.canvas.canvas.style.cursor = 'move';
         } else {
             this.canvas.canvas.style.cursor = 'default';
@@ -432,7 +432,7 @@ export class CanvasInteractions {
         } else {
             this.interaction.mode = 'resizing';
             this.interaction.resizeHandle = handle;
-            const handles = this.canvas.getHandles(layer);
+            const handles = this.canvas.canvasLayers.getHandles(layer);
             const oppositeHandleKey = {
                 'n': 's', 's': 'n', 'e': 'w', 'w': 'e',
                 'nw': 'se', 'se': 'nw', 'ne': 'sw', 'sw': 'ne'

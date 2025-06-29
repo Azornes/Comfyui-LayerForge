@@ -175,6 +175,12 @@ canvas.imageReferenceManager.manualGarbageCollection()
    - Zaktualizowano wywołania w CanvasLayers.js i CanvasIO.js
    - Wszystkie operacje na stanie używają teraz bezpośrednio modułu `canvasState`
 
+5. **Usunięcie metod delegujących do CanvasLayers** ✅
+   - Usunięto 14 metod delegujących do CanvasLayers z Canvas.js
+   - Zaktualizowano wszystkie wywołania w CanvasRenderer.js, CanvasIO.js i CanvasInteractions.js
+   - Wszystkie operacje na warstwach używają teraz bezpośrednio modułu `canvasLayers`
+   - Canvas.js zawiera teraz tylko główne operacje fasady i niezbędne metody pomocnicze
+
 ## Uwagi dla deweloperów
 
 - ✅ **Refaktoryzacja zakończona** - wszystkie pliki zostały zaktualizowane

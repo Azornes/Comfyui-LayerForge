@@ -301,7 +301,7 @@ export class CanvasRenderer {
         ctx.moveTo(0, -layer.height / 2);
         ctx.lineTo(0, -layer.height / 2 - 20 / this.canvas.viewport.zoom);
         ctx.stroke();
-        const handles = this.canvas.getHandles(layer);
+        const handles = this.canvas.canvasLayers.getHandles(layer);
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1 / this.canvas.viewport.zoom;

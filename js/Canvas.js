@@ -470,27 +470,9 @@ export class Canvas {
      * - this.canvasIO dla operacji I/O
      * - this.canvasState dla zarządzania stanem
      * 
-     * UWAGA: Metody delegujące do CanvasState zostały usunięte.
-     * Używaj: canvas.canvasState.saveStateToDB(), canvas.canvasState.undo(), etc.
+     * UWAGA: Metody delegujące do CanvasLayers i CanvasState zostały usunięte.
+     * Używaj: canvas.canvasLayers.copySelectedLayers(), canvas.canvasState.undo(), etc.
      */
-    
-    // Delegacje do CanvasLayers  
-    async copySelectedLayers() { return this.canvasLayers.copySelectedLayers(); }
-    async handlePaste(addMode) { return this.canvasLayers.handlePaste(addMode); }
-    async addLayerWithImage(image, layerProps = {}, addMode = 'default') {
-        return this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
-    }
-    moveLayerUp() { return this.canvasLayers.moveLayerUp(); }
-    moveLayerDown() { return this.canvasLayers.moveLayerDown(); }
-    resizeLayer(scale) { return this.canvasLayers.resizeLayer(scale); }
-    rotateLayer(angle) { return this.canvasLayers.rotateLayer(angle); }
-    getLayerAtPosition(worldX, worldY) { return this.canvasLayers.getLayerAtPosition(worldX, worldY); }
-    getHandles(layer) { return this.canvasLayers.getHandles(layer); }
-    getHandleAtPosition(worldX, worldY) { return this.canvasLayers.getHandleAtPosition(worldX, worldY); }
-    async mirrorHorizontal() { return this.canvasLayers.mirrorHorizontal(); }
-    async mirrorVertical() { return this.canvasLayers.mirrorVertical(); }
-    async getLayerImageData(layer) { return this.canvasLayers.getLayerImageData(layer); }
-    showBlendModeMenu(x, y) { return this.canvasLayers.showBlendModeMenu(x, y); }
     
     // Delegacje do CanvasInteractions
     handleMouseMove(e) { this.canvasInteractions.handleMouseMove(e); }
