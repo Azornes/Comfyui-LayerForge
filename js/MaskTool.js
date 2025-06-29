@@ -279,26 +279,4 @@ export class MaskTool {
         this.y += dy;
         log.info(`Mask position updated to (${this.x}, ${this.y})`);
     }
-
-    setMask(image) {
-        // `this.x` i `this.y` przechowują pozycję lewego górnego rogu płótna maski
-        // względem lewego górnego rogu widoku. Zatem (-this.x, -this.y) to pozycja
-        // lewego górnego rogu widoku na płótnie maski.
-        const destX = -this.x;
-        const destY = -this.y;
-
-        // Wyczyść tylko ten obszar na dużym płótnie maski, który odpowiada
-        // widocznemu obszarowi wyjściowemu.
-        this.maskCtx.clearRect(destX, destY, this.canvasInstance.width, this.canvasInstance.height);
-
-        // Narysuj nowy obraz maski (który ma rozmiar obszaru wyjściowego)
-        // dokładnie w tym wyczyszczonym miejscu.
-        this.maskCtx.drawImage(image, destX, destY);
-
-        if (this.onStateChange) {
-            this.onStateChange();
-        }
-        this.canvasInstance.render(); // Wymuś odświeżenie, aby zobaczyć zmianę
-        log.info(`MaskTool updated with a new mask image at correct canvas position (${destX}, ${destY}).`);
-    }
 }

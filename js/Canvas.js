@@ -1,5 +1,3 @@
-import { app, ComfyApp } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
 import {removeImage} from "./db.js";
 import {MaskTool} from "./MaskTool.js";
 import {CanvasState} from "./CanvasState.js";
@@ -9,7 +7,6 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import { mask_editor_showing } from "./utils/mask_utils.js";
 
 const log = createModuleLogger('Canvas');
 
@@ -463,143 +460,5 @@ export class Canvas {
             this.imageReferenceManager.destroy();
         }
         log.info("Canvas destroyed");
-    }
-
-    async startMaskEditor() {
-        const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
-        if (!blob) {
-            log.warn("Canvas is empty, cannot open mask editor.");
-            return;
-        }
-
-        try {
-            const formData = new FormData();
-            const filename = `layerforge-mask-edit-${+new Date()}.png`;
-            formData.append("image", blob, filename);
-            formData.append("overwrite", "true");
-            formData.append("type", "temp");
-
-            const response = await api.fetchApi("/upload/image", {
-                method: "POST",
-                body: formData,
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to upload image: ${response.statusText}`);
-            }
-            const data = await response.json();
-            
-            const img = new Image();
-            img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-            await new Promise((res, rej) => {
-                img.onload = res;
-                img.onerror = rej;
-            });
-            
-            this.node.imgs = [img];
-
-            ComfyApp.copyToClipspace(this.node);
-            ComfyApp.clipspace_return_node = this.node;
-            ComfyApp.open_maskeditor();
-            
-            this.editorWasShowing = false;
-            this.waitWhileMaskEditing();
-
-        } catch (error) {
-            log.error("Error preparing image for mask editor:", error);
-            alert(`Error: ${error.message}`);
-        }
-    }
-
-    waitWhileMaskEditing() {
-        // Czekamy, aż edytor się pojawi, a potem zniknie.
-        if (mask_editor_showing(app)) {
-            this.editorWasShowing = true;
-        }
-        
-        if (!mask_editor_showing(app) && this.editorWasShowing) {
-             // Edytor był widoczny i już go nie ma
-             this.editorWasShowing = false;
-             setTimeout(() => this.handleMaskEditorClose(), 100); // Dajemy chwilę na aktualizację
-        } else {
-            setTimeout(this.waitWhileMaskEditing.bind(this), 100);
-        }
-    }
-
-    async handleMaskEditorClose() {
-        console.log("Node object after mask editor close:", this.node);
-        if (!this.node.imgs || !this.node.imgs.length === 0 || !this.node.imgs[0].src) {
-            log.warn("Mask editor was closed without a result.");
-            return;
-        }
-
-        const resultImage = new Image();
-        resultImage.src = this.node.imgs[0].src;
-
-        try {
-            await new Promise((resolve, reject) => {
-                resultImage.onload = resolve;
-                resultImage.onerror = reject;
-            });
-        } catch (error) {
-            log.error("Failed to load image from mask editor.", error);
-            this.node.imgs = [];
-            return;
-        }
-
-        // Używamy wymiarów naszego płótna, aby zapewnić spójność
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.width;
-        tempCanvas.height = this.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // Rysujemy obrazek z edytora, który zawiera maskę w kanale alfa
-        tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
-
-        const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-        const originalAlpha = data[i + 3];
-
-        // Ustawiamy biały kolor
-        data[i]     = 255; // R
-        data[i + 1] = 255; // G
-        data[i + 2] = 255; // B
-
-        // Odwracamy kanał alfa
-        data[i + 3] = 255 - originalAlpha;
-        }
-
-        tempCtx.putImageData(imageData, 0, 0);
-
-        const maskAsImage = new Image();
-        maskAsImage.src = tempCanvas.toDataURL();
-        await new Promise(resolve => maskAsImage.onload = resolve);
-        
-        // Łączymy nową maskę z istniejącą, zamiast ją nadpisywać
-        const maskCtx = this.maskTool.maskCtx;
-        const destX = -this.maskTool.x;
-        const destY = -this.maskTool.y;
-        
-        maskCtx.globalCompositeOperation = 'screen';
-        maskCtx.drawImage(maskAsImage, destX, destY);
-        maskCtx.globalCompositeOperation = 'source-over'; // Przywracamy domyślny tryb
-        
-        this.render();
-        this.saveState();
-        
-        // Zaktualizuj podgląd węzła nowym, spłaszczonym obrazem
-        const new_preview = new Image();
-        const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
-        if (blob) {
-            new_preview.src = URL.createObjectURL(blob);
-            await new Promise(r => new_preview.onload = r);
-            this.node.imgs = [new_preview];
-        } else {
-            this.node.imgs = [];
-        }
-
-        this.render();
     }
 }

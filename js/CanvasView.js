@@ -762,13 +762,6 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-separator"),
             $el("div.painter-button-group", {id: "mask-controls"}, [
                 $el("button.painter-button", {
-                    textContent: "Edit Mask",
-                    title: "Open the current canvas view in the mask editor",
-                    onclick: () => {
-                        canvas.startMaskEditor();
-                    }
-                }),
-                $el("button.painter-button", {
                     id: "mask-mode-btn",
                     textContent: "Draw Mask",
                     title: "Toggle mask drawing mode",
