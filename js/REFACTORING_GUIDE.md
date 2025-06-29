@@ -181,17 +181,24 @@ canvas.imageReferenceManager.manualGarbageCollection()
    - Wszystkie operacje na warstwach używają teraz bezpośrednio modułu `canvasLayers`
    - Canvas.js zawiera teraz tylko główne operacje fasady i niezbędne metody pomocnicze
 
+6. **Usunięcie metod delegujących do CanvasInteractions** ✅
+   - Usunięto ostatnią metodę delegującą `handleMouseMove()` z Canvas.js
+   - Metoda nie była używana w żadnym pliku, więc usunięcie było bezpieczne
+   - Wszystkie operacje interakcji używają teraz bezpośrednio modułu `canvasInteractions`
+   - Canvas.js jest teraz prawdziwą fasadą bez niepotrzebnych metod delegujących
+
 ## Uwagi dla deweloperów
 
-- ✅ **Refaktoryzacja zakończona** - wszystkie pliki zostały zaktualizowane
+- ✅ **Refaktoryzacja w pełni zakończona** - wszystkie pliki zostały zaktualizowane
 - ✅ **Nowy kod** używa modułów bezpośrednio zgodnie z wzorcem fasady
-- ✅ **Wszystkie delegacje** wskazują na istniejące metody w modułach
+- ✅ **Wszystkie metody delegujące** do głównych modułów zostały usunięte
+- ✅ **Czysta fasada** - Canvas.js zawiera tylko główne operacje wysokiego poziomu
 - ✅ **Spójna architektura** - wszystkie moduły używają poprawnych referencji
-- ⚠️ **Metody delegujące** są zachowane dla kompatybilności, ale oznaczone jako tymczasowe
+- ✅ **Minimalne delegacje** - pozostały tylko metody do ImageReferenceManager
 - 📚 **Dokumentacja** została zaktualizowana w tym przewodniku
 - 🔄 **Kompatybilność** z istniejącym kodem jest zachowana
 
-**Refaktoryzacja została zakończona pomyślnie!** System jest gotowy do dalszego rozwoju z lepszą architekturą opartą na wzorcu fasady.
+**Refaktoryzacja została w pełni zakończona!** Canvas.js jest teraz prawdziwą fasadą bez niepotrzebnych metod delegujących. System jest gotowy do dalszego rozwoju z czystą architekturą opartą na wzorcu fasady.
 
 ### 📋 Mapowanie kompletnych funkcjonalności
 

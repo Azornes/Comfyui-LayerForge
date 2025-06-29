@@ -457,41 +457,4 @@ export class Canvas {
 
         this.render();
     }
-
-    // ==========================================
-    // METODY DELEGUJĄCE DLA KOMPATYBILNOŚCI
-    // ==========================================
-    
-    /**
-     * Te metody są zachowane tymczasowo dla kompatybilności wstecznej.
-     * W nowych implementacjach należy używać bezpośrednio odpowiednich modułów:
-     * - this.canvasLayers dla operacji na warstwach
-     * - this.canvasInteractions dla obsługi interakcji
-     * - this.canvasIO dla operacji I/O
-     * - this.canvasState dla zarządzania stanem
-     * 
-     * UWAGA: Metody delegujące do CanvasLayers i CanvasState zostały usunięte.
-     * Używaj: canvas.canvasLayers.copySelectedLayers(), canvas.canvasState.undo(), etc.
-     */
-    
-    // Delegacje do CanvasInteractions
-    handleMouseMove(e) { this.canvasInteractions.handleMouseMove(e); }
-    
-    // Delegacje do ImageReferenceManager
-    async runGarbageCollection() {
-        if (this.imageReferenceManager) {
-            await this.imageReferenceManager.manualGarbageCollection();
-        }
-    }
-    getGarbageCollectionStats() {
-        if (this.imageReferenceManager) {
-            const stats = this.imageReferenceManager.getStats();
-            return {
-                ...stats,
-                operationCount: this.imageReferenceManager.operationCount,
-                operationThreshold: this.imageReferenceManager.operationThreshold
-            };
-        }
-        return null;
-    }
 }
