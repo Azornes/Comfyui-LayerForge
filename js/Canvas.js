@@ -482,21 +482,8 @@ export class Canvas {
     }
     moveLayerUp() { return this.canvasLayers.moveLayerUp(); }
     moveLayerDown() { return this.canvasLayers.moveLayerDown(); }
-    resizeLayer(scale) {
-        this.selectedLayers.forEach(layer => {
-            layer.width *= scale;
-            layer.height *= scale;
-        });
-        this.render();
-        this.saveState();
-    }
-    rotateLayer(angle) {
-        this.selectedLayers.forEach(layer => {
-            layer.rotation += angle;
-        });
-        this.render();
-        this.saveState();
-    }
+    resizeLayer(scale) { return this.canvasLayers.resizeLayer(scale); }
+    rotateLayer(angle) { return this.canvasLayers.rotateLayer(angle); }
     getLayerAtPosition(worldX, worldY) { return this.canvasLayers.getLayerAtPosition(worldX, worldY); }
     getHandles(layer) { return this.canvasLayers.getHandles(layer); }
     getHandleAtPosition(worldX, worldY) { return this.canvasLayers.getHandleAtPosition(worldX, worldY); }
@@ -504,9 +491,9 @@ export class Canvas {
     async mirrorVertical() { return this.canvasLayers.mirrorVertical(); }
     async getLayerImageData(layer) { return this.canvasLayers.getLayerImageData(layer); }
     showBlendModeMenu(x, y) { return this.canvasLayers.showBlendModeMenu(x, y); }
+    
     // Delegacje do CanvasInteractions
     handleMouseMove(e) { this.canvasInteractions.handleMouseMove(e); }
-
     
     // Delegacje do ImageReferenceManager
     async runGarbageCollection() {

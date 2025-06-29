@@ -198,6 +198,35 @@ export class CanvasLayers {
         this.canvasLayers.saveState();
     }
 
+    /**
+     * Zmienia rozmiar wybranych warstw
+     * @param {number} scale - Skala zmiany rozmiaru
+     */
+    resizeLayer(scale) {
+        if (this.canvasLayers.selectedLayers.length === 0) return;
+        
+        this.canvasLayers.selectedLayers.forEach(layer => {
+            layer.width *= scale;
+            layer.height *= scale;
+        });
+        this.canvasLayers.render();
+        this.canvasLayers.saveState();
+    }
+
+    /**
+     * Obraca wybrane warstwy
+     * @param {number} angle - Kąt obrotu w stopniach
+     */
+    rotateLayer(angle) {
+        if (this.canvasLayers.selectedLayers.length === 0) return;
+        
+        this.canvasLayers.selectedLayers.forEach(layer => {
+            layer.rotation += angle;
+        });
+        this.canvasLayers.render();
+        this.canvasLayers.saveState();
+    }
+
     getLayerAtPosition(worldX, worldY) {
         for (let i = this.canvasLayers.layers.length - 1; i >= 0; i--) {
             const layer = this.canvasLayers.layers[i];

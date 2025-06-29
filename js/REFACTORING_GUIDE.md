@@ -145,17 +145,45 @@ canvas.imageReferenceManager.manualGarbageCollection()
 
 ### 🎯 Kolejne kroki
 
-1. **Monitorowanie działania** - sprawdzenie czy wszystkie funkcje działają poprawnie
+1. **Monitorowanie działania** - sprawdzenie czy wszystkie funkcje działają poprawnie ✅
 2. **Usunięcie metod delegujących** - w przyszłych wersjach (po okresie przejściowym)
-3. **Rozszerzenie dokumentacji** - dla poszczególnych modułów
+3. **Rozszerzenie dokumentacji** - dla poszczególnych modułów ✅
 4. **Dodanie testów jednostkowych** - dla modułów
+
+### 🔧 Ostatnie poprawki (2025-06-29)
+
+1. **Dodano brakujące metody w CanvasLayers.js** ✅
+   - `resizeLayer(scale)` - zmienia rozmiar wybranych warstw
+   - `rotateLayer(angle)` - obraca wybrane warstwy
+   - Poprawiono delegację z Canvas.js do CanvasLayers.js
+
+2. **Weryfikacja spójności** ✅
+   - Wszystkie delegacje w Canvas.js wskazują na istniejące metody w modułach
+   - CanvasView.js używa nowego podejścia modułowego
+   - Dokumentacja została zaktualizowana
 
 ## Uwagi dla deweloperów
 
 - ✅ **Refaktoryzacja zakończona** - wszystkie pliki zostały zaktualizowane
 - ✅ **Nowy kod** używa modułów bezpośrednio zgodnie z wzorcem fasady
+- ✅ **Wszystkie delegacje** wskazują na istniejące metody w modułach
 - ⚠️ **Metody delegujące** są zachowane dla kompatybilności, ale oznaczone jako tymczasowe
 - 📚 **Dokumentacja** została zaktualizowana w tym przewodniku
 - 🔄 **Kompatybilność** z istniejącym kodem jest zachowana
 
 **Refaktoryzacja została zakończona pomyślnie!** System jest gotowy do dalszego rozwoju z lepszą architekturą opartą na wzorcu fasady.
+
+### 📋 Mapowanie kompletnych funkcjonalności
+
+| Funkcjonalność | Moduł | Metoda | Status |
+|----------------|-------|--------|--------|
+| Dodawanie warstw | `canvasLayers` | `addLayerWithImage()` | ✅ |
+| Kopiowanie/wklejanie | `canvasLayers` | `copySelectedLayers()`, `handlePaste()` | ✅ |
+| Przesuwanie warstw | `canvasLayers` | `moveLayerUp()`, `moveLayerDown()` | ✅ |
+| Transformacje | `canvasLayers` | `resizeLayer()`, `rotateLayer()` | ✅ |
+| Odbicia lustrzane | `canvasLayers` | `mirrorHorizontal()`, `mirrorVertical()` | ✅ |
+| Obsługa interakcji | `canvasInteractions` | `handleMouseMove()`, `handleKeyDown()` | ✅ |
+| Zarządzanie stanem | `canvasState` | `saveState()`, `undo()`, `redo()` | ✅ |
+| Operacje I/O | `canvasIO` | `importLatestImage()`, `sendDataViaWebSocket()` | ✅ |
+| Renderowanie | `canvasRenderer` | `render()` | ✅ |
+| Zarządzanie pamięcią | `imageReferenceManager` | `manualGarbageCollection()` | ✅ |
