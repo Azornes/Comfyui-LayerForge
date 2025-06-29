@@ -13,11 +13,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Definicja uprawnień wymaganych przez zadanie do interakcji z API GitHub
+    # Poprawiona definicja uprawnień.
+    # Potrzebujemy tylko uprawnień do zapisu zawartości repozytorium (dla 'git push').
+    # Uprawnienia do Gistów i Sekretów są zarządzane przez osobisty token dostępu (PAT).
     permissions:
-      contents: write  # do wypychania (push) pliku LAYERFORGE.md
-      gists: write     # do tworzenia i edycji Gistów
-      secrets: write   # do ustawiania sekretu z ID Gista
+      contents: write
 
     steps:
       # Krok 1: Pobranie kodu repozytorium
@@ -32,8 +32,6 @@ jobs:
 
           for i in {1..20}; do
             echo "-> Próba $i/20..."
-            # W każdej próbie: pobierz dane, znajdź węzeł z najwyższą liczbą pobrań i zapisz go jako osobny plik.
-            # Używamy --fail, aby curl zwrócił błąd w przypadku problemów z HTTP, oraz jq -e, aby pominąć puste odpowiedzi.
             curl -sL --fail "https://api.comfy.org/nodes/layerforge" | \
               jq -e '. | sort_by(.downloads) | reverse | .[0]' > "temp_nodes/node_$i.json" || \
               echo "Ostrzeżenie: Próba $i nie powiodła się lub zwróciła pusty wynik."
@@ -41,22 +39,17 @@ jobs:
           done
 
           echo "Analizowanie zebranych wyników..."
-          # Zbierz wszystkie zapisane obiekty JSON z udanych prób, połącz je w jedną tablicę,
-          # a następnie posortuj tę tablicę i wybierz ostatecznego zwycięzcę.
-          # `jq -s .` łączy strumień obiektów JSON w jedną tablicę.
           jq -s '.' temp_nodes/node_*.json | jq 'sort_by(.downloads) | reverse | .[0]' > top_layerforge.json
-
-          # Wyczyść pliki tymczasowe
           rm -rf temp_nodes
 
           echo "Ostatecznie znaleziony węzeł z najwyższą liczbą pobrań:"
           cat top_layerforge.json
 
       # Krok 3: Stworzenie lub aktualizacja Gista z danymi dla plakietki (badge)
-      # Ten krok pozostaje bez zmian, ponieważ operuje na finalnym pliku top_layerforge.json
       - name: Create or Update Gist with top node data
         id: gist
         env:
+          # Użyj swojego osobistego tokenu (PAT) do autoryzacji operacji na Gistach i Sekretach
           GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
           GIST_ID="${{ secrets.LAYERFORGE_GIST_ID }}"
@@ -64,16 +57,17 @@ jobs:
             echo "Sekret GIST_ID nie znaleziony lub Gist usunięty. Tworzenie nowego Gista."
             GIST_URL=$(gh gist create top_layerforge.json --public --desc "Top LayerForge Node")
             GIST_ID=$(echo "$GIST_URL" | awk -F'/' '{print $NF}')
+            # Ta komenda wymaga, aby Twój token (SECRET_TOKEN) miał uprawnienie 'repo'
             gh secret set LAYERFORGE_GIST_ID -b "$GIST_ID"
             echo "Stworzono nowy Gist o ID: $GIST_ID i zapisano jako sekret."
           else
             echo "Znaleziono Gist ID: $GIST_ID. Aktualizowanie..."
+            # Ta komenda wymaga, aby Twój token (SECRET_TOKEN) miał uprawnienie 'gist'
             gh gist edit "$GIST_ID" top_layerforge.json
           fi
           echo "gist_id=$GIST_ID" >> "$GITHUB_OUTPUT"
 
       # Krok 4: Stworzenie pliku z kodem plakietki, jeśli jeszcze nie istnieje
-      # Ten krok również pozostaje bez zmian
       - name: Create badge markdown file if it does not exist
         id: create_badge
         run: |
@@ -106,10 +100,10 @@ jobs:
             echo "committed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # Krok 5: Wypchnięcie zmian do repozytorium (tylko jeśli plik został stworzony)
-      # Ten krok również pozostaje bez zmian
+      # Krok 5: Wypchnięcie zmian do repozytorium
       - name: Push changes to repository
         if: steps.create_badge.outputs.committed == 'true'
         uses: ad-m/github-push-action@v0.4.0
         with:
+          # Ten krok używa wbudowanego tokenu, który dzięki `permissions: contents: write` ma prawo zapisu
           github_token: ${{ secrets.GITHUB_TOKEN }}
