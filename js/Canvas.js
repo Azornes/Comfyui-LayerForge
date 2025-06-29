@@ -13,14 +13,6 @@ import { mask_editor_showing } from "./utils/mask_utils.js";
 
 const log = createModuleLogger('Canvas');
 
-/**
- * Canvas - Fasada dla systemu rysowania
- * 
- * Klasa Canvas pełni rolę fasady, oferując uproszczony interfejs wysokiego poziomu
- * dla złożonego systemu rysowania. Zamiast eksponować wszystkie metody modułów,
- * udostępnia tylko kluczowe operacje i umożliwia bezpośredni dostęp do modułów
- * gdy potrzebna jest bardziej szczegółowa kontrola.
- */
 export class Canvas {
     constructor(node, widget, callbacks = {}) {
         this.node = node;
@@ -49,115 +41,187 @@ export class Canvas {
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;
-        this.imageCache = new Map();
-        
-        // Inicjalizacja modułów
-        this._initializeModules(callbacks);
-        
-        // Podstawowa konfiguracja
-        this._setupCanvas();
-        
-        // Delegacja interaction dla kompatybilności wstecznej
-        this.interaction = this.canvasInteractions.interaction;
-    }
-
-    /**
-     * Inicjalizuje moduły systemu canvas
-     * @private
-     */
-    _initializeModules(callbacks) {
-        // Moduły są publiczne dla bezpośredniego dostępu gdy potrzebne
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
+        this.initCanvas();
         this.canvasState = new CanvasState(this);
         this.canvasInteractions = new CanvasInteractions(this);
         this.canvasLayers = new CanvasLayers(this);
         this.canvasRenderer = new CanvasRenderer(this);
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
-    }
+        this.interaction = this.canvasInteractions.interaction;
 
-    /**
-     * Konfiguruje podstawowe właściwości canvas
-     * @private
-     */
-    _setupCanvas() {
-        this.initCanvas();
-        this.canvasInteractions.setupEventListeners();
-        this.canvasIO.initNodeData();
-        
-        // Inicjalizacja warstw z domyślną przezroczystością
+        this.setupEventListeners();
+        this.initNodeData();
+
         this.layers = this.layers.map(layer => ({
             ...layer,
             opacity: 1
         }));
+
+        this.imageCache = new Map();
     }
 
-    // ==========================================
-    // GŁÓWNE OPERACJE FASADY
-    // ==========================================
+    async loadStateFromDB() {
+        return this.canvasState.loadStateFromDB();
+    }
 
-    /**
-     * Ładuje stan canvas z bazy danych
-     */
+    async saveStateToDB(immediate = false) {
+        return this.canvasState.saveStateToDB(immediate);
+    }
+
     async loadInitialState() {
         log.info("Loading initial state for node:", this.node.id);
-        const loaded = await this.canvasState.loadStateFromDB();
+        const loaded = await this.loadStateFromDB();
         if (!loaded) {
             log.info("No saved state found, initializing from node data.");
-            await this.canvasIO.initNodeData();
+            await this.initNodeData();
         }
         this.saveState();
         this.render();
     }
 
-    /**
-     * Zapisuje obecny stan
-     * @param {boolean} replaceLast - Czy zastąpić ostatni stan w historii
-     */
+    _notifyStateChange() {
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+    }
+
     saveState(replaceLast = false) {
         this.canvasState.saveState(replaceLast);
         this.incrementOperationCount();
         this._notifyStateChange();
     }
 
-    /**
-     * Cofnij ostatnią operację
-     */
     undo() {
         this.canvasState.undo();
         this.incrementOperationCount();
         this._notifyStateChange();
     }
 
-    /**
-     * Ponów cofniętą operację
-     */
     redo() {
         this.canvasState.redo();
         this.incrementOperationCount();
         this._notifyStateChange();
     }
 
-    /**
-     * Renderuje canvas
-     */
-    render() {
-        this.canvasRenderer.render();
+    updateSelectionAfterHistory() {
+        const newSelectedLayers = [];
+        if (this.selectedLayers) {
+            this.selectedLayers.forEach(sl => {
+                const found = this.layers.find(l => l.id === sl.id);
+                if (found) newSelectedLayers.push(found);
+            });
+        }
+        this.updateSelection(newSelectedLayers);
     }
 
-    /**
-     * Dodaje warstwę z obrazem
-     * @param {Image} image - Obraz do dodania
-     * @param {Object} layerProps - Właściwości warstwy
-     * @param {string} addMode - Tryb dodawania
-     */
-    async addLayer(image, layerProps = {}, addMode = 'default') {
+    updateHistoryButtons() {
+        if (this.onHistoryChange) {
+            const historyInfo = this.canvasState.getHistoryInfo();
+            this.onHistoryChange({
+                canUndo: historyInfo.canUndo,
+                canRedo: historyInfo.canRedo
+            });
+        }
+    }
+
+    initCanvas() {
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
+        this.canvas.style.border = '1px solid black';
+        this.canvas.style.maxWidth = '100%';
+        this.canvas.style.backgroundColor = '#606060';
+        this.canvas.style.width = '100%';
+        this.canvas.style.height = '100%';
+
+
+        this.canvas.tabIndex = 0;
+        this.canvas.style.outline = 'none';
+    }
+
+    setupEventListeners() {
+        this.canvasInteractions.setupEventListeners();
+    }
+
+    updateSelection(newSelection) {
+        this.selectedLayers = newSelection || [];
+        this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+        if (this.onSelectionChange) {
+            this.onSelectionChange();
+        }
+    }
+
+    async copySelectedLayers() {
+        return this.canvasLayers.copySelectedLayers();
+    }
+
+    pasteLayers() {
+        return this.canvasLayers.pasteLayers();
+    }
+
+    async handlePaste(addMode) {
+        return this.canvasLayers.handlePaste(addMode);
+    }
+
+
+    handleMouseMove(e) {
+        this.canvasInteractions.handleMouseMove(e);
+    }
+
+
+    handleMouseUp(e) {
+        this.canvasInteractions.handleMouseUp(e);
+    }
+
+
+    handleMouseLeave(e) {
+        this.canvasInteractions.handleMouseLeave(e);
+    }
+
+
+    handleWheel(e) {
+        this.canvasInteractions.handleWheel(e);
+    }
+
+    handleKeyDown(e) {
+        this.canvasInteractions.handleKeyDown(e);
+    }
+
+    handleKeyUp(e) {
+        this.canvasInteractions.handleKeyUp(e);
+    }
+
+
+    isRotationHandle(x, y) {
+        return this.canvasLayers.isRotationHandle(x, y);
+    }
+
+    async addLayerWithImage(image, layerProps = {}, addMode = 'default') {
         return this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
     }
 
-    /**
-     * Usuwa wybrane warstwy
-     */
+
+    async addLayer(image, addMode = 'default') {
+        return this.addLayerWithImage(image, {}, addMode);
+    }
+
+    async removeLayer(index) {
+        if (index >= 0 && index < this.layers.length) {
+            const layer = this.layers[index];
+            if (layer.imageId) {
+                const isImageUsedElsewhere = this.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
+                if (!isImageUsedElsewhere) {
+                    await removeImage(layer.imageId);
+                    this.imageCache.delete(layer.imageId);
+                }
+            }
+            this.layers.splice(index, 1);
+            this.selectedLayer = this.layers[this.layers.length - 1] || null;
+            this.render();
+        }
+    }
+
     removeSelectedLayers() {
         if (this.selectedLayers.length > 0) {
             this.saveState();
@@ -168,49 +232,239 @@ export class Canvas {
         }
     }
 
-    /**
-     * Aktualizuje zaznaczenie warstw
-     * @param {Array} newSelection - Nowa lista zaznaczonych warstw
-     */
-    updateSelection(newSelection) {
-        this.selectedLayers = newSelection || [];
-        this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
-        if (this.onSelectionChange) {
-            this.onSelectionChange();
-        }
+    getMouseWorldCoordinates(e) {
+        const rect = this.canvas.getBoundingClientRect();
+
+        const mouseX_DOM = e.clientX - rect.left;
+        const mouseY_DOM = e.clientY - rect.top;
+
+        const scaleX = this.offscreenCanvas.width / rect.width;
+        const scaleY = this.offscreenCanvas.height / rect.height;
+
+        const mouseX_Buffer = mouseX_DOM * scaleX;
+        const mouseY_Buffer = mouseY_DOM * scaleY;
+
+        const worldX = (mouseX_Buffer / this.viewport.zoom) + this.viewport.x;
+        const worldY = (mouseY_Buffer / this.viewport.zoom) + this.viewport.y;
+
+        return {x: worldX, y: worldY};
     }
 
-    /**
-     * Zmienia rozmiar obszaru wyjściowego
-     * @param {number} width - Nowa szerokość
-     * @param {number} height - Nowa wysokość
-     * @param {boolean} saveHistory - Czy zapisać w historii
-     */
+    getMouseViewCoordinates(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX_DOM = e.clientX - rect.left;
+        const mouseY_DOM = e.clientY - rect.top;
+
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+
+        const mouseX_Canvas = mouseX_DOM * scaleX;
+        const mouseY_Canvas = mouseY_DOM * scaleY;
+
+        return { x: mouseX_Canvas, y: mouseY_Canvas };
+    }
+
+
+    moveLayer(fromIndex, toIndex) {
+        return this.canvasLayers.moveLayer(fromIndex, toIndex);
+    }
+
+    resizeLayer(scale) {
+        this.selectedLayers.forEach(layer => {
+            layer.width *= scale;
+            layer.height *= scale;
+        });
+        this.render();
+        this.saveState();
+    }
+
+    rotateLayer(angle) {
+        this.selectedLayers.forEach(layer => {
+            layer.rotation += angle;
+        });
+        this.render();
+        this.saveState();
+    }
+
     updateOutputAreaSize(width, height, saveHistory = true) {
         return this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
     }
 
-    /**
-     * Eksportuje spłaszczony canvas jako blob
-     */
+    render() {
+        this.canvasRenderer.render();
+    }
+
+
+    getHandles(layer) {
+        return this.canvasLayers.getHandles(layer);
+    }
+
+    getHandleAtPosition(worldX, worldY) {
+        return this.canvasLayers.getHandleAtPosition(worldX, worldY);
+    }
+
+
     async getFlattenedCanvasAsBlob() {
         return this.canvasLayers.getFlattenedCanvasAsBlob();
     }
 
-    /**
-     * Importuje najnowszy obraz
-     */
+    async getFlattenedSelectionAsBlob() {
+        return this.canvasLayers.getFlattenedSelectionAsBlob();
+    }
+
+    moveLayerUp() {
+        return this.canvasLayers.moveLayerUp();
+    }
+
+    moveLayerDown() {
+        return this.canvasLayers.moveLayerDown();
+    }
+
+
+    getLayerAtPosition(worldX, worldY) {
+        return this.canvasLayers.getLayerAtPosition(worldX, worldY);
+    }
+
+    getResizeHandle(x, y) {
+        return this.canvasLayers.getResizeHandle(x, y);
+    }
+
+    async mirrorHorizontal() {
+        return this.canvasLayers.mirrorHorizontal();
+    }
+
+    async mirrorVertical() {
+        return this.canvasLayers.mirrorVertical();
+    }
+
+    async getLayerImageData(layer) {
+        return this.canvasLayers.getLayerImageData(layer);
+    }
+
+    addMattedLayer(image, mask) {
+        return this.canvasLayers.addMattedLayer(image, mask);
+    }
+
+    async addInputToCanvas(inputImage, inputMask) {
+        return this.canvasIO.addInputToCanvas(inputImage, inputMask);
+    }
+
+    async convertTensorToImage(tensor) {
+        return this.canvasIO.convertTensorToImage(tensor);
+    }
+
+    async convertTensorToMask(tensor) {
+        return this.canvasIO.convertTensorToMask(tensor);
+    }
+
+    async initNodeData() {
+        return this.canvasIO.initNodeData();
+    }
+
+    scheduleDataCheck() {
+        return this.canvasIO.scheduleDataCheck();
+    }
+
+    async processImageData(imageData) {
+        return this.canvasIO.processImageData(imageData);
+    }
+
+    addScaledLayer(image, scale) {
+        return this.canvasIO.addScaledLayer(image, scale);
+    }
+
+    convertTensorToImageData(tensor) {
+        return this.canvasIO.convertTensorToImageData(tensor);
+    }
+
+    async createImageFromData(imageData) {
+        return this.canvasIO.createImageFromData(imageData);
+    }
+
+    async retryDataLoad(maxRetries = 3, delay = 1000) {
+        return this.canvasIO.retryDataLoad(maxRetries, delay);
+    }
+
+    async processMaskData(maskData) {
+        return this.canvasIO.processMaskData(maskData);
+    }
+
+    async loadImageFromCache(base64Data) {
+        return this.canvasIO.loadImageFromCache(base64Data);
+    }
+
+    async importImage(cacheData) {
+        return this.canvasIO.importImage(cacheData);
+    }
+
     async importLatestImage() {
         return this.canvasIO.importLatestImage();
     }
 
-    // ==========================================
-    // OPERACJE NA MASCE
-    // ==========================================
+    showBlendModeMenu(x, y) {
+        return this.canvasLayers.showBlendModeMenu(x, y);
+    }
+
+    handleBlendModeSelection(mode) {
+        return this.canvasLayers.handleBlendModeSelection(mode);
+    }
+
+    showOpacitySlider(mode) {
+        return this.canvasLayers.showOpacitySlider(mode);
+    }
 
     /**
-     * Uruchamia edytor masek
+     * Zwiększa licznik operacji (wywoływane przy każdej operacji na canvas)
      */
+    incrementOperationCount() {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.incrementOperationCount();
+        }
+    }
+
+    /**
+     * Ręczne uruchomienie garbage collection
+     */
+    async runGarbageCollection() {
+        if (this.imageReferenceManager) {
+            await this.imageReferenceManager.manualGarbageCollection();
+        }
+    }
+
+    /**
+     * Zwraca statystyki garbage collection
+     */
+    getGarbageCollectionStats() {
+        if (this.imageReferenceManager) {
+            const stats = this.imageReferenceManager.getStats();
+            return {
+                ...stats,
+                operationCount: this.imageReferenceManager.operationCount,
+                operationThreshold: this.imageReferenceManager.operationThreshold
+            };
+        }
+        return null;
+    }
+
+    /**
+     * Ustawia próg operacji dla automatycznego GC
+     */
+    setGarbageCollectionThreshold(threshold) {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.setOperationThreshold(threshold);
+        }
+    }
+
+    /**
+     * Czyści zasoby canvas (wywoływane przy usuwaniu)
+     */
+    destroy() {
+        if (this.imageReferenceManager) {
+            this.imageReferenceManager.destroy();
+        }
+        log.info("Canvas destroyed");
+    }
+
     async startMaskEditor() {
         const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
         if (!blob) {
@@ -257,133 +511,16 @@ export class Canvas {
         }
     }
 
-    // ==========================================
-    // METODY POMOCNICZE
-    // ==========================================
-
-    /**
-     * Inicjalizuje podstawowe właściwości canvas
-     */
-    initCanvas() {
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
-        this.canvas.style.border = '1px solid black';
-        this.canvas.style.maxWidth = '100%';
-        this.canvas.style.backgroundColor = '#606060';
-        this.canvas.style.width = '100%';
-        this.canvas.style.height = '100%';
-        this.canvas.tabIndex = 0;
-        this.canvas.style.outline = 'none';
-    }
-
-    /**
-     * Pobiera współrzędne myszy w układzie świata
-     * @param {MouseEvent} e - Zdarzenie myszy
-     */
-    getMouseWorldCoordinates(e) {
-        const rect = this.canvas.getBoundingClientRect();
-
-        const mouseX_DOM = e.clientX - rect.left;
-        const mouseY_DOM = e.clientY - rect.top;
-
-        const scaleX = this.offscreenCanvas.width / rect.width;
-        const scaleY = this.offscreenCanvas.height / rect.height;
-
-        const mouseX_Buffer = mouseX_DOM * scaleX;
-        const mouseY_Buffer = mouseY_DOM * scaleY;
-
-        const worldX = (mouseX_Buffer / this.viewport.zoom) + this.viewport.x;
-        const worldY = (mouseY_Buffer / this.viewport.zoom) + this.viewport.y;
-
-        return {x: worldX, y: worldY};
-    }
-
-    /**
-     * Pobiera współrzędne myszy w układzie widoku
-     * @param {MouseEvent} e - Zdarzenie myszy
-     */
-    getMouseViewCoordinates(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const mouseX_DOM = e.clientX - rect.left;
-        const mouseY_DOM = e.clientY - rect.top;
-
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-
-        const mouseX_Canvas = mouseX_DOM * scaleX;
-        const mouseY_Canvas = mouseY_DOM * scaleY;
-
-        return { x: mouseX_Canvas, y: mouseY_Canvas };
-    }
-
-    /**
-     * Aktualizuje zaznaczenie po operacji historii
-     */
-    updateSelectionAfterHistory() {
-        const newSelectedLayers = [];
-        if (this.selectedLayers) {
-            this.selectedLayers.forEach(sl => {
-                const found = this.layers.find(l => l.id === sl.id);
-                if (found) newSelectedLayers.push(found);
-            });
-        }
-        this.updateSelection(newSelectedLayers);
-    }
-
-    /**
-     * Aktualizuje przyciski historii
-     */
-    updateHistoryButtons() {
-        if (this.onHistoryChange) {
-            const historyInfo = this.canvasState.getHistoryInfo();
-            this.onHistoryChange({
-                canUndo: historyInfo.canUndo,
-                canRedo: historyInfo.canRedo
-            });
-        }
-    }
-
-    /**
-     * Zwiększa licznik operacji (dla garbage collection)
-     */
-    incrementOperationCount() {
-        if (this.imageReferenceManager) {
-            this.imageReferenceManager.incrementOperationCount();
-        }
-    }
-
-    /**
-     * Czyści zasoby canvas
-     */
-    destroy() {
-        if (this.imageReferenceManager) {
-            this.imageReferenceManager.destroy();
-        }
-        log.info("Canvas destroyed");
-    }
-
-    /**
-     * Powiadamia o zmianie stanu
-     * @private
-     */
-    _notifyStateChange() {
-        if (this.onStateChange) {
-            this.onStateChange();
-        }
-    }
-
-    // ==========================================
-    // METODY DLA EDYTORA MASEK
-    // ==========================================
-
     waitWhileMaskEditing() {
+        // Czekamy, aż edytor się pojawi, a potem zniknie.
         if (mask_editor_showing(app)) {
             this.editorWasShowing = true;
         }
         
         if (!mask_editor_showing(app) && this.editorWasShowing) {
+             // Edytor był widoczny i już go nie ma
              this.editorWasShowing = false;
-             setTimeout(() => this.handleMaskEditorClose(), 100);
+             setTimeout(() => this.handleMaskEditorClose(), 100); // Dajemy chwilę na aktualizację
         } else {
             setTimeout(this.waitWhileMaskEditing.bind(this), 100);
         }
@@ -410,22 +547,28 @@ export class Canvas {
             return;
         }
 
+        // Używamy wymiarów naszego płótna, aby zapewnić spójność
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
         const tempCtx = tempCanvas.getContext('2d');
         
+        // Rysujemy obrazek z edytora, który zawiera maskę w kanale alfa
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 
         const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
         const data = imageData.data;
 
         for (let i = 0; i < data.length; i += 4) {
-            const originalAlpha = data[i + 3];
-            data[i]     = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-            data[i + 3] = 255 - originalAlpha;
+        const originalAlpha = data[i + 3];
+
+        // Ustawiamy biały kolor
+        data[i]     = 255; // R
+        data[i + 1] = 255; // G
+        data[i + 2] = 255; // B
+
+        // Odwracamy kanał alfa
+        data[i + 3] = 255 - originalAlpha;
         }
 
         tempCtx.putImageData(imageData, 0, 0);
@@ -434,17 +577,19 @@ export class Canvas {
         maskAsImage.src = tempCanvas.toDataURL();
         await new Promise(resolve => maskAsImage.onload = resolve);
         
+        // Łączymy nową maskę z istniejącą, zamiast ją nadpisywać
         const maskCtx = this.maskTool.maskCtx;
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
         
         maskCtx.globalCompositeOperation = 'screen';
         maskCtx.drawImage(maskAsImage, destX, destY);
-        maskCtx.globalCompositeOperation = 'source-over';
+        maskCtx.globalCompositeOperation = 'source-over'; // Przywracamy domyślny tryb
         
         this.render();
         this.saveState();
         
+        // Zaktualizuj podgląd węzła nowym, spłaszczonym obrazem
         const new_preview = new Image();
         const blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
         if (blob) {
@@ -456,73 +601,5 @@ export class Canvas {
         }
 
         this.render();
-    }
-
-    // ==========================================
-    // METODY DELEGUJĄCE DLA KOMPATYBILNOŚCI
-    // ==========================================
-    
-    /**
-     * Te metody są zachowane tymczasowo dla kompatybilności wstecznej.
-     * W nowych implementacjach należy używać bezpośrednio odpowiednich modułów:
-     * - this.canvasLayers dla operacji na warstwach
-     * - this.canvasInteractions dla obsługi interakcji
-     * - this.canvasIO dla operacji I/O
-     * - this.canvasState dla zarządzania stanem
-     */
-    
-    // Delegacje do CanvasState
-    async saveStateToDB(immediate = false) { return this.canvasState.saveStateToDB(immediate); }
-    
-    // Delegacje do CanvasLayers  
-    async copySelectedLayers() { return this.canvasLayers.copySelectedLayers(); }
-    async handlePaste(addMode) { return this.canvasLayers.handlePaste(addMode); }
-    async addLayerWithImage(image, layerProps = {}, addMode = 'default') {
-        return this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
-    }
-    moveLayerUp() { return this.canvasLayers.moveLayerUp(); }
-    moveLayerDown() { return this.canvasLayers.moveLayerDown(); }
-    resizeLayer(scale) {
-        this.selectedLayers.forEach(layer => {
-            layer.width *= scale;
-            layer.height *= scale;
-        });
-        this.render();
-        this.saveState();
-    }
-    rotateLayer(angle) {
-        this.selectedLayers.forEach(layer => {
-            layer.rotation += angle;
-        });
-        this.render();
-        this.saveState();
-    }
-    getLayerAtPosition(worldX, worldY) { return this.canvasLayers.getLayerAtPosition(worldX, worldY); }
-    getHandles(layer) { return this.canvasLayers.getHandles(layer); }
-    getHandleAtPosition(worldX, worldY) { return this.canvasLayers.getHandleAtPosition(worldX, worldY); }
-    async mirrorHorizontal() { return this.canvasLayers.mirrorHorizontal(); }
-    async mirrorVertical() { return this.canvasLayers.mirrorVertical(); }
-    async getLayerImageData(layer) { return this.canvasLayers.getLayerImageData(layer); }
-    showBlendModeMenu(x, y) { return this.canvasLayers.showBlendModeMenu(x, y); }
-    // Delegacje do CanvasInteractions
-    handleMouseMove(e) { this.canvasInteractions.handleMouseMove(e); }
-
-    
-    // Delegacje do ImageReferenceManager
-    async runGarbageCollection() {
-        if (this.imageReferenceManager) {
-            await this.imageReferenceManager.manualGarbageCollection();
-        }
-    }
-    getGarbageCollectionStats() {
-        if (this.imageReferenceManager) {
-            const stats = this.imageReferenceManager.getStats();
-            return {
-                ...stats,
-                operationCount: this.imageReferenceManager.operationCount,
-                operationThreshold: this.imageReferenceManager.operationThreshold
-            };
-        }
-        return null;
     }
 }

@@ -162,6 +162,32 @@ export class CanvasLayers {
         return this.addLayerWithImage(image);
     }
 
+    async removeLayer(index) {
+        if (index >= 0 && index < this.canvasLayers.layers.length) {
+            const layer = this.canvasLayers.layers[index];
+            if (layer.imageId) {
+                const isImageUsedElsewhere = this.canvasLayers.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
+                if (!isImageUsedElsewhere) {
+                    await removeImage(layer.imageId);
+                    this.canvasLayers.imageCache.delete(layer.imageId);
+                }
+            }
+            this.canvasLayers.layers.splice(index, 1);
+            this.canvasLayers.selectedLayer = this.canvasLayers.layers[this.canvasLayers.layers.length - 1] || null;
+            this.canvasLayers.render();
+            this.canvasLayers.saveState();
+        }
+    }
+
+    moveLayer(fromIndex, toIndex) {
+        if (fromIndex >= 0 && fromIndex < this.canvasLayers.layers.length &&
+            toIndex >= 0 && toIndex < this.canvasLayers.layers.length) {
+            const layer = this.canvasLayers.layers.splice(fromIndex, 1)[0];
+            this.canvasLayers.layers.splice(toIndex, 0, layer);
+            this.canvasLayers.render();
+        }
+    }
+
     moveLayerUp() {
         if (this.canvasLayers.selectedLayers.length === 0) return;
         const selectedIndicesSet = new Set(this.canvasLayers.selectedLayers.map(layer => this.canvasLayers.layers.indexOf(layer)));
@@ -335,6 +361,33 @@ export class CanvasLayers {
         }
     }
 
+    addMattedLayer(image, mask) {
+        const layer = {
+            image: image,
+            mask: mask,
+            x: 0,
+            y: 0,
+            width: image.width,
+            height: image.height,
+            rotation: 0,
+            zIndex: this.canvasLayers.layers.length
+        };
+
+        this.canvasLayers.layers.push(layer);
+        this.canvasLayers.selectedLayer = layer;
+        this.canvasLayers.render();
+    }
+
+    isRotationHandle(x, y) {
+        if (!this.canvasLayers.selectedLayer) return false;
+
+        const handleX = this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width / 2;
+        const handleY = this.canvasLayers.selectedLayer.y - 20;
+        const handleRadius = 5;
+
+        return Math.sqrt(Math.pow(x - handleX, 2) + Math.pow(y - handleY, 2)) <= handleRadius;
+    }
+
     getHandles(layer) {
         if (!layer) return {};
 
@@ -384,6 +437,34 @@ export class CanvasLayers {
                 if (dx * dx + dy * dy <= handleRadius * handleRadius) {
                     return {layer: layer, handle: key};
                 }
+            }
+        }
+        return null;
+    }
+
+    getResizeHandle(x, y) {
+        if (!this.canvasLayers.selectedLayer) return null;
+
+        const handleRadius = 5;
+        const handles = {
+            'nw': {x: this.canvasLayers.selectedLayer.x, y: this.canvasLayers.selectedLayer.y},
+            'ne': {
+                x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
+                y: this.canvasLayers.selectedLayer.y
+            },
+            'se': {
+                x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
+                y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
+            },
+            'sw': {
+                x: this.canvasLayers.selectedLayer.x,
+                y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
+            }
+        };
+
+        for (const [position, point] of Object.entries(handles)) {
+            if (Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2)) <= handleRadius) {
+                return position;
             }
         }
         return null;
@@ -507,6 +588,17 @@ export class CanvasLayers {
         const menu = document.getElementById('blend-mode-menu');
         if (menu && menu.parentNode) {
             menu.parentNode.removeChild(menu);
+        }
+    }
+
+    handleBlendModeSelection(mode) {
+        if (this.selectedBlendMode === mode && !this.isAdjustingOpacity) {
+            this.applyBlendMode(mode, this.blendOpacity);
+            this.closeBlendModeMenu();
+        } else {
+            this.selectedBlendMode = mode;
+            this.isAdjustingOpacity = true;
+            this.showOpacitySlider(mode);
         }
     }
 
@@ -641,5 +733,37 @@ export class CanvasLayers {
                 resolve(blob);
             }, 'image/png');
         });
+    }
+
+    async getFlattenedCanvasAsDataURL() {
+        if (this.canvasLayers.layers.length === 0) return null;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.canvasLayers.width;
+        tempCanvas.height = this.canvasLayers.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        const sortedLayers = [...this.canvasLayers.layers].sort((a, b) => a.zIndex - b.zIndex);
+        sortedLayers.forEach(layer => {
+            if (!layer.image) return;
+
+            tempCtx.save();
+            tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+            tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            tempCtx.translate(centerX, centerY);
+            tempCtx.rotate(layer.rotation * Math.PI / 180);
+            tempCtx.drawImage(
+                layer.image,
+                -layer.width / 2,
+                -layer.height / 2,
+                layer.width,
+                layer.height
+            );
+            tempCtx.restore();
+        });
+
+        return tempCanvas.toDataURL('image/png');
     }
 }
