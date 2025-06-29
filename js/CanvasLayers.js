@@ -734,4 +734,36 @@ export class CanvasLayers {
             }, 'image/png');
         });
     }
+
+    async getFlattenedCanvasAsDataURL() {
+        if (this.canvasLayers.layers.length === 0) return null;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.canvasLayers.width;
+        tempCanvas.height = this.canvasLayers.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        const sortedLayers = [...this.canvasLayers.layers].sort((a, b) => a.zIndex - b.zIndex);
+        sortedLayers.forEach(layer => {
+            if (!layer.image) return;
+
+            tempCtx.save();
+            tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+            tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            tempCtx.translate(centerX, centerY);
+            tempCtx.rotate(layer.rotation * Math.PI / 180);
+            tempCtx.drawImage(
+                layer.image,
+                -layer.width / 2,
+                -layer.height / 2,
+                layer.width,
+                layer.height
+            );
+            tempCtx.restore();
+        });
+
+        return tempCanvas.toDataURL('image/png');
+    }
 }
