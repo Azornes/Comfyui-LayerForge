@@ -1237,7 +1237,33 @@ app.registerExtension({
                 originalGetExtraMenuOptions?.apply(this, arguments);
 
                 const self = this;
+                
+                // Usuń standardową opcję "Open in MaskEditor" jeśli istnieje
+                const maskEditorIndex = options.findIndex(option => 
+                    option && option.content === "Open in MaskEditor"
+                );
+                if (maskEditorIndex !== -1) {
+                    options.splice(maskEditorIndex, 1);
+                }
+                
                 const newOptions = [
+                    {
+                        content: "Open in MaskEditor",
+                        callback: async () => {
+                            try {
+                                log.info("Opening LayerForge canvas in MaskEditor");
+                                if (self.canvasWidget && self.canvasWidget.startMaskEditor) {
+                                    await self.canvasWidget.startMaskEditor();
+                                } else {
+                                    log.error("Canvas widget not available");
+                                    alert("Canvas not ready. Please try again.");
+                                }
+                            } catch (e) {
+                                log.error("Error opening MaskEditor:", e);
+                                alert(`Failed to open MaskEditor: ${e.message}`);
+                            }
+                        },
+                    },
                     {
                         content: "Open Image",
                         callback: async () => {
