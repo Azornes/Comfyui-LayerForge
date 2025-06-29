@@ -2,6 +2,7 @@ import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
+import { app, ComfyApp } from "../../scripts/app.js";
 
 const log = createModuleLogger('CanvasLayers');
 
@@ -48,13 +49,30 @@ export class CanvasLayers {
         if (this.internalClipboard.length === 0) return;
         this.canvas.saveState();
         const newLayers = [];
-        const pasteOffset = 20;
+
+        // Calculate the center of the copied layers
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.internalClipboard.forEach(layer => {
+            minX = Math.min(minX, layer.x);
+            minY = Math.min(minY, layer.y);
+            maxX = Math.max(maxX, layer.x + layer.width);
+            maxY = Math.max(maxY, layer.y + layer.height);
+        });
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        // Calculate offset to position at mouse cursor
+        const mouseX = this.canvas.lastMousePosition.x;
+        const mouseY = this.canvas.lastMousePosition.y;
+        const offsetX = mouseX - centerX;
+        const offsetY = mouseY - centerY;
 
         this.internalClipboard.forEach(clipboardLayer => {
             const newLayer = {
                 ...clipboardLayer,
-                x: clipboardLayer.x + pasteOffset / this.canvas.viewport.zoom,
-                y: clipboardLayer.y + pasteOffset / this.canvas.viewport.zoom,
+                x: clipboardLayer.x + offsetX,
+                y: clipboardLayer.y + offsetY,
                 zIndex: this.canvas.layers.length
             };
             this.canvas.layers.push(newLayer);
@@ -63,17 +81,48 @@ export class CanvasLayers {
 
         this.canvas.updateSelection(newLayers);
         this.canvas.render();
-        log.info(`Pasted ${newLayers.length} layer(s).`);
+        log.info(`Pasted ${newLayers.length} layer(s) at mouse position (${mouseX}, ${mouseY}).`);
     }
 
     async handlePaste(addMode = 'mouse') {
         try {
-            if (!navigator.clipboard?.read) {
-                log.info("Browser does not support clipboard read API. Falling back to internal paste.");
+            // 1. FIRST: Check Internal Clipboard
+            if (this.internalClipboard.length > 0) {
+                log.info("Pasting from internal clipboard");
                 this.pasteLayers();
                 return;
             }
 
+            // 2. SECOND: Try ComfyUI Clipspace
+            try {
+                log.info("Attempting to paste from ComfyUI Clipspace");
+                const clipspaceResult = ComfyApp.pasteFromClipspace(this.canvas.node);
+                
+                // Check if clipspace operation was successful and node has images
+                if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
+                    const clipspaceImage = this.canvas.node.imgs[0];
+                    if (clipspaceImage && clipspaceImage.src) {
+                        log.info("Successfully got image from ComfyUI Clipspace");
+                        const img = new Image();
+                        img.onload = async () => {
+                            await this.addLayerWithImage(img, {}, addMode);
+                        };
+                        img.src = clipspaceImage.src;
+                        return;
+                    }
+                }
+                log.info("No image found in ComfyUI Clipspace, trying system clipboard");
+            } catch (clipspaceError) {
+                log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
+            }
+
+            // 3. THIRD: Try System Clipboard
+            if (!navigator.clipboard?.read) {
+                log.info("Browser does not support clipboard read API. No more options available.");
+                return;
+            }
+
+            log.info("Attempting to paste from system clipboard");
             const clipboardItems = await navigator.clipboard.read();
             let imagePasted = false;
 
@@ -92,16 +141,17 @@ export class CanvasLayers {
                     };
                     reader.readAsDataURL(blob);
                     imagePasted = true;
+                    log.info("Successfully pasted image from system clipboard");
                     break;
                 }
             }
+            
             if (!imagePasted) {
-                this.pasteLayers();
+                log.info("No image found in system clipboard. Paste operation completed with no result.");
             }
 
         } catch (err) {
-            log.error("Paste operation failed, falling back to internal paste. Error:", err);
-            this.pasteLayers();
+            log.error("Paste operation failed:", err);
         }
     }
 
