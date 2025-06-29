@@ -162,11 +162,18 @@ canvas.imageReferenceManager.manualGarbageCollection()
    - CanvasView.js używa nowego podejścia modułowego
    - Dokumentacja została zaktualizowana
 
+3. **Finalne poprawki architektury** ✅
+   - Poprawiono konstruktor CanvasLayers.js - zmieniono mylącą nazwę parametru z `canvasLayers` na `canvas`
+   - Zaktualizowano wszystkie odwołania `this.canvasLayers.` na `this.canvas.` w CanvasLayers.js
+   - Poprawiono wywołania w CanvasView.js - `canvas.rotateLayer()` → `canvas.canvasLayers.rotateLayer()`
+   - Wszystkie moduły używają teraz spójnej konwencji nazewnictwa
+
 ## Uwagi dla deweloperów
 
 - ✅ **Refaktoryzacja zakończona** - wszystkie pliki zostały zaktualizowane
 - ✅ **Nowy kod** używa modułów bezpośrednio zgodnie z wzorcem fasady
 - ✅ **Wszystkie delegacje** wskazują na istniejące metody w modułach
+- ✅ **Spójna architektura** - wszystkie moduły używają poprawnych referencji
 - ⚠️ **Metody delegujące** są zachowane dla kompatybilności, ale oznaczone jako tymczasowe
 - 📚 **Dokumentacja** została zaktualizowana w tym przewodniku
 - 🔄 **Kompatybilność** z istniejącym kodem jest zachowana

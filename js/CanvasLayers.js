@@ -6,8 +6,8 @@ import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
-    constructor(canvasLayers) {
-        this.canvasLayers = canvasLayers;
+    constructor(canvas) {
+        this.canvas = canvas;
         this.blendModes = [
             {name: 'normal', label: 'Normal'},
             {name: 'multiply', label: 'Multiply'},
@@ -29,8 +29,8 @@ export class CanvasLayers {
     }
 
     async copySelectedLayers() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        this.internalClipboard = this.canvasLayers.selectedLayers.map(layer => ({...layer}));
+        if (this.canvas.selectedLayers.length === 0) return;
+        this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
         log.info(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
         try {
             const blob = await this.getFlattenedSelectionAsBlob();
@@ -46,23 +46,23 @@ export class CanvasLayers {
 
     pasteLayers() {
         if (this.internalClipboard.length === 0) return;
-        this.canvasLayers.saveState();
+        this.canvas.saveState();
         const newLayers = [];
         const pasteOffset = 20;
 
         this.internalClipboard.forEach(clipboardLayer => {
             const newLayer = {
                 ...clipboardLayer,
-                x: clipboardLayer.x + pasteOffset / this.canvasLayers.viewport.zoom,
-                y: clipboardLayer.y + pasteOffset / this.canvasLayers.viewport.zoom,
-                zIndex: this.canvasLayers.layers.length
+                x: clipboardLayer.x + pasteOffset / this.canvas.viewport.zoom,
+                y: clipboardLayer.y + pasteOffset / this.canvas.viewport.zoom,
+                zIndex: this.canvas.layers.length
             };
-            this.canvasLayers.layers.push(newLayer);
+            this.canvas.layers.push(newLayer);
             newLayers.push(newLayer);
         });
 
-        this.canvasLayers.updateSelection(newLayers);
-        this.canvasLayers.render();
+        this.canvas.updateSelection(newLayers);
+        this.canvas.render();
         log.info(`Pasted ${newLayers.length} layer(s).`);
     }
 
@@ -113,24 +113,24 @@ export class CanvasLayers {
         log.debug("Adding layer with image:", image, "with mode:", addMode);
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
-        this.canvasLayers.imageCache.set(imageId, image.src);
+        this.canvas.imageCache.set(imageId, image.src);
         
         let finalWidth = image.width;
         let finalHeight = image.height;
         let finalX, finalY;
 
         if (addMode === 'fit') {
-            const scale = Math.min(this.canvasLayers.width / image.width, this.canvasLayers.height / image.height);
+            const scale = Math.min(this.canvas.width / image.width, this.canvas.height / image.height);
             finalWidth = image.width * scale;
             finalHeight = image.height * scale;
-            finalX = (this.canvasLayers.width - finalWidth) / 2;
-            finalY = (this.canvasLayers.height - finalHeight) / 2;
+            finalX = (this.canvas.width - finalWidth) / 2;
+            finalY = (this.canvas.height - finalHeight) / 2;
         } else if (addMode === 'mouse') {
-            finalX = this.canvasLayers.lastMousePosition.x - finalWidth / 2;
-            finalY = this.canvasLayers.lastMousePosition.y - finalHeight / 2;
+            finalX = this.canvas.lastMousePosition.x - finalWidth / 2;
+            finalY = this.canvas.lastMousePosition.y - finalHeight / 2;
         } else { // 'center' or 'default'
-            finalX = (this.canvasLayers.width - finalWidth) / 2;
-            finalY = (this.canvasLayers.height - finalHeight) / 2;
+            finalX = (this.canvas.width - finalWidth) / 2;
+            finalY = (this.canvas.height - finalHeight) / 2;
         }
 
         const layer = {
@@ -143,16 +143,16 @@ export class CanvasLayers {
             originalWidth: image.width,
             originalHeight: image.height,
             rotation: 0,
-            zIndex: this.canvasLayers.layers.length,
+            zIndex: this.canvas.layers.length,
             blendMode: 'normal',
             opacity: 1,
             ...layerProps
         };
 
-        this.canvasLayers.layers.push(layer);
-        this.canvasLayers.updateSelection([layer]);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.push(layer);
+        this.canvas.updateSelection([layer]);
+        this.canvas.render();
+        this.canvas.saveState();
 
         log.info("Layer added successfully");
         return layer;
@@ -163,26 +163,26 @@ export class CanvasLayers {
     }
 
     moveLayerUp() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvasLayers.selectedLayers.map(layer => this.canvasLayers.layers.indexOf(layer)));
+        if (this.canvas.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
 
         const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => b - a);
 
         sortedIndices.forEach(index => {
             const targetIndex = index + 1;
 
-            if (targetIndex < this.canvasLayers.layers.length && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvasLayers.layers[index], this.canvasLayers.layers[targetIndex]] = [this.canvasLayers.layers[targetIndex], this.canvasLayers.layers[index]];
+            if (targetIndex < this.canvas.layers.length && !selectedIndicesSet.has(targetIndex)) {
+                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
             }
         });
-        this.canvasLayers.layers.forEach((layer, i) => layer.zIndex = i);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     moveLayerDown() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvasLayers.selectedLayers.map(layer => this.canvasLayers.layers.indexOf(layer)));
+        if (this.canvas.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
 
         const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => a - b);
 
@@ -190,12 +190,12 @@ export class CanvasLayers {
             const targetIndex = index - 1;
 
             if (targetIndex >= 0 && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvasLayers.layers[index], this.canvasLayers.layers[targetIndex]] = [this.canvasLayers.layers[targetIndex], this.canvasLayers.layers[index]];
+                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
             }
         });
-        this.canvasLayers.layers.forEach((layer, i) => layer.zIndex = i);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     /**
@@ -203,14 +203,14 @@ export class CanvasLayers {
      * @param {number} scale - Skala zmiany rozmiaru
      */
     resizeLayer(scale) {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
         
-        this.canvasLayers.selectedLayers.forEach(layer => {
+        this.canvas.selectedLayers.forEach(layer => {
             layer.width *= scale;
             layer.height *= scale;
         });
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     /**
@@ -218,18 +218,18 @@ export class CanvasLayers {
      * @param {number} angle - Kąt obrotu w stopniach
      */
     rotateLayer(angle) {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
         
-        this.canvasLayers.selectedLayers.forEach(layer => {
+        this.canvas.selectedLayers.forEach(layer => {
             layer.rotation += angle;
         });
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     getLayerAtPosition(worldX, worldY) {
-        for (let i = this.canvasLayers.layers.length - 1; i >= 0; i--) {
-            const layer = this.canvasLayers.layers[i];
+        for (let i = this.canvas.layers.length - 1; i >= 0; i--) {
+            const layer = this.canvas.layers[i];
 
             const centerX = layer.x + layer.width / 2;
             const centerY = layer.y + layer.height / 2;
@@ -256,9 +256,9 @@ export class CanvasLayers {
     }
 
     async mirrorHorizontal() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
 
-        const promises = this.canvasLayers.selectedLayers.map(layer => {
+        const promises = this.canvas.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
@@ -279,14 +279,14 @@ export class CanvasLayers {
         });
 
         await Promise.all(promises);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     async mirrorVertical() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
 
-        const promises = this.canvasLayers.selectedLayers.map(layer => {
+        const promises = this.canvas.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
@@ -307,8 +307,8 @@ export class CanvasLayers {
         });
 
         await Promise.all(promises);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     async getLayerImageData(layer) {
@@ -345,22 +345,21 @@ export class CanvasLayers {
         }
     }
 
-
     updateOutputAreaSize(width, height, saveHistory = true) {
         if (saveHistory) {
-            this.canvasLayers.saveState();
+            this.canvas.saveState();
         }
-        this.canvasLayers.width = width;
-        this.canvasLayers.height = height;
-        this.canvasLayers.maskTool.resize(width, height);
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.canvas.maskTool.resize(width, height);
 
-        this.canvasLayers.canvasLayers.width = width;
-        this.canvasLayers.canvasLayers.height = height;
+        this.canvas.canvas.width = width;
+        this.canvas.canvas.height = height;
 
-        this.canvasLayers.render();
+        this.canvas.render();
 
         if (saveHistory) {
-            this.canvasLayers.saveStateToDB();
+            this.canvas.saveStateToDB();
         }
     }
 
@@ -384,7 +383,7 @@ export class CanvasLayers {
             'sw': {x: -halfW, y: halfH},
             'w': {x: -halfW, y: 0},
             'nw': {x: -halfW, y: -halfH},
-            'rot': {x: 0, y: -halfH - 20 / this.canvasLayers.viewport.zoom}
+            'rot': {x: 0, y: -halfH - 20 / this.canvas.viewport.zoom}
         };
 
         const worldHandles = {};
@@ -399,11 +398,11 @@ export class CanvasLayers {
     }
 
     getHandleAtPosition(worldX, worldY) {
-        if (this.canvasLayers.selectedLayers.length === 0) return null;
+        if (this.canvas.selectedLayers.length === 0) return null;
 
-        const handleRadius = 8 / this.canvasLayers.viewport.zoom;
-        for (let i = this.canvasLayers.selectedLayers.length - 1; i >= 0; i--) {
-            const layer = this.canvasLayers.selectedLayers[i];
+        const handleRadius = 8 / this.canvas.viewport.zoom;
+        for (let i = this.canvas.selectedLayers.length - 1; i >= 0; i--) {
+            const layer = this.canvas.selectedLayers[i];
             const handles = this.getHandles(layer);
 
             for (const key in handles) {
@@ -456,14 +455,14 @@ export class CanvasLayers {
             slider.min = '0';
             slider.max = '100';
 
-            slider.value = this.canvasLayers.selectedLayer.opacity ? Math.round(this.canvasLayers.selectedLayer.opacity * 100) : 100;
+            slider.value = this.canvas.selectedLayer.opacity ? Math.round(this.canvas.selectedLayer.opacity * 100) : 100;
             slider.style.cssText = `
                 width: 100%;
                 margin: 5px 0;
                 display: none;
             `;
 
-            if (this.canvasLayers.selectedLayer.blendMode === mode.name) {
+            if (this.canvas.selectedLayer.blendMode === mode.name) {
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
             }
@@ -479,35 +478,35 @@ export class CanvasLayers {
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
 
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.blendMode = mode.name;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.blendMode = mode.name;
+                    this.canvas.render();
                 }
             };
 
             slider.addEventListener('input', () => {
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.opacity = slider.value / 100;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.opacity = slider.value / 100;
+                    this.canvas.render();
                 }
             });
 
             slider.addEventListener('change', async () => {
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.opacity = slider.value / 100;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.opacity = slider.value / 100;
+                    this.canvas.render();
                     const saveWithFallback = async (fileName) => {
                         try {
-                            const uniqueFileName = generateUniqueFileName(fileName, this.canvasLayers.node.id);
-                            return await this.canvasLayers.saveToServer(uniqueFileName);
+                            const uniqueFileName = generateUniqueFileName(fileName, this.canvas.node.id);
+                            return await this.canvas.saveToServer(uniqueFileName);
                         } catch (error) {
                             console.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);
-                            return await this.canvasLayers.saveToServer(fileName);
+                            return await this.canvas.saveToServer(fileName);
                         }
                     };
 
-                    await saveWithFallback(this.canvasLayers.widget.value);
-                    if (this.canvasLayers.node) {
+                    await saveWithFallback(this.canvas.widget.value);
+                    if (this.canvas.node) {
                         app.graph.runStep();
                     }
                 }
@@ -518,7 +517,7 @@ export class CanvasLayers {
             menu.appendChild(container);
         });
 
-        const container = this.canvasLayers.canvas.parentElement || document.body;
+        const container = this.canvas.canvas.parentElement || document.body;
         container.appendChild(menu);
 
         const closeMenu = (e) => {
@@ -560,11 +559,11 @@ export class CanvasLayers {
     async getFlattenedCanvasAsBlob() {
         return new Promise((resolve, reject) => {
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = this.canvasLayers.width;
-            tempCanvas.height = this.canvasLayers.height;
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
             const tempCtx = tempCanvas.getContext('2d');
 
-            const sortedLayers = [...this.canvasLayers.layers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedLayers.forEach(layer => {
                 if (!layer.image) return;
@@ -598,13 +597,13 @@ export class CanvasLayers {
     }
 
     async getFlattenedSelectionAsBlob() {
-        if (this.canvasLayers.selectedLayers.length === 0) {
+        if (this.canvas.selectedLayers.length === 0) {
             return null;
         }
 
         return new Promise((resolve) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvasLayers.selectedLayers.forEach(layer => {
+            this.canvas.selectedLayers.forEach(layer => {
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
                 const rad = layer.rotation * Math.PI / 180;
@@ -646,7 +645,7 @@ export class CanvasLayers {
 
             tempCtx.translate(-minX, -minY);
 
-            const sortedSelection = [...this.canvasLayers.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedSelection = [...this.canvas.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedSelection.forEach(layer => {
                 if (!layer.image) return;

@@ -674,17 +674,17 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
-                    onclick: () => canvas.rotateLayer(90)
+                    onclick: () => canvas.canvasLayers.rotateLayer(90)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale +5%",
                     title: "Increase size of selected layer(s) by 5%",
-                    onclick: () => canvas.resizeLayer(1.05)
+                    onclick: () => canvas.canvasLayers.resizeLayer(1.05)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale -5%",
                     title: "Decrease size of selected layer(s) by 5%",
-                    onclick: () => canvas.resizeLayer(0.95)
+                    onclick: () => canvas.canvasLayers.resizeLayer(0.95)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror H",
