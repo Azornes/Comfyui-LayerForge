@@ -563,6 +563,31 @@ async function createCanvasWidget(node, widget, app) {
                         canvas.canvasLayers.handlePaste(addMode);
                     }
                 }),
+                $el("button.painter-button", {
+                    id: `clipboard-toggle-${node.id}`,
+                    textContent: "📋 System",
+                    title: "Toggle clipboard source: System Clipboard",
+                    style: {
+                        minWidth: "100px",
+                        fontSize: "11px",
+                        backgroundColor: "#4a4a4a"
+                    },
+                    onclick: (e) => {
+                        const button = e.target;
+                        if (canvas.canvasLayers.clipboardPreference === 'system') {
+                            canvas.canvasLayers.clipboardPreference = 'clipspace';
+                            button.textContent = "📋 Clipspace";
+                            button.title = "Toggle clipboard source: ComfyUI Clipspace";
+                            button.style.backgroundColor = "#4a6cd4";
+                        } else {
+                            canvas.canvasLayers.clipboardPreference = 'system';
+                            button.textContent = "📋 System";
+                            button.title = "Toggle clipboard source: System Clipboard";
+                            button.style.backgroundColor = "#4a4a4a";
+                        }
+                        log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
+                    }
+                }),
             ]),
 
             $el("div.painter-separator"),

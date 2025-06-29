@@ -27,6 +27,7 @@ export class CanvasLayers {
         this.blendOpacity = 100;
         this.isAdjustingOpacity = false;
         this.internalClipboard = [];
+        this.clipboardPreference = 'system'; // 'system', 'clipspace'
     }
 
     async copySelectedLayers() {
@@ -86,46 +87,66 @@ export class CanvasLayers {
 
     async handlePaste(addMode = 'mouse') {
         try {
-            // 1. FIRST: Check Internal Clipboard
+            log.info(`Paste operation started with preference: ${this.clipboardPreference}`);
+
+            // ALWAYS FIRST: Check Internal Clipboard
             if (this.internalClipboard.length > 0) {
                 log.info("Pasting from internal clipboard");
                 this.pasteLayers();
                 return;
             }
 
-            // 2. SECOND: Try ComfyUI Clipspace
-            try {
-                log.info("Attempting to paste from ComfyUI Clipspace");
-                const clipspaceResult = ComfyApp.pasteFromClipspace(this.canvas.node);
-                
-                // Check if clipspace operation was successful and node has images
-                if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
-                    const clipspaceImage = this.canvas.node.imgs[0];
-                    if (clipspaceImage && clipspaceImage.src) {
-                        log.info("Successfully got image from ComfyUI Clipspace");
-                        const img = new Image();
-                        img.onload = async () => {
-                            await this.addLayerWithImage(img, {}, addMode);
-                        };
-                        img.src = clipspaceImage.src;
-                        return;
-                    }
+            // SECOND: Use preference setting
+            if (this.clipboardPreference === 'clipspace') {
+                log.info("Attempting paste from ComfyUI Clipspace");
+                if (!await this.tryClipspacePaste(addMode)) {
+                    log.info("No image found in ComfyUI Clipspace");
                 }
-                log.info("No image found in ComfyUI Clipspace, trying system clipboard");
-            } catch (clipspaceError) {
-                log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
+            } else if (this.clipboardPreference === 'system') {
+                log.info("Attempting paste from system clipboard");
+                await this.trySystemClipboardPaste(addMode);
             }
 
-            // 3. THIRD: Try System Clipboard
-            if (!navigator.clipboard?.read) {
-                log.info("Browser does not support clipboard read API. No more options available.");
-                return;
-            }
+        } catch (err) {
+            log.error("Paste operation failed:", err);
+        }
+    }
 
+    async tryClipspacePaste(addMode) {
+        try {
+            log.info("Attempting to paste from ComfyUI Clipspace");
+            const clipspaceResult = ComfyApp.pasteFromClipspace(this.canvas.node);
+            
+            // Check if clipspace operation was successful and node has images
+            if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
+                const clipspaceImage = this.canvas.node.imgs[0];
+                if (clipspaceImage && clipspaceImage.src) {
+                    log.info("Successfully got image from ComfyUI Clipspace");
+                    const img = new Image();
+                    img.onload = async () => {
+                        await this.addLayerWithImage(img, {}, addMode);
+                    };
+                    img.src = clipspaceImage.src;
+                    return true;
+                }
+            }
+            return false;
+        } catch (clipspaceError) {
+            log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
+            return false;
+        }
+    }
+
+    async trySystemClipboardPaste(addMode) {
+        if (!navigator.clipboard?.read) {
+            log.info("Browser does not support clipboard read API");
+            return false;
+        }
+
+        try {
             log.info("Attempting to paste from system clipboard");
             const clipboardItems = await navigator.clipboard.read();
-            let imagePasted = false;
-
+            
             for (const item of clipboardItems) {
                 const imageType = item.types.find(type => type.startsWith('image/'));
 
@@ -140,18 +161,16 @@ export class CanvasLayers {
                         img.src = event.target.result;
                     };
                     reader.readAsDataURL(blob);
-                    imagePasted = true;
                     log.info("Successfully pasted image from system clipboard");
-                    break;
+                    return true;
                 }
             }
             
-            if (!imagePasted) {
-                log.info("No image found in system clipboard. Paste operation completed with no result.");
-            }
-
-        } catch (err) {
-            log.error("Paste operation failed:", err);
+            log.info("No image found in system clipboard");
+            return false;
+        } catch (error) {
+            log.warn("System clipboard paste failed:", error);
+            return false;
         }
     }
 
