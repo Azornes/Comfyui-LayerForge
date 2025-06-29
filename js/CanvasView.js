@@ -552,7 +552,7 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.primary", {
                     textContent: "Import Input",
                     title: "Import image from another node",
-                    onclick: () => canvas.importLatestImage()
+                    onclick: () => canvas.canvasIO.importLatestImage()
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Paste Image",
@@ -560,7 +560,7 @@ async function createCanvasWidget(node, widget, app) {
                     onclick: () => {
                         const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
                         const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                        canvas.handlePaste(addMode);
+                        canvas.canvasLayers.handlePaste(addMode);
                     }
                 }),
             ]),
@@ -660,12 +660,12 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Up",
                     title: "Move selected layer(s) up",
-                    onclick: () => canvas.moveLayerUp()
+                    onclick: () => canvas.canvasLayers.moveLayerUp()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Down",
                     title: "Move selected layer(s) down",
-                    onclick: () => canvas.moveLayerDown()
+                    onclick: () => canvas.canvasLayers.moveLayerDown()
                 }),
             ]),
 
@@ -689,12 +689,12 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror H",
                     title: "Mirror selected layer(s) horizontally",
-                    onclick: () => canvas.mirrorHorizontal()
+                    onclick: () => canvas.canvasLayers.mirrorHorizontal()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror V",
                     title: "Mirror selected layer(s) vertically",
-                    onclick: () => canvas.mirrorVertical()
+                    onclick: () => canvas.canvasLayers.mirrorVertical()
                 }),
             ]),
 
@@ -716,7 +716,7 @@ async function createCanvasWidget(node, widget, app) {
 
                             const selectedLayer = canvas.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
-                            const imageData = await canvas.getLayerImageData(selectedLayer);
+                            const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
                             const response = await fetch("/matting", {
                                 method: "POST",
                                 headers: {"Content-Type": "application/json"},
@@ -845,15 +845,15 @@ async function createCanvasWidget(node, widget, app) {
                     style: {backgroundColor: "#4a7c59", borderColor: "#3a6c49"},
                     onclick: async () => {
                         try {
-                            const stats = canvas.getGarbageCollectionStats();
+                            const stats = canvas.imageReferenceManager.getStats();
                             log.info("GC Stats before cleanup:", stats);
 
-                            await canvas.runGarbageCollection();
+                            await canvas.imageReferenceManager.manualGarbageCollection();
 
-                            const newStats = canvas.getGarbageCollectionStats();
+                            const newStats = canvas.imageReferenceManager.getStats();
                             log.info("GC Stats after cleanup:", newStats);
 
-                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${newStats.operationCount}/${newStats.operationThreshold}`);
+                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${canvas.imageReferenceManager.operationCount}/${canvas.imageReferenceManager.operationThreshold}`);
                         } catch (e) {
                             log.error("Failed to run garbage collection:", e);
                             alert("Error running garbage collection. Check the console for details.");
