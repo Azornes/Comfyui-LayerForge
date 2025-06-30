@@ -217,11 +217,32 @@ export class Canvas {
 
     /**
      * Uruchamia edytor masek
+     * @param {Image|HTMLCanvasElement|null} predefinedMask - Opcjonalna maska do nałożenia po otwarciu editora
+     * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
-    async startMaskEditor() {
-        // Używamy specjalnej metody która łączy pełny obraz z istniejącą maską
-        // Dzięki temu edytor masek dostanie pełny obraz z maską jako punkt startowy
-        const blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
+    async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
+        // Jeśli nie ma predefiniowanej maski, stwórz ją z istniejącej maski canvas
+        if (!predefinedMask && this.maskTool && this.maskTool.maskCanvas) {
+            try {
+                predefinedMask = await this.createMaskFromCurrentMask();
+            } catch (error) {
+                log.warn("Could not create mask from current mask:", error);
+            }
+        }
+        
+        // Przechowaj maskę do późniejszego użycia
+        this.pendingMask = predefinedMask;
+        
+        // Wybierz odpowiednią metodę w zależności od parametru sendCleanImage
+        let blob;
+        if (sendCleanImage) {
+            // Wyślij czysty obraz bez maski (domyślne zachowanie)
+            blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
+        } else {
+            // Używamy specjalnej metody która łączy pełny obraz z istniejącą maską
+            blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
+        }
+        
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");
             return;
@@ -259,6 +280,11 @@ export class Canvas {
             
             this.editorWasShowing = false;
             this.waitWhileMaskEditing();
+            
+            // Jeśli mamy predefiniowaną maskę, czekaj na otwarcie editora i nałóż ją
+            if (predefinedMask) {
+                this.waitForMaskEditorAndApplyMask();
+            }
 
         } catch (error) {
             log.error("Error preparing image for mask editor:", error);
@@ -384,6 +410,271 @@ export class Canvas {
     // ==========================================
     // METODY DLA EDYTORA MASEK
     // ==========================================
+
+    /**
+     * Czeka na otwarcie mask editora i automatycznie nakłada predefiniowaną maskę
+     */
+    waitForMaskEditorAndApplyMask() {
+        let attempts = 0;
+        const maxAttempts = 100; // Zwiększone do 10 sekund oczekiwania
+        
+        const checkEditor = () => {
+            attempts++;
+            
+            if (mask_editor_showing(app)) {
+                // Editor się otworzył - sprawdź czy jest w pełni zainicjalizowany
+                const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
+                let editorReady = false;
+                
+                if (useNewEditor) {
+                    // Sprawdź czy nowy editor jest gotowy - różne metody wykrywania
+                    const MaskEditorDialog = window.MaskEditorDialog;
+                    if (MaskEditorDialog && MaskEditorDialog.instance) {
+                        // Sprawdź czy ma MessageBroker i czy canvas jest dostępny
+                        try {
+                            const messageBroker = MaskEditorDialog.instance.getMessageBroker();
+                            if (messageBroker) {
+                                editorReady = true;
+                                log.info("New mask editor detected as ready via MessageBroker");
+                            }
+                        } catch (e) {
+                            // MessageBroker jeszcze nie gotowy
+                            editorReady = false;
+                        }
+                    }
+                    
+                    // Alternatywne wykrywanie - sprawdź czy istnieje element maskEditor
+                    if (!editorReady) {
+                        const maskEditorElement = document.getElementById('maskEditor');
+                        if (maskEditorElement && maskEditorElement.style.display !== 'none') {
+                            // Sprawdź czy ma canvas wewnątrz
+                            const canvas = maskEditorElement.querySelector('canvas');
+                            if (canvas) {
+                                editorReady = true;
+                                log.info("New mask editor detected as ready via DOM element");
+                            }
+                        }
+                    }
+                } else {
+                    // Sprawdź czy stary editor jest gotowy
+                    const maskCanvas = document.getElementById('maskCanvas');
+                    editorReady = maskCanvas && maskCanvas.getContext && maskCanvas.width > 0;
+                    if (editorReady) {
+                        log.info("Old mask editor detected as ready");
+                    }
+                }
+                
+                if (editorReady) {
+                    // Editor jest gotowy - nałóż maskę po krótkim opóźnieniu
+                    log.info("Applying mask to editor after", attempts * 100, "ms wait");
+                    setTimeout(() => {
+                        this.applyMaskToEditor(this.pendingMask);
+                        this.pendingMask = null; // Wyczyść po użyciu
+                    }, 300); // Krótsze opóźnienie gdy już wiemy że jest gotowy
+                } else if (attempts < maxAttempts) {
+                    // Editor widoczny ale nie gotowy - sprawdź ponownie
+                    if (attempts % 10 === 0) {
+                        log.info("Waiting for mask editor to be ready... attempt", attempts, "/", maxAttempts);
+                    }
+                    setTimeout(checkEditor, 100);
+                } else {
+                    log.warn("Mask editor timeout - editor not ready after", maxAttempts * 100, "ms");
+                    // Spróbuj nałożyć maskę mimo wszystko
+                    log.info("Attempting to apply mask anyway...");
+                    setTimeout(() => {
+                        this.applyMaskToEditor(this.pendingMask);
+                        this.pendingMask = null;
+                    }, 100);
+                }
+            } else if (attempts < maxAttempts) {
+                // Editor jeszcze nie widoczny - sprawdź ponownie
+                setTimeout(checkEditor, 100);
+            } else {
+                log.warn("Mask editor timeout - editor not showing after", maxAttempts * 100, "ms");
+                this.pendingMask = null;
+            }
+        };
+        
+        checkEditor();
+    }
+
+    /**
+     * Nakłada maskę na otwarty mask editor
+     * @param {Image|HTMLCanvasElement} maskData - Dane maski do nałożenia
+     */
+    async applyMaskToEditor(maskData) {
+        try {
+            // Sprawdź czy używamy nowego czy starego editora
+            const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
+            
+            if (useNewEditor) {
+                // Sprawdź czy nowy editor jest rzeczywiście dostępny
+                const MaskEditorDialog = window.MaskEditorDialog;
+                if (MaskEditorDialog && MaskEditorDialog.instance) {
+                    // Nowy editor - użyj MessageBroker
+                    await this.applyMaskToNewEditor(maskData);
+                } else {
+                    log.warn("New editor setting enabled but instance not found, trying old editor");
+                    await this.applyMaskToOldEditor(maskData);
+                }
+            } else {
+                // Stary editor - bezpośredni dostęp do canvas
+                await this.applyMaskToOldEditor(maskData);
+            }
+            
+            log.info("Predefined mask applied to mask editor successfully");
+        } catch (error) {
+            log.error("Failed to apply predefined mask to editor:", error);
+            // Spróbuj alternatywną metodę
+            try {
+                log.info("Trying alternative mask application method...");
+                await this.applyMaskToOldEditor(maskData);
+                log.info("Alternative method succeeded");
+            } catch (fallbackError) {
+                log.error("Alternative method also failed:", fallbackError);
+            }
+        }
+    }
+
+    /**
+     * Nakłada maskę na nowy mask editor (przez MessageBroker)
+     * @param {Image|HTMLCanvasElement} maskData - Dane maski
+     */
+    async applyMaskToNewEditor(maskData) {
+        // Pobierz instancję nowego editora
+        const MaskEditorDialog = window.MaskEditorDialog;
+        if (!MaskEditorDialog || !MaskEditorDialog.instance) {
+            throw new Error("New mask editor instance not found");
+        }
+
+        const editor = MaskEditorDialog.instance;
+        const messageBroker = editor.getMessageBroker();
+        
+        // Pobierz canvas maski z editora
+        const maskCanvas = await messageBroker.pull('maskCanvas');
+        const maskCtx = await messageBroker.pull('maskCtx');
+        const maskColor = await messageBroker.pull('getMaskColor');
+
+        // Konwertuj maskę do odpowiedniego formatu
+        const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
+        
+        // Nałóż maskę na canvas
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+        maskCtx.drawImage(processedMask, 0, 0);
+        
+        // Zapisz stan dla undo/redo
+        messageBroker.publish('saveState');
+    }
+
+    /**
+     * Nakłada maskę na stary mask editor
+     * @param {Image|HTMLCanvasElement} maskData - Dane maski
+     */
+    async applyMaskToOldEditor(maskData) {
+        // Znajdź canvas maski w starym edytorze
+        const maskCanvas = document.getElementById('maskCanvas');
+        if (!maskCanvas) {
+            throw new Error("Old mask editor canvas not found");
+        }
+
+        const maskCtx = maskCanvas.getContext('2d');
+        
+        // Konwertuj maskę do odpowiedniego formatu (dla starego editora używamy białego koloru)
+        const maskColor = { r: 255, g: 255, b: 255 };
+        const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
+        
+        // Nałóż maskę na canvas
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+        maskCtx.drawImage(processedMask, 0, 0);
+    }
+
+    /**
+     * Przetwarza maskę do odpowiedniego formatu dla editora
+     * @param {Image|HTMLCanvasElement} maskData - Oryginalne dane maski
+     * @param {number} targetWidth - Docelowa szerokość
+     * @param {number} targetHeight - Docelowa wysokość
+     * @param {Object} maskColor - Kolor maski {r, g, b}
+     * @returns {HTMLCanvasElement} Przetworzona maska
+     */
+    async processMaskForEditor(maskData, targetWidth, targetHeight, maskColor) {
+        const originalWidth = maskData.width || maskData.naturalWidth || this.width;
+        const originalHeight = maskData.height || maskData.naturalHeight || this.height;
+        
+        log.info("Processing mask for editor:", {
+            originalSize: { width: originalWidth, height: originalHeight },
+            targetSize: { width: targetWidth, height: targetHeight },
+            canvasSize: { width: this.width, height: this.height }
+        });
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = targetWidth;
+        tempCanvas.height = targetHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+
+        // Wyczyść canvas
+        tempCtx.clearRect(0, 0, targetWidth, targetHeight);
+
+        // Skaluj maskę do originalSize zamiast targetSize
+        // originalSize to prawdziwy rozmiar obrazu w mask editorze
+        const scaleToOriginal = Math.min(originalWidth / this.width, originalHeight / this.height);
+        
+        // Maska powinna pokryć cały obszar originalSize
+        const scaledWidth = this.width * scaleToOriginal;
+        const scaledHeight = this.height * scaleToOriginal;
+        
+        // Wyśrodkuj na target canvas (który reprezentuje viewport mask editora)
+        const offsetX = (targetWidth - scaledWidth) / 2;
+        const offsetY = (targetHeight - scaledHeight) / 2;
+        
+        tempCtx.drawImage(maskData, offsetX, offsetY, scaledWidth, scaledHeight);
+        
+        log.info("Mask drawn scaled to original image size:", { 
+            originalSize: { width: originalWidth, height: originalHeight },
+            targetSize: { width: targetWidth, height: targetHeight },
+            canvasSize: { width: this.width, height: this.height },
+            scaleToOriginal: scaleToOriginal,
+            finalSize: { width: scaledWidth, height: scaledHeight },
+            offset: { x: offsetX, y: offsetY }
+        });
+
+        // Pobierz dane obrazu i przetwórz je
+        const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+        const data = imageData.data;
+
+        // Konwertuj maskę do formatu editora (alpha channel jako maska)
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3]; // Oryginalny kanał alpha
+            
+            // Ustaw kolor maski
+            data[i] = maskColor.r;     // R
+            data[i + 1] = maskColor.g; // G
+            data[i + 2] = maskColor.b; // B
+            data[i + 3] = alpha;       // Zachowaj oryginalny alpha
+        }
+
+        // Zapisz przetworzone dane z powrotem
+        tempCtx.putImageData(imageData, 0, 0);
+        
+        log.info("Mask processing completed - full size scaling applied");
+        return tempCanvas;
+    }
+
+    /**
+     * Tworzy obiekt Image z obecnej maski canvas
+     * @returns {Promise<Image>} Promise zwracający obiekt Image z maską
+     */
+    async createMaskFromCurrentMask() {
+        if (!this.maskTool || !this.maskTool.maskCanvas) {
+            throw new Error("No mask canvas available");
+        }
+
+        return new Promise((resolve, reject) => {
+            const maskImage = new Image();
+            maskImage.onload = () => resolve(maskImage);
+            maskImage.onerror = reject;
+            maskImage.src = this.maskTool.maskCanvas.toDataURL();
+        });
+    }
 
     waitWhileMaskEditing() {
         if (mask_editor_showing(app)) {
