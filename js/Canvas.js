@@ -9,7 +9,7 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import { mask_editor_showing } from "./utils/mask_utils.js";
+import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 
 const log = createModuleLogger('Canvas');
 
@@ -221,6 +221,10 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
+        // Zapisz obecny stan maski przed otwarciem editora (dla obsługi Cancel)
+        this.savedMaskState = await this.saveMaskState();
+        this.maskEditorCancelled = false;
+        
         // Jeśli nie ma predefiniowanej maski, stwórz ją z istniejącej maski canvas
         if (!predefinedMask && this.maskTool && this.maskTool.maskCanvas) {
             try {
@@ -274,17 +278,20 @@ export class Canvas {
             
             this.node.imgs = [img];
 
-            ComfyApp.copyToClipspace(this.node);
-            ComfyApp.clipspace_return_node = this.node;
-            ComfyApp.open_maskeditor();
-            
-            this.editorWasShowing = false;
-            this.waitWhileMaskEditing();
-            
-            // Jeśli mamy predefiniowaną maskę, czekaj na otwarcie editora i nałóż ją
-            if (predefinedMask) {
-                this.waitForMaskEditorAndApplyMask();
-            }
+        ComfyApp.copyToClipspace(this.node);
+        ComfyApp.clipspace_return_node = this.node;
+        ComfyApp.open_maskeditor();
+        
+        this.editorWasShowing = false;
+        this.waitWhileMaskEditing();
+        
+        // Nasłuchuj na przycisk Cancel
+        this.setupCancelListener();
+        
+        // Jeśli mamy predefiniowaną maskę, czekaj na otwarcie editora i nałóż ją
+        if (predefinedMask) {
+            this.waitForMaskEditorAndApplyMask();
+        }
 
         } catch (error) {
             log.error("Error preparing image for mask editor:", error);
@@ -761,5 +768,170 @@ export class Canvas {
         }
 
         this.render();
+    }
+
+    // ==========================================
+    // OBSŁUGA ANULOWANIA MASK EDITORA
+    // ==========================================
+
+    /**
+     * Zapisuje obecny stan maski przed otwarciem editora
+     * @returns {Object} Zapisany stan maski
+     */
+    async saveMaskState() {
+        if (!this.maskTool || !this.maskTool.maskCanvas) {
+            return null;
+        }
+
+        // Skopiuj dane z mask canvas
+        const maskCanvas = this.maskTool.maskCanvas;
+        const savedCanvas = document.createElement('canvas');
+        savedCanvas.width = maskCanvas.width;
+        savedCanvas.height = maskCanvas.height;
+        const savedCtx = savedCanvas.getContext('2d');
+        savedCtx.drawImage(maskCanvas, 0, 0);
+
+        return {
+            maskData: savedCanvas,
+            maskPosition: {
+                x: this.maskTool.x,
+                y: this.maskTool.y
+            }
+        };
+    }
+
+    /**
+     * Przywraca zapisany stan maski
+     * @param {Object} savedState - Zapisany stan maski
+     */
+    async restoreMaskState(savedState) {
+        if (!savedState || !this.maskTool) {
+            return;
+        }
+
+        // Przywróć dane maski
+        if (savedState.maskData) {
+            const maskCtx = this.maskTool.maskCtx;
+            maskCtx.clearRect(0, 0, this.maskTool.maskCanvas.width, this.maskTool.maskCanvas.height);
+            maskCtx.drawImage(savedState.maskData, 0, 0);
+        }
+
+        // Przywróć pozycję maski
+        if (savedState.maskPosition) {
+            this.maskTool.x = savedState.maskPosition.x;
+            this.maskTool.y = savedState.maskPosition.y;
+        }
+
+        this.render();
+        log.info("Mask state restored after cancel");
+    }
+
+    /**
+     * Konfiguruje nasłuchiwanie na przycisk Cancel w mask editorze
+     */
+    setupCancelListener() {
+        mask_editor_listen_for_cancel(app, () => {
+            log.info("Mask editor cancel button clicked");
+            this.maskEditorCancelled = true;
+        });
+    }
+
+    /**
+     * Sprawdza czy mask editor został anulowany i obsługuje to odpowiednio
+     */
+    async handleMaskEditorClose() {
+        console.log("Node object after mask editor close:", this.node);
+        
+        // Sprawdź czy editor został anulowany
+        if (this.maskEditorCancelled) {
+            log.info("Mask editor was cancelled - restoring original mask state");
+            
+            // Przywróć oryginalny stan maski
+            if (this.savedMaskState) {
+                await this.restoreMaskState(this.savedMaskState);
+            }
+            
+            // Wyczyść flagi
+            this.maskEditorCancelled = false;
+            this.savedMaskState = null;
+            
+            // Nie przetwarzaj wyniku z editora
+            return;
+        }
+
+        // Kontynuuj normalną obsługę save
+        if (!this.node.imgs || !this.node.imgs.length === 0 || !this.node.imgs[0].src) {
+            log.warn("Mask editor was closed without a result.");
+            return;
+        }
+
+        const resultImage = new Image();
+        resultImage.src = this.node.imgs[0].src;
+
+        try {
+            await new Promise((resolve, reject) => {
+                resultImage.onload = resolve;
+                resultImage.onerror = reject;
+            });
+        } catch (error) {
+            log.error("Failed to load image from mask editor.", error);
+            this.node.imgs = [];
+            return;
+        }
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.width;
+        tempCanvas.height = this.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
+
+        const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const originalAlpha = data[i + 3];
+            data[i]     = 255;
+            data[i + 1] = 255;
+            data[i + 2] = 255;
+            data[i + 3] = 255 - originalAlpha;
+        }
+
+        tempCtx.putImageData(imageData, 0, 0);
+
+        const maskAsImage = new Image();
+        maskAsImage.src = tempCanvas.toDataURL();
+        await new Promise(resolve => maskAsImage.onload = resolve);
+        
+        const maskCtx = this.maskTool.maskCtx;
+        const destX = -this.maskTool.x;
+        const destY = -this.maskTool.y;
+        
+        // Zamiast dodawać maskę (screen), zastąp całą maskę (source-over)
+        // Najpierw wyczyść obszar który będzie zastąpiony
+        maskCtx.globalCompositeOperation = 'source-over';
+        maskCtx.clearRect(destX, destY, this.width, this.height);
+        
+        // Teraz narysuj nową maskę
+        maskCtx.drawImage(maskAsImage, destX, destY);
+        
+        this.render();
+        this.saveState();
+        
+        const new_preview = new Image();
+        // Użyj nowej metody z maską jako kanałem alpha
+        const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+        if (blob) {
+            new_preview.src = URL.createObjectURL(blob);
+            await new Promise(r => new_preview.onload = r);
+            this.node.imgs = [new_preview];
+        } else {
+            this.node.imgs = [];
+        }
+
+        this.render();
+        
+        // Wyczyść zapisany stan po pomyślnym save
+        this.savedMaskState = null;
     }
 }

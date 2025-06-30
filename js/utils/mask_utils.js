@@ -1,3 +1,7 @@
+import {createModuleLogger} from "./LoggerUtils.js";
+
+const log = createModuleLogger('MaskUtils');
+
 export function new_editor(app) {
     if (!app) return false;
     return app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor')
@@ -17,8 +21,49 @@ export function hide_mask_editor() {
 }
 
 function get_mask_editor_cancel_button(app) {
-    if (document.getElementById("maskEditor_topBarCancelButton")) return document.getElementById("maskEditor_topBarCancelButton")
-    return get_mask_editor_element(app)?.parentElement?.lastChild?.childNodes[2]
+    // Główny przycisk Cancel z nowego editora
+    const cancelButton = document.getElementById("maskEditor_topBarCancelButton");
+    if (cancelButton) {
+        log.debug("Found cancel button by ID: maskEditor_topBarCancelButton");
+        return cancelButton;
+    }
+    
+    // Sprawdź inne możliwe selektory (bez :contains które nie działają)
+    const cancelSelectors = [
+        'button[onclick*="cancel"]',
+        'button[onclick*="Cancel"]',
+        'input[value="Cancel"]'
+    ];
+    
+    for (const selector of cancelSelectors) {
+        try {
+            const button = document.querySelector(selector);
+            if (button) {
+                log.debug("Found cancel button with selector:", selector);
+                return button;
+            }
+        } catch (e) {
+            log.warn("Invalid selector:", selector, e);
+        }
+    }
+    
+    // Fallback - sprawdź wszystkie przyciski w dokumencie po tekście
+    const allButtons = document.querySelectorAll('button, input[type="button"]');
+    for (const button of allButtons) {
+        const text = button.textContent || button.value || '';
+        if (text.toLowerCase().includes('cancel')) {
+            log.debug("Found cancel button by text content:", text);
+            return button;
+        }
+    }
+    
+    // Ostatni fallback - stary editor
+    const editorElement = get_mask_editor_element(app);
+    if (editorElement) {
+        return editorElement?.parentElement?.lastChild?.childNodes[2];
+    }
+    
+    return null;
 }
 
 function get_mask_editor_save_button(app) {
@@ -27,11 +72,44 @@ function get_mask_editor_save_button(app) {
 }
 
 export function mask_editor_listen_for_cancel(app, callback) {
-    const cancel_button = get_mask_editor_cancel_button(app);
-    if (cancel_button && !cancel_button.filter_listener_added) {
-        cancel_button.addEventListener('click', callback);
-        cancel_button.filter_listener_added = true;
-    }
+    // Spróbuj znaleźć przycisk Cancel wielokrotnie z opóźnieniem
+    let attempts = 0;
+    const maxAttempts = 50; // 5 sekund
+    
+    const findAndAttachListener = () => {
+        attempts++;
+        const cancel_button = get_mask_editor_cancel_button(app);
+        
+        if (cancel_button && !cancel_button.filter_listener_added) {
+            log.info("Cancel button found, attaching listener");
+            cancel_button.addEventListener('click', callback);
+            cancel_button.filter_listener_added = true;
+            return true; // Znaleziono i podłączono
+        } else if (attempts < maxAttempts) {
+            // Spróbuj ponownie za 100ms
+            setTimeout(findAndAttachListener, 100);
+        } else {
+            log.warn("Could not find cancel button after", maxAttempts, "attempts");
+            
+            // Ostatnia próba - nasłuchuj na wszystkie kliknięcia w dokumencie
+            const globalClickHandler = (event) => {
+                const target = event.target;
+                const text = target.textContent || target.value || '';
+                if (text.toLowerCase().includes('cancel') || 
+                    target.id.toLowerCase().includes('cancel') ||
+                    target.className.toLowerCase().includes('cancel')) {
+                    log.info("Cancel detected via global click handler");
+                    callback();
+                    document.removeEventListener('click', globalClickHandler);
+                }
+            };
+            
+            document.addEventListener('click', globalClickHandler);
+            log.debug("Added global click handler for cancel detection");
+        }
+    };
+    
+    findAndAttachListener();
 }
 
 export function press_maskeditor_save(app) {
@@ -50,7 +128,7 @@ export function press_maskeditor_cancel(app) {
  */
 export function start_mask_editor_with_predefined_mask(canvasInstance, maskImage, sendCleanImage = true) {
     if (!canvasInstance || !maskImage) {
-        console.error('Canvas instance and mask image are required');
+        log.error('Canvas instance and mask image are required');
         return;
     }
     
@@ -63,7 +141,7 @@ export function start_mask_editor_with_predefined_mask(canvasInstance, maskImage
  */
 export function start_mask_editor_auto(canvasInstance) {
     if (!canvasInstance) {
-        console.error('Canvas instance is required');
+        log.error('Canvas instance is required');
         return;
     }
     
