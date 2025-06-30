@@ -1,0 +1,24 @@
+name: 📝 Documentation Request
+description: Suggest improvements or additions to documentation
+title: "[Docs] "
+labels: [documentation]
+body:
+  - type: input
+    id: doc_area
+    attributes:
+      label: Area of documentation
+      placeholder: e.g. Getting started, Node API, Deployment guide
+    validations:
+      required: true
+  - type: textarea
+    id: current_issue
+    attributes:
+      label: What's wrong or missing?
+      placeholder: Describe the gap or confusing part
+    validations:
+      required: true
+  - type: textarea
+    id: suggested_content
+    attributes:
+      label: How should it be improved?
+      placeholder: Provide concrete suggestions or examples
