@@ -968,4 +968,152 @@ export class CanvasLayers {
             }, 'image/png');
         });
     }
+
+    /**
+     * Fuses (flattens and merges) selected layers into a single layer
+     */
+    async fuseLayers() {
+        if (this.canvas.selectedLayers.length < 2) {
+            alert("Please select at least 2 layers to fuse.");
+            return;
+        }
+
+        log.info(`Fusing ${this.canvas.selectedLayers.length} selected layers`);
+
+        try {
+            // Save state for undo
+            this.canvas.saveState();
+
+            // Calculate bounding box of all selected layers
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            this.canvas.selectedLayers.forEach(layer => {
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                const rad = layer.rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+
+                const halfW = layer.width / 2;
+                const halfH = layer.height / 2;
+
+                const corners = [
+                    {x: -halfW, y: -halfH},
+                    {x: halfW, y: -halfH},
+                    {x: halfW, y: halfH},
+                    {x: -halfW, y: halfH}
+                ];
+
+                corners.forEach(p => {
+                    const worldX = centerX + (p.x * cos - p.y * sin);
+                    const worldY = centerY + (p.x * sin + p.y * cos);
+
+                    minX = Math.min(minX, worldX);
+                    minY = Math.min(minY, worldY);
+                    maxX = Math.max(maxX, worldX);
+                    maxY = Math.max(maxY, worldY);
+                });
+            });
+
+            const fusedWidth = Math.ceil(maxX - minX);
+            const fusedHeight = Math.ceil(maxY - minY);
+
+            if (fusedWidth <= 0 || fusedHeight <= 0) {
+                log.warn("Calculated fused layer dimensions are invalid");
+                alert("Cannot fuse layers: invalid dimensions calculated.");
+                return;
+            }
+
+            // Create temporary canvas for flattening
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = fusedWidth;
+            tempCanvas.height = fusedHeight;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+            // Translate context to account for the bounding box offset
+            tempCtx.translate(-minX, -minY);
+
+            // Sort selected layers by z-index and render them
+            const sortedSelection = [...this.canvas.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedSelection.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2, -layer.height / 2,
+                    layer.width, layer.height
+                );
+                tempCtx.restore();
+            });
+
+            // Convert flattened canvas to image
+            const fusedImage = new Image();
+            fusedImage.src = tempCanvas.toDataURL();
+            await new Promise((resolve, reject) => {
+                fusedImage.onload = resolve;
+                fusedImage.onerror = reject;
+            });
+
+            // Find the lowest z-index among selected layers to maintain visual order
+            const minZIndex = Math.min(...this.canvas.selectedLayers.map(layer => layer.zIndex));
+
+            // Generate unique ID for the new fused layer
+            const imageId = generateUUID();
+            await saveImage(imageId, fusedImage.src);
+            this.canvas.imageCache.set(imageId, fusedImage.src);
+
+            // Create the new fused layer
+            const fusedLayer = {
+                image: fusedImage,
+                imageId: imageId,
+                x: minX,
+                y: minY,
+                width: fusedWidth,
+                height: fusedHeight,
+                originalWidth: fusedWidth,
+                originalHeight: fusedHeight,
+                rotation: 0,
+                zIndex: minZIndex,
+                blendMode: 'normal',
+                opacity: 1
+            };
+
+            // Remove selected layers from canvas
+            this.canvas.layers = this.canvas.layers.filter(layer => !this.canvas.selectedLayers.includes(layer));
+
+            // Insert the fused layer at the correct position
+            this.canvas.layers.push(fusedLayer);
+
+            // Re-index all layers to maintain proper z-order
+            this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
+            this.canvas.layers.forEach((layer, index) => {
+                layer.zIndex = index;
+            });
+
+            // Select the new fused layer
+            this.canvas.updateSelection([fusedLayer]);
+
+            // Render and save state
+            this.canvas.render();
+            this.canvas.saveState();
+
+            log.info("Layers fused successfully", {
+                originalLayerCount: sortedSelection.length,
+                fusedDimensions: { width: fusedWidth, height: fusedHeight },
+                fusedPosition: { x: minX, y: minY }
+            });
+
+        } catch (error) {
+            log.error("Error during layer fusion:", error);
+            alert(`Error fusing layers: ${error.message}`);
+        }
+    }
 }

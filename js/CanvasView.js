@@ -789,6 +789,11 @@ async function createCanvasWidget(node, widget, app) {
                     title: "Move selected layer(s) down",
                     onclick: () => canvas.canvasLayers.moveLayerDown()
                 }),
+                $el("button.painter-button.requires-selection", {
+                    textContent: "Fuse",
+                    title: "Flatten and merge selected layers into a single layer",
+                    onclick: () => canvas.canvasLayers.fuseLayers()
+                }),
             ]),
 
             $el("div.painter-separator"),
@@ -1008,7 +1013,12 @@ async function createCanvasWidget(node, widget, app) {
         const selectionCount = canvas.selectedLayers.length;
         const hasSelection = selectionCount > 0;
         controlPanel.querySelectorAll('.requires-selection').forEach(btn => {
-            btn.disabled = !hasSelection;
+            // Special handling for Fuse button - requires at least 2 layers
+            if (btn.textContent === 'Fuse') {
+                btn.disabled = selectionCount < 2;
+            } else {
+                btn.disabled = !hasSelection;
+            }
         });
         const mattingBtn = controlPanel.querySelector('.matting-button');
         if (mattingBtn && !mattingBtn.classList.contains('loading')) {
