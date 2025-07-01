@@ -15,11 +15,10 @@ import {
  * Przykład 1: Podstawowe użycie z obrazem maski
  */
 async function example1_basic_usage(canvasInstance) {
-    // Załaduj obraz maski z URL
+
     const maskImage = await create_mask_from_image_src('/path/to/mask.png');
-    
-    // Uruchom mask editor z predefiniowaną maską
-    // sendCleanImage = true oznacza że wyślemy czysty obraz bez istniejącej maski
+
+
     start_mask_editor_with_predefined_mask(canvasInstance, maskImage, true);
 }
 
@@ -27,24 +26,21 @@ async function example1_basic_usage(canvasInstance) {
  * Przykład 2: Użycie z canvas jako maska
  */
 async function example2_canvas_mask(canvasInstance) {
-    // Stwórz canvas z maską programowo
+
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = 512;
     maskCanvas.height = 512;
     const ctx = maskCanvas.getContext('2d');
-    
-    // Narysuj prostą maskę - białe koło na czarnym tle
+
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, 512, 512);
     ctx.fillStyle = 'white';
     ctx.beginPath();
     ctx.arc(256, 256, 100, 0, 2 * Math.PI);
     ctx.fill();
-    
-    // Konwertuj canvas do Image
+
     const maskImage = await canvas_to_mask_image(maskCanvas);
-    
-    // Uruchom mask editor
+
     start_mask_editor_with_predefined_mask(canvasInstance, maskImage, true);
 }
 
@@ -52,12 +48,11 @@ async function example2_canvas_mask(canvasInstance) {
  * Przykład 3: Bezpośrednie użycie metody Canvas
  */
 async function example3_direct_canvas_method(canvasInstance) {
-    // Załaduj maskę
+
     const maskImage = await create_mask_from_image_src('/path/to/mask.png');
-    
-    // Bezpośrednie wywołanie metody Canvas
-    // Parametr 1: predefiniowana maska
-    // Parametr 2: czy wysłać czysty obraz (true = tak, false = z istniejącą maską)
+
+
+
     await canvasInstance.startMaskEditor(maskImage, true);
 }
 
@@ -65,17 +60,14 @@ async function example3_direct_canvas_method(canvasInstance) {
  * Przykład 4: Tworzenie maski z danych binarnych
  */
 async function example4_binary_data_mask(canvasInstance, binaryData) {
-    // Konwertuj dane binarne do data URL
+
     const blob = new Blob([binaryData], { type: 'image/png' });
     const dataUrl = URL.createObjectURL(blob);
-    
-    // Stwórz obraz z data URL
+
     const maskImage = await create_mask_from_image_src(dataUrl);
-    
-    // Uruchom mask editor
+
     start_mask_editor_with_predefined_mask(canvasInstance, maskImage, true);
-    
-    // Wyczyść URL po użyciu
+
     URL.revokeObjectURL(dataUrl);
 }
 
@@ -87,8 +79,7 @@ async function example5_gradient_mask(canvasInstance) {
     maskCanvas.width = 512;
     maskCanvas.height = 512;
     const ctx = maskCanvas.getContext('2d');
-    
-    // Stwórz gradient od przezroczystego do białego
+
     const gradient = ctx.createLinearGradient(0, 0, 512, 0);
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');    // Przezroczysty
     gradient.addColorStop(1, 'rgba(255, 255, 255, 1)'); // Biały
@@ -109,8 +100,7 @@ async function example6_error_handling(canvasInstance) {
         start_mask_editor_with_predefined_mask(canvasInstance, maskImage, true);
     } catch (error) {
         console.error('Błąd podczas ładowania maski:', error);
-        
-        // Fallback - uruchom editor bez predefiniowanej maski
+
         await canvasInstance.startMaskEditor();
     }
 }
@@ -134,13 +124,11 @@ async function example7_existing_canvas_element(canvasInstance, canvasElementId)
  */
 async function example8_combine_with_existing_mask(canvasInstance) {
     const maskImage = await create_mask_from_image_src('/path/to/mask.png');
-    
-    // sendCleanImage = false oznacza że wyślemy obraz z istniejącą maską
-    // Nowa maska zostanie nałożona dodatkowo w edytorze
+
+
     start_mask_editor_with_predefined_mask(canvasInstance, maskImage, false);
 }
 
-// Eksportuj przykłady dla użycia w innych plikach
 export {
     example1_basic_usage,
     example2_canvas_mask,

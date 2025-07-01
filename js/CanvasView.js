@@ -485,8 +485,7 @@ async function createCanvasWidget(node, widget, app) {
                         } else {
                             helpTooltip.innerHTML = standardShortcuts;
                         }
-                        
-                        // Najpierw wyświetlamy tooltip z visibility: hidden aby obliczyć jego wymiary
+
                         helpTooltip.style.visibility = 'hidden';
                         helpTooltip.style.display = 'block';
                         
@@ -494,29 +493,23 @@ async function createCanvasWidget(node, widget, app) {
                         const tooltipRect = helpTooltip.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
                         const viewportHeight = window.innerHeight;
-                        
-                        // Obliczamy pozycję
+
                         let left = buttonRect.left;
                         let top = buttonRect.bottom + 5;
-                        
-                        // Sprawdzamy czy tooltip wychodzi poza prawy brzeg ekranu
+
                         if (left + tooltipRect.width > viewportWidth) {
                             left = viewportWidth - tooltipRect.width - 10;
                         }
-                        
-                        // Sprawdzamy czy tooltip wychodzi poza dolny brzeg ekranu
+
                         if (top + tooltipRect.height > viewportHeight) {
-                            // Wyświetlamy nad przyciskiem zamiast pod
+
                             top = buttonRect.top - tooltipRect.height - 5;
                         }
-                        
-                        // Upewniamy się, że tooltip nie wychodzi poza lewy brzeg
+
                         if (left < 10) left = 10;
-                        
-                        // Upewniamy się, że tooltip nie wychodzi poza górny brzeg
+
                         if (top < 10) top = 10;
-                        
-                        // Ustawiamy finalną pozycję i pokazujemy tooltip
+
                         helpTooltip.style.left = `${left}px`;
                         helpTooltip.style.top = `${top}px`;
                         helpTooltip.style.visibility = 'visible';
@@ -671,7 +664,7 @@ async function createCanvasWidget(node, widget, app) {
                             const height = parseInt(document.getElementById('canvas-height').value) || canvas.height;
                             canvas.updateOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
-                            // updateOutput is triggered by saveState in updateOutputAreaSize
+
                         };
 
                         document.getElementById('cancel-size').onclick = () => {
@@ -946,8 +939,7 @@ async function createCanvasWidget(node, widget, app) {
 
     const updateOutput = async () => {
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
-        
-        // ZAWSZE generuj obraz (potrzebny dla funkcji masek)
+
         try {
             const new_preview = new Image();
             const blob = await canvas.getFlattenedCanvasWithMaskAsBlob();
@@ -961,8 +953,7 @@ async function createCanvasWidget(node, widget, app) {
         } catch (error) {
             console.error("Error updating node preview:", error);
         }
-        
-        // app.graph.runStep(); // Potentially not needed if we just want to mark dirty
+
     };
 
     const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
@@ -1111,8 +1102,6 @@ async function createCanvasWidget(node, widget, app) {
         canvas.loadInitialState();
     }, 100);
 
-
-    // Konfiguracja opcji ukrywania podglądu
     const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");
     if (showPreviewWidget) {
         const originalCallback = showPreviewWidget.callback;
@@ -1121,20 +1110,17 @@ async function createCanvasWidget(node, widget, app) {
             if (originalCallback) {
                 originalCallback.call(this, value);
             }
-            
-            // Kontroluj widoczność podglądu w Canvas
+
             if (canvas && canvas.setPreviewVisibility) {
                 canvas.setPreviewVisibility(value);
             }
-            
-            // Wymuś przerysowanie node'a
+
             if (node.graph && node.graph.canvas) {
                 node.setDirtyCanvas(true, true);
             }
         };
-        
-        // Podgląd jest automatycznie ukrywany w konstruktorze Canvas.js
-        // Nie potrzebujemy już wywoływać setInitialPreviewVisibility
+
+
     }
 
 
@@ -1213,7 +1199,6 @@ app.registerExtension({
                     return;
                 }
 
-                // Iterate through every widget attached to this node
                 this.widgets.forEach(w => {
                     log.debug(`Widget name: ${w.name}, type: ${w.type}, value: ${w.value}`);
                 });
@@ -1265,8 +1250,7 @@ app.registerExtension({
                 originalGetExtraMenuOptions?.apply(this, arguments);
 
                 const self = this;
-                
-                // Usuń standardową opcję "Open in MaskEditor" jeśli istnieje
+
                 const maskEditorIndex = options.findIndex(option => 
                     option && option.content === "Open in MaskEditor"
                 );

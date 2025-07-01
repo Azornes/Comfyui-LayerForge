@@ -21,14 +21,13 @@ export function hide_mask_editor() {
 }
 
 function get_mask_editor_cancel_button(app) {
-    // Główny przycisk Cancel z nowego editora
+
     const cancelButton = document.getElementById("maskEditor_topBarCancelButton");
     if (cancelButton) {
         log.debug("Found cancel button by ID: maskEditor_topBarCancelButton");
         return cancelButton;
     }
-    
-    // Sprawdź inne możliwe selektory (bez :contains które nie działają)
+
     const cancelSelectors = [
         'button[onclick*="cancel"]',
         'button[onclick*="Cancel"]',
@@ -46,8 +45,7 @@ function get_mask_editor_cancel_button(app) {
             log.warn("Invalid selector:", selector, e);
         }
     }
-    
-    // Fallback - sprawdź wszystkie przyciski w dokumencie po tekście
+
     const allButtons = document.querySelectorAll('button, input[type="button"]');
     for (const button of allButtons) {
         const text = button.textContent || button.value || '';
@@ -56,8 +54,7 @@ function get_mask_editor_cancel_button(app) {
             return button;
         }
     }
-    
-    // Ostatni fallback - stary editor
+
     const editorElement = get_mask_editor_element(app);
     if (editorElement) {
         return editorElement?.parentElement?.lastChild?.childNodes[2];
@@ -72,7 +69,7 @@ function get_mask_editor_save_button(app) {
 }
 
 export function mask_editor_listen_for_cancel(app, callback) {
-    // Spróbuj znaleźć przycisk Cancel wielokrotnie z opóźnieniem
+
     let attempts = 0;
     const maxAttempts = 50; // 5 sekund
     
@@ -86,12 +83,11 @@ export function mask_editor_listen_for_cancel(app, callback) {
             cancel_button.filter_listener_added = true;
             return true; // Znaleziono i podłączono
         } else if (attempts < maxAttempts) {
-            // Spróbuj ponownie za 100ms
+
             setTimeout(findAndAttachListener, 100);
         } else {
             log.warn("Could not find cancel button after", maxAttempts, "attempts");
-            
-            // Ostatnia próba - nasłuchuj na wszystkie kliknięcia w dokumencie
+
             const globalClickHandler = (event) => {
                 const target = event.target;
                 const text = target.textContent || target.value || '';
@@ -144,10 +140,9 @@ export function start_mask_editor_auto(canvasInstance) {
         log.error('Canvas instance is required');
         return;
     }
-    
-    // Wywołaj bez parametrów - użyje domyślnych wartości (null, true)
-    // Co oznacza: brak predefiniowanej maski, ale wyślij czysty obraz
-    // i automatycznie nałóż istniejącą maskę z canvas
+
+
+
     canvasInstance.startMaskEditor();
 }
 

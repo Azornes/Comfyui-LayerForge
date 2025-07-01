@@ -162,7 +162,7 @@ export class MaskTool {
             if (this.brushHardness === 1) {
                 this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
             } else {
-                // hardness: 1 = hard edge, 0 = soft edge
+
                 const innerRadius = gradientRadius * this.brushHardness;
                 const gradient = this.maskCtx.createRadialGradient(
                     canvasX, canvasY, innerRadius,
@@ -281,18 +281,16 @@ export class MaskTool {
     }
 
     setMask(image) {
-        // `this.x` i `this.y` przechowują pozycję lewego górnego rogu płótna maski
-        // względem lewego górnego rogu widoku. Zatem (-this.x, -this.y) to pozycja
-        // lewego górnego rogu widoku na płótnie maski.
+
+
+
         const destX = -this.x;
         const destY = -this.y;
 
-        // Wyczyść tylko ten obszar na dużym płótnie maski, który odpowiada
-        // widocznemu obszarowi wyjściowemu.
+
         this.maskCtx.clearRect(destX, destY, this.canvasInstance.width, this.canvasInstance.height);
 
-        // Narysuj nowy obraz maski (który ma rozmiar obszaru wyjściowego)
-        // dokładnie w tym wyczyszczonym miejscu.
+
         this.maskCtx.drawImage(image, destX, destY);
 
         if (this.onStateChange) {

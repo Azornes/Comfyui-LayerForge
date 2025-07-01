@@ -194,8 +194,7 @@ export class CanvasInteractions {
             this.resetInteractionState();
             this.canvas.render();
         }
-        
-        // Clear internal clipboard when mouse leaves canvas
+
         if (this.canvas.canvasLayers.internalClipboard.length > 0) {
             this.canvas.canvasLayers.internalClipboard = [];
             log.info("Internal clipboard cleared - mouse left canvas");

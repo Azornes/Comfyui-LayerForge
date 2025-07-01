@@ -50,19 +50,15 @@ export class Canvas {
         this.dataInitialized = false;
         this.pendingDataCheck = null;
         this.imageCache = new Map();
-        
-        // Inicjalizacja modułów
+
         this._initializeModules(callbacks);
-        
-        // Podstawowa konfiguracja
+
         this._setupCanvas();
-        
-        // Delegacja interaction dla kompatybilności wstecznej
+
         this.interaction = this.canvasInteractions.interaction;
 
         console.log('Canvas widget element:', this.node);
-                
-        // Dodaj metodę do kontroli widoczności podglądu
+
         this.previewVisible = true; // Domyślnie widoczny
         this.setPreviewVisibility(false);
     }
@@ -95,16 +91,14 @@ export class Canvas {
     async setPreviewVisibility(visible) {
         this.previewVisible = visible;
         console.log("Canvas preview visibility set to:", visible);
-        
-        // Znajdź i kontroluj ImagePreviewWidget
+
         const imagePreviewWidget = await this.waitForWidget("$$canvas-image-preview", this.node);
         if (imagePreviewWidget) {
             console.log("Found $$canvas-image-preview widget, controlling visibility");
             
             if (visible) {
                 console.log("=== SHOWING WIDGET ===");
-                
-                // Pokaż widget
+
                 if (imagePreviewWidget.options) {
                     imagePreviewWidget.options.hidden = false;
                 }
@@ -123,8 +117,7 @@ export class Canvas {
                 console.log("ImagePreviewWidget shown");
             } else {
                 console.log("=== HIDING WIDGET ===");
-                
-                // Ukryj widget
+
                 if (imagePreviewWidget.options) {
                     imagePreviewWidget.options.hidden = true;
                 }
@@ -154,7 +147,7 @@ export class Canvas {
      * @private
      */
     _initializeModules(callbacks) {
-        // Moduły są publiczne dla bezpośredniego dostępu gdy potrzebne
+
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.canvasState = new CanvasState(this);
         this.canvasInteractions = new CanvasInteractions(this);
@@ -172,17 +165,15 @@ export class Canvas {
         this.initCanvas();
         this.canvasInteractions.setupEventListeners();
         this.canvasIO.initNodeData();
-        
-        // Inicjalizacja warstw z domyślną przezroczystością
+
         this.layers = this.layers.map(layer => ({
             ...layer,
             opacity: 1
         }));
     }
 
-    // ==========================================
-    // GŁÓWNE OPERACJE FASADY
-    // ==========================================
+
+
 
     /**
      * Ładuje stan canvas z bazy danych
@@ -300,9 +291,8 @@ export class Canvas {
         return this.canvasIO.importLatestImage();
     }
 
-    // ==========================================
-    // OPERACJE NA MASCE
-    // ==========================================
+
+
 
     /**
      * Uruchamia edytor masek
@@ -310,11 +300,10 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
-        // Zapisz obecny stan maski przed otwarciem editora (dla obsługi Cancel)
+
         this.savedMaskState = await this.saveMaskState();
         this.maskEditorCancelled = false;
-        
-        // Jeśli nie ma predefiniowanej maski, stwórz ją z istniejącej maski canvas
+
         if (!predefinedMask && this.maskTool && this.maskTool.maskCanvas) {
             try {
                 predefinedMask = await this.createMaskFromCurrentMask();
@@ -322,17 +311,15 @@ export class Canvas {
                 log.warn("Could not create mask from current mask:", error);
             }
         }
-        
-        // Przechowaj maskę do późniejszego użycia
+
         this.pendingMask = predefinedMask;
-        
-        // Wybierz odpowiednią metodę w zależności od parametru sendCleanImage
+
         let blob;
         if (sendCleanImage) {
-            // Wyślij czysty obraz bez maski (domyślne zachowanie)
+
             blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
         } else {
-            // Używamy specjalnej metody która łączy pełny obraz z istniejącą maską
+
             blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
         }
         
@@ -373,11 +360,9 @@ export class Canvas {
         
         this.editorWasShowing = false;
         this.waitWhileMaskEditing();
-        
-        // Nasłuchuj na przycisk Cancel
+
         this.setupCancelListener();
-        
-        // Jeśli mamy predefiniowaną maskę, czekaj na otwarcie editora i nałóż ją
+
         if (predefinedMask) {
             this.waitForMaskEditorAndApplyMask();
         }
@@ -388,9 +373,8 @@ export class Canvas {
         }
     }
 
-    // ==========================================
-    // METODY POMOCNICZE
-    // ==========================================
+
+
 
     /**
      * Inicjalizuje podstawowe właściwości canvas
@@ -503,9 +487,8 @@ export class Canvas {
         }
     }
 
-    // ==========================================
-    // METODY DLA EDYTORA MASEK
-    // ==========================================
+
+
 
     /**
      * Czeka na otwarcie mask editora i automatycznie nakłada predefiniowaną maskę
@@ -518,15 +501,15 @@ export class Canvas {
             attempts++;
             
             if (mask_editor_showing(app)) {
-                // Editor się otworzył - sprawdź czy jest w pełni zainicjalizowany
+
                 const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
                 let editorReady = false;
                 
                 if (useNewEditor) {
-                    // Sprawdź czy nowy editor jest gotowy - różne metody wykrywania
+
                     const MaskEditorDialog = window.MaskEditorDialog;
                     if (MaskEditorDialog && MaskEditorDialog.instance) {
-                        // Sprawdź czy ma MessageBroker i czy canvas jest dostępny
+
                         try {
                             const messageBroker = MaskEditorDialog.instance.getMessageBroker();
                             if (messageBroker) {
@@ -534,16 +517,15 @@ export class Canvas {
                                 log.info("New mask editor detected as ready via MessageBroker");
                             }
                         } catch (e) {
-                            // MessageBroker jeszcze nie gotowy
+
                             editorReady = false;
                         }
                     }
-                    
-                    // Alternatywne wykrywanie - sprawdź czy istnieje element maskEditor
+
                     if (!editorReady) {
                         const maskEditorElement = document.getElementById('maskEditor');
                         if (maskEditorElement && maskEditorElement.style.display !== 'none') {
-                            // Sprawdź czy ma canvas wewnątrz
+
                             const canvas = maskEditorElement.querySelector('canvas');
                             if (canvas) {
                                 editorReady = true;
@@ -552,7 +534,7 @@ export class Canvas {
                         }
                     }
                 } else {
-                    // Sprawdź czy stary editor jest gotowy
+
                     const maskCanvas = document.getElementById('maskCanvas');
                     editorReady = maskCanvas && maskCanvas.getContext && maskCanvas.width > 0;
                     if (editorReady) {
@@ -561,21 +543,21 @@ export class Canvas {
                 }
                 
                 if (editorReady) {
-                    // Editor jest gotowy - nałóż maskę po krótkim opóźnieniu
+
                     log.info("Applying mask to editor after", attempts * 100, "ms wait");
                     setTimeout(() => {
                         this.applyMaskToEditor(this.pendingMask);
                         this.pendingMask = null; // Wyczyść po użyciu
                     }, 300); // Krótsze opóźnienie gdy już wiemy że jest gotowy
                 } else if (attempts < maxAttempts) {
-                    // Editor widoczny ale nie gotowy - sprawdź ponownie
+
                     if (attempts % 10 === 0) {
                         log.info("Waiting for mask editor to be ready... attempt", attempts, "/", maxAttempts);
                     }
                     setTimeout(checkEditor, 100);
                 } else {
                     log.warn("Mask editor timeout - editor not ready after", maxAttempts * 100, "ms");
-                    // Spróbuj nałożyć maskę mimo wszystko
+
                     log.info("Attempting to apply mask anyway...");
                     setTimeout(() => {
                         this.applyMaskToEditor(this.pendingMask);
@@ -583,7 +565,7 @@ export class Canvas {
                     }, 100);
                 }
             } else if (attempts < maxAttempts) {
-                // Editor jeszcze nie widoczny - sprawdź ponownie
+
                 setTimeout(checkEditor, 100);
             } else {
                 log.warn("Mask editor timeout - editor not showing after", maxAttempts * 100, "ms");
@@ -600,28 +582,28 @@ export class Canvas {
      */
     async applyMaskToEditor(maskData) {
         try {
-            // Sprawdź czy używamy nowego czy starego editora
+
             const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
             
             if (useNewEditor) {
-                // Sprawdź czy nowy editor jest rzeczywiście dostępny
+
                 const MaskEditorDialog = window.MaskEditorDialog;
                 if (MaskEditorDialog && MaskEditorDialog.instance) {
-                    // Nowy editor - użyj MessageBroker
+
                     await this.applyMaskToNewEditor(maskData);
                 } else {
                     log.warn("New editor setting enabled but instance not found, trying old editor");
                     await this.applyMaskToOldEditor(maskData);
                 }
             } else {
-                // Stary editor - bezpośredni dostęp do canvas
+
                 await this.applyMaskToOldEditor(maskData);
             }
             
             log.info("Predefined mask applied to mask editor successfully");
         } catch (error) {
             log.error("Failed to apply predefined mask to editor:", error);
-            // Spróbuj alternatywną metodę
+
             try {
                 log.info("Trying alternative mask application method...");
                 await this.applyMaskToOldEditor(maskData);
@@ -637,7 +619,7 @@ export class Canvas {
      * @param {Image|HTMLCanvasElement} maskData - Dane maski
      */
     async applyMaskToNewEditor(maskData) {
-        // Pobierz instancję nowego editora
+
         const MaskEditorDialog = window.MaskEditorDialog;
         if (!MaskEditorDialog || !MaskEditorDialog.instance) {
             throw new Error("New mask editor instance not found");
@@ -645,20 +627,16 @@ export class Canvas {
 
         const editor = MaskEditorDialog.instance;
         const messageBroker = editor.getMessageBroker();
-        
-        // Pobierz canvas maski z editora
+
         const maskCanvas = await messageBroker.pull('maskCanvas');
         const maskCtx = await messageBroker.pull('maskCtx');
         const maskColor = await messageBroker.pull('getMaskColor');
 
-        // Konwertuj maskę do odpowiedniego formatu
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
-        
-        // Nałóż maskę na canvas
+
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.drawImage(processedMask, 0, 0);
-        
-        // Zapisz stan dla undo/redo
+
         messageBroker.publish('saveState');
     }
 
@@ -667,19 +645,17 @@ export class Canvas {
      * @param {Image|HTMLCanvasElement} maskData - Dane maski
      */
     async applyMaskToOldEditor(maskData) {
-        // Znajdź canvas maski w starym edytorze
+
         const maskCanvas = document.getElementById('maskCanvas');
         if (!maskCanvas) {
             throw new Error("Old mask editor canvas not found");
         }
 
         const maskCtx = maskCanvas.getContext('2d');
-        
-        // Konwertuj maskę do odpowiedniego formatu (dla starego editora używamy białego koloru)
+
         const maskColor = { r: 255, g: 255, b: 255 };
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
-        
-        // Nałóż maskę na canvas
+
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.drawImage(processedMask, 0, 0);
     }
@@ -707,18 +683,14 @@ export class Canvas {
         tempCanvas.height = targetHeight;
         const tempCtx = tempCanvas.getContext('2d');
 
-        // Wyczyść canvas
         tempCtx.clearRect(0, 0, targetWidth, targetHeight);
 
-        // Skaluj maskę do originalSize zamiast targetSize
-        // originalSize to prawdziwy rozmiar obrazu w mask editorze
+
         const scaleToOriginal = Math.min(originalWidth / this.width, originalHeight / this.height);
-        
-        // Maska powinna pokryć cały obszar originalSize
+
         const scaledWidth = this.width * scaleToOriginal;
         const scaledHeight = this.height * scaleToOriginal;
-        
-        // Wyśrodkuj na target canvas (który reprezentuje viewport mask editora)
+
         const offsetX = (targetWidth - scaledWidth) / 2;
         const offsetY = (targetHeight - scaledHeight) / 2;
         
@@ -733,22 +705,18 @@ export class Canvas {
             offset: { x: offsetX, y: offsetY }
         });
 
-        // Pobierz dane obrazu i przetwórz je
         const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
         const data = imageData.data;
 
-        // Konwertuj maskę do formatu editora (alpha channel jako maska)
         for (let i = 0; i < data.length; i += 4) {
             const alpha = data[i + 3]; // Oryginalny kanał alpha
-            
-            // Ustaw kolor maski
+
             data[i] = maskColor.r;     // R
             data[i + 1] = maskColor.g; // G
             data[i + 2] = maskColor.b; // B
             data[i + 3] = alpha;       // Zachowaj oryginalny alpha
         }
 
-        // Zapisz przetworzone dane z powrotem
         tempCtx.putImageData(imageData, 0, 0);
         
         log.info("Mask processing completed - full size scaling applied");
@@ -833,20 +801,18 @@ export class Canvas {
         const maskCtx = this.maskTool.maskCtx;
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
-        
-        // Zamiast dodawać maskę (screen), zastąp całą maskę (source-over)
-        // Najpierw wyczyść obszar który będzie zastąpiony
+
+
         maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.clearRect(destX, destY, this.width, this.height);
-        
-        // Teraz narysuj nową maskę
+
         maskCtx.drawImage(maskAsImage, destX, destY);
         
         this.render();
         this.saveState();
         
         const new_preview = new Image();
-        // Użyj nowej metody z maską jako kanałem alpha
+
         const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
         if (blob) {
             new_preview.src = URL.createObjectURL(blob);
@@ -859,9 +825,8 @@ export class Canvas {
         this.render();
     }
 
-    // ==========================================
-    // OBSŁUGA ANULOWANIA MASK EDITORA
-    // ==========================================
+
+
 
     /**
      * Zapisuje obecny stan maski przed otwarciem editora
@@ -872,7 +837,6 @@ export class Canvas {
             return null;
         }
 
-        // Skopiuj dane z mask canvas
         const maskCanvas = this.maskTool.maskCanvas;
         const savedCanvas = document.createElement('canvas');
         savedCanvas.width = maskCanvas.width;
@@ -898,14 +862,12 @@ export class Canvas {
             return;
         }
 
-        // Przywróć dane maski
         if (savedState.maskData) {
             const maskCtx = this.maskTool.maskCtx;
             maskCtx.clearRect(0, 0, this.maskTool.maskCanvas.width, this.maskTool.maskCanvas.height);
             maskCtx.drawImage(savedState.maskData, 0, 0);
         }
 
-        // Przywróć pozycję maski
         if (savedState.maskPosition) {
             this.maskTool.x = savedState.maskPosition.x;
             this.maskTool.y = savedState.maskPosition.y;
@@ -930,25 +892,20 @@ export class Canvas {
      */
     async handleMaskEditorClose() {
         console.log("Node object after mask editor close:", this.node);
-        
-        // Sprawdź czy editor został anulowany
+
         if (this.maskEditorCancelled) {
             log.info("Mask editor was cancelled - restoring original mask state");
-            
-            // Przywróć oryginalny stan maski
+
             if (this.savedMaskState) {
                 await this.restoreMaskState(this.savedMaskState);
             }
-            
-            // Wyczyść flagi
+
             this.maskEditorCancelled = false;
             this.savedMaskState = null;
-            
-            // Nie przetwarzaj wyniku z editora
+
             return;
         }
 
-        // Kontynuuj normalną obsługę save
         if (!this.node.imgs || !this.node.imgs.length === 0 || !this.node.imgs[0].src) {
             log.warn("Mask editor was closed without a result.");
             return;
@@ -995,20 +952,18 @@ export class Canvas {
         const maskCtx = this.maskTool.maskCtx;
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
-        
-        // Zamiast dodawać maskę (screen), zastąp całą maskę (source-over)
-        // Najpierw wyczyść obszar który będzie zastąpiony
+
+
         maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.clearRect(destX, destY, this.width, this.height);
-        
-        // Teraz narysuj nową maskę
+
         maskCtx.drawImage(maskAsImage, destX, destY);
         
         this.render();
         this.saveState();
         
         const new_preview = new Image();
-        // Użyj nowej metody z maską jako kanałem alpha
+
         const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
         if (blob) {
             new_preview.src = URL.createObjectURL(blob);
@@ -1019,8 +974,7 @@ export class Canvas {
         }
 
         this.render();
-        
-        // Wyczyść zapisany stan po pomyślnym save
+
         this.savedMaskState = null;
     }
 }
