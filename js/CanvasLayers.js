@@ -34,39 +34,34 @@ export class CanvasLayers {
 
     async copySelectedLayers() {
         if (this.canvas.selectedLayers.length === 0) return;
-        
-        // Always copy to internal clipboard first
+
         this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
         log.info(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
-        
-        // Get flattened image
+
         const blob = await this.getFlattenedSelectionAsBlob();
         if (!blob) {
             log.warn("Failed to create flattened selection blob");
             return;
         }
 
-        // Copy to external clipboard based on preference
         if (this.clipboardPreference === 'clipspace') {
             try {
-                // Copy to ComfyUI Clipspace
+
                 const dataURL = await new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = () => resolve(reader.result);
                     reader.readAsDataURL(blob);
                 });
-                
-                // Create temporary image for clipspace
+
                 const img = new Image();
                 img.onload = () => {
-                    // Add to ComfyUI Clipspace
+
                     if (this.canvas.node.imgs) {
                         this.canvas.node.imgs = [img];
                     } else {
                         this.canvas.node.imgs = [img];
                     }
-                    
-                    // Use ComfyUI's clipspace functionality
+
                     if (ComfyApp.copyToClipspace) {
                         ComfyApp.copyToClipspace(this.canvas.node);
                         log.info("Flattened selection copied to ComfyUI Clipspace.");
@@ -78,7 +73,7 @@ export class CanvasLayers {
                 
             } catch (error) {
                 log.error("Failed to copy image to ComfyUI Clipspace:", error);
-                // Fallback to system clipboard
+
                 try {
                     const item = new ClipboardItem({'image/png': blob});
                     await navigator.clipboard.write([item]);
@@ -88,7 +83,7 @@ export class CanvasLayers {
                 }
             }
         } else {
-            // Copy to system clipboard (default behavior)
+
             try {
                 const item = new ClipboardItem({'image/png': blob});
                 await navigator.clipboard.write([item]);
@@ -140,7 +135,6 @@ export class CanvasLayers {
         try {
             log.info(`Paste operation started with preference: ${this.clipboardPreference}`);
 
-            // Delegate all clipboard handling to ClipboardManager (it will check internal clipboard first)
             await this.clipboardManager.handlePaste(addMode, this.clipboardPreference);
 
         } catch (err) {
@@ -478,7 +472,6 @@ export class CanvasLayers {
             min-width: 200px;
         `;
 
-        // Create draggable title bar
         const titleBar = document.createElement('div');
         titleBar.style.cssText = `
             background: #3a3a3a;
@@ -493,7 +486,6 @@ export class CanvasLayers {
         `;
         titleBar.textContent = 'Blend Mode';
 
-        // Create content area
         const content = document.createElement('div');
         content.style.cssText = `
             padding: 5px;
@@ -502,7 +494,6 @@ export class CanvasLayers {
         menu.appendChild(titleBar);
         menu.appendChild(content);
 
-        // Add drag functionality
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
 
@@ -510,8 +501,7 @@ export class CanvasLayers {
             if (isDragging) {
                 const newX = e.clientX - dragOffset.x;
                 const newY = e.clientY - dragOffset.y;
-                
-                // Keep menu within viewport bounds
+
                 const maxX = window.innerWidth - menu.offsetWidth;
                 const maxY = window.innerHeight - menu.offsetHeight;
                 
@@ -530,13 +520,12 @@ export class CanvasLayers {
 
         titleBar.addEventListener('mousedown', (e) => {
             isDragging = true;
-            // Calculate offset from mouse position to menu's top-left corner
+
             dragOffset.x = e.clientX - parseInt(menu.style.left);
             dragOffset.y = e.clientY - parseInt(menu.style.top);
             e.preventDefault();
             e.stopPropagation();
-            
-            // Add global event listeners for dragging
+
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
         });

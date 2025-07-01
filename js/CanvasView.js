@@ -582,7 +582,7 @@ async function createCanvasWidget(node, widget, app) {
                         textContent: "Paste Image",
                         title: "Paste image from clipboard",
                         onclick: () => {
-                            // Use the direct handlePaste method from CanvasLayers
+
                             const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
                             const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
                             canvas.canvasLayers.handlePaste(addMode);
@@ -1091,8 +1091,8 @@ async function createCanvasWidget(node, widget, app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer]);
-    // Drag & drop is now handled by CanvasInteractions.js
-    // Removed duplicate handlers to prevent double loading
+
+
 
     const mainWidget = node.addDOMWidget("mainContainer", "widget", mainContainer);
 

@@ -20,14 +20,12 @@ export class ClipboardManager {
         try {
             log.info(`ClipboardManager handling paste with preference: ${preference}`);
 
-            // PRIORITY 1: Check internal clipboard first (copied layers)
             if (this.canvas.canvasLayers.internalClipboard.length > 0) {
                 log.info("Found layers in internal clipboard, pasting layers");
                 this.canvas.canvasLayers.pasteLayers();
                 return true;
             }
 
-            // PRIORITY 2: Check external clipboard based on preference
             if (preference === 'clipspace') {
                 log.info("Attempting paste from ComfyUI Clipspace");
                 const success = await this.tryClipspacePaste(addMode);
@@ -37,7 +35,6 @@ export class ClipboardManager {
                 log.info("No image found in ComfyUI Clipspace");
             }
 
-            // PRIORITY 3: Always try system clipboard (either as primary or fallback)
             log.info("Attempting paste from system clipboard");
             return await this.trySystemClipboardPaste(addMode);
 
@@ -83,16 +80,14 @@ export class ClipboardManager {
      */
     async trySystemClipboardPaste(addMode) {
         log.info("ClipboardManager: Checking system clipboard for images and paths");
-        
-        // First try modern clipboard API for both images and text
+
         if (navigator.clipboard?.read) {
             try {
                 const clipboardItems = await navigator.clipboard.read();
                 
                 for (const item of clipboardItems) {
                     log.debug("Clipboard item types:", item.types);
-                    
-                    // Check for image data first
+
                     const imageType = item.types.find(type => type.startsWith('image/'));
                     if (imageType) {
                         try {
@@ -113,8 +108,7 @@ export class ClipboardManager {
                             log.debug("Error reading image data:", error);
                         }
                     }
-                    
-                    // Check for text types (file paths, URLs)
+
                     const textTypes = ['text/plain', 'text/uri-list'];
                     for (const textType of textTypes) {
                         if (item.types.includes(textType)) {
@@ -140,7 +134,6 @@ export class ClipboardManager {
             }
         }
 
-        // Fallback to text-only API
         if (navigator.clipboard?.readText) {
             try {
                 const text = await navigator.clipboard.readText();
@@ -173,17 +166,14 @@ export class ClipboardManager {
             return false;
         }
 
-        // Trim whitespace
         text = text.trim();
 
-        // Check if it's empty after trimming
         if (!text) {
             return false;
         }
 
-        // Check if it's a URL first (URLs have priority and don't need file extensions)
         if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('file://')) {
-            // For URLs, we're more permissive - any valid URL could potentially be an image
+
             try {
                 new URL(text);
                 log.debug("Detected valid URL:", text);
@@ -194,13 +184,11 @@ export class ClipboardManager {
             }
         }
 
-        // For local file paths, check for image extensions
         const imageExtensions = [
             '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', 
             '.svg', '.tiff', '.tif', '.ico', '.avif'
         ];
 
-        // Check if the text ends with a valid image extension (case insensitive)
         const hasImageExtension = imageExtensions.some(ext => 
             text.toLowerCase().endsWith(ext)
         );
@@ -210,8 +198,7 @@ export class ClipboardManager {
             return false;
         }
 
-        // Basic path validation for local files - should look like a file path
-        // Accept both Windows and Unix style paths
+
         const pathPatterns = [
             /^[a-zA-Z]:[\\\/]/, // Windows absolute path (C:\... or C:/...)
             /^[\\\/]/, // Unix absolute path (/...)
@@ -238,7 +225,7 @@ export class ClipboardManager {
      * @returns {Promise<boolean>} - True if successful, false otherwise
      */
     async loadImageFromPath(filePath, addMode) {
-        // Method 1: Direct loading for URLs
+
         if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
             try {
                 const img = new Image();
@@ -261,7 +248,6 @@ export class ClipboardManager {
             }
         }
 
-        // Method 2: Load local files via backend endpoint
         try {
             log.info("Attempting to load local file via backend");
             const success = await this.loadFileViaBackend(filePath, addMode);
@@ -272,7 +258,6 @@ export class ClipboardManager {
             log.warn("Backend loading failed:", error);
         }
 
-        // Method 3: Fallback to file picker
         try {
             log.info("Falling back to file picker");
             const success = await this.promptUserForFile(filePath, addMode);
@@ -283,7 +268,6 @@ export class ClipboardManager {
             log.warn("File picker failed:", error);
         }
 
-        // Method 4: Show user a helpful message
         this.showFilePathMessage(filePath);
         return false;
     }
@@ -297,8 +281,7 @@ export class ClipboardManager {
     async loadFileViaBackend(filePath, addMode) {
         try {
             log.info("Loading file via ComfyUI backend:", filePath);
-            
-            // Use the backend endpoint to load image from path
+
             const response = await api.fetchApi("/ycnode/load_image_from_path", {
                 method: "POST",
                 headers: {
@@ -323,8 +306,7 @@ export class ClipboardManager {
             }
             
             log.info("Successfully loaded image via ComfyUI backend:", filePath);
-            
-            // Create image from the returned base64 data
+
             const img = new Image();
             const success = await new Promise((resolve) => {
                 img.onload = async () => {
@@ -356,13 +338,12 @@ export class ClipboardManager {
      */
     async promptUserForFile(originalPath, addMode) {
         return new Promise((resolve) => {
-            // Create a temporary file input
+
             const fileInput = document.createElement('input');
             fileInput.type = 'file';
             fileInput.accept = 'image/*';
             fileInput.style.display = 'none';
 
-            // Extract filename from path for user reference
             const fileName = originalPath.split(/[\\\/]/).pop();
 
             fileInput.onchange = async (event) => {
@@ -396,8 +377,7 @@ export class ClipboardManager {
                     log.warn("Selected file is not an image");
                     resolve(false);
                 }
-                
-                // Clean up
+
                 document.body.removeChild(fileInput);
             };
 
@@ -407,10 +387,8 @@ export class ClipboardManager {
                 resolve(false);
             };
 
-            // Show a brief notification to the user
             this.showNotification(`Detected image path: ${fileName}. Please select the file to load it.`, 3000);
 
-            // Add to DOM and trigger click
             document.body.appendChild(fileInput);
             fileInput.click();
         });
@@ -433,8 +411,7 @@ export class ClipboardManager {
      */
     showEmptyClipboardMessage(addMode) {
         const message = `Copied a file? Browser can't access file paths for security. Click here to select the file manually.`;
-        
-        // Create clickable notification
+
         const notification = document.createElement('div');
         notification.style.cssText = `
             position: fixed;
@@ -464,7 +441,6 @@ export class ClipboardManager {
             </div>
         `;
 
-        // Add hover effect
         notification.onmouseenter = () => {
             notification.style.backgroundColor = '#3d6bb0';
             notification.style.borderColor = '#5a8bd8';
@@ -476,7 +452,6 @@ export class ClipboardManager {
             notification.style.transform = 'translateY(0)';
         };
 
-        // Add click handler to open file picker
         notification.onclick = async () => {
             document.body.removeChild(notification);
             try {
@@ -489,10 +464,8 @@ export class ClipboardManager {
             }
         };
 
-        // Add to DOM
         document.body.appendChild(notification);
 
-        // Auto-remove after longer duration
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
@@ -508,7 +481,7 @@ export class ClipboardManager {
      * @param {number} duration - Duration in milliseconds
      */
     showNotification(message, duration = 3000) {
-        // Create notification element
+
         const notification = document.createElement('div');
         notification.style.cssText = `
             position: fixed;
@@ -526,10 +499,8 @@ export class ClipboardManager {
         `;
         notification.textContent = message;
 
-        // Add to DOM
         document.body.appendChild(notification);
 
-        // Remove after duration
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);

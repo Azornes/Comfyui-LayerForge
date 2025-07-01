@@ -33,8 +33,7 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('wheel', this.handleWheel.bind(this), {passive: false});
         this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
-        
-        // Add paste event listener like ComfyUI does
+
         document.addEventListener('paste', this.handlePasteEvent.bind(this));
 
         this.canvas.canvas.addEventListener('mouseenter', (e) => {
@@ -46,13 +45,11 @@ export class CanvasInteractions {
             this.handleMouseLeave(e);
         });
 
-        // Add drag & drop support
         this.canvas.canvas.addEventListener('dragover', this.handleDragOver.bind(this));
         this.canvas.canvas.addEventListener('dragenter', this.handleDragEnter.bind(this));
         this.canvas.canvas.addEventListener('dragleave', this.handleDragLeave.bind(this));
         this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this));
-        
-        // Prevent default context menu on canvas
+
         this.canvas.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     }
 
@@ -98,7 +95,6 @@ export class CanvasInteractions {
         }
         this.interaction.lastClickTime = currentTime;
 
-        // Check for right click to show blend mode menu on selected layers
         if (e.button === 2) {
             const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
             if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
@@ -108,7 +104,6 @@ export class CanvasInteractions {
             }
         }
 
-        // Check for Shift key first to start output area drawing, ignoring layers
         if (e.shiftKey) {
             this.startCanvasResize(worldCoords);
             this.canvas.render();
@@ -230,7 +225,7 @@ export class CanvasInteractions {
     }
 
     handleContextMenu(e) {
-        // Prevent default context menu on canvas
+
         e.preventDefault();
     }
 
@@ -375,8 +370,8 @@ export class CanvasInteractions {
                 return;
             }
             if (e.key.toLowerCase() === 'v') {
-                // Don't prevent default - let the natural paste event fire
-                // which is handled by handlePasteEvent
+
+
                 return;
             }
         }
@@ -742,7 +737,6 @@ export class CanvasInteractions {
         }
     }
 
-    // Drag & Drop handlers
     handleDragOver(e) {
         e.preventDefault();
         e.stopPropagation(); // Prevent ComfyUI from handling this event
@@ -759,7 +753,7 @@ export class CanvasInteractions {
     handleDragLeave(e) {
         e.preventDefault();
         e.stopPropagation(); // Prevent ComfyUI from handling this event
-        // Only reset if we're actually leaving the canvas (not just moving between child elements)
+
         if (!this.canvas.canvas.contains(e.relatedTarget)) {
             this.canvas.canvas.style.backgroundColor = '';
             this.canvas.canvas.style.border = '';
@@ -771,8 +765,7 @@ export class CanvasInteractions {
         e.stopPropagation(); // CRITICAL: Prevent ComfyUI from handling this event and loading workflow
         
         log.info("Canvas drag & drop event intercepted - preventing ComfyUI workflow loading");
-        
-        // Reset visual feedback
+
         this.canvas.canvas.style.backgroundColor = '';
         this.canvas.canvas.style.border = '';
 
@@ -800,11 +793,10 @@ export class CanvasInteractions {
         reader.onload = async (e) => {
             const img = new Image();
             img.onload = async () => {
-                // Check fit_on_add widget to determine add mode
+
                 const fitOnAddWidget = this.canvas.node.widgets.find(w => w.name === "fit_on_add");
                 const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                
-                // Use the same method as "Add Image" button for consistency
+
                 await this.canvas.addLayer(img, {}, addMode);
             };
             img.onerror = () => {
@@ -818,9 +810,8 @@ export class CanvasInteractions {
         reader.readAsDataURL(file);
     }
 
-    // Paste event handler that respects clipboard preference
     async handlePasteEvent(e) {
-        // Check if we should handle this paste event
+
         const shouldHandle = this.canvas.isMouseOver || 
                            this.canvas.canvas.contains(document.activeElement) ||
                            document.activeElement === this.canvas.canvas ||
@@ -832,20 +823,18 @@ export class CanvasInteractions {
         }
 
         log.info("Paste event detected, checking clipboard preference");
-        
-        // Check clipboard preference first
+
         const preference = this.canvas.canvasLayers.clipboardPreference;
         
         if (preference === 'clipspace') {
-            // For clipspace preference, always delegate to ClipboardManager
+
             log.info("Clipboard preference is clipspace, delegating to ClipboardManager");
             e.preventDefault();
             e.stopPropagation();
             await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
             return;
         }
-        
-        // For system preference, check direct image data first, then delegate
+
         const clipboardData = e.clipboardData;
         if (clipboardData && clipboardData.items) {
             for (const item of clipboardData.items) {
@@ -870,8 +859,7 @@ export class CanvasInteractions {
                 }
             }
         }
-        
-        // If no direct image data, delegate to ClipboardManager with system preference
+
         await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
     }
 }
