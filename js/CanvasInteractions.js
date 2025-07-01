@@ -51,6 +51,9 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('dragenter', this.handleDragEnter.bind(this));
         this.canvas.canvas.addEventListener('dragleave', this.handleDragLeave.bind(this));
         this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this));
+        
+        // Prevent default context menu on canvas
+        this.canvas.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     }
 
     resetInteractionState() {
@@ -95,6 +98,23 @@ export class CanvasInteractions {
         }
         this.interaction.lastClickTime = currentTime;
 
+        // Check for right click to show blend mode menu on selected layers
+        if (e.button === 2) {
+            const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
+            if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
+                e.preventDefault(); // Prevent context menu
+                this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x ,viewCoords.y);
+                return;
+            }
+        }
+
+        // Check for Shift key first to start output area drawing, ignoring layers
+        if (e.shiftKey) {
+            this.startCanvasResize(worldCoords);
+            this.canvas.render();
+            return;
+        }
+
         const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
         if (transformTarget) {
             this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
@@ -103,18 +123,11 @@ export class CanvasInteractions {
 
         const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
         if (clickedLayerResult) {
-            if (e.shiftKey && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
-                this.canvas.canvasLayers.showBlendModeMenu(e.clientX, e.clientY);
-                return;
-            }
             this.startLayerDrag(clickedLayerResult.layer, worldCoords);
             return;
         }
-        if (e.shiftKey) {
-            this.startCanvasResize(worldCoords);
-        } else {
-            this.startPanning(e);
-        }
+        
+        this.startPanning(e);
 
         this.canvas.render();
     }
@@ -214,6 +227,11 @@ export class CanvasInteractions {
         if (this.canvas.maskTool.isActive) {
             this.canvas.maskTool.handleMouseEnter();
         }
+    }
+
+    handleContextMenu(e) {
+        // Prevent default context menu on canvas
+        e.preventDefault();
     }
 
     handleWheel(e) {

@@ -473,10 +473,73 @@ export class CanvasLayers {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
             border-radius: 4px;
-            padding: 5px;
             z-index: 10000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            min-width: 200px;
         `;
+
+        // Create draggable title bar
+        const titleBar = document.createElement('div');
+        titleBar.style.cssText = `
+            background: #3a3a3a;
+            color: white;
+            padding: 8px 10px;
+            cursor: move;
+            user-select: none;
+            border-radius: 3px 3px 0 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #4a4a4a;
+        `;
+        titleBar.textContent = 'Blend Mode';
+
+        // Create content area
+        const content = document.createElement('div');
+        content.style.cssText = `
+            padding: 5px;
+        `;
+
+        menu.appendChild(titleBar);
+        menu.appendChild(content);
+
+        // Add drag functionality
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        const handleMouseMove = (e) => {
+            if (isDragging) {
+                const newX = e.clientX - dragOffset.x;
+                const newY = e.clientY - dragOffset.y;
+                
+                // Keep menu within viewport bounds
+                const maxX = window.innerWidth - menu.offsetWidth;
+                const maxY = window.innerHeight - menu.offsetHeight;
+                
+                menu.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                menu.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+            }
+        };
+
+        const handleMouseUp = () => {
+            if (isDragging) {
+                isDragging = false;
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+        };
+
+        titleBar.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            // Calculate offset from mouse position to menu's top-left corner
+            dragOffset.x = e.clientX - parseInt(menu.style.left);
+            dragOffset.y = e.clientY - parseInt(menu.style.top);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Add global event listeners for dragging
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
 
         this.blendModes.forEach(mode => {
             const container = document.createElement('div');
@@ -512,10 +575,10 @@ export class CanvasLayers {
             }
 
             option.onclick = () => {
-                menu.querySelectorAll('input[type="range"]').forEach(s => {
+                content.querySelectorAll('input[type="range"]').forEach(s => {
                     s.style.display = 'none';
                 });
-                menu.querySelectorAll('.blend-mode-container div').forEach(d => {
+                content.querySelectorAll('.blend-mode-container div').forEach(d => {
                     d.style.backgroundColor = '';
                 });
 
@@ -558,14 +621,14 @@ export class CanvasLayers {
 
             container.appendChild(option);
             container.appendChild(slider);
-            menu.appendChild(container);
+            content.appendChild(container);
         });
 
         const container = this.canvas.canvas.parentElement || document.body;
         container.appendChild(menu);
 
         const closeMenu = (e) => {
-            if (!menu.contains(e.target)) {
+            if (!menu.contains(e.target) && !isDragging) {
                 this.closeBlendModeMenu();
                 document.removeEventListener('mousedown', closeMenu);
             }

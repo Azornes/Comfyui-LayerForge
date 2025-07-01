@@ -241,12 +241,13 @@ async function createCanvasWidget(node, widget, app) {
         }
 
         .painter-tooltip table td:first-child {
-            width: 45%;
+            width: auto;
             white-space: nowrap;
+            min-width: fit-content;
         }
 
         .painter-tooltip table td:last-child {
-            width: 55%;
+            width: auto;
         }
 
         .painter-tooltip table tr:nth-child(odd) td {
