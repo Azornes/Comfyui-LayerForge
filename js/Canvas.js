@@ -57,7 +57,12 @@ export class Canvas {
 
         this.interaction = this.canvasInteractions.interaction;
 
-        console.log('Canvas widget element:', this.node);
+        log.debug('Canvas widget element:', this.node);
+        log.info('Canvas initialized', {
+            nodeId: this.node.id,
+            dimensions: { width: this.width, height: this.height },
+            viewport: this.viewport
+        });
 
         this.setPreviewVisibility(false);
     }
@@ -89,11 +94,11 @@ export class Canvas {
      */
     async setPreviewVisibility(visible) {
         this.previewVisible = visible;
-        console.log("Canvas preview visibility set to:", visible);
+        log.info("Canvas preview visibility set to:", visible);
 
         const imagePreviewWidget = await this.waitForWidget("$$canvas-image-preview", this.node);
         if (imagePreviewWidget) {
-            console.log("Found $$canvas-image-preview widget, controlling visibility");
+            log.debug("Found $$canvas-image-preview widget, controlling visibility");
 
             if (visible) {
                 if (imagePreviewWidget.options) {
@@ -125,7 +130,7 @@ export class Canvas {
             }
             this.render()
         } else {
-            console.warn("$$canvas-image-preview widget not found in Canvas.js");
+            log.warn("$$canvas-image-preview widget not found in Canvas.js");
         }
     }
 
@@ -134,6 +139,7 @@ export class Canvas {
      * @private
      */
     _initializeModules(callbacks) {
+        log.debug('Initializing Canvas modules...');
 
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.canvasState = new CanvasState(this);
@@ -142,6 +148,8 @@ export class Canvas {
         this.canvasRenderer = new CanvasRenderer(this);
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
+
+        log.debug('Canvas modules initialized successfully');
     }
 
     /**
@@ -179,6 +187,7 @@ export class Canvas {
      * @param {boolean} replaceLast - Czy zastąpić ostatni stan w historii
      */
     saveState(replaceLast = false) {
+        log.debug('Saving canvas state', { replaceLast, layersCount: this.layers.length });
         this.canvasState.saveState(replaceLast);
         this.incrementOperationCount();
         this._notifyStateChange();
@@ -188,9 +197,15 @@ export class Canvas {
      * Cofnij ostatnią operację
      */
     undo() {
+        log.info('Performing undo operation');
+        const historyInfo = this.canvasState.getHistoryInfo();
+        log.debug('History state before undo:', historyInfo);
+        
         this.canvasState.undo();
         this.incrementOperationCount();
         this._notifyStateChange();
+        
+        log.debug('Undo completed, layers count:', this.layers.length);
     }
 
 
@@ -198,9 +213,15 @@ export class Canvas {
      * Ponów cofniętą operację
      */
     redo() {
+        log.info('Performing redo operation');
+        const historyInfo = this.canvasState.getHistoryInfo();
+        log.debug('History state before redo:', historyInfo);
+        
         this.canvasState.redo();
         this.incrementOperationCount();
         this._notifyStateChange();
+        
+        log.debug('Redo completed, layers count:', this.layers.length);
     }
 
     /**
@@ -225,11 +246,20 @@ export class Canvas {
      */
     removeSelectedLayers() {
         if (this.selectedLayers.length > 0) {
+            log.info('Removing selected layers', { 
+                layersToRemove: this.selectedLayers.length,
+                totalLayers: this.layers.length 
+            });
+            
             this.saveState();
             this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
             this.updateSelection([]);
             this.render();
             this.saveState();
+            
+            log.debug('Layers removed successfully, remaining layers:', this.layers.length);
+        } else {
+            log.debug('No layers selected for removal');
         }
     }
 
@@ -238,8 +268,16 @@ export class Canvas {
      * @param {Array} newSelection - Nowa lista zaznaczonych warstw
      */
     updateSelection(newSelection) {
+        const previousSelection = this.selectedLayers.length;
         this.selectedLayers = newSelection || [];
         this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+        
+        log.debug('Selection updated', {
+            previousCount: previousSelection,
+            newCount: this.selectedLayers.length,
+            selectedLayerIds: this.selectedLayers.map(l => l.id || 'unknown')
+        });
+        
         if (this.onSelectionChange) {
             this.onSelectionChange();
         }
@@ -283,13 +321,20 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
+        log.info('Starting mask editor', { 
+            hasPredefinedMask: !!predefinedMask, 
+            sendCleanImage,
+            layersCount: this.layers.length 
+        });
 
         this.savedMaskState = await this.saveMaskState();
         this.maskEditorCancelled = false;
 
         if (!predefinedMask && this.maskTool && this.maskTool.maskCanvas) {
             try {
+                log.debug('Creating mask from current mask tool');
                 predefinedMask = await this.createMaskFromCurrentMask();
+                log.debug('Mask created from current mask tool successfully');
             } catch (error) {
                 log.warn("Could not create mask from current mask:", error);
             }
@@ -299,10 +344,10 @@ export class Canvas {
 
         let blob;
         if (sendCleanImage) {
-
+            log.debug('Getting flattened canvas as blob (clean image)');
             blob = await this.canvasLayers.getFlattenedCanvasAsBlob();
         } else {
-
+            log.debug('Getting flattened canvas for mask editor (with mask)');
             blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
         }
 
@@ -311,12 +356,16 @@ export class Canvas {
             return;
         }
 
+        log.debug('Canvas blob created successfully, size:', blob.size);
+
         try {
             const formData = new FormData();
             const filename = `layerforge-mask-edit-${+new Date()}.png`;
             formData.append("image", blob, filename);
             formData.append("overwrite", "true");
             formData.append("type", "temp");
+
+            log.debug('Uploading image to server:', filename);
 
             const response = await api.fetchApi("/upload/image", {
                 method: "POST",
@@ -328,6 +377,8 @@ export class Canvas {
             }
             const data = await response.json();
 
+            log.debug('Image uploaded successfully:', data);
+
             const img = new Image();
             img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
             await new Promise((res, rej) => {
@@ -337,6 +388,7 @@ export class Canvas {
 
             this.node.imgs = [img];
 
+            log.info('Opening ComfyUI mask editor');
             ComfyApp.copyToClipspace(this.node);
             ComfyApp.clipspace_return_node = this.node;
             ComfyApp.open_maskeditor();
@@ -347,6 +399,7 @@ export class Canvas {
             this.setupCancelListener();
 
             if (predefinedMask) {
+                log.debug('Will apply predefined mask when editor is ready');
                 this.waitForMaskEditorAndApplyMask();
             }
 
@@ -794,7 +847,8 @@ export class Canvas {
      * Sprawdza czy mask editor został anulowany i obsługuje to odpowiednio
      */
     async handleMaskEditorClose() {
-        console.log("Node object after mask editor close:", this.node);
+        log.info("Handling mask editor close");
+        log.debug("Node object after mask editor close:", this.node);
 
         if (this.maskEditorCancelled) {
             log.info("Mask editor was cancelled - restoring original mask state");
@@ -814,6 +868,8 @@ export class Canvas {
             return;
         }
 
+        log.debug("Processing mask editor result, image source:", this.node.imgs[0].src.substring(0, 100) + '...');
+
         const resultImage = new Image();
         resultImage.src = this.node.imgs[0].src;
 
@@ -822,12 +878,18 @@ export class Canvas {
                 resultImage.onload = resolve;
                 resultImage.onerror = reject;
             });
+            
+            log.debug("Result image loaded successfully", {
+                width: resultImage.width,
+                height: resultImage.height
+            });
         } catch (error) {
             log.error("Failed to load image from mask editor.", error);
             this.node.imgs = [];
             return;
         }
 
+        log.debug("Creating temporary canvas for mask processing");
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
@@ -835,6 +897,7 @@ export class Canvas {
 
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 
+        log.debug("Processing image data to create mask");
         const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
         const data = imageData.data;
 
@@ -848,6 +911,7 @@ export class Canvas {
 
         tempCtx.putImageData(imageData, 0, 0);
 
+        log.debug("Converting processed mask to image");
         const maskAsImage = new Image();
         maskAsImage.src = tempCanvas.toDataURL();
         await new Promise(resolve => maskAsImage.onload = resolve);
@@ -856,6 +920,7 @@ export class Canvas {
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
 
+        log.debug("Applying mask to canvas", { destX, destY });
 
         maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.clearRect(destX, destY, this.width, this.height);
@@ -865,6 +930,7 @@ export class Canvas {
         this.render();
         this.saveState();
 
+        log.debug("Creating new preview image");
         const new_preview = new Image();
 
         const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
@@ -872,12 +938,15 @@ export class Canvas {
             new_preview.src = URL.createObjectURL(blob);
             await new Promise(r => new_preview.onload = r);
             this.node.imgs = [new_preview];
+            log.debug("New preview image created successfully");
         } else {
             this.node.imgs = [];
+            log.warn("Failed to create preview blob");
         }
 
         this.render();
 
         this.savedMaskState = null;
+        log.info("Mask editor result processed successfully");
     }
 }
