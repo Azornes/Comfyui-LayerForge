@@ -1,0 +1,76 @@
+MASKEDITOR.TS FUNCTION DOCUMENTATION
+
+MaskEditorDialog - Main mask editor class
+
+- getInstance() - Singleton pattern, returns editor instance
+- show() - Opens the mask editor
+- save() - Saves mask to server
+- destroy() - Closes and cleans up editor
+- isOpened() - Checks if editor is open
+
+CanvasHistory - Change history management
+
+- saveState() - Saves current canvas state
+- undo() - Undo last operation
+- redo() - Redo undone operation
+- clearStates() - Clears history
+
+BrushTool - Brush tool
+
+- setBrushSize(size) - Sets brush size
+- setBrushOpacity(opacity) - Sets brush opacity
+- setBrushHardness(hardness) - Sets brush hardness
+- setBrushType(type) - Sets brush shape (circle/square)
+- startDrawing() - Starts drawing
+- handleDrawing() - Handles drawing during movement
+- drawEnd() - Ends drawing
+
+PaintBucketTool - Fill tool
+
+- floodFill(point) - Fills area with color from point
+- setTolerance(tolerance) - Sets color tolerance
+- setFillOpacity(opacity) - Sets fill opacity
+- invertMask() - Inverts mask
+
+ColorSelectTool - Color selection tool
+
+- fillColorSelection(point) - Selects similar colors
+- setTolerance(tolerance) - Sets selection tolerance
+- setLivePreview(enabled) - Enables/disables live preview
+- setComparisonMethod(method) - Sets color comparison method
+- setApplyWholeImage(enabled) - Applies to whole image
+- setSelectOpacity(opacity) - Sets selection opacity
+
+UIManager - Interface management
+
+- updateBrushPreview() - Updates brush preview
+- setBrushVisibility(visible) - Shows/hides brush
+- screenToCanvas(coords) - Converts screen coordinates to canvas
+- getMaskColor() - Returns mask color
+- setSaveButtonEnabled(enabled) - Enables/disables save button
+
+ToolManager - Tool management
+
+- setTool(tool) - Sets active tool
+- getCurrentTool() - Returns active tool
+- handlePointerDown/Move/Up() - Handles mouse/touch events
+
+PanAndZoomManager - View management
+
+- zoom(event) - Zooms in/out canvas
+- handlePanStart/Move() - Handles canvas panning
+- initializeCanvasPanZoom() - Initializes canvas view
+- smoothResetView() - Smoothly resets view
+
+MessageBroker - Communication system
+
+- publish(topic, data) - Publishes message
+- subscribe(topic, callback) - Subscribes to topic
+- pull(topic, data) - Pulls data from topic
+- createPullTopic/PushTopic() - Creates communication topics
+
+KeyboardManager - Keyboard handling
+
+- addListeners() - Adds keyboard listeners
+- removeListeners() - Removes listeners
+- isKeyDown(key) - Checks if key is pressed

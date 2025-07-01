@@ -26,7 +26,7 @@ export class Canvas {
         this.node = node;
         this.widget = widget;
         this.canvas = document.createElement('canvas');
-        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        this.ctx = this.canvas.getContext('2d', {willReadFrequently: true});
         this.width = 512;
         this.height = 512;
         this.layers = [];
@@ -60,7 +60,7 @@ export class Canvas {
         log.debug('Canvas widget element:', this.node);
         log.info('Canvas initialized', {
             nodeId: this.node.id,
-            dimensions: { width: this.width, height: this.height },
+            dimensions: {width: this.width, height: this.height},
             viewport: this.viewport
         });
 
@@ -187,7 +187,7 @@ export class Canvas {
      * @param {boolean} replaceLast - Czy zastąpić ostatni stan w historii
      */
     saveState(replaceLast = false) {
-        log.debug('Saving canvas state', { replaceLast, layersCount: this.layers.length });
+        log.debug('Saving canvas state', {replaceLast, layersCount: this.layers.length});
         this.canvasState.saveState(replaceLast);
         this.incrementOperationCount();
         this._notifyStateChange();
@@ -200,11 +200,11 @@ export class Canvas {
         log.info('Performing undo operation');
         const historyInfo = this.canvasState.getHistoryInfo();
         log.debug('History state before undo:', historyInfo);
-        
+
         this.canvasState.undo();
         this.incrementOperationCount();
         this._notifyStateChange();
-        
+
         log.debug('Undo completed, layers count:', this.layers.length);
     }
 
@@ -216,11 +216,11 @@ export class Canvas {
         log.info('Performing redo operation');
         const historyInfo = this.canvasState.getHistoryInfo();
         log.debug('History state before redo:', historyInfo);
-        
+
         this.canvasState.redo();
         this.incrementOperationCount();
         this._notifyStateChange();
-        
+
         log.debug('Redo completed, layers count:', this.layers.length);
     }
 
@@ -246,17 +246,17 @@ export class Canvas {
      */
     removeSelectedLayers() {
         if (this.selectedLayers.length > 0) {
-            log.info('Removing selected layers', { 
+            log.info('Removing selected layers', {
                 layersToRemove: this.selectedLayers.length,
-                totalLayers: this.layers.length 
+                totalLayers: this.layers.length
             });
-            
+
             this.saveState();
             this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
             this.updateSelection([]);
             this.render();
             this.saveState();
-            
+
             log.debug('Layers removed successfully, remaining layers:', this.layers.length);
         } else {
             log.debug('No layers selected for removal');
@@ -271,13 +271,13 @@ export class Canvas {
         const previousSelection = this.selectedLayers.length;
         this.selectedLayers = newSelection || [];
         this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
-        
+
         log.debug('Selection updated', {
             previousCount: previousSelection,
             newCount: this.selectedLayers.length,
             selectedLayerIds: this.selectedLayers.map(l => l.id || 'unknown')
         });
-        
+
         if (this.onSelectionChange) {
             this.onSelectionChange();
         }
@@ -321,10 +321,10 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
-        log.info('Starting mask editor', { 
-            hasPredefinedMask: !!predefinedMask, 
+        log.info('Starting mask editor', {
+            hasPredefinedMask: !!predefinedMask,
             sendCleanImage,
-            layersCount: this.layers.length 
+            layersCount: this.layers.length
         });
 
         this.savedMaskState = await this.saveMaskState();
@@ -683,7 +683,7 @@ export class Canvas {
             throw new Error("Old mask editor canvas not found");
         }
 
-        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+        const maskCtx = maskCanvas.getContext('2d', {willReadFrequently: true});
 
         const maskColor = {r: 255, g: 255, b: 255};
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
@@ -699,59 +699,58 @@ export class Canvas {
      * @param {number} targetHeight - Docelowa wysokość
      * @param {Object} maskColor - Kolor maski {r, g, b}
      * @returns {HTMLCanvasElement} Przetworzona maska
-     */
-    async processMaskForEditor(maskData, targetWidth, targetHeight, maskColor) {
-        const originalWidth = maskData.width || maskData.naturalWidth || this.width;
-        const originalHeight = maskData.height || maskData.naturalHeight || this.height;
+     */async processMaskForEditor(maskData, targetWidth, targetHeight, maskColor) {
+        // Współrzędne przesunięcia (pan) widoku edytora
+        const panX = this.maskTool.x;
+        const panY = this.maskTool.y;
 
         log.info("Processing mask for editor:", {
-            originalSize: {width: originalWidth, height: originalHeight},
+            sourceSize: {width: maskData.width, height: maskData.height},
             targetSize: {width: targetWidth, height: targetHeight},
-            canvasSize: {width: this.width, height: this.height}
+            viewportPan: {x: panX, y: panY}
         });
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = targetWidth;
         tempCanvas.height = targetHeight;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
 
-        tempCtx.clearRect(0, 0, targetWidth, targetHeight);
+        const sourceX = -panX;
+        const sourceY = -panY;
 
+        tempCtx.drawImage(
+            maskData,       // Źródło: pełna maska z "output area"
+            sourceX,        // sx: Prawdziwa współrzędna X na dużej masce (np. 1000)
+            sourceY,        // sy: Prawdziwa współrzędna Y na dużej masce (np. 1000)
+            targetWidth,    // sWidth: Szerokość wycinanego fragmentu
+            targetHeight,   // sHeight: Wysokość wycinanego fragmentu
+            0,              // dx: Gdzie wkleić w płótnie docelowym (zawsze 0)
+            0,              // dy: Gdzie wkleić w płótnie docelowym (zawsze 0)
+            targetWidth,    // dWidth: Szerokość wklejanego obrazu
+            targetHeight    // dHeight: Wysokość wklejanego obrazu
+        );
 
-        const scaleToOriginal = Math.min(originalWidth / this.width, originalHeight / this.height);
-
-        const scaledWidth = this.width * scaleToOriginal;
-        const scaledHeight = this.height * scaleToOriginal;
-
-        const offsetX = (targetWidth - scaledWidth) / 2;
-        const offsetY = (targetHeight - scaledHeight) / 2;
-
-        tempCtx.drawImage(maskData, offsetX, offsetY, scaledWidth, scaledHeight);
-
-        log.info("Mask drawn scaled to original image size:", {
-            originalSize: {width: originalWidth, height: originalHeight},
-            targetSize: {width: targetWidth, height: targetHeight},
-            canvasSize: {width: this.width, height: this.height},
-            scaleToOriginal: scaleToOriginal,
-            finalSize: {width: scaledWidth, height: scaledHeight},
-            offset: {x: offsetX, y: offsetY}
+        log.info("Mask viewport cropped correctly.", {
+            source: "maskData",
+            cropArea: {x: sourceX, y: sourceY, width: targetWidth, height: targetHeight}
         });
 
+        // Reszta kodu (zmiana koloru) pozostaje bez zmian
         const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
         const data = imageData.data;
 
         for (let i = 0; i < data.length; i += 4) {
-            const alpha = data[i + 3]; // Oryginalny kanał alpha
-
-            data[i] = maskColor.r;     // R
-            data[i + 1] = maskColor.g; // G
-            data[i + 2] = maskColor.b; // B
-            data[i + 3] = alpha;       // Zachowaj oryginalny alpha
+            const alpha = data[i + 3];
+            if (alpha > 0) {
+                data[i] = maskColor.r;
+                data[i + 1] = maskColor.g;
+                data[i + 2] = maskColor.b;
+            }
         }
 
         tempCtx.putImageData(imageData, 0, 0);
 
-        log.info("Mask processing completed - full size scaling applied");
+        log.info("Mask processing completed - color applied.");
         return tempCanvas;
     }
 
@@ -784,6 +783,7 @@ export class Canvas {
             setTimeout(this.waitWhileMaskEditing.bind(this), 100);
         }
     }
+
     /**
      * Zapisuje obecny stan maski przed otwarciem editora
      * @returns {Object} Zapisany stan maski
@@ -797,7 +797,7 @@ export class Canvas {
         const savedCanvas = document.createElement('canvas');
         savedCanvas.width = maskCanvas.width;
         savedCanvas.height = maskCanvas.height;
-        const savedCtx = savedCanvas.getContext('2d', { willReadFrequently: true });
+        const savedCtx = savedCanvas.getContext('2d', {willReadFrequently: true});
         savedCtx.drawImage(maskCanvas, 0, 0);
 
         return {
@@ -878,7 +878,7 @@ export class Canvas {
                 resultImage.onload = resolve;
                 resultImage.onerror = reject;
             });
-            
+
             log.debug("Result image loaded successfully", {
                 width: resultImage.width,
                 height: resultImage.height
@@ -893,7 +893,7 @@ export class Canvas {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
 
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 
@@ -920,7 +920,7 @@ export class Canvas {
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
 
-        log.debug("Applying mask to canvas", { destX, destY });
+        log.debug("Applying mask to canvas", {destX, destY});
 
         maskCtx.globalCompositeOperation = 'source-over';
         maskCtx.clearRect(destX, destY, this.width, this.height);

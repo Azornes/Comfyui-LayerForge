@@ -1,0 +1,75 @@
+LitegraphService Documentation
+
+Main functions of useLitegraphService()
+
+Node Registration and Creation Functions:
+
+registerNodeDef(nodeId: string, nodeDefV1: ComfyNodeDefV1)
+
+- Registers node definition in LiteGraph system
+- Creates ComfyNode class with inputs, outputs and widgets
+- Adds context menu, background drawing and keyboard handling
+- Invokes extensions before registration
+
+addNodeOnGraph(nodeDef, options)
+
+- Adds new node to graph at specified position
+- By default places node at canvas center
+
+Navigation and View Functions:
+
+getCanvasCenter(): Vector2
+
+- Returns canvas center coordinates accounting for DPI
+
+goToNode(nodeId: NodeId)
+
+- Animates transition to specified node on canvas
+
+resetView()
+
+- Resets canvas view to default settings (scale 1, offset [0,0])
+
+fitView()
+
+- Fits canvas view to show all nodes
+
+Node Handling Functions (internal):
+
+addNodeContextMenuHandler(node)
+
+- Adds context menu with options:
+
+  - Open/Copy/Save image (for image nodes)
+  - Bypass node
+  - Copy/Paste to Clipspace
+  - Open in MaskEditor (for image nodes)
+
+addDrawBackgroundHandler(node)
+
+- Adds node background drawing logic
+- Handles image, animation and video previews
+- Manages thumbnail display
+
+addNodeKeyHandler(node)
+
+- Adds keyboard handling:
+
+  - Left/Right arrows: navigate between images
+  - Escape: close image preview
+
+ComfyNode Class (created by registerNodeDef):
+
+Main methods:
+
+- #addInputs() - adds inputs and widgets to node
+- #addOutputs() - adds outputs to node
+- configure() - configures node from serialized data
+- #setupStrokeStyles() - sets border styles (errors, execution, etc.)
+
+Properties:
+
+- comfyClass - ComfyUI class name
+- nodeData - node definition
+- Automatic yellow coloring for API nodes
+

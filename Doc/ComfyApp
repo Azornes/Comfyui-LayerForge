@@ -1,0 +1,72 @@
+## __Main ComfyApp Functions__ import { app, ComfyApp } from "../../scripts/app.js";
+
+### __Application Management__
+
+- `setup(canvasEl)` - Initializes the application on the page, loads extensions, registers nodes
+- `resizeCanvas()` - Adjusts canvas size to window
+- `clean()` - Clears application state (node outputs, image previews, errors)
+
+### __Workflow Management__
+
+- `loadGraphData(graphData, clean, restore_view, workflow, options)` - Loads workflow data from JSON
+- `loadApiJson(apiData, fileName)` - Loads workflow from API format
+- `graphToPrompt(graph, options)` - Converts graph to prompt for execution
+- `handleFile(file)` - Handles file loading (PNG, WebP, JSON, MP3, MP4, SVG, etc.)
+
+### __Execution__
+
+- `queuePrompt(number, batchCount, queueNodeIds)` - Queues prompt for execution
+- `registerNodes()` - Registers node definitions from backend
+- `registerNodeDef(nodeId, nodeDef)` - Registers single node definition
+- `refreshComboInNodes()` - Refreshes combo lists in nodes
+
+### __Node Management__
+
+- `registerExtension(extension)` - Registers ComfyUI extension
+- `updateVueAppNodeDefs(defs)` - Updates node definitions in Vue app
+- `revokePreviews(nodeId)` - Frees memory for node previews
+
+### __Clipboard__
+
+- `copyToClipspace(node)` - Copies node to clipboard
+- `pasteFromClipspace(node)` - Pastes data from clipboard to node
+
+### __Position Conversion__
+
+- `clientPosToCanvasPos(pos)` - Converts client position to canvas position
+- `canvasPosToClientPos(pos)` - Converts canvas position to client position
+
+### __Error Handling__
+
+- `showErrorOnFileLoad(file)` - Displays file loading error
+- `#showMissingNodesError(missingNodeTypes)` - Shows missing nodes error
+- `#showMissingModelsError(missingModels, paths)` - Shows missing models error
+
+### __Internal Handlers__
+
+- `#addDropHandler()` - Handles drag and drop of files
+- `#addProcessKeyHandler()` - Handles keyboard input
+- `#addDrawNodeHandler()` - Modifies node drawing behavior
+- `#addApiUpdateHandlers()` - Handles API updates
+- `#addConfigureHandler()` - Graph configuration flag
+- `#addAfterConfigureHandler()` - Post-configuration handling
+
+### __Deprecated Properties__
+
+Many properties are marked as deprecated and redirect to appropriate stores:
+
+- `lastNodeErrors` → `useExecutionStore().lastNodeErrors`
+- `lastExecutionError` → `useExecutionStore().lastExecutionError`
+- `runningNodeId` → `useExecutionStore().executingNodeId`
+- `shiftDown` → `useWorkspaceStore().shiftDown`
+- `widgets` → `useWidgetStore().widgets`
+- `extensions` → `useExtensionStore().extensions`
+
+### __Utility Functions__
+
+- `sanitizeNodeName(string)` - Cleans node name from dangerous characters
+- `getPreviewFormatParam()` - Returns preview format parameter
+- `getRandParam()` - Returns random parameter for refresh
+- `isApiJson(data)` - Checks if data is in API JSON format
+
+This application uses Vue and TypeScript composition pattern, where many functionalities are separated into different services and stores (e.g., `useExecutionStore`, `useWorkflowService`, `useExtensionService`, etc.).

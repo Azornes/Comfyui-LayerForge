@@ -1,0 +1,96 @@
+# ComfyApi - Function Documentation Summary  import { api } from "../../scripts/api.js";
+
+## Basic Information
+
+ComfyApi is a class for communication with ComfyUI backend via WebSocket and REST API.
+
+## Main Functions:
+
+### Connection and Initialization
+
+- constructor() - Initializes API, sets host and base path
+- init() - Starts WebSocket connection for real-time updates
+- #createSocket() - Creates and manages WebSocket connection
+
+### URL Management
+
+- internalURL(route) - Generates URL for internal endpoints
+- apiURL(route) - Generates URL for public API endpoints
+- fileURL(route) - Generates URL for static files
+- fetchApi(route, options) - Performs HTTP requests with automatic user headers
+
+### Event Handling
+
+- addEventListener(type, callback) - Listens for API events (status, executing, progress, etc.)
+- removeEventListener(type, callback) - Removes event listeners
+- dispatchCustomEvent(type, detail) - Emits custom events
+
+### Queue and Prompt Management
+
+- queuePrompt(number, data) - Adds prompt to execution queue
+- getQueue() - Gets current queue state (Running/Pending)
+- interrupt() - Interrupts currently executing prompt
+- clearItems(type) - Clears queue or history
+- deleteItem(type, id) - Removes item from queue or history
+
+### History and Statistics
+
+- getHistory(max_items) - Gets history of executed prompts
+- getSystemStats() - Gets system statistics (Python, OS, GPU, etc.)
+- getLogs() - Gets system logs
+- getRawLogs() - Gets raw logs
+- subscribeLogs(enabled) - Enables/disables log subscription
+
+### Model and Resource Management
+
+- getNodeDefs(options) - Gets definitions of available nodes
+- getExtensions() - List of installed extensions
+- getEmbeddings() - List of available embeddings
+- getModelFolders() - List of model folders
+- getModels(folder) - List of models in given folder
+- viewMetadata(folder, model) - Metadata of specific model
+
+### Workflow Templates
+
+- getWorkflowTemplates() - Gets workflow templates from custom nodes
+- getCoreWorkflowTemplates() - Gets core workflow templates
+
+### User Management
+
+- getUserConfig() - Gets user configuration
+- createUser(username) - Creates new user
+- getSettings() - Gets all user settings
+- getSetting(id) - Gets specific setting
+- storeSettings(settings) - Saves settings dictionary
+- storeSetting(id, value) - Saves single setting
+
+### User Data
+
+- getUserData(file) - Gets user data file
+- storeUserData(file, data, options) - Saves user data
+- deleteUserData(file) - Deletes user data file
+- moveUserData(source, dest) - Moves data file
+- listUserDataFullInfo(dir) - Lists files with full information
+
+### Other
+
+- getFolderPaths() - Gets system folder paths
+- getCustomNodesI18n() - Gets internationalization data for custom nodes
+
+## Important Properties
+
+- clientId - Client ID from WebSocket
+- authToken - Authorization token for ComfyOrg account
+- apiKey - API key for ComfyOrg account
+- socket - Active WebSocket connection
+
+## WebSocket Event Types
+
+- status - System status
+- executing - Currently executing node
+- progress - Execution progress
+- executed - Node executed
+- execution_start/success/error/interrupted/cached - Execution events
+- logs - System logs
+- b_preview - Image preview (binary)
+- reconnecting/reconnected - Connection events
