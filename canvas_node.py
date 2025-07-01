@@ -471,6 +471,70 @@ class CanvasNode:
                     'error': str(e)
                 }, status=500)
 
+        @PromptServer.instance.routes.post("/ycnode/load_image_from_path")
+        async def load_image_from_path_route(request):
+            try:
+                data = await request.json()
+                file_path = data.get('file_path')
+                
+                if not file_path:
+                    return web.json_response({
+                        'success': False,
+                        'error': 'file_path is required'
+                    }, status=400)
+                
+                log_info(f"Attempting to load image from path: {file_path}")
+                
+                # Check if file exists and is accessible
+                if not os.path.exists(file_path):
+                    log_warn(f"File not found: {file_path}")
+                    return web.json_response({
+                        'success': False,
+                        'error': f'File not found: {file_path}'
+                    }, status=404)
+                
+                # Check if it's an image file
+                valid_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.ico', '.avif')
+                if not file_path.lower().endswith(valid_extensions):
+                    return web.json_response({
+                        'success': False,
+                        'error': f'Invalid image file extension. Supported: {valid_extensions}'
+                    }, status=400)
+                
+                # Try to load and convert the image
+                try:
+                    with Image.open(file_path) as img:
+                        # Convert to RGB if necessary
+                        if img.mode != 'RGB':
+                            img = img.convert('RGB')
+                        
+                        # Convert to base64
+                        buffered = io.BytesIO()
+                        img.save(buffered, format="PNG")
+                        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                        
+                        log_info(f"Successfully loaded image from path: {file_path}")
+                        return web.json_response({
+                            'success': True,
+                            'image_data': f"data:image/png;base64,{img_str}",
+                            'width': img.width,
+                            'height': img.height
+                        })
+                        
+                except Exception as img_error:
+                    log_error(f"Error processing image file {file_path}: {str(img_error)}")
+                    return web.json_response({
+                        'success': False,
+                        'error': f'Error processing image file: {str(img_error)}'
+                    }, status=500)
+                    
+            except Exception as e:
+                log_error(f"Error in load_image_from_path_route: {str(e)}")
+                return web.json_response({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
+
     def store_image(self, image_data):
 
         if isinstance(image_data, str) and image_data.startswith('data:image'):
