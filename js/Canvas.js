@@ -26,7 +26,7 @@ export class Canvas {
         this.node = node;
         this.widget = widget;
         this.canvas = document.createElement('canvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
         this.width = 512;
         this.height = 512;
         this.layers = [];
@@ -683,7 +683,7 @@ export class Canvas {
             throw new Error("Old mask editor canvas not found");
         }
 
-        const maskCtx = maskCanvas.getContext('2d');
+        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
 
         const maskColor = {r: 255, g: 255, b: 255};
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
@@ -713,7 +713,7 @@ export class Canvas {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = targetWidth;
         tempCanvas.height = targetHeight;
-        const tempCtx = tempCanvas.getContext('2d');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
         tempCtx.clearRect(0, 0, targetWidth, targetHeight);
 
@@ -797,7 +797,7 @@ export class Canvas {
         const savedCanvas = document.createElement('canvas');
         savedCanvas.width = maskCanvas.width;
         savedCanvas.height = maskCanvas.height;
-        const savedCtx = savedCanvas.getContext('2d');
+        const savedCtx = savedCanvas.getContext('2d', { willReadFrequently: true });
         savedCtx.drawImage(maskCanvas, 0, 0);
 
         return {
@@ -893,7 +893,7 @@ export class Canvas {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
-        const tempCtx = tempCanvas.getContext('2d');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 

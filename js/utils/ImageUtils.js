@@ -168,7 +168,7 @@ export const imageToTensor = withErrorHandling(async function (image) {
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     canvas.width = image.width || image.naturalWidth;
     canvas.height = image.height || image.naturalHeight;
@@ -205,7 +205,7 @@ export const tensorToImage = withErrorHandling(async function (tensor) {
 
     const [, height, width, channels] = tensor.shape;
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     canvas.width = width;
     canvas.height = height;
@@ -246,7 +246,7 @@ export const resizeImage = withErrorHandling(async function (image, maxWidth, ma
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     const originalWidth = image.width || image.naturalWidth;
     const originalHeight = image.height || image.naturalHeight;
@@ -292,7 +292,7 @@ export const imageToBase64 = withErrorHandling(function (image, format = 'png', 
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     canvas.width = image.width || image.naturalWidth;
     canvas.height = image.height || image.naturalHeight;
@@ -374,7 +374,7 @@ export function createImageFromSource(source) {
  */
 export const createEmptyImage = withErrorHandling(function (width, height, color = 'transparent') {
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     canvas.width = width;
     canvas.height = height;

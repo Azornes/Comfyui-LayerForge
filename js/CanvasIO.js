@@ -102,7 +102,7 @@ export class CanvasIO {
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
 
                 tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
 
@@ -279,7 +279,7 @@ export class CanvasIO {
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
 
                 tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
 
@@ -403,7 +403,7 @@ export class CanvasIO {
             }
 
             const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             canvas.width = tensor.width;
             canvas.height = tensor.height;
 
@@ -611,7 +611,7 @@ export class CanvasIO {
             const canvas = document.createElement('canvas');
             canvas.width = imageData.width;
             canvas.height = imageData.height;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             ctx.putImageData(imageData, 0, 0);
 
             const img = new Image();
@@ -684,7 +684,7 @@ export class CanvasIO {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = img.width;
             tempCanvas.height = img.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
             tempCtx.drawImage(img, 0, 0);
 
@@ -693,7 +693,7 @@ export class CanvasIO {
                 const maskCanvas = document.createElement('canvas');
                 maskCanvas.width = img.width;
                 maskCanvas.height = img.height;
-                const maskCtx = maskCanvas.getContext('2d');
+                const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
                 maskCtx.drawImage(mask, 0, 0);
                 const maskData = maskCtx.getImageData(0, 0, img.width, img.height);
 
