@@ -34,17 +34,68 @@ export class CanvasLayers {
 
     async copySelectedLayers() {
         if (this.canvas.selectedLayers.length === 0) return;
+        
+        // Always copy to internal clipboard first
         this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
         log.info(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
-        try {
-            const blob = await this.getFlattenedSelectionAsBlob();
-            if (blob) {
+        
+        // Get flattened image
+        const blob = await this.getFlattenedSelectionAsBlob();
+        if (!blob) {
+            log.warn("Failed to create flattened selection blob");
+            return;
+        }
+
+        // Copy to external clipboard based on preference
+        if (this.clipboardPreference === 'clipspace') {
+            try {
+                // Copy to ComfyUI Clipspace
+                const dataURL = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+                
+                // Create temporary image for clipspace
+                const img = new Image();
+                img.onload = () => {
+                    // Add to ComfyUI Clipspace
+                    if (this.canvas.node.imgs) {
+                        this.canvas.node.imgs = [img];
+                    } else {
+                        this.canvas.node.imgs = [img];
+                    }
+                    
+                    // Use ComfyUI's clipspace functionality
+                    if (ComfyApp.copyToClipspace) {
+                        ComfyApp.copyToClipspace(this.canvas.node);
+                        log.info("Flattened selection copied to ComfyUI Clipspace.");
+                    } else {
+                        log.warn("ComfyUI copyToClipspace not available");
+                    }
+                };
+                img.src = dataURL;
+                
+            } catch (error) {
+                log.error("Failed to copy image to ComfyUI Clipspace:", error);
+                // Fallback to system clipboard
+                try {
+                    const item = new ClipboardItem({'image/png': blob});
+                    await navigator.clipboard.write([item]);
+                    log.info("Fallback: Flattened selection copied to system clipboard.");
+                } catch (fallbackError) {
+                    log.error("Failed to copy to system clipboard as fallback:", fallbackError);
+                }
+            }
+        } else {
+            // Copy to system clipboard (default behavior)
+            try {
                 const item = new ClipboardItem({'image/png': blob});
                 await navigator.clipboard.write([item]);
-                log.info("Flattened selection copied to the system clipboard.");
+                log.info("Flattened selection copied to system clipboard.");
+            } catch (error) {
+                log.error("Failed to copy image to system clipboard:", error);
             }
-        } catch (error) {
-            log.error("Failed to copy image to system clipboard:", error);
         }
     }
 
@@ -89,53 +140,12 @@ export class CanvasLayers {
         try {
             log.info(`Paste operation started with preference: ${this.clipboardPreference}`);
 
-            if (this.internalClipboard.length > 0) {
-                log.info("Pasting from internal clipboard");
-                this.pasteLayers();
-                return;
-            }
-
-            if (this.clipboardPreference === 'clipspace') {
-                log.info("Attempting paste from ComfyUI Clipspace");
-                if (!await this.tryClipspacePaste(addMode)) {
-                    log.info("No image found in ComfyUI Clipspace");
-                }
-            } else if (this.clipboardPreference === 'system') {
-                log.info("Attempting paste from system clipboard");
-                await this.trySystemClipboardPaste(addMode);
-            }
+            // Delegate all clipboard handling to ClipboardManager (it will check internal clipboard first)
+            await this.clipboardManager.handlePaste(addMode, this.clipboardPreference);
 
         } catch (err) {
             log.error("Paste operation failed:", err);
         }
-    }
-
-    async tryClipspacePaste(addMode) {
-        try {
-            log.info("Attempting to paste from ComfyUI Clipspace");
-            const clipspaceResult = ComfyApp.pasteFromClipspace(this.canvas.node);
-
-            if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
-                const clipspaceImage = this.canvas.node.imgs[0];
-                if (clipspaceImage && clipspaceImage.src) {
-                    log.info("Successfully got image from ComfyUI Clipspace");
-                    const img = new Image();
-                    img.onload = async () => {
-                        await this.addLayerWithImage(img, {}, addMode);
-                    };
-                    img.src = clipspaceImage.src;
-                    return true;
-                }
-            }
-            return false;
-        } catch (clipspaceError) {
-            log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
-            return false;
-        }
-    }
-
-    async trySystemClipboardPaste(addMode) {
-        return await this.clipboardManager.trySystemClipboardPaste(addMode);
     }
 
 

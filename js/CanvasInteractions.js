@@ -33,6 +33,9 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('wheel', this.handleWheel.bind(this), {passive: false});
         this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
+        
+        // Add paste event listener like ComfyUI does
+        document.addEventListener('paste', this.handlePasteEvent.bind(this));
 
         this.canvas.canvas.addEventListener('mouseenter', (e) => {
             this.canvas.isMouseOver = true;
@@ -42,6 +45,12 @@ export class CanvasInteractions {
             this.canvas.isMouseOver = false;
             this.handleMouseLeave(e);
         });
+
+        // Add drag & drop support
+        this.canvas.canvas.addEventListener('dragover', this.handleDragOver.bind(this));
+        this.canvas.canvas.addEventListener('dragenter', this.handleDragEnter.bind(this));
+        this.canvas.canvas.addEventListener('dragleave', this.handleDragLeave.bind(this));
+        this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this));
     }
 
     resetInteractionState() {
@@ -343,16 +352,13 @@ export class CanvasInteractions {
             }
             if (e.key.toLowerCase() === 'c') {
                 if (this.canvas.selectedLayers.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
                     this.canvas.canvasLayers.copySelectedLayers();
                 }
                 return;
             }
             if (e.key.toLowerCase() === 'v') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.canvas.canvasLayers.handlePaste('mouse');
+                // Don't prevent default - let the natural paste event fire
+                // which is handled by handlePasteEvent
                 return;
             }
         }
@@ -716,5 +722,138 @@ export class CanvasInteractions {
             this.canvas.viewport.x -= rectX;
             this.canvas.viewport.y -= rectY;
         }
+    }
+
+    // Drag & Drop handlers
+    handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+        e.dataTransfer.dropEffect = 'copy';
+    }
+
+    handleDragEnter(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+        this.canvas.canvas.style.backgroundColor = 'rgba(45, 90, 160, 0.1)';
+        this.canvas.canvas.style.border = '2px dashed #2d5aa0';
+    }
+
+    handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+        // Only reset if we're actually leaving the canvas (not just moving between child elements)
+        if (!this.canvas.canvas.contains(e.relatedTarget)) {
+            this.canvas.canvas.style.backgroundColor = '';
+            this.canvas.canvas.style.border = '';
+        }
+    }
+
+    async handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation(); // CRITICAL: Prevent ComfyUI from handling this event and loading workflow
+        
+        log.info("Canvas drag & drop event intercepted - preventing ComfyUI workflow loading");
+        
+        // Reset visual feedback
+        this.canvas.canvas.style.backgroundColor = '';
+        this.canvas.canvas.style.border = '';
+
+        const files = Array.from(e.dataTransfer.files);
+        const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        
+        log.info(`Dropped ${files.length} file(s) onto canvas at position (${worldCoords.x}, ${worldCoords.y})`);
+
+        for (const file of files) {
+            if (file.type.startsWith('image/')) {
+                try {
+                    await this.loadDroppedImageFile(file, worldCoords);
+                    log.info(`Successfully loaded dropped image: ${file.name}`);
+                } catch (error) {
+                    log.error(`Failed to load dropped image ${file.name}:`, error);
+                }
+            } else {
+                log.warn(`Skipped non-image file: ${file.name} (${file.type})`);
+            }
+        }
+    }
+
+    async loadDroppedImageFile(file, worldCoords) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const img = new Image();
+            img.onload = async () => {
+                // Check fit_on_add widget to determine add mode
+                const fitOnAddWidget = this.canvas.node.widgets.find(w => w.name === "fit_on_add");
+                const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                
+                // Use the same method as "Add Image" button for consistency
+                await this.canvas.addLayer(img, {}, addMode);
+            };
+            img.onerror = () => {
+                log.error(`Failed to load dropped image: ${file.name}`);
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = () => {
+            log.error(`Failed to read dropped file: ${file.name}`);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Paste event handler that respects clipboard preference
+    async handlePasteEvent(e) {
+        // Check if we should handle this paste event
+        const shouldHandle = this.canvas.isMouseOver || 
+                           this.canvas.canvas.contains(document.activeElement) ||
+                           document.activeElement === this.canvas.canvas ||
+                           document.activeElement === document.body;
+        
+        if (!shouldHandle) {
+            log.debug("Paste event ignored - not focused on canvas");
+            return;
+        }
+
+        log.info("Paste event detected, checking clipboard preference");
+        
+        // Check clipboard preference first
+        const preference = this.canvas.canvasLayers.clipboardPreference;
+        
+        if (preference === 'clipspace') {
+            // For clipspace preference, always delegate to ClipboardManager
+            log.info("Clipboard preference is clipspace, delegating to ClipboardManager");
+            e.preventDefault();
+            e.stopPropagation();
+            await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
+            return;
+        }
+        
+        // For system preference, check direct image data first, then delegate
+        const clipboardData = e.clipboardData;
+        if (clipboardData && clipboardData.items) {
+            for (const item of clipboardData.items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const file = item.getAsFile();
+                    if (file) {
+                        log.info("Found direct image data in paste event");
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                            const img = new Image();
+                            img.onload = async () => {
+                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'mouse');
+                            };
+                            img.src = event.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // If no direct image data, delegate to ClipboardManager with system preference
+        await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
     }
 }

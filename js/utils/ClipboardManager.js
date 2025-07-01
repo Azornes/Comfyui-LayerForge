@@ -1,5 +1,6 @@
 import {createModuleLogger} from "./LoggerUtils.js";
 import {api} from "../../../scripts/api.js";
+import {ComfyApp} from "../../../scripts/app.js";
 
 const log = createModuleLogger('ClipboardManager');
 
@@ -10,67 +11,157 @@ export class ClipboardManager {
     }
 
     /**
-     * Attempts to paste from system clipboard
+     * Main paste handler that delegates to appropriate methods
+     * @param {string} addMode - The mode for adding the layer
+     * @param {string} preference - Clipboard preference ('system' or 'clipspace')
+     * @returns {Promise<boolean>} - True if successful, false otherwise
+     */
+    async handlePaste(addMode = 'mouse', preference = 'system') {
+        try {
+            log.info(`ClipboardManager handling paste with preference: ${preference}`);
+
+            // PRIORITY 1: Check internal clipboard first (copied layers)
+            if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+                log.info("Found layers in internal clipboard, pasting layers");
+                this.canvas.canvasLayers.pasteLayers();
+                return true;
+            }
+
+            // PRIORITY 2: Check external clipboard based on preference
+            if (preference === 'clipspace') {
+                log.info("Attempting paste from ComfyUI Clipspace");
+                const success = await this.tryClipspacePaste(addMode);
+                if (success) {
+                    return true;
+                }
+                log.info("No image found in ComfyUI Clipspace");
+            }
+
+            // PRIORITY 3: Always try system clipboard (either as primary or fallback)
+            log.info("Attempting paste from system clipboard");
+            return await this.trySystemClipboardPaste(addMode);
+
+        } catch (err) {
+            log.error("ClipboardManager paste operation failed:", err);
+            return false;
+        }
+    }
+
+    /**
+     * Attempts to paste from ComfyUI Clipspace
+     * @param {string} addMode - The mode for adding the layer
+     * @returns {Promise<boolean>} - True if successful, false otherwise
+     */
+    async tryClipspacePaste(addMode) {
+        try {
+            log.info("Attempting to paste from ComfyUI Clipspace");
+            const clipspaceResult = ComfyApp.pasteFromClipspace(this.canvas.node);
+
+            if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
+                const clipspaceImage = this.canvas.node.imgs[0];
+                if (clipspaceImage && clipspaceImage.src) {
+                    log.info("Successfully got image from ComfyUI Clipspace");
+                    const img = new Image();
+                    img.onload = async () => {
+                        await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                    };
+                    img.src = clipspaceImage.src;
+                    return true;
+                }
+            }
+            return false;
+        } catch (clipspaceError) {
+            log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
+            return false;
+        }
+    }
+
+    /**
+     * System clipboard paste - handles both image data and text paths
      * @param {string} addMode - The mode for adding the layer
      * @returns {Promise<boolean>} - True if successful, false otherwise
      */
     async trySystemClipboardPaste(addMode) {
-        if (!navigator.clipboard?.read) {
-            log.info("Browser does not support clipboard read API");
-            return false;
-        }
-
-        try {
-            log.info("Attempting to paste from system clipboard");
-            const clipboardItems = await navigator.clipboard.read();
-
-            for (const item of clipboardItems) {
-                // First, try to find actual image data
-                const imageType = item.types.find(type => type.startsWith('image/'));
-
-                if (imageType) {
-                    const blob = await item.getType(imageType);
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const img = new Image();
-                        img.onload = async () => {
-                            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                        };
-                        img.src = event.target.result;
-                    };
-                    reader.readAsDataURL(blob);
-                    log.info("Successfully pasted image from system clipboard");
-                    return true;
-                }
-
-                // If no image data found, check for text that might be a file path
-                const textType = item.types.find(type => type === 'text/plain');
-                if (textType) {
-                    const textBlob = await item.getType(textType);
-                    const text = await textBlob.text();
+        log.info("ClipboardManager: Checking system clipboard for images and paths");
+        
+        // First try modern clipboard API for both images and text
+        if (navigator.clipboard?.read) {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                
+                for (const item of clipboardItems) {
+                    log.debug("Clipboard item types:", item.types);
                     
-                    if (this.isValidImagePath(text)) {
-                        log.info("Found image file path in clipboard:", text);
+                    // Check for image data first
+                    const imageType = item.types.find(type => type.startsWith('image/'));
+                    if (imageType) {
                         try {
-                            // Try to load the image using different methods
-                            const success = await this.loadImageFromPath(text, addMode);
-                            if (success) {
-                                return true;
+                            const blob = await item.getType(imageType);
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                const img = new Image();
+                                img.onload = async () => {
+                                    log.info("Successfully loaded image from system clipboard");
+                                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                                };
+                                img.src = event.target.result;
+                            };
+                            reader.readAsDataURL(blob);
+                            log.info("Found image data in system clipboard");
+                            return true;
+                        } catch (error) {
+                            log.debug("Error reading image data:", error);
+                        }
+                    }
+                    
+                    // Check for text types (file paths, URLs)
+                    const textTypes = ['text/plain', 'text/uri-list'];
+                    for (const textType of textTypes) {
+                        if (item.types.includes(textType)) {
+                            try {
+                                const textBlob = await item.getType(textType);
+                                const text = await textBlob.text();
+                                
+                                if (this.isValidImagePath(text)) {
+                                    log.info("Found image path in clipboard:", text);
+                                    const success = await this.loadImageFromPath(text, addMode);
+                                    if (success) {
+                                        return true;
+                                    }
+                                }
+                            } catch (error) {
+                                log.debug(`Error reading ${textType}:`, error);
                             }
-                        } catch (pathError) {
-                            log.warn("Error loading image from path:", pathError);
                         }
                     }
                 }
+            } catch (error) {
+                log.debug("Modern clipboard API failed:", error);
             }
-
-            log.info("No image or valid image path found in system clipboard");
-            return false;
-        } catch (error) {
-            log.warn("System clipboard paste failed:", error);
-            return false;
         }
+
+        // Fallback to text-only API
+        if (navigator.clipboard?.readText) {
+            try {
+                const text = await navigator.clipboard.readText();
+                log.debug("Found text in clipboard:", text);
+                
+                if (text && this.isValidImagePath(text)) {
+                    log.info("Found valid image path in clipboard:", text);
+                    const success = await this.loadImageFromPath(text, addMode);
+                    if (success) {
+                        return true;
+                    }
+                }
+            } catch (error) {
+                log.debug("Could not read text from clipboard:", error);
+            }
+        }
+
+        log.debug("No images or valid image paths found in system clipboard");
+        return false;
     }
+
 
     /**
      * Validates if a text string is a valid image file path or URL
@@ -141,13 +232,13 @@ export class ClipboardManager {
     }
 
     /**
-     * Attempts to load an image from a file path using various methods
+     * Attempts to load an image from a file path using simplified methods
      * @param {string} filePath - The file path to load
      * @param {string} addMode - The mode for adding the layer
      * @returns {Promise<boolean>} - True if successful, false otherwise
      */
     async loadImageFromPath(filePath, addMode) {
-        // Method 1: Try direct loading for URLs
+        // Method 1: Direct loading for URLs
         if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
             try {
                 const img = new Image();
@@ -170,143 +261,44 @@ export class ClipboardManager {
             }
         }
 
-        // Method 2: Try to load via ComfyUI's view endpoint for local files
+        // Method 2: Load local files via backend endpoint
         try {
-            log.info("Attempting to load local file via ComfyUI view endpoint");
-            const success = await this.loadImageViaComfyUIView(filePath, addMode);
+            log.info("Attempting to load local file via backend");
+            const success = await this.loadFileViaBackend(filePath, addMode);
             if (success) {
                 return true;
             }
         } catch (error) {
-            log.warn("ComfyUI view endpoint method failed:", error);
+            log.warn("Backend loading failed:", error);
         }
 
-        // Method 3: Try to prompt user to select the file manually
+        // Method 3: Fallback to file picker
         try {
-            log.info("Attempting to load local file via file picker");
+            log.info("Falling back to file picker");
             const success = await this.promptUserForFile(filePath, addMode);
             if (success) {
                 return true;
             }
         } catch (error) {
-            log.warn("File picker method failed:", error);
+            log.warn("File picker failed:", error);
         }
 
-        // Method 4: Show user a helpful message about the limitation
+        // Method 4: Show user a helpful message
         this.showFilePathMessage(filePath);
         return false;
     }
 
     /**
-     * Attempts to load an image using ComfyUI's API methods
+     * Loads a local file via the ComfyUI backend endpoint
      * @param {string} filePath - The file path to load
      * @param {string} addMode - The mode for adding the layer
      * @returns {Promise<boolean>} - True if successful, false otherwise
      */
-    async loadImageViaComfyUIView(filePath, addMode) {
+    async loadFileViaBackend(filePath, addMode) {
         try {
-            // First, try to get folder paths to understand ComfyUI structure
-            const folderPaths = await this.getComfyUIFolderPaths();
-            log.debug("ComfyUI folder paths:", folderPaths);
+            log.info("Loading file via ComfyUI backend:", filePath);
             
-            // Extract filename from path
-            const fileName = filePath.split(/[\\\/]/).pop();
-            
-            // Method 1: Try to upload the file to ComfyUI first, then load it
-            const uploadSuccess = await this.uploadFileToComfyUI(filePath, addMode);
-            if (uploadSuccess) {
-                return true;
-            }
-            
-            // Method 2: Try different view endpoints if file might already exist in ComfyUI
-            const viewConfigs = [
-                // Direct filename approach
-                { filename: fileName },
-                // Full path approach
-                { filename: filePath },
-                // Input folder approach
-                { filename: fileName, type: 'input' },
-                // Temp folder approach  
-                { filename: fileName, type: 'temp' },
-                // Output folder approach
-                { filename: fileName, type: 'output' }
-            ];
-
-            for (const config of viewConfigs) {
-                try {
-                    // Build query parameters
-                    const params = new URLSearchParams();
-                    params.append('filename', config.filename);
-                    if (config.type) {
-                        params.append('type', config.type);
-                    }
-                    if (config.subfolder) {
-                        params.append('subfolder', config.subfolder);
-                    }
-                    
-                    const viewUrl = api.apiURL(`/view?${params.toString()}`);
-                    log.debug("Trying ComfyUI view URL:", viewUrl);
-                    
-                    const img = new Image();
-                    const success = await new Promise((resolve) => {
-                        img.onload = async () => {
-                            log.info("Successfully loaded image via ComfyUI view endpoint:", viewUrl);
-                            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                            resolve(true);
-                        };
-                        img.onerror = () => {
-                            log.debug("Failed to load image via ComfyUI view endpoint:", viewUrl);
-                            resolve(false);
-                        };
-                        
-                        // Set a timeout to avoid hanging
-                        setTimeout(() => {
-                            resolve(false);
-                        }, 3000);
-                        
-                        img.src = viewUrl;
-                    });
-                    
-                    if (success) {
-                        return true;
-                    }
-                } catch (error) {
-                    log.debug("Error with view config:", config, error);
-                    continue;
-                }
-            }
-            
-            return false;
-        } catch (error) {
-            log.warn("Error in loadImageViaComfyUIView:", error);
-            return false;
-        }
-    }
-
-    /**
-     * Gets ComfyUI folder paths using the API
-     * @returns {Promise<Object>} - Folder paths object
-     */
-    async getComfyUIFolderPaths() {
-        try {
-            return await api.getFolderPaths();
-        } catch (error) {
-            log.warn("Failed to get ComfyUI folder paths:", error);
-            return {};
-        }
-    }
-
-    /**
-     * Attempts to load a file via ComfyUI backend endpoint
-     * @param {string} filePath - The file path to load
-     * @param {string} addMode - The mode for adding the layer
-     * @returns {Promise<boolean>} - True if successful, false otherwise
-     */
-    async uploadFileToComfyUI(filePath, addMode) {
-        try {
-            log.info("Attempting to load file via ComfyUI backend:", filePath);
-            
-            // Use the new backend endpoint to load image from path
+            // Use the backend endpoint to load image from path
             const response = await api.fetchApi("/ycnode/load_image_from_path", {
                 method: "POST",
                 headers: {
@@ -433,6 +425,81 @@ export class ClipboardManager {
         const message = `Cannot load local file directly due to browser security restrictions. File detected: ${fileName}`;
         this.showNotification(message, 5000);
         log.info("Showed file path limitation message to user");
+    }
+
+    /**
+     * Shows a helpful message when clipboard appears empty and offers file picker
+     * @param {string} addMode - The mode for adding the layer
+     */
+    showEmptyClipboardMessage(addMode) {
+        const message = `Copied a file? Browser can't access file paths for security. Click here to select the file manually.`;
+        
+        // Create clickable notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2d5aa0;
+            color: white;
+            padding: 14px 18px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 10001;
+            max-width: 320px;
+            font-size: 14px;
+            line-height: 1.4;
+            cursor: pointer;
+            border: 2px solid #4a7bc8;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        `;
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">📁</span>
+                <span>${message}</span>
+            </div>
+            <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">
+                💡 Tip: You can also drag & drop files directly onto the canvas
+            </div>
+        `;
+
+        // Add hover effect
+        notification.onmouseenter = () => {
+            notification.style.backgroundColor = '#3d6bb0';
+            notification.style.borderColor = '#5a8bd8';
+            notification.style.transform = 'translateY(-1px)';
+        };
+        notification.onmouseleave = () => {
+            notification.style.backgroundColor = '#2d5aa0';
+            notification.style.borderColor = '#4a7bc8';
+            notification.style.transform = 'translateY(0)';
+        };
+
+        // Add click handler to open file picker
+        notification.onclick = async () => {
+            document.body.removeChild(notification);
+            try {
+                const success = await this.promptUserForFile('image_file.jpg', addMode);
+                if (success) {
+                    log.info("Successfully loaded image via empty clipboard file picker");
+                }
+            } catch (error) {
+                log.warn("Error with empty clipboard file picker:", error);
+            }
+        };
+
+        // Add to DOM
+        document.body.appendChild(notification);
+
+        // Auto-remove after longer duration
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 12000);
+
+        log.info("Showed enhanced empty clipboard message with file picker option");
     }
 
     /**

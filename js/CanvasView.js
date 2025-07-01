@@ -553,6 +553,7 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Paste Image",
                     title: "Paste image from clipboard",
                     onclick: () => {
+                        // Use the direct handlePaste method from CanvasLayers
                         const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
                         const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
                         canvas.canvasLayers.handlePaste(addMode);
@@ -581,6 +582,77 @@ async function createCanvasWidget(node, widget, app) {
                             button.style.backgroundColor = "#4a4a4a";
                         }
                         log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
+                    },
+                    onmouseenter: (e) => {
+                        const currentPreference = canvas.canvasLayers.clipboardPreference;
+                        let tooltipContent = '';
+                        
+                        if (currentPreference === 'system') {
+                            tooltipContent = `
+                                <h4>📋 System Clipboard Mode</h4>
+                                <table>
+                                    <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>system clipboard</strong> as flattened image</td></tr>
+                                    <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                    <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                    <tr><td></td><td>2️⃣ System clipboard (images, screenshots)</td></tr>
+                                    <tr><td></td><td>3️⃣ System clipboard (file paths, URLs)</td></tr>
+                                    <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                    <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                </table>
+                                <div style="margin-top: 8px; padding: 6px; background: rgba(255,165,0,0.2); border: 1px solid rgba(255,165,0,0.4); border-radius: 4px; font-size: 11px;">
+                                    ⚠️ <strong>Security Note:</strong> "Paste Image" button for external images may not work due to browser security restrictions. Use Ctrl+V instead or Drag & Drop.
+                                </div>
+                                <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                    💡 <strong>Best for:</strong> Working with screenshots, copied images, file paths, and urls.
+                                </div>
+                            `;
+                        } else {
+                            tooltipContent = `
+                                <h4>📋 ComfyUI Clipspace Mode</h4>
+                                <table>
+                                    <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>ComfyUI Clipspace</strong> as flattened image</td></tr>
+                                    <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                    <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                    <tr><td></td><td>2️⃣ ComfyUI Clipspace (workflow images)</td></tr>
+                                    <tr><td></td><td>3️⃣ System clipboard (fallback)</td></tr>
+                                    <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                    <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                </table>
+                                <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                    💡 <strong>Best for:</strong> ComfyUI workflow integration and node-to-node image transfer
+                                </div>
+                            `;
+                        }
+
+                        helpTooltip.innerHTML = tooltipContent;
+                        helpTooltip.style.visibility = 'hidden';
+                        helpTooltip.style.display = 'block';
+
+                        const buttonRect = e.target.getBoundingClientRect();
+                        const tooltipRect = helpTooltip.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+
+                        let left = buttonRect.left;
+                        let top = buttonRect.bottom + 5;
+
+                        if (left + tooltipRect.width > viewportWidth) {
+                            left = viewportWidth - tooltipRect.width - 10;
+                        }
+
+                        if (top + tooltipRect.height > viewportHeight) {
+                            top = buttonRect.top - tooltipRect.height - 5;
+                        }
+
+                        if (left < 10) left = 10;
+                        if (top < 10) top = 10;
+
+                        helpTooltip.style.left = `${left}px`;
+                        helpTooltip.style.top = `${top}px`;
+                        helpTooltip.style.visibility = 'visible';
+                    },
+                    onmouseleave: () => {
+                        helpTooltip.style.display = 'none';
                     }
                 }),
             ]),
@@ -989,53 +1061,8 @@ async function createCanvasWidget(node, widget, app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer]);
-    const handleFileLoad = async (file) => {
-        log.info("File dropped:", file.name);
-        if (!file.type.startsWith('image/')) {
-            log.info("Dropped file is not an image.");
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            log.debug("FileReader finished loading dropped file as data:URL.");
-            const img = new Image();
-            img.onload = async () => {
-                log.debug("Image object loaded from dropped data:URL.");
-                const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
-                const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-
-                await canvas.addLayer(img, {}, addMode);
-                log.info("Dropped layer added and state saved.");
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-
-    mainContainer.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.add('drag-over');
-    });
-
-    mainContainer.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.remove('drag-over');
-    });
-
-    mainContainer.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.remove('drag-over');
-
-        if (e.dataTransfer.files) {
-            for (const file of e.dataTransfer.files) {
-                await handleFileLoad(file);
-            }
-        }
-    });
+    // Drag & drop is now handled by CanvasInteractions.js
+    // Removed duplicate handlers to prevent double loading
 
     const mainWidget = node.addDOMWidget("mainContainer", "widget", mainContainer);
 
