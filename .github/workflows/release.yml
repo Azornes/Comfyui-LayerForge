@@ -1,4 +1,4 @@
-name: Auto Release with Version Patch and Commit Message
+name: Auto Release with Version Check
 
 on:
   push:
@@ -19,28 +19,24 @@ jobs:
           base=$(grep '^version *= *"' pyproject.toml | sed -E 's/version *= *"([^"]+)"/\1/')
           echo "base_version=$base" >> $GITHUB_OUTPUT
 
-      - name: Determine unique version tag
+      - name: Check if tag for this version already exists
+        run: |
+          TAG="v${{ steps.version.outputs.base_version }}"
+          git fetch --tags
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Skipping release."
+            exit 0
+          fi
+
+      - name: Set version tag
         id: unique_tag
         run: |
-          BASE="v${{ steps.version.outputs.base_version }}"
-          TAG=$BASE
-          COUNT=0
-
-          # Fetch remote tags
-          git fetch --tags
-
-          while git rev-parse "$TAG" >/dev/null 2>&1; do
-            COUNT=$((COUNT + 1))
-            TAG="$BASE.$COUNT"
-          done
-
-          echo "final_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "final_tag=v${{ steps.version.outputs.base_version }}" >> $GITHUB_OUTPUT
 
       - name: Get latest commit message
         id: last_commit
         run: |
           msg=$(git log -1 --pretty=%B)
-          # Zamiana nowych linii na \n aby ładnie wyświetlać w release body
           msg=${msg//$'\n'/\\n}
           echo "commit_msg=$msg" >> $GITHUB_OUTPUT
 
@@ -51,8 +47,7 @@ jobs:
           name: Release ${{ steps.unique_tag.outputs.final_tag }}
           body: |
             📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`
-            🔁 Auto-postfix to avoid duplicate tag: `${{ steps.unique_tag.outputs.final_tag }}`
-
+            
             📝 Last commit message:
             ```
             ${{ steps.last_commit.outputs.commit_msg }}

@@ -1,0 +1,98 @@
+name: 🐞 Bug Report
+description: Report an error or unexpected behavior
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you for reporting a bug!**  
+        Please follow these steps to capture useful info:
+
+        ### How to gather the necessary information:
+        🌐 **Browser & Version:**  
+        - Chrome: Click the three dots → Help → About Google Chrome  
+        - Firefox: Click the three bars → Help → About Firefox  
+        - Edge: Click the three dots → Help and feedback → About Microsoft Edge
+
+        🔗 **Where to find the latest versions of ComfyUI and LayerForge:**  
+        - [ComfyUI Github](https://github.com/comfyanonymous/ComfyUI/releases)
+        - [LayerForge Github](https://github.com/Azornes/Comfyui-LayerForge/releases/tag/v1.2.4) or [LayerForge from manager Comfyui](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
+
+        Make sure you have the latest versions before reporting an issue.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment (OS, ComfyUI version, LayerForge version)
+      placeholder: e.g. Windows 11, ComfyUI v0.3.43, LayerForge v1.2.4
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser & Version
+      placeholder: e.g. Chrome 115.0.0, Firefox 120.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What Happened?
+      placeholder: Describe the issue you encountered
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      placeholder: Describe what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      placeholder: Describe what happened instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: console_logs
+    attributes:
+      label: Browser Console Logs
+      description: |
+        **How to capture logs:**
+        - **Open console:**
+          - Chrome/Edge (Win/Linux): `Ctrl+Shift+J`  
+            Mac: `Cmd+Option+J`
+          - Firefox (Win/Linux): `Ctrl+Shift+K`  
+            Mac: `Cmd+Option+K`
+          - Safari (Mac): enable **Develop** menu in Preferences → Advanced, then `Cmd+Option+C`
+        - **Clear console** before reproducing:
+          - Chrome/Edge: click “🚫 Clear console” or press `Ctrl+L` (Win/Linux) / `Cmd+K` (Mac)
+          - Firefox: `Ctrl+Shift+L` (newer) or `Ctrl+L` (older) (Win/Linux), Mac: `Cmd+K`
+          - Safari: click 🗑 icon or press `Cmd+K` / `Ctrl+L`
+        - Reproduce the issue and paste new logs here.
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        **Optional:** You can also **attach a screenshot or video** to demonstrate the issue visually.  
+        To add media, simply drag & drop or paste image/video files into this issue form. GitHub supports common image formats and MP4/GIF files.

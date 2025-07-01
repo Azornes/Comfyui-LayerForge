@@ -1,0 +1,365 @@
+{
+  "id": "c7ba7096-c52c-4978-8843-e87ce219b6a8",
+  "revision": 0,
+  "last_node_id": 705,
+  "last_link_id": 1497,
+  "nodes": [
+    {
+      "id": 368,
+      "type": "Mask To Image (mtb)",
+      "pos": [
+        -1913.9735107421875,
+        -3351.5126953125
+      ],
+      "size": [
+        210,
+        130
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 1496
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            612
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-mtb",
+        "ver": "7e36007933f42c29cca270ae55e0e6866e323633",
+        "Node name for S&R": "Mask To Image (mtb)",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "#ff0000",
+        "#000000",
+        false
+      ]
+    },
+    {
+      "id": 442,
+      "type": "JoinImageWithAlpha",
+      "pos": [
+        -1907.2977294921875,
+        -3180.562744140625
+      ],
+      "size": [
+        176.86483764648438,
+        46
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1494
+        },
+        {
+          "name": "alpha",
+          "type": "MASK",
+          "link": 1497
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1236,
+            1465
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "JoinImageWithAlpha",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 369,
+      "type": "PreviewImage",
+      "pos": [
+        -1699.1021728515625,
+        -3355.60498046875
+      ],
+      "size": [
+        660.91162109375,
+        400.2092590332031
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 612
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 606,
+      "type": "PreviewImage",
+      "pos": [
+        -1911.126708984375,
+        -2916.072998046875
+      ],
+      "size": [
+        551.7399291992188,
+        546.8018798828125
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1495
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 603,
+      "type": "PreviewImage",
+      "pos": [
+        -1344.1650390625,
+        -2915.117919921875
+      ],
+      "size": [
+        601.4136962890625,
+        527.1531372070312
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1236
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 680,
+      "type": "SaveImage",
+      "pos": [
+        -1025.9984130859375,
+        -3357.975341796875
+      ],
+      "size": [
+        278.8309020996094,
+        395.84002685546875
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1465
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "SaveImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 701,
+      "type": "MarkdownNote",
+      "pos": [
+        -3330.08984375,
+        -3347.998291015625
+      ],
+      "size": [
+        347.055419921875,
+        217.8630828857422
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "Known Issue",
+      "properties": {
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "### `node_id` not auto-filled → black output\n\nIn some cases, **ComfyUI doesn't auto-fill the `node_id`** when adding a node.\nAs a result, the node may produce a **completely black image** or not work at all.\n\n**Workaround:**\n\n* Search node ID in ComfyUI settings.\n* In NodesMap check \"Enable node ID display\"\n* Manually enter the correct `node_id` (match the ID shown in the UI).\n\n⚠️ This is a known issue and not yet fixed.\nPlease follow the steps above if your output is black or broken."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 697,
+      "type": "CanvasNode",
+      "pos": [
+        -2968.572998046875,
+        -3347.89306640625
+      ],
+      "size": [
+        1044.9053955078125,
+        980.680908203125
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            1494,
+            1495
+          ]
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            1496,
+            1497
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "Comfyui-Ycanvas",
+        "ver": "f6a491e83bab9481a2cac3367541a3b7803df9ab",
+        "Node name for S&R": "CanvasNode",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        true,
+        17,
+        "697",
+        ""
+      ]
+    }
+  ],
+  "links": [
+    [
+      612,
+      368,
+      0,
+      369,
+      0,
+      "IMAGE"
+    ],
+    [
+      1236,
+      442,
+      0,
+      603,
+      0,
+      "IMAGE"
+    ],
+    [
+      1465,
+      442,
+      0,
+      680,
+      0,
+      "IMAGE"
+    ],
+    [
+      1494,
+      697,
+      0,
+      442,
+      0,
+      "IMAGE"
+    ],
+    [
+      1495,
+      697,
+      0,
+      606,
+      0,
+      "IMAGE"
+    ],
+    [
+      1496,
+      697,
+      1,
+      368,
+      0,
+      "MASK"
+    ],
+    [
+      1497,
+      697,
+      1,
+      442,
+      1,
+      "MASK"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7972024500000005,
+      "offset": [
+        3957.401300495613,
+        3455.1487103849176
+      ]
+    },
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "frontendVersion": "1.23.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

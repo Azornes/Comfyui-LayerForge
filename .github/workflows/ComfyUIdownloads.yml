@@ -1,0 +1,143 @@
+name: LayerForge Top Downloads Badge
+
+on:
+  schedule:
+    - cron: "0 0,8,16 * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: gh login
+        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
+
+      - name: Query LayerForge API 20 times and find top download
+        run: |
+          max_downloads=0
+          top_node_json="{}"
+          
+          for i in {1..20}; do
+            echo "Pobieranie danych z próby $i..."
+            curl -s https://api.comfy.org/nodes/layerforge > tmp_$i.json
+            
+            if [ ! -s tmp_$i.json ] || ! jq empty tmp_$i.json 2>/dev/null; then
+              echo "Błąd: Nieprawidłowy JSON dla próby $i"
+              continue
+            fi
+            
+            if jq -e 'type == "array"' tmp_$i.json >/dev/null; then
+              # Przeszukanie wszystkich węzłów w tablicy
+              node_count=$(jq 'length' tmp_$i.json)
+              echo "Znaleziono $node_count węzłów w próbie $i"
+              
+              for j in $(seq 0 $((node_count - 1))); do
+                downloads=$(jq -r ".[$j].downloads // 0" tmp_$i.json)
+                name=$(jq -r ".[$j].name // \"\"" tmp_$i.json)
+                
+                if [ "$downloads" -gt "$max_downloads" ]; then
+                  max_downloads=$downloads
+                  top_node_json=$(jq ".[$j]" tmp_$i.json)
+                  echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
+                fi
+              done
+            else
+              downloads=$(jq -r '.downloads // 0' tmp_$i.json)
+              name=$(jq -r '.name // ""' tmp_$i.json)
+              
+              if [ "$downloads" -gt "$max_downloads" ]; then
+                max_downloads=$downloads
+                top_node_json=$(cat tmp_$i.json)
+                echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
+              fi
+            fi
+            
+            rm -f tmp_$i.json
+          done
+          
+          if [ "$max_downloads" -gt 0 ]; then
+            echo "$top_node_json" > top_layerforge.json
+            echo "Najwyższa liczba pobrań: $max_downloads"
+            echo "Szczegóły węzła:"
+            jq . top_layerforge.json
+          else
+            echo "Błąd: Nie znaleziono żadnych prawidłowych danych"
+            # Utworzenie domyślnego JSON-a
+            echo '{"name": "No data", "downloads": 0}' > top_layerforge.json
+          fi
+
+      - name: create or update gist with top download
+        id: set_id
+        run: |
+          if gh secret list | grep -q "LAYERFORGE_GIST_ID"
+          then
+              echo "GIST_ID found"
+              echo "GIST=${{ secrets.LAYERFORGE_GIST_ID }}" >> $GITHUB_OUTPUT
+              
+              # Sprawdzenie czy gist istnieje
+              if gh gist view ${{ secrets.LAYERFORGE_GIST_ID }} &>/dev/null; then
+                echo "Gist istnieje, będzie zaktualizowany"
+              else
+                echo "Gist nie istnieje, tworzenie nowego"
+                gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+                echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+              fi
+          else
+              echo "Tworzenie nowego gist"
+              gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
+              echo $gist_id | gh secret set LAYERFORGE_GIST_ID
+              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
+          fi
+
+      - name: create badge if needed
+        run: |
+          COUNT=$(jq '.downloads' top_layerforge.json)
+          NAME=$(jq -r '.name' top_layerforge.json)
+          if [ ! -f LAYERFORGE.md ]; then
+            shields="https://img.shields.io/badge/dynamic/json?color=informational&label=TopLayerForge&query=downloads&url="
+            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/top_layerforge.json"
+            repo="https://comfy.org"
+            echo ''> LAYERFORGE.md
+            echo '
+            **Markdown**
+
+            ```markdown' >> LAYERFORGE.md
+            echo "[![Top LayerForge Node]($shields$url)]($repo)" >> LAYERFORGE.md
+            echo '
+            ```
+
+            **HTML**
+            ```html' >> LAYERFORGE.md
+            echo "<a href='$repo'><img alt='Top LayerForge Node' src='$shields$url'></a>" >> LAYERFORGE.md
+            echo '```' >> LAYERFORGE.md
+
+            git add LAYERFORGE.md
+            git config --global user.name "GitHub Action"
+            git config --global user.email "action@github.com"
+            git commit -m "Create LayerForge badge"
+          fi
+
+      - name: Update Gist
+        run: |
+          # Upewnienie się, że JSON jest poprawny
+          if jq empty top_layerforge.json 2>/dev/null; then
+            content=$(jq -c . top_layerforge.json)
+            echo "{\"description\": \"Top LayerForge Node\", \"files\": {\"top_layerforge.json\": {\"content\": $(jq -Rs . <<< "$content")}}}" > patch.json
+            
+            curl -s -X PATCH \
+              --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
+          else
+            echo "Błąd: Nieprawidłowy JSON w top_layerforge.json"
+            exit 1
+          fi
+
+      - name: Push
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
