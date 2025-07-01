@@ -147,7 +147,7 @@ optional feature and requires a model.
 > - **Download from**:
     >
 - [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet/tree/main) (Recommended)
->     - [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
+- [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
 > - **Installation Path**: Place the model file in `ComfyUI/models/BiRefNet/`.
 
 ---
