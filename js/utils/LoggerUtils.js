@@ -13,7 +13,7 @@ import {logger, LogLevel} from "../logger.js";
  */
 export function createModuleLogger(moduleName, level = LogLevel.NONE) {
     logger.setModuleLevel(moduleName, level);
-    
+
     return {
         debug: (...args) => logger.debug(moduleName, ...args),
         info: (...args) => logger.info(moduleName, ...args),
@@ -31,7 +31,7 @@ export function createAutoLogger(level = LogLevel.DEBUG) {
     const stack = new Error().stack;
     const match = stack.match(/\/([^\/]+)\.js/);
     const moduleName = match ? match[1] : 'Unknown';
-    
+
     return createModuleLogger(moduleName, level);
 }
 
@@ -43,7 +43,7 @@ export function createAutoLogger(level = LogLevel.DEBUG) {
  * @returns {Function} Opakowana funkcja
  */
 export function withErrorLogging(operation, log, operationName) {
-    return async function(...args) {
+    return async function (...args) {
         try {
             log.debug(`Starting ${operationName}`);
             const result = await operation.apply(this, args);
@@ -62,10 +62,10 @@ export function withErrorLogging(operation, log, operationName) {
  * @param {string} methodName - Nazwa metody
  */
 export function logMethod(log, methodName) {
-    return function(target, propertyKey, descriptor) {
+    return function (target, propertyKey, descriptor) {
         const originalMethod = descriptor.value;
-        
-        descriptor.value = async function(...args) {
+
+        descriptor.value = async function (...args) {
             try {
                 log.debug(`${methodName || propertyKey} started`);
                 const result = await originalMethod.apply(this, args);
@@ -76,7 +76,7 @@ export function logMethod(log, methodName) {
                 throw error;
             }
         };
-        
+
         return descriptor;
     };
 }

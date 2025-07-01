@@ -34,6 +34,8 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
 
+        document.addEventListener('paste', this.handlePasteEvent.bind(this));
+
         this.canvas.canvas.addEventListener('mouseenter', (e) => {
             this.canvas.isMouseOver = true;
             this.handleMouseEnter(e);
@@ -42,6 +44,13 @@ export class CanvasInteractions {
             this.canvas.isMouseOver = false;
             this.handleMouseLeave(e);
         });
+
+        this.canvas.canvas.addEventListener('dragover', this.handleDragOver.bind(this));
+        this.canvas.canvas.addEventListener('dragenter', this.handleDragEnter.bind(this));
+        this.canvas.canvas.addEventListener('dragleave', this.handleDragLeave.bind(this));
+        this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this));
+
+        this.canvas.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
     }
 
     resetInteractionState() {
@@ -86,26 +95,34 @@ export class CanvasInteractions {
         }
         this.interaction.lastClickTime = currentTime;
 
-        const transformTarget = this.canvas.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        if (e.button === 2) {
+            const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
+            if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
+                e.preventDefault(); // Prevent context menu
+                this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x ,viewCoords.y);
+                return;
+            }
+        }
+
+        if (e.shiftKey) {
+            this.startCanvasResize(worldCoords);
+            this.canvas.render();
+            return;
+        }
+
+        const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
         if (transformTarget) {
             this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
             return;
         }
 
-        const clickedLayerResult = this.canvas.getLayerAtPosition(worldCoords.x, worldCoords.y);
+        const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
         if (clickedLayerResult) {
-            if (e.shiftKey && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
-                this.canvas.showBlendModeMenu(e.clientX, e.clientY);
-                return;
-            }
             this.startLayerDrag(clickedLayerResult.layer, worldCoords);
             return;
         }
-        if (e.shiftKey) {
-            this.startCanvasResize(worldCoords);
-        } else {
-            this.startPanning(e);
-        }
+        
+        this.startPanning(e);
 
         this.canvas.render();
     }
@@ -176,7 +193,7 @@ export class CanvasInteractions {
 
         if (interactionEnded) {
             this.canvas.saveState();
-            this.canvas.saveStateToDB(true);
+            this.canvas.canvasState.saveStateToDB(true);
         }
     }
 
@@ -194,12 +211,22 @@ export class CanvasInteractions {
             this.resetInteractionState();
             this.canvas.render();
         }
+
+        if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+            this.canvas.canvasLayers.internalClipboard = [];
+            log.info("Internal clipboard cleared - mouse left canvas");
+        }
     }
 
     handleMouseEnter(e) {
         if (this.canvas.maskTool.isActive) {
             this.canvas.maskTool.handleMouseEnter();
         }
+    }
+
+    handleContextMenu(e) {
+
+        e.preventDefault();
     }
 
     handleWheel(e) {
@@ -297,16 +324,16 @@ export class CanvasInteractions {
                     e.preventDefault();
                     e.stopPropagation();
                     if (e.shiftKey) {
-                        this.canvas.redo();
+                        this.canvas.canvasState.redo();
                     } else {
-                        this.canvas.undo();
+                        this.canvas.canvasState.undo();
                     }
                     return;
                 }
                 if (e.key.toLowerCase() === 'y') {
                     e.preventDefault();
                     e.stopPropagation();
-                    this.canvas.redo();
+                    this.canvas.canvasState.redo();
                     return;
                 }
             }
@@ -324,30 +351,27 @@ export class CanvasInteractions {
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.shiftKey) {
-                    this.canvas.redo();
+                    this.canvas.canvasState.redo();
                 } else {
-                    this.canvas.undo();
+                    this.canvas.canvasState.undo();
                 }
                 return;
             }
             if (e.key.toLowerCase() === 'y') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.redo();
+                this.canvas.canvasState.redo();
                 return;
             }
             if (e.key.toLowerCase() === 'c') {
                 if (this.canvas.selectedLayers.length > 0) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.canvas.copySelectedLayers();
+                    this.canvas.canvasLayers.copySelectedLayers();
                 }
                 return;
             }
             if (e.key.toLowerCase() === 'v') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.canvas.handlePaste('mouse');
+
+
                 return;
             }
         }
@@ -399,7 +423,7 @@ export class CanvasInteractions {
     }
 
     updateCursor(worldCoords) {
-        const transformTarget = this.canvas.getHandleAtPosition(worldCoords.x, worldCoords.y);
+        const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
 
         if (transformTarget) {
             const handleName = transformTarget.handle;
@@ -409,7 +433,7 @@ export class CanvasInteractions {
                 'rot': 'grab'
             };
             this.canvas.canvas.style.cursor = cursorMap[handleName];
-        } else if (this.canvas.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
+        } else if (this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y)) {
             this.canvas.canvas.style.cursor = 'move';
         } else {
             this.canvas.canvas.style.cursor = 'default';
@@ -432,7 +456,7 @@ export class CanvasInteractions {
         } else {
             this.interaction.mode = 'resizing';
             this.interaction.resizeHandle = handle;
-            const handles = this.canvas.getHandles(layer);
+            const handles = this.canvas.canvasLayers.getHandles(layer);
             const oppositeHandleKey = {
                 'n': 's', 's': 'n', 'e': 'w', 'w': 'e',
                 'nw': 'se', 'se': 'nw', 'ne': 'sw', 'sw': 'ne'
@@ -711,5 +735,131 @@ export class CanvasInteractions {
             this.canvas.viewport.x -= rectX;
             this.canvas.viewport.y -= rectY;
         }
+    }
+
+    handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+        e.dataTransfer.dropEffect = 'copy';
+    }
+
+    handleDragEnter(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+        this.canvas.canvas.style.backgroundColor = 'rgba(45, 90, 160, 0.1)';
+        this.canvas.canvas.style.border = '2px dashed #2d5aa0';
+    }
+
+    handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent ComfyUI from handling this event
+
+        if (!this.canvas.canvas.contains(e.relatedTarget)) {
+            this.canvas.canvas.style.backgroundColor = '';
+            this.canvas.canvas.style.border = '';
+        }
+    }
+
+    async handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation(); // CRITICAL: Prevent ComfyUI from handling this event and loading workflow
+        
+        log.info("Canvas drag & drop event intercepted - preventing ComfyUI workflow loading");
+
+        this.canvas.canvas.style.backgroundColor = '';
+        this.canvas.canvas.style.border = '';
+
+        const files = Array.from(e.dataTransfer.files);
+        const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        
+        log.info(`Dropped ${files.length} file(s) onto canvas at position (${worldCoords.x}, ${worldCoords.y})`);
+
+        for (const file of files) {
+            if (file.type.startsWith('image/')) {
+                try {
+                    await this.loadDroppedImageFile(file, worldCoords);
+                    log.info(`Successfully loaded dropped image: ${file.name}`);
+                } catch (error) {
+                    log.error(`Failed to load dropped image ${file.name}:`, error);
+                }
+            } else {
+                log.warn(`Skipped non-image file: ${file.name} (${file.type})`);
+            }
+        }
+    }
+
+    async loadDroppedImageFile(file, worldCoords) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const img = new Image();
+            img.onload = async () => {
+
+                const fitOnAddWidget = this.canvas.node.widgets.find(w => w.name === "fit_on_add");
+                const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+
+                await this.canvas.addLayer(img, {}, addMode);
+            };
+            img.onerror = () => {
+                log.error(`Failed to load dropped image: ${file.name}`);
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = () => {
+            log.error(`Failed to read dropped file: ${file.name}`);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async handlePasteEvent(e) {
+
+        const shouldHandle = this.canvas.isMouseOver || 
+                           this.canvas.canvas.contains(document.activeElement) ||
+                           document.activeElement === this.canvas.canvas ||
+                           document.activeElement === document.body;
+        
+        if (!shouldHandle) {
+            log.debug("Paste event ignored - not focused on canvas");
+            return;
+        }
+
+        log.info("Paste event detected, checking clipboard preference");
+
+        const preference = this.canvas.canvasLayers.clipboardPreference;
+        
+        if (preference === 'clipspace') {
+
+            log.info("Clipboard preference is clipspace, delegating to ClipboardManager");
+            e.preventDefault();
+            e.stopPropagation();
+            await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
+            return;
+        }
+
+        const clipboardData = e.clipboardData;
+        if (clipboardData && clipboardData.items) {
+            for (const item of clipboardData.items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const file = item.getAsFile();
+                    if (file) {
+                        log.info("Found direct image data in paste event");
+                        const reader = new FileReader();
+                        reader.onload = async (event) => {
+                            const img = new Image();
+                            img.onload = async () => {
+                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'mouse');
+                            };
+                            img.src = event.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                        return;
+                    }
+                }
+            }
+        }
+
+        await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
     }
 }

@@ -2,12 +2,15 @@ import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
+import {app, ComfyApp} from "../../scripts/app.js";
+import {ClipboardManager} from "./utils/ClipboardManager.js";
 
 const log = createModuleLogger('CanvasLayers');
 
 export class CanvasLayers {
-    constructor(canvasLayers) {
-        this.canvasLayers = canvasLayers;
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.clipboardManager = new ClipboardManager(canvas);
         this.blendModes = [
             {name: 'normal', label: 'Normal'},
             {name: 'multiply', label: 'Multiply'},
@@ -26,84 +29,119 @@ export class CanvasLayers {
         this.blendOpacity = 100;
         this.isAdjustingOpacity = false;
         this.internalClipboard = [];
+        this.clipboardPreference = 'system'; // 'system', 'clipspace'
     }
 
     async copySelectedLayers() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        this.internalClipboard = this.canvasLayers.selectedLayers.map(layer => ({...layer}));
+        if (this.canvas.selectedLayers.length === 0) return;
+
+        this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
         log.info(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
-        try {
-            const blob = await this.getFlattenedSelectionAsBlob();
-            if (blob) {
+
+        const blob = await this.getFlattenedSelectionAsBlob();
+        if (!blob) {
+            log.warn("Failed to create flattened selection blob");
+            return;
+        }
+
+        if (this.clipboardPreference === 'clipspace') {
+            try {
+
+                const dataURL = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+
+                const img = new Image();
+                img.onload = () => {
+
+                    if (this.canvas.node.imgs) {
+                        this.canvas.node.imgs = [img];
+                    } else {
+                        this.canvas.node.imgs = [img];
+                    }
+
+                    if (ComfyApp.copyToClipspace) {
+                        ComfyApp.copyToClipspace(this.canvas.node);
+                        log.info("Flattened selection copied to ComfyUI Clipspace.");
+                    } else {
+                        log.warn("ComfyUI copyToClipspace not available");
+                    }
+                };
+                img.src = dataURL;
+                
+            } catch (error) {
+                log.error("Failed to copy image to ComfyUI Clipspace:", error);
+
+                try {
+                    const item = new ClipboardItem({'image/png': blob});
+                    await navigator.clipboard.write([item]);
+                    log.info("Fallback: Flattened selection copied to system clipboard.");
+                } catch (fallbackError) {
+                    log.error("Failed to copy to system clipboard as fallback:", fallbackError);
+                }
+            }
+        } else {
+
+            try {
                 const item = new ClipboardItem({'image/png': blob});
                 await navigator.clipboard.write([item]);
-                log.info("Flattened selection copied to the system clipboard.");
+                log.info("Flattened selection copied to system clipboard.");
+            } catch (error) {
+                log.error("Failed to copy image to system clipboard:", error);
             }
-        } catch (error) {
-            log.error("Failed to copy image to system clipboard:", error);
         }
     }
 
     pasteLayers() {
         if (this.internalClipboard.length === 0) return;
-        this.canvasLayers.saveState();
+        this.canvas.saveState();
         const newLayers = [];
-        const pasteOffset = 20;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        this.internalClipboard.forEach(layer => {
+            minX = Math.min(minX, layer.x);
+            minY = Math.min(minY, layer.y);
+            maxX = Math.max(maxX, layer.x + layer.width);
+            maxY = Math.max(maxY, layer.y + layer.height);
+        });
+
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        const mouseX = this.canvas.lastMousePosition.x;
+        const mouseY = this.canvas.lastMousePosition.y;
+        const offsetX = mouseX - centerX;
+        const offsetY = mouseY - centerY;
 
         this.internalClipboard.forEach(clipboardLayer => {
             const newLayer = {
                 ...clipboardLayer,
-                x: clipboardLayer.x + pasteOffset / this.canvasLayers.viewport.zoom,
-                y: clipboardLayer.y + pasteOffset / this.canvasLayers.viewport.zoom,
-                zIndex: this.canvasLayers.layers.length
+                x: clipboardLayer.x + offsetX,
+                y: clipboardLayer.y + offsetY,
+                zIndex: this.canvas.layers.length
             };
-            this.canvasLayers.layers.push(newLayer);
+            this.canvas.layers.push(newLayer);
             newLayers.push(newLayer);
         });
 
-        this.canvasLayers.updateSelection(newLayers);
-        this.canvasLayers.render();
-        log.info(`Pasted ${newLayers.length} layer(s).`);
+        this.canvas.updateSelection(newLayers);
+        this.canvas.render();
+        log.info(`Pasted ${newLayers.length} layer(s) at mouse position (${mouseX}, ${mouseY}).`);
     }
 
     async handlePaste(addMode = 'mouse') {
         try {
-            if (!navigator.clipboard?.read) {
-                log.info("Browser does not support clipboard read API. Falling back to internal paste.");
-                this.pasteLayers();
-                return;
-            }
+            log.info(`Paste operation started with preference: ${this.clipboardPreference}`);
 
-            const clipboardItems = await navigator.clipboard.read();
-            let imagePasted = false;
-
-            for (const item of clipboardItems) {
-                const imageType = item.types.find(type => type.startsWith('image/'));
-
-                if (imageType) {
-                    const blob = await item.getType(imageType);
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const img = new Image();
-                        img.onload = async () => {
-                            await this.addLayerWithImage(img, {}, addMode);
-                        };
-                        img.src = event.target.result;
-                    };
-                    reader.readAsDataURL(blob);
-                    imagePasted = true;
-                    break;
-                }
-            }
-            if (!imagePasted) {
-                this.pasteLayers();
-            }
+            await this.clipboardManager.handlePaste(addMode, this.clipboardPreference);
 
         } catch (err) {
-            log.error("Paste operation failed, falling back to internal paste. Error:", err);
-            this.pasteLayers();
+            log.error("Paste operation failed:", err);
         }
     }
+
 
     addLayerWithImage = withErrorHandling(async (image, layerProps = {}, addMode = 'default') => {
         if (!image) {
@@ -113,24 +151,24 @@ export class CanvasLayers {
         log.debug("Adding layer with image:", image, "with mode:", addMode);
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
-        this.canvasLayers.imageCache.set(imageId, image.src);
-        
+        this.canvas.imageCache.set(imageId, image.src);
+
         let finalWidth = image.width;
         let finalHeight = image.height;
         let finalX, finalY;
 
         if (addMode === 'fit') {
-            const scale = Math.min(this.canvasLayers.width / image.width, this.canvasLayers.height / image.height);
+            const scale = Math.min(this.canvas.width / image.width, this.canvas.height / image.height);
             finalWidth = image.width * scale;
             finalHeight = image.height * scale;
-            finalX = (this.canvasLayers.width - finalWidth) / 2;
-            finalY = (this.canvasLayers.height - finalHeight) / 2;
+            finalX = (this.canvas.width - finalWidth) / 2;
+            finalY = (this.canvas.height - finalHeight) / 2;
         } else if (addMode === 'mouse') {
-            finalX = this.canvasLayers.lastMousePosition.x - finalWidth / 2;
-            finalY = this.canvasLayers.lastMousePosition.y - finalHeight / 2;
+            finalX = this.canvas.lastMousePosition.x - finalWidth / 2;
+            finalY = this.canvas.lastMousePosition.y - finalHeight / 2;
         } else { // 'center' or 'default'
-            finalX = (this.canvasLayers.width - finalWidth) / 2;
-            finalY = (this.canvasLayers.height - finalHeight) / 2;
+            finalX = (this.canvas.width - finalWidth) / 2;
+            finalY = (this.canvas.height - finalHeight) / 2;
         }
 
         const layer = {
@@ -143,16 +181,16 @@ export class CanvasLayers {
             originalWidth: image.width,
             originalHeight: image.height,
             rotation: 0,
-            zIndex: this.canvasLayers.layers.length,
+            zIndex: this.canvas.layers.length,
             blendMode: 'normal',
             opacity: 1,
             ...layerProps
         };
 
-        this.canvasLayers.layers.push(layer);
-        this.canvasLayers.updateSelection([layer]);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.push(layer);
+        this.canvas.updateSelection([layer]);
+        this.canvas.render();
+        this.canvas.saveState();
 
         log.info("Layer added successfully");
         return layer;
@@ -162,53 +200,27 @@ export class CanvasLayers {
         return this.addLayerWithImage(image);
     }
 
-    async removeLayer(index) {
-        if (index >= 0 && index < this.canvasLayers.layers.length) {
-            const layer = this.canvasLayers.layers[index];
-            if (layer.imageId) {
-                const isImageUsedElsewhere = this.canvasLayers.layers.some((l, i) => i !== index && l.imageId === layer.imageId);
-                if (!isImageUsedElsewhere) {
-                    await removeImage(layer.imageId);
-                    this.canvasLayers.imageCache.delete(layer.imageId);
-                }
-            }
-            this.canvasLayers.layers.splice(index, 1);
-            this.canvasLayers.selectedLayer = this.canvasLayers.layers[this.canvasLayers.layers.length - 1] || null;
-            this.canvasLayers.render();
-            this.canvasLayers.saveState();
-        }
-    }
-
-    moveLayer(fromIndex, toIndex) {
-        if (fromIndex >= 0 && fromIndex < this.canvasLayers.layers.length &&
-            toIndex >= 0 && toIndex < this.canvasLayers.layers.length) {
-            const layer = this.canvasLayers.layers.splice(fromIndex, 1)[0];
-            this.canvasLayers.layers.splice(toIndex, 0, layer);
-            this.canvasLayers.render();
-        }
-    }
-
     moveLayerUp() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvasLayers.selectedLayers.map(layer => this.canvasLayers.layers.indexOf(layer)));
+        if (this.canvas.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
 
         const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => b - a);
 
         sortedIndices.forEach(index => {
             const targetIndex = index + 1;
 
-            if (targetIndex < this.canvasLayers.layers.length && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvasLayers.layers[index], this.canvasLayers.layers[targetIndex]] = [this.canvasLayers.layers[targetIndex], this.canvasLayers.layers[index]];
+            if (targetIndex < this.canvas.layers.length && !selectedIndicesSet.has(targetIndex)) {
+                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
             }
         });
-        this.canvasLayers.layers.forEach((layer, i) => layer.zIndex = i);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     moveLayerDown() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvasLayers.selectedLayers.map(layer => this.canvasLayers.layers.indexOf(layer)));
+        if (this.canvas.selectedLayers.length === 0) return;
+        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
 
         const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => a - b);
 
@@ -216,17 +228,46 @@ export class CanvasLayers {
             const targetIndex = index - 1;
 
             if (targetIndex >= 0 && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvasLayers.layers[index], this.canvasLayers.layers[targetIndex]] = [this.canvasLayers.layers[targetIndex], this.canvasLayers.layers[index]];
+                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
             }
         });
-        this.canvasLayers.layers.forEach((layer, i) => layer.zIndex = i);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
+        this.canvas.render();
+        this.canvas.saveState();
+    }
+
+    /**
+     * Zmienia rozmiar wybranych warstw
+     * @param {number} scale - Skala zmiany rozmiaru
+     */
+    resizeLayer(scale) {
+        if (this.canvas.selectedLayers.length === 0) return;
+
+        this.canvas.selectedLayers.forEach(layer => {
+            layer.width *= scale;
+            layer.height *= scale;
+        });
+        this.canvas.render();
+        this.canvas.saveState();
+    }
+
+    /**
+     * Obraca wybrane warstwy
+     * @param {number} angle - Kąt obrotu w stopniach
+     */
+    rotateLayer(angle) {
+        if (this.canvas.selectedLayers.length === 0) return;
+
+        this.canvas.selectedLayers.forEach(layer => {
+            layer.rotation += angle;
+        });
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     getLayerAtPosition(worldX, worldY) {
-        for (let i = this.canvasLayers.layers.length - 1; i >= 0; i--) {
-            const layer = this.canvasLayers.layers[i];
+        for (let i = this.canvas.layers.length - 1; i >= 0; i--) {
+            const layer = this.canvas.layers[i];
 
             const centerX = layer.x + layer.width / 2;
             const centerY = layer.y + layer.height / 2;
@@ -253,12 +294,12 @@ export class CanvasLayers {
     }
 
     async mirrorHorizontal() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
 
-        const promises = this.canvasLayers.selectedLayers.map(layer => {
+        const promises = this.canvas.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
+                const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
                 tempCanvas.width = layer.image.width;
                 tempCanvas.height = layer.image.height;
 
@@ -276,17 +317,17 @@ export class CanvasLayers {
         });
 
         await Promise.all(promises);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     async mirrorVertical() {
-        if (this.canvasLayers.selectedLayers.length === 0) return;
+        if (this.canvas.selectedLayers.length === 0) return;
 
-        const promises = this.canvasLayers.selectedLayers.map(layer => {
+        const promises = this.canvas.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
+                const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
                 tempCanvas.width = layer.image.width;
                 tempCanvas.height = layer.image.height;
 
@@ -304,14 +345,14 @@ export class CanvasLayers {
         });
 
         await Promise.all(promises);
-        this.canvasLayers.render();
-        this.canvasLayers.saveState();
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     async getLayerImageData(layer) {
         try {
             const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
             tempCanvas.width = layer.width;
             tempCanvas.height = layer.height;
@@ -342,50 +383,22 @@ export class CanvasLayers {
         }
     }
 
-
     updateOutputAreaSize(width, height, saveHistory = true) {
         if (saveHistory) {
-            this.canvasLayers.saveState();
+            this.canvas.saveState();
         }
-        this.canvasLayers.width = width;
-        this.canvasLayers.height = height;
-        this.canvasLayers.maskTool.resize(width, height);
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.canvas.maskTool.resize(width, height);
 
-        this.canvasLayers.canvasLayers.width = width;
-        this.canvasLayers.canvasLayers.height = height;
+        this.canvas.canvas.width = width;
+        this.canvas.canvas.height = height;
 
-        this.canvasLayers.render();
+        this.canvas.render();
 
         if (saveHistory) {
-            this.canvasLayers.saveStateToDB();
+            this.canvas.canvasState.saveStateToDB();
         }
-    }
-
-    addMattedLayer(image, mask) {
-        const layer = {
-            image: image,
-            mask: mask,
-            x: 0,
-            y: 0,
-            width: image.width,
-            height: image.height,
-            rotation: 0,
-            zIndex: this.canvasLayers.layers.length
-        };
-
-        this.canvasLayers.layers.push(layer);
-        this.canvasLayers.selectedLayer = layer;
-        this.canvasLayers.render();
-    }
-
-    isRotationHandle(x, y) {
-        if (!this.canvasLayers.selectedLayer) return false;
-
-        const handleX = this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width / 2;
-        const handleY = this.canvasLayers.selectedLayer.y - 20;
-        const handleRadius = 5;
-
-        return Math.sqrt(Math.pow(x - handleX, 2) + Math.pow(y - handleY, 2)) <= handleRadius;
     }
 
     getHandles(layer) {
@@ -408,7 +421,7 @@ export class CanvasLayers {
             'sw': {x: -halfW, y: halfH},
             'w': {x: -halfW, y: 0},
             'nw': {x: -halfW, y: -halfH},
-            'rot': {x: 0, y: -halfH - 20 / this.canvasLayers.viewport.zoom}
+            'rot': {x: 0, y: -halfH - 20 / this.canvas.viewport.zoom}
         };
 
         const worldHandles = {};
@@ -423,11 +436,11 @@ export class CanvasLayers {
     }
 
     getHandleAtPosition(worldX, worldY) {
-        if (this.canvasLayers.selectedLayers.length === 0) return null;
+        if (this.canvas.selectedLayers.length === 0) return null;
 
-        const handleRadius = 8 / this.canvasLayers.viewport.zoom;
-        for (let i = this.canvasLayers.selectedLayers.length - 1; i >= 0; i--) {
-            const layer = this.canvasLayers.selectedLayers[i];
+        const handleRadius = 8 / this.canvas.viewport.zoom;
+        for (let i = this.canvas.selectedLayers.length - 1; i >= 0; i--) {
+            const layer = this.canvas.selectedLayers[i];
             const handles = this.getHandles(layer);
 
             for (const key in handles) {
@@ -437,34 +450,6 @@ export class CanvasLayers {
                 if (dx * dx + dy * dy <= handleRadius * handleRadius) {
                     return {layer: layer, handle: key};
                 }
-            }
-        }
-        return null;
-    }
-
-    getResizeHandle(x, y) {
-        if (!this.canvasLayers.selectedLayer) return null;
-
-        const handleRadius = 5;
-        const handles = {
-            'nw': {x: this.canvasLayers.selectedLayer.x, y: this.canvasLayers.selectedLayer.y},
-            'ne': {
-                x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
-                y: this.canvasLayers.selectedLayer.y
-            },
-            'se': {
-                x: this.canvasLayers.selectedLayer.x + this.canvasLayers.selectedLayer.width,
-                y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
-            },
-            'sw': {
-                x: this.canvasLayers.selectedLayer.x,
-                y: this.canvasLayers.selectedLayer.y + this.canvasLayers.selectedLayer.height
-            }
-        };
-
-        for (const [position, point] of Object.entries(handles)) {
-            if (Math.sqrt(Math.pow(x - point.x, 2) + Math.pow(y - point.y, 2)) <= handleRadius) {
-                return position;
             }
         }
         return null;
@@ -482,10 +467,68 @@ export class CanvasLayers {
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
             border-radius: 4px;
-            padding: 5px;
             z-index: 10000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            min-width: 200px;
         `;
+
+        const titleBar = document.createElement('div');
+        titleBar.style.cssText = `
+            background: #3a3a3a;
+            color: white;
+            padding: 8px 10px;
+            cursor: move;
+            user-select: none;
+            border-radius: 3px 3px 0 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #4a4a4a;
+        `;
+        titleBar.textContent = 'Blend Mode';
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            padding: 5px;
+        `;
+
+        menu.appendChild(titleBar);
+        menu.appendChild(content);
+
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        const handleMouseMove = (e) => {
+            if (isDragging) {
+                const newX = e.clientX - dragOffset.x;
+                const newY = e.clientY - dragOffset.y;
+
+                const maxX = window.innerWidth - menu.offsetWidth;
+                const maxY = window.innerHeight - menu.offsetHeight;
+                
+                menu.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+                menu.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+            }
+        };
+
+        const handleMouseUp = () => {
+            if (isDragging) {
+                isDragging = false;
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+        };
+
+        titleBar.addEventListener('mousedown', (e) => {
+            isDragging = true;
+
+            dragOffset.x = e.clientX - parseInt(menu.style.left);
+            dragOffset.y = e.clientY - parseInt(menu.style.top);
+            e.preventDefault();
+            e.stopPropagation();
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
 
         this.blendModes.forEach(mode => {
             const container = document.createElement('div');
@@ -508,58 +551,58 @@ export class CanvasLayers {
             slider.min = '0';
             slider.max = '100';
 
-            slider.value = this.canvasLayers.selectedLayer.opacity ? Math.round(this.canvasLayers.selectedLayer.opacity * 100) : 100;
+            slider.value = this.canvas.selectedLayer.opacity ? Math.round(this.canvas.selectedLayer.opacity * 100) : 100;
             slider.style.cssText = `
                 width: 100%;
                 margin: 5px 0;
                 display: none;
             `;
 
-            if (this.canvasLayers.selectedLayer.blendMode === mode.name) {
+            if (this.canvas.selectedLayer.blendMode === mode.name) {
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
             }
 
             option.onclick = () => {
-                menu.querySelectorAll('input[type="range"]').forEach(s => {
+                content.querySelectorAll('input[type="range"]').forEach(s => {
                     s.style.display = 'none';
                 });
-                menu.querySelectorAll('.blend-mode-container div').forEach(d => {
+                content.querySelectorAll('.blend-mode-container div').forEach(d => {
                     d.style.backgroundColor = '';
                 });
 
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
 
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.blendMode = mode.name;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.blendMode = mode.name;
+                    this.canvas.render();
                 }
             };
 
             slider.addEventListener('input', () => {
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.opacity = slider.value / 100;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.opacity = slider.value / 100;
+                    this.canvas.render();
                 }
             });
 
             slider.addEventListener('change', async () => {
-                if (this.canvasLayers.selectedLayer) {
-                    this.canvasLayers.selectedLayer.opacity = slider.value / 100;
-                    this.canvasLayers.render();
+                if (this.canvas.selectedLayer) {
+                    this.canvas.selectedLayer.opacity = slider.value / 100;
+                    this.canvas.render();
                     const saveWithFallback = async (fileName) => {
                         try {
-                            const uniqueFileName = generateUniqueFileName(fileName, this.canvasLayers.node.id);
-                            return await this.canvasLayers.saveToServer(uniqueFileName);
+                            const uniqueFileName = generateUniqueFileName(fileName, this.canvas.node.id);
+                            return await this.canvas.saveToServer(uniqueFileName);
                         } catch (error) {
                             console.warn(`Failed to save with unique name, falling back to original: ${fileName}`, error);
-                            return await this.canvasLayers.saveToServer(fileName);
+                            return await this.canvas.saveToServer(fileName);
                         }
                     };
 
-                    await saveWithFallback(this.canvasLayers.widget.value);
-                    if (this.canvasLayers.node) {
+                    await saveWithFallback(this.canvas.widget.value);
+                    if (this.canvas.node) {
                         app.graph.runStep();
                     }
                 }
@@ -567,14 +610,14 @@ export class CanvasLayers {
 
             container.appendChild(option);
             container.appendChild(slider);
-            menu.appendChild(container);
+            content.appendChild(container);
         });
 
-        const container = this.canvasLayers.canvas.parentElement || document.body;
+        const container = this.canvas.canvas.parentElement || document.body;
         container.appendChild(menu);
 
         const closeMenu = (e) => {
-            if (!menu.contains(e.target)) {
+            if (!menu.contains(e.target) && !isDragging) {
                 this.closeBlendModeMenu();
                 document.removeEventListener('mousedown', closeMenu);
             }
@@ -588,17 +631,6 @@ export class CanvasLayers {
         const menu = document.getElementById('blend-mode-menu');
         if (menu && menu.parentNode) {
             menu.parentNode.removeChild(menu);
-        }
-    }
-
-    handleBlendModeSelection(mode) {
-        if (this.selectedBlendMode === mode && !this.isAdjustingOpacity) {
-            this.applyBlendMode(mode, this.blendOpacity);
-            this.closeBlendModeMenu();
-        } else {
-            this.selectedBlendMode = mode;
-            this.isAdjustingOpacity = true;
-            this.showOpacitySlider(mode);
         }
     }
 
@@ -623,11 +655,11 @@ export class CanvasLayers {
     async getFlattenedCanvasAsBlob() {
         return new Promise((resolve, reject) => {
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = this.canvasLayers.width;
-            tempCanvas.height = this.canvasLayers.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
-            const sortedLayers = [...this.canvasLayers.layers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedLayers.forEach(layer => {
                 if (!layer.image) return;
@@ -660,14 +692,216 @@ export class CanvasLayers {
         });
     }
 
+    async getFlattenedCanvasWithMaskAsBlob() {
+        return new Promise((resolve, reject) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2,
+                    -layer.height / 2,
+                    layer.width,
+                    layer.height
+                );
+
+                tempCtx.restore();
+            });
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
+
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.canvas.width;
+                tempMaskCanvas.height = this.canvas.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+
+                const maskX = this.canvas.maskTool.x;
+                const maskY = this.canvas.maskTool.y;
+
+                const sourceX = Math.max(0, -maskX);  // Where in the mask canvas to start reading
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);     // Where in the output canvas to start writing
+                const destY = Math.max(0, maskY);
+
+                const copyWidth = Math.min(
+                    toolMaskCanvas.width - sourceX,   // Available width in source
+                    this.canvas.width - destX         // Available width in destination
+                );
+                const copyHeight = Math.min(
+                    toolMaskCanvas.height - sourceY,  // Available height in source
+                    this.canvas.height - destY        // Available height in destination
+                );
+
+                if (copyWidth > 0 && copyHeight > 0) {
+                    tempMaskCtx.drawImage(
+                        toolMaskCanvas,
+                        sourceX, sourceY, copyWidth, copyHeight,  // Source rectangle
+                        destX, destY, copyWidth, copyHeight       // Destination rectangle
+                    );
+                }
+
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                    tempMaskData.data[i + 3] = alpha;
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+
+                const maskImageData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const maskData = maskImageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const originalAlpha = data[i + 3];
+                    const maskAlpha = maskData[i + 3] / 255; // Użyj kanału alpha maski
+
+
+                    const invertedMaskAlpha = 1 - maskAlpha;
+                    data[i + 3] = originalAlpha * invertedMaskAlpha;
+                }
+
+                tempCtx.putImageData(imageData, 0, 0);
+            }
+
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas toBlob failed.'));
+                }
+            }, 'image/png');
+        });
+    }
+
+    async getFlattenedCanvasForMaskEditor() {
+        return new Promise((resolve, reject) => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = this.canvas.width;
+            tempCanvas.height = this.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
+
+            sortedLayers.forEach(layer => {
+                if (!layer.image) return;
+
+                tempCtx.save();
+                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
+                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                tempCtx.translate(centerX, centerY);
+                tempCtx.rotate(layer.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    layer.image,
+                    -layer.width / 2,
+                    -layer.height / 2,
+                    layer.width,
+                    layer.height
+                );
+
+                tempCtx.restore();
+            });
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const data = imageData.data;
+
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
+
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = this.canvas.width;
+                tempMaskCanvas.height = this.canvas.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+
+                const maskX = this.canvas.maskTool.x;
+                const maskY = this.canvas.maskTool.y;
+
+                const sourceX = Math.max(0, -maskX);
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);
+                const destY = Math.max(0, maskY);
+
+                const copyWidth = Math.min(
+                    toolMaskCanvas.width - sourceX,
+                    this.canvas.width - destX
+                );
+                const copyHeight = Math.min(
+                    toolMaskCanvas.height - sourceY,
+                    this.canvas.height - destY
+                );
+
+                if (copyWidth > 0 && copyHeight > 0) {
+                    tempMaskCtx.drawImage(
+                        toolMaskCanvas,
+                        sourceX, sourceY, copyWidth, copyHeight,
+                        destX, destY, copyWidth, copyHeight
+                    );
+                }
+
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                    tempMaskData.data[i + 3] = alpha;
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+
+                const maskImageData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const maskData = maskImageData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const originalAlpha = data[i + 3];
+                    const maskAlpha = maskData[i + 3] / 255;
+
+
+                    const invertedMaskAlpha = 1 - maskAlpha;
+                    data[i + 3] = originalAlpha * invertedMaskAlpha;
+                }
+
+                tempCtx.putImageData(imageData, 0, 0);
+            }
+
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error('Canvas toBlob failed.'));
+                }
+            }, 'image/png');
+        });
+    }
+
     async getFlattenedSelectionAsBlob() {
-        if (this.canvasLayers.selectedLayers.length === 0) {
+        if (this.canvas.selectedLayers.length === 0) {
             return null;
         }
 
         return new Promise((resolve) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvasLayers.selectedLayers.forEach(layer => {
+            this.canvas.selectedLayers.forEach(layer => {
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
                 const rad = layer.rotation * Math.PI / 180;
@@ -705,11 +939,11 @@ export class CanvasLayers {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = newWidth;
             tempCanvas.height = newHeight;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
             tempCtx.translate(-minX, -minY);
 
-            const sortedSelection = [...this.canvasLayers.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedSelection = [...this.canvas.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedSelection.forEach(layer => {
                 if (!layer.image) return;

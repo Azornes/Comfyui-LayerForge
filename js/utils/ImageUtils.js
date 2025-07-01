@@ -1,5 +1,6 @@
 import {createModuleLogger} from "./LoggerUtils.js";
 import {withErrorHandling, createValidationError} from "../ErrorHandler.js";
+
 const log = createModuleLogger('ImageUtils');
 
 export function validateImageData(data) {
@@ -114,7 +115,7 @@ export function applyMaskToImageData(imageData, maskData) {
     };
 }
 
-export const prepareImageForCanvas = withErrorHandling(function(inputImage) {
+export const prepareImageForCanvas = withErrorHandling(function (inputImage) {
     log.info("Preparing image for canvas:", inputImage);
 
     if (Array.isArray(inputImage)) {
@@ -122,7 +123,7 @@ export const prepareImageForCanvas = withErrorHandling(function(inputImage) {
     }
 
     if (!inputImage || !inputImage.shape || !inputImage.data) {
-        throw createValidationError("Invalid input image format", { inputImage });
+        throw createValidationError("Invalid input image format", {inputImage});
     }
 
     const shape = inputImage.shape;
@@ -161,29 +162,29 @@ export const prepareImageForCanvas = withErrorHandling(function(inputImage) {
  * @param {HTMLImageElement|HTMLCanvasElement} image - Obraz do konwersji
  * @returns {Promise<Object>} Tensor z danymi obrazu
  */
-export const imageToTensor = withErrorHandling(async function(image) {
+export const imageToTensor = withErrorHandling(async function (image) {
     if (!image) {
         throw createValidationError("Image is required");
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     canvas.width = image.width || image.naturalWidth;
     canvas.height = image.height || image.naturalHeight;
-    
+
     ctx.drawImage(image, 0, 0);
-    
+
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = new Float32Array(canvas.width * canvas.height * 3);
-    
+
     for (let i = 0; i < imageData.data.length; i += 4) {
         const pixelIndex = i / 4;
         data[pixelIndex * 3] = imageData.data[i] / 255;
         data[pixelIndex * 3 + 1] = imageData.data[i + 1] / 255;
         data[pixelIndex * 3 + 2] = imageData.data[i + 2] / 255;
     }
-    
+
     return {
         data: data,
         shape: [1, canvas.height, canvas.width, 3],
@@ -197,33 +198,33 @@ export const imageToTensor = withErrorHandling(async function(image) {
  * @param {Object} tensor - Tensor z danymi obrazu
  * @returns {Promise<HTMLImageElement>} Obraz HTML
  */
-export const tensorToImage = withErrorHandling(async function(tensor) {
+export const tensorToImage = withErrorHandling(async function (tensor) {
     if (!tensor || !tensor.data || !tensor.shape) {
-        throw createValidationError("Invalid tensor format", { tensor });
+        throw createValidationError("Invalid tensor format", {tensor});
     }
 
     const [, height, width, channels] = tensor.shape;
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     canvas.width = width;
     canvas.height = height;
-    
+
     const imageData = ctx.createImageData(width, height);
     const data = tensor.data;
-    
+
     for (let i = 0; i < width * height; i++) {
         const pixelIndex = i * 4;
         const tensorIndex = i * channels;
-        
+
         imageData.data[pixelIndex] = Math.round(data[tensorIndex] * 255);
         imageData.data[pixelIndex + 1] = Math.round(data[tensorIndex + 1] * 255);
         imageData.data[pixelIndex + 2] = Math.round(data[tensorIndex + 2] * 255);
         imageData.data[pixelIndex + 3] = 255;
     }
-    
+
     ctx.putImageData(imageData, 0, 0);
-    
+
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
@@ -239,27 +240,27 @@ export const tensorToImage = withErrorHandling(async function(tensor) {
  * @param {number} maxHeight - Maksymalna wysokość
  * @returns {Promise<HTMLImageElement>} Przeskalowany obraz
  */
-export const resizeImage = withErrorHandling(async function(image, maxWidth, maxHeight) {
+export const resizeImage = withErrorHandling(async function (image, maxWidth, maxHeight) {
     if (!image) {
         throw createValidationError("Image is required");
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     const originalWidth = image.width || image.naturalWidth;
     const originalHeight = image.height || image.naturalHeight;
     const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
     const newWidth = Math.round(originalWidth * scale);
     const newHeight = Math.round(originalHeight * scale);
-    
+
     canvas.width = newWidth;
     canvas.height = newHeight;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    
+
     ctx.drawImage(image, 0, 0, newWidth, newHeight);
-    
+
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
@@ -274,7 +275,7 @@ export const resizeImage = withErrorHandling(async function(image, maxWidth, max
  * @param {number} size - Rozmiar miniatury (kwadrat)
  * @returns {Promise<HTMLImageElement>} Miniatura
  */
-export const createThumbnail = withErrorHandling(async function(image, size = 128) {
+export const createThumbnail = withErrorHandling(async function (image, size = 128) {
     return resizeImage(image, size, size);
 }, 'createThumbnail');
 
@@ -285,19 +286,19 @@ export const createThumbnail = withErrorHandling(async function(image, size = 12
  * @param {number} quality - Jakość (0-1) dla formatów stratnych
  * @returns {string} Base64 string
  */
-export const imageToBase64 = withErrorHandling(function(image, format = 'png', quality = 0.9) {
+export const imageToBase64 = withErrorHandling(function (image, format = 'png', quality = 0.9) {
     if (!image) {
         throw createValidationError("Image is required");
     }
 
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     canvas.width = image.width || image.naturalWidth;
     canvas.height = image.height || image.naturalHeight;
-    
+
     ctx.drawImage(image, 0, 0);
-    
+
     const mimeType = `image/${format}`;
     return canvas.toDataURL(mimeType, quality);
 }, 'imageToBase64');
@@ -307,7 +308,7 @@ export const imageToBase64 = withErrorHandling(function(image, format = 'png', q
  * @param {string} base64 - Base64 string
  * @returns {Promise<HTMLImageElement>} Obraz
  */
-export const base64ToImage = withErrorHandling(function(base64) {
+export const base64ToImage = withErrorHandling(function (base64) {
     if (!base64) {
         throw createValidationError("Base64 string is required");
     }
@@ -326,10 +327,10 @@ export const base64ToImage = withErrorHandling(function(base64) {
  * @returns {boolean} Czy obraz jest prawidłowy
  */
 export function isValidImage(image) {
-    return image && 
-           (image instanceof HTMLImageElement || image instanceof HTMLCanvasElement) &&
-           image.width > 0 && 
-           image.height > 0;
+    return image &&
+        (image instanceof HTMLImageElement || image instanceof HTMLCanvasElement) &&
+        image.width > 0 &&
+        image.height > 0;
 }
 
 /**
@@ -371,18 +372,18 @@ export function createImageFromSource(source) {
  * @param {string} color - Kolor tła (CSS color)
  * @returns {Promise<HTMLImageElement>} Pusty obraz
  */
-export const createEmptyImage = withErrorHandling(function(width, height, color = 'transparent') {
+export const createEmptyImage = withErrorHandling(function (width, height, color = 'transparent') {
     const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     canvas.width = width;
     canvas.height = height;
-    
+
     if (color !== 'transparent') {
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, width, height);
     }
-    
+
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);

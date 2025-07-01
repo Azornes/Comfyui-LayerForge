@@ -8,7 +8,7 @@ export class MaskTool {
         this.mainCanvas = canvasInstance.canvas;
         this.onStateChange = callbacks.onStateChange || null;
         this.maskCanvas = document.createElement('canvas');
-        this.maskCtx = this.maskCanvas.getContext('2d');
+        this.maskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
 
         this.x = 0;
         this.y = 0;
@@ -21,7 +21,7 @@ export class MaskTool {
         this.lastPosition = null;
 
         this.previewCanvas = document.createElement('canvas');
-        this.previewCtx = this.previewCanvas.getContext('2d');
+        this.previewCtx = this.previewCanvas.getContext('2d', { willReadFrequently: true });
         this.previewVisible = false;
         this.previewCanvasInitialized = false;
 
@@ -162,7 +162,7 @@ export class MaskTool {
             if (this.brushHardness === 1) {
                 this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
             } else {
-                // hardness: 1 = hard edge, 0 = soft edge
+
                 const innerRadius = gradientRadius * this.brushHardness;
                 const gradient = this.maskCtx.createRadialGradient(
                     canvasX, canvasY, innerRadius,
@@ -220,7 +220,7 @@ export class MaskTool {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = this.maskCanvas.width;
         tempCanvas.height = this.maskCanvas.height;
-        const tempCtx = tempCanvas.getContext('2d');
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
         tempCtx.drawImage(this.maskCanvas, 0, 0);
         const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
         const data = imageData.data;
@@ -258,7 +258,7 @@ export class MaskTool {
 
         this.maskCanvas.width = newWidth;
         this.maskCanvas.height = newHeight;
-        this.maskCtx = this.maskCanvas.getContext('2d');
+        this.maskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
 
         if (oldMask.width > 0 && oldMask.height > 0) {
 
@@ -278,5 +278,24 @@ export class MaskTool {
         this.x += dx;
         this.y += dy;
         log.info(`Mask position updated to (${this.x}, ${this.y})`);
+    }
+
+    setMask(image) {
+
+
+        const destX = -this.x;
+        const destY = -this.y;
+
+
+        this.maskCtx.clearRect(destX, destY, this.canvasInstance.width, this.canvasInstance.height);
+
+
+        this.maskCtx.drawImage(image, destX, destY);
+
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+        this.canvasInstance.render(); // Wymuś odświeżenie, aby zobaczyć zmianę
+        log.info(`MaskTool updated with a new mask image at correct canvas position (${destX}, ${destY}).`);
     }
 }

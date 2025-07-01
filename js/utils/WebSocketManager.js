@@ -45,7 +45,7 @@ class WebSocketManager {
                 try {
                     const data = JSON.parse(event.data);
                     log.debug("Received message:", data);
-                    
+
                     if (data.type === 'ack' && data.nodeId) {
                         const callback = this.ackCallbacks.get(data.nodeId);
                         if (callback) {
@@ -130,7 +130,6 @@ class WebSocketManager {
                 log.warn("WebSocket not open. Queuing message.");
 
 
-
                 this.messageQueue.push(message);
                 if (!this.isConnecting) {
                     this.connect();
@@ -145,7 +144,6 @@ class WebSocketManager {
 
     flushMessageQueue() {
         log.debug(`Flushing ${this.messageQueue.length} queued messages.`);
-
 
 
         while (this.messageQueue.length > 0) {

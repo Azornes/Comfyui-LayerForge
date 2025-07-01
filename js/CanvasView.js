@@ -96,6 +96,33 @@ async function createCanvasWidget(node, widget, app) {
             border-radius: 6px;
         }
 
+        .painter-clipboard-group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            background-color: rgba(0,0,0,0.15);
+            padding: 3px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .painter-clipboard-group::before {
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(74, 108, 212, 0.6), transparent);
+            border-radius: 1px;
+        }
+
+        .painter-clipboard-group .painter-button {
+            margin: 1px;
+        }
+
         .painter-separator {
             width: 1px;
             height: 28px;
@@ -214,12 +241,13 @@ async function createCanvasWidget(node, widget, app) {
         }
 
         .painter-tooltip table td:first-child {
-            width: 45%;
+            width: auto;
             white-space: nowrap;
+            min-width: fit-content;
         }
 
         .painter-tooltip table td:last-child {
-            width: 55%;
+            width: auto;
         }
 
         .painter-tooltip table tr:nth-child(odd) td {
@@ -368,7 +396,7 @@ async function createCanvasWidget(node, widget, app) {
             width: 100vw;
             height: 100vh;
             background-color: rgba(0, 0, 0, 0.8);
-            z-index: 9998;
+            z-index: 111;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -385,6 +413,8 @@ async function createCanvasWidget(node, widget, app) {
             flex-direction: column;
             position: relative;
         }
+
+
     `;
     document.head.appendChild(style);
 
@@ -483,38 +513,31 @@ async function createCanvasWidget(node, widget, app) {
                         } else {
                             helpTooltip.innerHTML = standardShortcuts;
                         }
-                        
-                        // Najpierw wyświetlamy tooltip z visibility: hidden aby obliczyć jego wymiary
+
                         helpTooltip.style.visibility = 'hidden';
                         helpTooltip.style.display = 'block';
-                        
+
                         const buttonRect = e.target.getBoundingClientRect();
                         const tooltipRect = helpTooltip.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
                         const viewportHeight = window.innerHeight;
-                        
-                        // Obliczamy pozycję
+
                         let left = buttonRect.left;
                         let top = buttonRect.bottom + 5;
-                        
-                        // Sprawdzamy czy tooltip wychodzi poza prawy brzeg ekranu
+
                         if (left + tooltipRect.width > viewportWidth) {
                             left = viewportWidth - tooltipRect.width - 10;
                         }
-                        
-                        // Sprawdzamy czy tooltip wychodzi poza dolny brzeg ekranu
+
                         if (top + tooltipRect.height > viewportHeight) {
-                            // Wyświetlamy nad przyciskiem zamiast pod
+
                             top = buttonRect.top - tooltipRect.height - 5;
                         }
-                        
-                        // Upewniamy się, że tooltip nie wychodzi poza lewy brzeg
+
                         if (left < 10) left = 10;
-                        
-                        // Upewniamy się, że tooltip nie wychodzi poza górny brzeg
+
                         if (top < 10) top = 10;
-                        
-                        // Ustawiamy finalną pozycję i pokazujemy tooltip
+
                         helpTooltip.style.left = `${left}px`;
                         helpTooltip.style.top = `${top}px`;
                         helpTooltip.style.visibility = 'visible';
@@ -539,7 +562,7 @@ async function createCanvasWidget(node, widget, app) {
                                 reader.onload = (event) => {
                                     const img = new Image();
                                     img.onload = () => {
-                                        canvas.addLayer(img, addMode);
+                                        canvas.addLayer(img, {}, addMode);
                                     };
                                     img.src = event.target.result;
                                 };
@@ -552,17 +575,116 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.primary", {
                     textContent: "Import Input",
                     title: "Import image from another node",
-                    onclick: () => canvas.importLatestImage()
+                    onclick: () => canvas.canvasIO.importLatestImage()
                 }),
-                $el("button.painter-button.primary", {
-                    textContent: "Paste Image",
-                    title: "Paste image from clipboard",
-                    onclick: () => {
-                        const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
-                        const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                        canvas.handlePaste(addMode);
-                    }
-                }),
+                $el("div.painter-clipboard-group", {}, [
+                    $el("button.painter-button.primary", {
+                        textContent: "Paste Image",
+                        title: "Paste image from clipboard",
+                        onclick: () => {
+
+                            const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
+                            const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                            canvas.canvasLayers.handlePaste(addMode);
+                        }
+                    }),
+                    $el("button.painter-button", {
+                        id: `clipboard-toggle-${node.id}`,
+                        textContent: "📋 System",
+                        title: "Toggle clipboard source: System Clipboard",
+                        style: {
+                            minWidth: "100px",
+                            fontSize: "11px",
+                            backgroundColor: "#4a4a4a"
+                        },
+                        onclick: (e) => {
+                            const button = e.target;
+                            if (canvas.canvasLayers.clipboardPreference === 'system') {
+                                canvas.canvasLayers.clipboardPreference = 'clipspace';
+                                button.textContent = "📋 Clipspace";
+                                button.title = "Toggle clipboard source: ComfyUI Clipspace";
+                                button.style.backgroundColor = "#4a6cd4";
+                            } else {
+                                canvas.canvasLayers.clipboardPreference = 'system';
+                                button.textContent = "📋 System";
+                                button.title = "Toggle clipboard source: System Clipboard";
+                                button.style.backgroundColor = "#4a4a4a";
+                            }
+                            log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
+                        },
+                        onmouseenter: (e) => {
+                            const currentPreference = canvas.canvasLayers.clipboardPreference;
+                            let tooltipContent = '';
+                            
+                            if (currentPreference === 'system') {
+                                tooltipContent = `
+                                    <h4>📋 System Clipboard Mode</h4>
+                                    <table>
+                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>system clipboard</strong> as flattened image</td></tr>
+                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                        <tr><td></td><td>2️⃣ System clipboard (images, screenshots)</td></tr>
+                                        <tr><td></td><td>3️⃣ System clipboard (file paths, URLs)</td></tr>
+                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                    </table>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(255,165,0,0.2); border: 1px solid rgba(255,165,0,0.4); border-radius: 4px; font-size: 11px;">
+                                        ⚠️ <strong>Security Note:</strong> "Paste Image" button for external images may not work due to browser security restrictions. Use Ctrl+V instead or Drag & Drop.
+                                    </div>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                        💡 <strong>Best for:</strong> Working with screenshots, copied images, file paths, and urls.
+                                    </div>
+                                `;
+                            } else {
+                                tooltipContent = `
+                                    <h4>📋 ComfyUI Clipspace Mode</h4>
+                                    <table>
+                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>ComfyUI Clipspace</strong> as flattened image</td></tr>
+                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                        <tr><td></td><td>2️⃣ ComfyUI Clipspace (workflow images)</td></tr>
+                                        <tr><td></td><td>3️⃣ System clipboard (fallback)</td></tr>
+                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                    </table>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                        💡 <strong>Best for:</strong> ComfyUI workflow integration and node-to-node image transfer
+                                    </div>
+                                `;
+                            }
+
+                            helpTooltip.innerHTML = tooltipContent;
+                            helpTooltip.style.visibility = 'hidden';
+                            helpTooltip.style.display = 'block';
+
+                            const buttonRect = e.target.getBoundingClientRect();
+                            const tooltipRect = helpTooltip.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+
+                            let left = buttonRect.left;
+                            let top = buttonRect.bottom + 5;
+
+                            if (left + tooltipRect.width > viewportWidth) {
+                                left = viewportWidth - tooltipRect.width - 10;
+                            }
+
+                            if (top + tooltipRect.height > viewportHeight) {
+                                top = buttonRect.top - tooltipRect.height - 5;
+                            }
+
+                            if (left < 10) left = 10;
+                            if (top < 10) top = 10;
+
+                            helpTooltip.style.left = `${left}px`;
+                            helpTooltip.style.top = `${top}px`;
+                            helpTooltip.style.visibility = 'visible';
+                        },
+                        onmouseleave: () => {
+                            helpTooltip.style.display = 'none';
+                        }
+                    })
+                ]),
             ]),
 
             $el("div.painter-separator"),
@@ -644,7 +766,7 @@ async function createCanvasWidget(node, widget, app) {
                             const height = parseInt(document.getElementById('canvas-height').value) || canvas.height;
                             canvas.updateOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
-                            // updateOutput is triggered by saveState in updateOutputAreaSize
+
                         };
 
                         document.getElementById('cancel-size').onclick = () => {
@@ -660,12 +782,12 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Up",
                     title: "Move selected layer(s) up",
-                    onclick: () => canvas.moveLayerUp()
+                    onclick: () => canvas.canvasLayers.moveLayerUp()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Layer Down",
                     title: "Move selected layer(s) down",
-                    onclick: () => canvas.moveLayerDown()
+                    onclick: () => canvas.canvasLayers.moveLayerDown()
                 }),
             ]),
 
@@ -674,27 +796,27 @@ async function createCanvasWidget(node, widget, app) {
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
-                    onclick: () => canvas.rotateLayer(90)
+                    onclick: () => canvas.canvasLayers.rotateLayer(90)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale +5%",
                     title: "Increase size of selected layer(s) by 5%",
-                    onclick: () => canvas.resizeLayer(1.05)
+                    onclick: () => canvas.canvasLayers.resizeLayer(1.05)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Scale -5%",
                     title: "Decrease size of selected layer(s) by 5%",
-                    onclick: () => canvas.resizeLayer(0.95)
+                    onclick: () => canvas.canvasLayers.resizeLayer(0.95)
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror H",
                     title: "Mirror selected layer(s) horizontally",
-                    onclick: () => canvas.mirrorHorizontal()
+                    onclick: () => canvas.canvasLayers.mirrorHorizontal()
                 }),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Mirror V",
                     title: "Mirror selected layer(s) vertically",
-                    onclick: () => canvas.mirrorVertical()
+                    onclick: () => canvas.canvasLayers.mirrorVertical()
                 }),
             ]),
 
@@ -716,7 +838,7 @@ async function createCanvasWidget(node, widget, app) {
 
                             const selectedLayer = canvas.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
-                            const imageData = await canvas.getLayerImageData(selectedLayer);
+                            const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
                             const response = await fetch("/matting", {
                                 method: "POST",
                                 headers: {"Content-Type": "application/json"},
@@ -749,18 +871,25 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Undo",
                     title: "Undo last action",
                     disabled: true,
-                    onclick: () => canvas.undo()
+                    onclick: () => canvas.canvasState.undo()
                 }),
                 $el("button.painter-button", {
                     id: `redo-button-${node.id}`,
                     textContent: "Redo",
                     title: "Redo last undone action",
                     disabled: true,
-                    onclick: () => canvas.redo()
+                    onclick: () => canvas.canvasState.redo()
                 }),
             ]),
             $el("div.painter-separator"),
             $el("div.painter-button-group", {id: "mask-controls"}, [
+                $el("button.painter-button", {
+                    textContent: "Edit Mask",
+                    title: "Open the current canvas view in the mask editor",
+                    onclick: () => {
+                        canvas.startMaskEditor();
+                    }
+                }),
                 $el("button.painter-button", {
                     id: "mask-mode-btn",
                     textContent: "Draw Mask",
@@ -838,15 +967,15 @@ async function createCanvasWidget(node, widget, app) {
                     style: {backgroundColor: "#4a7c59", borderColor: "#3a6c49"},
                     onclick: async () => {
                         try {
-                            const stats = canvas.getGarbageCollectionStats();
+                            const stats = canvas.imageReferenceManager.getStats();
                             log.info("GC Stats before cleanup:", stats);
 
-                            await canvas.runGarbageCollection();
+                            await canvas.imageReferenceManager.manualGarbageCollection();
 
-                            const newStats = canvas.getGarbageCollectionStats();
+                            const newStats = canvas.imageReferenceManager.getStats();
                             log.info("GC Stats after cleanup:", newStats);
 
-                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${newStats.operationCount}/${newStats.operationThreshold}`);
+                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${canvas.imageReferenceManager.operationCount}/${canvas.imageReferenceManager.operationThreshold}`);
                         } catch (e) {
                             log.error("Failed to run garbage collection:", e);
                             alert("Error running garbage collection. Check the console for details.");
@@ -910,9 +1039,23 @@ async function createCanvasWidget(node, widget, app) {
 
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
-    const updateOutput = () => {
+    const updateOutput = async () => {
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
-        // app.graph.runStep(); // Potentially not needed if we just want to mark dirty
+
+        try {
+            const new_preview = new Image();
+            const blob = await canvas.getFlattenedCanvasWithMaskAsBlob();
+            if (blob) {
+                new_preview.src = URL.createObjectURL(blob);
+                await new Promise(r => new_preview.onload = r);
+                node.imgs = [new_preview];
+            } else {
+                node.imgs = [];
+            }
+        } catch (error) {
+            console.error("Error updating node preview:", error);
+        }
+
     };
 
     const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
@@ -948,70 +1091,8 @@ async function createCanvasWidget(node, widget, app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer]);
-    const handleFileLoad = async (file) => {
-        log.info("File dropped:", file.name);
-        if (!file.type.startsWith('image/')) {
-            log.info("Dropped file is not an image.");
-            return;
-        }
 
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            log.debug("FileReader finished loading dropped file as data:URL.");
-            const img = new Image();
-            img.onload = async () => {
-                log.debug("Image object loaded from dropped data:URL.");
-                const scale = Math.min(
-                    canvas.width / img.width,
-                    canvas.height / img.height
-                );
 
-                const layer = {
-                    image: img,
-                    x: (canvas.width - img.width * scale) / 2,
-                    y: (canvas.height - img.height * scale) / 2,
-                    width: img.width * scale,
-                    height: img.height * scale,
-                    rotation: 0,
-                    zIndex: canvas.layers.length,
-                    blendMode: 'normal',
-                    opacity: 1
-                };
-
-                canvas.layers.push(layer);
-                canvas.updateSelection([layer]);
-                canvas.render();
-                canvas.saveState();
-                log.info("Dropped layer added and state saved.");
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    };
-
-    mainContainer.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.add('drag-over');
-    });
-
-    mainContainer.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.remove('drag-over');
-    });
-
-    mainContainer.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        canvasContainer.classList.remove('drag-over');
-
-        if (e.dataTransfer.files) {
-            for (const file of e.dataTransfer.files) {
-                await handleFileLoad(file);
-            }
-        }
-    });
 
     const mainWidget = node.addDOMWidget("mainContainer", "widget", mainContainer);
 
@@ -1072,13 +1153,33 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-
-
     node.canvasWidget = canvas;
 
     setTimeout(() => {
         canvas.loadInitialState();
     }, 100);
+
+    const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");
+    if (showPreviewWidget) {
+        const originalCallback = showPreviewWidget.callback;
+
+        showPreviewWidget.callback = function (value) {
+            if (originalCallback) {
+                originalCallback.call(this, value);
+            }
+
+            if (canvas && canvas.setPreviewVisibility) {
+                canvas.setPreviewVisibility(value);
+            }
+
+            if (node.graph && node.graph.canvas) {
+                node.setDirtyCanvas(true, true);
+            }
+        };
+
+
+    }
+
 
     return {
         canvas: canvas,
@@ -1154,7 +1255,6 @@ app.registerExtension({
                     return;
                 }
 
-                // Iterate through every widget attached to this node
                 this.widgets.forEach(w => {
                     log.debug(`Widget name: ${w.name}, type: ${w.type}, value: ${w.value}`);
                 });
@@ -1206,7 +1306,32 @@ app.registerExtension({
                 originalGetExtraMenuOptions?.apply(this, arguments);
 
                 const self = this;
+
+                const maskEditorIndex = options.findIndex(option =>
+                    option && option.content === "Open in MaskEditor"
+                );
+                if (maskEditorIndex !== -1) {
+                    options.splice(maskEditorIndex, 1);
+                }
+
                 const newOptions = [
+                    {
+                        content: "Open in MaskEditor",
+                        callback: async () => {
+                            try {
+                                log.info("Opening LayerForge canvas in MaskEditor");
+                                if (self.canvasWidget && self.canvasWidget.startMaskEditor) {
+                                    await self.canvasWidget.startMaskEditor();
+                                } else {
+                                    log.error("Canvas widget not available");
+                                    alert("Canvas not ready. Please try again.");
+                                }
+                            } catch (e) {
+                                log.error("Error opening MaskEditor:", e);
+                                alert(`Failed to open MaskEditor: ${e.message}`);
+                            }
+                        },
+                    },
                     {
                         content: "Open Image",
                         callback: async () => {
@@ -1217,6 +1342,19 @@ app.registerExtension({
                                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                             } catch (e) {
                                 log.error("Error opening image:", e);
+                            }
+                        },
+                    },
+                    {
+                        content: "Open Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const url = URL.createObjectURL(blob);
+                                window.open(url, '_blank');
+                                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            } catch (e) {
+                                log.error("Error opening image with mask:", e);
                             }
                         },
                     },
@@ -1235,6 +1373,20 @@ app.registerExtension({
                         },
                     },
                     {
+                        content: "Copy Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const item = new ClipboardItem({'image/png': blob});
+                                await navigator.clipboard.write([item]);
+                                log.info("Image with mask alpha copied to clipboard.");
+                            } catch (e) {
+                                log.error("Error copying image with mask:", e);
+                                alert("Failed to copy image with mask to clipboard.");
+                            }
+                        },
+                    },
+                    {
                         content: "Save Image",
                         callback: async () => {
                             try {
@@ -1249,6 +1401,24 @@ app.registerExtension({
                                 setTimeout(() => URL.revokeObjectURL(url), 1000);
                             } catch (e) {
                                 log.error("Error saving image:", e);
+                            }
+                        },
+                    },
+                    {
+                        content: "Save Image with Mask Alpha",
+                        callback: async () => {
+                            try {
+                                const blob = await self.canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'canvas_output_with_mask.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                            } catch (e) {
+                                log.error("Error saving image with mask:", e);
                             }
                         },
                     },

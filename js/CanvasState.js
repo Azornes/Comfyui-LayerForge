@@ -216,6 +216,7 @@ export class CanvasState {
             await setCanvasState(this.canvas.node.id, state);
             log.info("Canvas state saved to IndexedDB.");
             this.lastSavedStateSignature = currentStateSignature;
+            this.canvas.render();
         }, 'CanvasState.saveStateToDB');
 
         if (immediate) {
@@ -292,7 +293,7 @@ export class CanvasState {
         const clonedCanvas = document.createElement('canvas');
         clonedCanvas.width = maskCanvas.width;
         clonedCanvas.height = maskCanvas.height;
-        const clonedCtx = clonedCanvas.getContext('2d');
+        const clonedCtx = clonedCanvas.getContext('2d', { willReadFrequently: true });
         clonedCtx.drawImage(maskCanvas, 0, 0);
 
         this.maskUndoStack.push(clonedCanvas);
@@ -352,7 +353,7 @@ export class CanvasState {
         if (this.maskUndoStack.length > 0) {
             const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
             const maskCanvas = this.canvas.maskTool.getMask();
-            const maskCtx = maskCanvas.getContext('2d');
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
             maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
             maskCtx.drawImage(prevState, 0, 0);
 
@@ -368,7 +369,7 @@ export class CanvasState {
         const nextState = this.maskRedoStack.pop();
         this.maskUndoStack.push(nextState);
         const maskCanvas = this.canvas.maskTool.getMask();
-        const maskCtx = maskCanvas.getContext('2d');
+        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.drawImage(nextState, 0, 0);
 
