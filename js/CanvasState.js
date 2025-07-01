@@ -216,6 +216,7 @@ export class CanvasState {
             await setCanvasState(this.canvas.node.id, state);
             log.info("Canvas state saved to IndexedDB.");
             this.lastSavedStateSignature = currentStateSignature;
+            this.canvas.render();
         }, 'CanvasState.saveStateToDB');
 
         if (immediate) {

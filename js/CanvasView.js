@@ -1105,14 +1105,12 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-
-
     node.canvasWidget = canvas;
 
-    console.log('Canvas widget element:', node.element);
-    console.log('Canvas widget canvas:', node.canvas);
-    console.log('Canvas widget parent:', node.parent);
-    
+    setTimeout(() => {
+        canvas.loadInitialState();
+    }, 100);
+
 
     // Konfiguracja opcji ukrywania podglądu
     const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");
@@ -1134,11 +1132,12 @@ async function createCanvasWidget(node, widget, app) {
                 node.setDirtyCanvas(true, true);
             }
         };
+        
+        // Podgląd jest automatycznie ukrywany w konstruktorze Canvas.js
+        // Nie potrzebujemy już wywoływać setInitialPreviewVisibility
     }
 
-    setTimeout(() => {
-        canvas.loadInitialState();
-    }, 100);
+
 
     return {
         canvas: canvas,
