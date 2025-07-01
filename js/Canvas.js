@@ -59,12 +59,11 @@ export class Canvas {
 
         console.log('Canvas widget element:', this.node);
 
-        this.previewVisible = true; // Domyślnie widoczny
         this.setPreviewVisibility(false);
     }
 
 
-    async waitForWidget(name, node, interval = 100, timeout = 5000) {
+    async waitForWidget(name, node, interval = 100, timeout = 20000) {
         const startTime = Date.now();
 
         return new Promise((resolve, reject) => {
@@ -97,8 +96,6 @@ export class Canvas {
             console.log("Found $$canvas-image-preview widget, controlling visibility");
 
             if (visible) {
-                console.log("=== SHOWING WIDGET ===");
-
                 if (imagePreviewWidget.options) {
                     imagePreviewWidget.options.hidden = false;
                 }
@@ -108,16 +105,10 @@ export class Canvas {
                 if ('hidden' in imagePreviewWidget) {
                     imagePreviewWidget.hidden = false;
                 }
-
-                console.log("Setting computeSize to fixed height 250");
                 imagePreviewWidget.computeSize = function () {
                     return [0, 250]; // Szerokość 0 (auto), wysokość 250
                 };
-
-                console.log("ImagePreviewWidget shown");
             } else {
-                console.log("=== HIDING WIDGET ===");
-
                 if (imagePreviewWidget.options) {
                     imagePreviewWidget.options.hidden = true;
                 }
@@ -131,11 +122,7 @@ export class Canvas {
                 imagePreviewWidget.computeSize = function () {
                     return [0, 0]; // Szerokość 0, wysokość 0
                 };
-
-                console.log("ImagePreviewWidget hidden with zero size");
             }
-
-            console.log("=== FINAL WIDGET STATE ===");
             this.render()
         } else {
             console.warn("$$canvas-image-preview widget not found in Canvas.js");
@@ -539,8 +526,8 @@ export class Canvas {
                     log.info("Applying mask to editor after", attempts * 100, "ms wait");
                     setTimeout(() => {
                         this.applyMaskToEditor(this.pendingMask);
-                        this.pendingMask = null; // Wyczyść po użyciu
-                    }, 300); // Krótsze opóźnienie gdy już wiemy że jest gotowy
+                        this.pendingMask = null;
+                    }, 300);
                 } else if (attempts < maxAttempts) {
 
                     if (attempts % 10 === 0) {
@@ -744,80 +731,6 @@ export class Canvas {
             setTimeout(this.waitWhileMaskEditing.bind(this), 100);
         }
     }
-
-    async handleMaskEditorClose() {
-        console.log("Node object after mask editor close:", this.node);
-        if (!this.node.imgs || !this.node.imgs.length === 0 || !this.node.imgs[0].src) {
-            log.warn("Mask editor was closed without a result.");
-            return;
-        }
-
-        const resultImage = new Image();
-        resultImage.src = this.node.imgs[0].src;
-
-        try {
-            await new Promise((resolve, reject) => {
-                resultImage.onload = resolve;
-                resultImage.onerror = reject;
-            });
-        } catch (error) {
-            log.error("Failed to load image from mask editor.", error);
-            this.node.imgs = [];
-            return;
-        }
-
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.width;
-        tempCanvas.height = this.height;
-        const tempCtx = tempCanvas.getContext('2d');
-
-        tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
-
-        const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
-        const data = imageData.data;
-
-        for (let i = 0; i < data.length; i += 4) {
-            const originalAlpha = data[i + 3];
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-            data[i + 3] = 255 - originalAlpha;
-        }
-
-        tempCtx.putImageData(imageData, 0, 0);
-
-        const maskAsImage = new Image();
-        maskAsImage.src = tempCanvas.toDataURL();
-        await new Promise(resolve => maskAsImage.onload = resolve);
-
-        const maskCtx = this.maskTool.maskCtx;
-        const destX = -this.maskTool.x;
-        const destY = -this.maskTool.y;
-
-
-        maskCtx.globalCompositeOperation = 'source-over';
-        maskCtx.clearRect(destX, destY, this.width, this.height);
-
-        maskCtx.drawImage(maskAsImage, destX, destY);
-
-        this.render();
-        this.saveState();
-
-        const new_preview = new Image();
-
-        const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-        if (blob) {
-            new_preview.src = URL.createObjectURL(blob);
-            await new Promise(r => new_preview.onload = r);
-            this.node.imgs = [new_preview];
-        } else {
-            this.node.imgs = [];
-        }
-
-        this.render();
-    }
-
-
     /**
      * Zapisuje obecny stan maski przed otwarciem editora
      * @returns {Object} Zapisany stan maski
