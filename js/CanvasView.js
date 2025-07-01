@@ -96,6 +96,33 @@ async function createCanvasWidget(node, widget, app) {
             border-radius: 6px;
         }
 
+        .painter-clipboard-group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            background-color: rgba(0,0,0,0.15);
+            padding: 3px;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+        }
+
+        .painter-clipboard-group::before {
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(74, 108, 212, 0.6), transparent);
+            border-radius: 1px;
+        }
+
+        .painter-clipboard-group .painter-button {
+            margin: 1px;
+        }
+
         .painter-separator {
             width: 1px;
             height: 28px;
@@ -368,7 +395,7 @@ async function createCanvasWidget(node, widget, app) {
             width: 100vw;
             height: 100vh;
             background-color: rgba(0, 0, 0, 0.8);
-            z-index: 9998;
+            z-index: 111;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -549,112 +576,114 @@ async function createCanvasWidget(node, widget, app) {
                     title: "Import image from another node",
                     onclick: () => canvas.canvasIO.importLatestImage()
                 }),
-                $el("button.painter-button.primary", {
-                    textContent: "Paste Image",
-                    title: "Paste image from clipboard",
-                    onclick: () => {
-                        // Use the direct handlePaste method from CanvasLayers
-                        const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
-                        const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                        canvas.canvasLayers.handlePaste(addMode);
-                    }
-                }),
-                $el("button.painter-button", {
-                    id: `clipboard-toggle-${node.id}`,
-                    textContent: "📋 System",
-                    title: "Toggle clipboard source: System Clipboard",
-                    style: {
-                        minWidth: "100px",
-                        fontSize: "11px",
-                        backgroundColor: "#4a4a4a"
-                    },
-                    onclick: (e) => {
-                        const button = e.target;
-                        if (canvas.canvasLayers.clipboardPreference === 'system') {
-                            canvas.canvasLayers.clipboardPreference = 'clipspace';
-                            button.textContent = "📋 Clipspace";
-                            button.title = "Toggle clipboard source: ComfyUI Clipspace";
-                            button.style.backgroundColor = "#4a6cd4";
-                        } else {
-                            canvas.canvasLayers.clipboardPreference = 'system';
-                            button.textContent = "📋 System";
-                            button.title = "Toggle clipboard source: System Clipboard";
-                            button.style.backgroundColor = "#4a4a4a";
+                $el("div.painter-clipboard-group", {}, [
+                    $el("button.painter-button.primary", {
+                        textContent: "Paste Image",
+                        title: "Paste image from clipboard",
+                        onclick: () => {
+                            // Use the direct handlePaste method from CanvasLayers
+                            const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
+                            const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                            canvas.canvasLayers.handlePaste(addMode);
                         }
-                        log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
-                    },
-                    onmouseenter: (e) => {
-                        const currentPreference = canvas.canvasLayers.clipboardPreference;
-                        let tooltipContent = '';
-                        
-                        if (currentPreference === 'system') {
-                            tooltipContent = `
-                                <h4>📋 System Clipboard Mode</h4>
-                                <table>
-                                    <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>system clipboard</strong> as flattened image</td></tr>
-                                    <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
-                                    <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
-                                    <tr><td></td><td>2️⃣ System clipboard (images, screenshots)</td></tr>
-                                    <tr><td></td><td>3️⃣ System clipboard (file paths, URLs)</td></tr>
-                                    <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
-                                    <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
-                                </table>
-                                <div style="margin-top: 8px; padding: 6px; background: rgba(255,165,0,0.2); border: 1px solid rgba(255,165,0,0.4); border-radius: 4px; font-size: 11px;">
-                                    ⚠️ <strong>Security Note:</strong> "Paste Image" button for external images may not work due to browser security restrictions. Use Ctrl+V instead or Drag & Drop.
-                                </div>
-                                <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
-                                    💡 <strong>Best for:</strong> Working with screenshots, copied images, file paths, and urls.
-                                </div>
-                            `;
-                        } else {
-                            tooltipContent = `
-                                <h4>📋 ComfyUI Clipspace Mode</h4>
-                                <table>
-                                    <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>ComfyUI Clipspace</strong> as flattened image</td></tr>
-                                    <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
-                                    <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
-                                    <tr><td></td><td>2️⃣ ComfyUI Clipspace (workflow images)</td></tr>
-                                    <tr><td></td><td>3️⃣ System clipboard (fallback)</td></tr>
-                                    <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
-                                    <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
-                                </table>
-                                <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
-                                    💡 <strong>Best for:</strong> ComfyUI workflow integration and node-to-node image transfer
-                                </div>
-                            `;
+                    }),
+                    $el("button.painter-button", {
+                        id: `clipboard-toggle-${node.id}`,
+                        textContent: "📋 System",
+                        title: "Toggle clipboard source: System Clipboard",
+                        style: {
+                            minWidth: "100px",
+                            fontSize: "11px",
+                            backgroundColor: "#4a4a4a"
+                        },
+                        onclick: (e) => {
+                            const button = e.target;
+                            if (canvas.canvasLayers.clipboardPreference === 'system') {
+                                canvas.canvasLayers.clipboardPreference = 'clipspace';
+                                button.textContent = "📋 Clipspace";
+                                button.title = "Toggle clipboard source: ComfyUI Clipspace";
+                                button.style.backgroundColor = "#4a6cd4";
+                            } else {
+                                canvas.canvasLayers.clipboardPreference = 'system';
+                                button.textContent = "📋 System";
+                                button.title = "Toggle clipboard source: System Clipboard";
+                                button.style.backgroundColor = "#4a4a4a";
+                            }
+                            log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
+                        },
+                        onmouseenter: (e) => {
+                            const currentPreference = canvas.canvasLayers.clipboardPreference;
+                            let tooltipContent = '';
+                            
+                            if (currentPreference === 'system') {
+                                tooltipContent = `
+                                    <h4>📋 System Clipboard Mode</h4>
+                                    <table>
+                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>system clipboard</strong> as flattened image</td></tr>
+                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                        <tr><td></td><td>2️⃣ System clipboard (images, screenshots)</td></tr>
+                                        <tr><td></td><td>3️⃣ System clipboard (file paths, URLs)</td></tr>
+                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                    </table>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(255,165,0,0.2); border: 1px solid rgba(255,165,0,0.4); border-radius: 4px; font-size: 11px;">
+                                        ⚠️ <strong>Security Note:</strong> "Paste Image" button for external images may not work due to browser security restrictions. Use Ctrl+V instead or Drag & Drop.
+                                    </div>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                        💡 <strong>Best for:</strong> Working with screenshots, copied images, file paths, and urls.
+                                    </div>
+                                `;
+                            } else {
+                                tooltipContent = `
+                                    <h4>📋 ComfyUI Clipspace Mode</h4>
+                                    <table>
+                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>ComfyUI Clipspace</strong> as flattened image</td></tr>
+                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
+                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
+                                        <tr><td></td><td>2️⃣ ComfyUI Clipspace (workflow images)</td></tr>
+                                        <tr><td></td><td>3️⃣ System clipboard (fallback)</td></tr>
+                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
+                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
+                                    </table>
+                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
+                                        💡 <strong>Best for:</strong> ComfyUI workflow integration and node-to-node image transfer
+                                    </div>
+                                `;
+                            }
+
+                            helpTooltip.innerHTML = tooltipContent;
+                            helpTooltip.style.visibility = 'hidden';
+                            helpTooltip.style.display = 'block';
+
+                            const buttonRect = e.target.getBoundingClientRect();
+                            const tooltipRect = helpTooltip.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+
+                            let left = buttonRect.left;
+                            let top = buttonRect.bottom + 5;
+
+                            if (left + tooltipRect.width > viewportWidth) {
+                                left = viewportWidth - tooltipRect.width - 10;
+                            }
+
+                            if (top + tooltipRect.height > viewportHeight) {
+                                top = buttonRect.top - tooltipRect.height - 5;
+                            }
+
+                            if (left < 10) left = 10;
+                            if (top < 10) top = 10;
+
+                            helpTooltip.style.left = `${left}px`;
+                            helpTooltip.style.top = `${top}px`;
+                            helpTooltip.style.visibility = 'visible';
+                        },
+                        onmouseleave: () => {
+                            helpTooltip.style.display = 'none';
                         }
-
-                        helpTooltip.innerHTML = tooltipContent;
-                        helpTooltip.style.visibility = 'hidden';
-                        helpTooltip.style.display = 'block';
-
-                        const buttonRect = e.target.getBoundingClientRect();
-                        const tooltipRect = helpTooltip.getBoundingClientRect();
-                        const viewportWidth = window.innerWidth;
-                        const viewportHeight = window.innerHeight;
-
-                        let left = buttonRect.left;
-                        let top = buttonRect.bottom + 5;
-
-                        if (left + tooltipRect.width > viewportWidth) {
-                            left = viewportWidth - tooltipRect.width - 10;
-                        }
-
-                        if (top + tooltipRect.height > viewportHeight) {
-                            top = buttonRect.top - tooltipRect.height - 5;
-                        }
-
-                        if (left < 10) left = 10;
-                        if (top < 10) top = 10;
-
-                        helpTooltip.style.left = `${left}px`;
-                        helpTooltip.style.top = `${top}px`;
-                        helpTooltip.style.visibility = 'visible';
-                    },
-                    onmouseleave: () => {
-                        helpTooltip.style.display = 'none';
-                    }
-                }),
+                    })
+                ]),
             ]),
 
             $el("div.painter-separator"),
