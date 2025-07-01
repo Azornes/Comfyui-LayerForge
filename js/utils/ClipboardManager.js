@@ -73,9 +73,9 @@ export class ClipboardManager {
     }
 
     /**
-     * Validates if a text string is a valid image file path
+     * Validates if a text string is a valid image file path or URL
      * @param {string} text - The text to validate
-     * @returns {boolean} - True if the text appears to be a valid image file path
+     * @returns {boolean} - True if the text appears to be a valid image file path or URL
      */
     isValidImagePath(text) {
         if (!text || typeof text !== 'string') {
@@ -90,7 +90,20 @@ export class ClipboardManager {
             return false;
         }
 
-        // Common image file extensions
+        // Check if it's a URL first (URLs have priority and don't need file extensions)
+        if (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('file://')) {
+            // For URLs, we're more permissive - any valid URL could potentially be an image
+            try {
+                new URL(text);
+                log.debug("Detected valid URL:", text);
+                return true;
+            } catch (e) {
+                log.debug("Invalid URL format:", text);
+                return false;
+            }
+        }
+
+        // For local file paths, check for image extensions
         const imageExtensions = [
             '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', 
             '.svg', '.tiff', '.tif', '.ico', '.avif'
@@ -102,22 +115,27 @@ export class ClipboardManager {
         );
 
         if (!hasImageExtension) {
+            log.debug("No valid image extension found in:", text);
             return false;
         }
 
-        // Basic path validation - should look like a file path
-        // Accept both Windows and Unix style paths, and URLs
+        // Basic path validation for local files - should look like a file path
+        // Accept both Windows and Unix style paths
         const pathPatterns = [
             /^[a-zA-Z]:[\\\/]/, // Windows absolute path (C:\... or C:/...)
             /^[\\\/]/, // Unix absolute path (/...)
             /^\.{1,2}[\\\/]/, // Relative path (./... or ../...)
-            /^https?:\/\//, // HTTP/HTTPS URL
-            /^file:\/\//, // File URL
             /^[^\\\/]*[\\\/]/ // Contains path separators
         ];
 
         const isValidPath = pathPatterns.some(pattern => pattern.test(text)) || 
                            (!text.includes('/') && !text.includes('\\') && text.includes('.')); // Simple filename
+
+        if (isValidPath) {
+            log.debug("Detected valid local file path:", text);
+        } else {
+            log.debug("Invalid local file path format:", text);
+        }
 
         return isValidPath;
     }
