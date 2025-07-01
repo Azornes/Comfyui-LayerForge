@@ -2,7 +2,7 @@ import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
-import { app, ComfyApp } from "../../scripts/app.js";
+import {app, ComfyApp} from "../../scripts/app.js";
 
 const log = createModuleLogger('CanvasLayers');
 
@@ -141,7 +141,7 @@ export class CanvasLayers {
         try {
             log.info("Attempting to paste from system clipboard");
             const clipboardItems = await navigator.clipboard.read();
-            
+
             for (const item of clipboardItems) {
                 const imageType = item.types.find(type => type.startsWith('image/'));
 
@@ -160,7 +160,7 @@ export class CanvasLayers {
                     return true;
                 }
             }
-            
+
             log.info("No image found in system clipboard");
             return false;
         } catch (error) {
@@ -178,7 +178,7 @@ export class CanvasLayers {
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
         this.canvas.imageCache.set(imageId, image.src);
-        
+
         let finalWidth = image.width;
         let finalHeight = image.height;
         let finalX, finalY;
@@ -268,7 +268,7 @@ export class CanvasLayers {
      */
     resizeLayer(scale) {
         if (this.canvas.selectedLayers.length === 0) return;
-        
+
         this.canvas.selectedLayers.forEach(layer => {
             layer.width *= scale;
             layer.height *= scale;
@@ -283,7 +283,7 @@ export class CanvasLayers {
      */
     rotateLayer(angle) {
         if (this.canvas.selectedLayers.length === 0) return;
-        
+
         this.canvas.selectedLayers.forEach(layer => {
             layer.rotation += angle;
         });

@@ -488,7 +488,7 @@ async function createCanvasWidget(node, widget, app) {
 
                         helpTooltip.style.visibility = 'hidden';
                         helpTooltip.style.display = 'block';
-                        
+
                         const buttonRect = e.target.getBoundingClientRect();
                         const tooltipRect = helpTooltip.getBoundingClientRect();
                         const viewportWidth = window.innerWidth;
@@ -1004,7 +1004,7 @@ async function createCanvasWidget(node, widget, app) {
                 log.debug("Image object loaded from dropped data:URL.");
                 const fitOnAddWidget = node.widgets.find(w => w.name === "fit_on_add");
                 const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                
+
                 await canvas.addLayer(img, {}, addMode);
                 log.info("Dropped layer added and state saved.");
             };
@@ -1105,8 +1105,8 @@ async function createCanvasWidget(node, widget, app) {
     const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");
     if (showPreviewWidget) {
         const originalCallback = showPreviewWidget.callback;
-        
-        showPreviewWidget.callback = function(value) {
+
+        showPreviewWidget.callback = function (value) {
             if (originalCallback) {
                 originalCallback.call(this, value);
             }
@@ -1122,7 +1122,6 @@ async function createCanvasWidget(node, widget, app) {
 
 
     }
-
 
 
     return {
@@ -1251,13 +1250,13 @@ app.registerExtension({
 
                 const self = this;
 
-                const maskEditorIndex = options.findIndex(option => 
+                const maskEditorIndex = options.findIndex(option =>
                     option && option.content === "Open in MaskEditor"
                 );
                 if (maskEditorIndex !== -1) {
                     options.splice(maskEditorIndex, 1);
                 }
-                
+
                 const newOptions = [
                     {
                         content: "Open in MaskEditor",

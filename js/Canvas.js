@@ -1,5 +1,5 @@
-import { app, ComfyApp } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
+import {app, ComfyApp} from "../../scripts/app.js";
+import {api} from "../../scripts/api.js";
 import {removeImage} from "./db.js";
 import {MaskTool} from "./MaskTool.js";
 import {CanvasState} from "./CanvasState.js";
@@ -9,13 +9,13 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
+import {mask_editor_showing, mask_editor_listen_for_cancel} from "./utils/mask_utils.js";
 
 const log = createModuleLogger('Canvas');
 
 /**
  * Canvas - Fasada dla systemu rysowania
- * 
+ *
  * Klasa Canvas pełni rolę fasady, oferując uproszczony interfejs wysokiego poziomu
  * dla złożonego systemu rysowania. Zamiast eksponować wszystkie metody modułów,
  * udostępnia tylko kluczowe operacje i umożliwia bezpośredni dostęp do modułów
@@ -69,21 +69,21 @@ export class Canvas {
 
         return new Promise((resolve, reject) => {
             const check = () => {
-            const widget = node.widgets.find(w => w.name === name);
-            if (widget) {
-                resolve(widget);
-            } else if (Date.now() - startTime > timeout) {
-                reject(new Error(`Widget "${name}" not found within timeout.`));
-            } else {
-                setTimeout(check, interval);
-            }
+                const widget = node.widgets.find(w => w.name === name);
+                if (widget) {
+                    resolve(widget);
+                } else if (Date.now() - startTime > timeout) {
+                    reject(new Error(`Widget "${name}" not found within timeout.`));
+                } else {
+                    setTimeout(check, interval);
+                }
             };
 
             check();
         });
     }
 
-    
+
     /**
      * Kontroluje widoczność podglądu canvas
      * @param {boolean} visible - Czy podgląd ma być widoczny
@@ -95,7 +95,7 @@ export class Canvas {
         const imagePreviewWidget = await this.waitForWidget("$$canvas-image-preview", this.node);
         if (imagePreviewWidget) {
             console.log("Found $$canvas-image-preview widget, controlling visibility");
-            
+
             if (visible) {
                 console.log("=== SHOWING WIDGET ===");
 
@@ -110,10 +110,10 @@ export class Canvas {
                 }
 
                 console.log("Setting computeSize to fixed height 250");
-                imagePreviewWidget.computeSize = function() {
+                imagePreviewWidget.computeSize = function () {
                     return [0, 250]; // Szerokość 0 (auto), wysokość 250
                 };
-                
+
                 console.log("ImagePreviewWidget shown");
             } else {
                 console.log("=== HIDING WIDGET ===");
@@ -127,14 +127,14 @@ export class Canvas {
                 if ('hidden' in imagePreviewWidget) {
                     imagePreviewWidget.hidden = true;
                 }
-                
-                imagePreviewWidget.computeSize = function() {
+
+                imagePreviewWidget.computeSize = function () {
                     return [0, 0]; // Szerokość 0, wysokość 0
-                };                
-                
+                };
+
                 console.log("ImagePreviewWidget hidden with zero size");
             }
-            
+
             console.log("=== FINAL WIDGET STATE ===");
             this.render()
         } else {
@@ -171,8 +171,6 @@ export class Canvas {
             opacity: 1
         }));
     }
-
-
 
 
     /**
@@ -292,8 +290,6 @@ export class Canvas {
     }
 
 
-
-
     /**
      * Uruchamia edytor masek
      * @param {Image|HTMLCanvasElement|null} predefinedMask - Opcjonalna maska do nałożenia po otwarciu editora
@@ -322,7 +318,7 @@ export class Canvas {
 
             blob = await this.canvasLayers.getFlattenedCanvasForMaskEditor();
         }
-        
+
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");
             return;
@@ -344,36 +340,34 @@ export class Canvas {
                 throw new Error(`Failed to upload image: ${response.statusText}`);
             }
             const data = await response.json();
-            
+
             const img = new Image();
             img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
             await new Promise((res, rej) => {
                 img.onload = res;
                 img.onerror = rej;
             });
-            
+
             this.node.imgs = [img];
 
-        ComfyApp.copyToClipspace(this.node);
-        ComfyApp.clipspace_return_node = this.node;
-        ComfyApp.open_maskeditor();
-        
-        this.editorWasShowing = false;
-        this.waitWhileMaskEditing();
+            ComfyApp.copyToClipspace(this.node);
+            ComfyApp.clipspace_return_node = this.node;
+            ComfyApp.open_maskeditor();
 
-        this.setupCancelListener();
+            this.editorWasShowing = false;
+            this.waitWhileMaskEditing();
 
-        if (predefinedMask) {
-            this.waitForMaskEditorAndApplyMask();
-        }
+            this.setupCancelListener();
+
+            if (predefinedMask) {
+                this.waitForMaskEditorAndApplyMask();
+            }
 
         } catch (error) {
             log.error("Error preparing image for mask editor:", error);
             alert(`Error: ${error.message}`);
         }
     }
-
-
 
 
     /**
@@ -428,7 +422,7 @@ export class Canvas {
         const mouseX_Canvas = mouseX_DOM * scaleX;
         const mouseY_Canvas = mouseY_DOM * scaleY;
 
-        return { x: mouseX_Canvas, y: mouseY_Canvas };
+        return {x: mouseX_Canvas, y: mouseY_Canvas};
     }
 
     /**
@@ -488,23 +482,21 @@ export class Canvas {
     }
 
 
-
-
     /**
      * Czeka na otwarcie mask editora i automatycznie nakłada predefiniowaną maskę
      */
     waitForMaskEditorAndApplyMask() {
         let attempts = 0;
         const maxAttempts = 100; // Zwiększone do 10 sekund oczekiwania
-        
+
         const checkEditor = () => {
             attempts++;
-            
+
             if (mask_editor_showing(app)) {
 
                 const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
                 let editorReady = false;
-                
+
                 if (useNewEditor) {
 
                     const MaskEditorDialog = window.MaskEditorDialog;
@@ -541,7 +533,7 @@ export class Canvas {
                         log.info("Old mask editor detected as ready");
                     }
                 }
-                
+
                 if (editorReady) {
 
                     log.info("Applying mask to editor after", attempts * 100, "ms wait");
@@ -572,7 +564,7 @@ export class Canvas {
                 this.pendingMask = null;
             }
         };
-        
+
         checkEditor();
     }
 
@@ -584,7 +576,7 @@ export class Canvas {
         try {
 
             const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
-            
+
             if (useNewEditor) {
 
                 const MaskEditorDialog = window.MaskEditorDialog;
@@ -599,7 +591,7 @@ export class Canvas {
 
                 await this.applyMaskToOldEditor(maskData);
             }
-            
+
             log.info("Predefined mask applied to mask editor successfully");
         } catch (error) {
             log.error("Failed to apply predefined mask to editor:", error);
@@ -653,7 +645,7 @@ export class Canvas {
 
         const maskCtx = maskCanvas.getContext('2d');
 
-        const maskColor = { r: 255, g: 255, b: 255 };
+        const maskColor = {r: 255, g: 255, b: 255};
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
 
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
@@ -671,11 +663,11 @@ export class Canvas {
     async processMaskForEditor(maskData, targetWidth, targetHeight, maskColor) {
         const originalWidth = maskData.width || maskData.naturalWidth || this.width;
         const originalHeight = maskData.height || maskData.naturalHeight || this.height;
-        
+
         log.info("Processing mask for editor:", {
-            originalSize: { width: originalWidth, height: originalHeight },
-            targetSize: { width: targetWidth, height: targetHeight },
-            canvasSize: { width: this.width, height: this.height }
+            originalSize: {width: originalWidth, height: originalHeight},
+            targetSize: {width: targetWidth, height: targetHeight},
+            canvasSize: {width: this.width, height: this.height}
         });
 
         const tempCanvas = document.createElement('canvas');
@@ -693,16 +685,16 @@ export class Canvas {
 
         const offsetX = (targetWidth - scaledWidth) / 2;
         const offsetY = (targetHeight - scaledHeight) / 2;
-        
+
         tempCtx.drawImage(maskData, offsetX, offsetY, scaledWidth, scaledHeight);
-        
-        log.info("Mask drawn scaled to original image size:", { 
-            originalSize: { width: originalWidth, height: originalHeight },
-            targetSize: { width: targetWidth, height: targetHeight },
-            canvasSize: { width: this.width, height: this.height },
+
+        log.info("Mask drawn scaled to original image size:", {
+            originalSize: {width: originalWidth, height: originalHeight},
+            targetSize: {width: targetWidth, height: targetHeight},
+            canvasSize: {width: this.width, height: this.height},
             scaleToOriginal: scaleToOriginal,
-            finalSize: { width: scaledWidth, height: scaledHeight },
-            offset: { x: offsetX, y: offsetY }
+            finalSize: {width: scaledWidth, height: scaledHeight},
+            offset: {x: offsetX, y: offsetY}
         });
 
         const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
@@ -718,7 +710,7 @@ export class Canvas {
         }
 
         tempCtx.putImageData(imageData, 0, 0);
-        
+
         log.info("Mask processing completed - full size scaling applied");
         return tempCanvas;
     }
@@ -744,10 +736,10 @@ export class Canvas {
         if (mask_editor_showing(app)) {
             this.editorWasShowing = true;
         }
-        
+
         if (!mask_editor_showing(app) && this.editorWasShowing) {
-             this.editorWasShowing = false;
-             setTimeout(() => this.handleMaskEditorClose(), 100);
+            this.editorWasShowing = false;
+            setTimeout(() => this.handleMaskEditorClose(), 100);
         } else {
             setTimeout(this.waitWhileMaskEditing.bind(this), 100);
         }
@@ -778,7 +770,7 @@ export class Canvas {
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
         const tempCtx = tempCanvas.getContext('2d');
-        
+
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 
         const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
@@ -786,7 +778,7 @@ export class Canvas {
 
         for (let i = 0; i < data.length; i += 4) {
             const originalAlpha = data[i + 3];
-            data[i]     = 255;
+            data[i] = 255;
             data[i + 1] = 255;
             data[i + 2] = 255;
             data[i + 3] = 255 - originalAlpha;
@@ -797,7 +789,7 @@ export class Canvas {
         const maskAsImage = new Image();
         maskAsImage.src = tempCanvas.toDataURL();
         await new Promise(resolve => maskAsImage.onload = resolve);
-        
+
         const maskCtx = this.maskTool.maskCtx;
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
@@ -807,10 +799,10 @@ export class Canvas {
         maskCtx.clearRect(destX, destY, this.width, this.height);
 
         maskCtx.drawImage(maskAsImage, destX, destY);
-        
+
         this.render();
         this.saveState();
-        
+
         const new_preview = new Image();
 
         const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
@@ -824,8 +816,6 @@ export class Canvas {
 
         this.render();
     }
-
-
 
 
     /**
@@ -929,7 +919,7 @@ export class Canvas {
         tempCanvas.width = this.width;
         tempCanvas.height = this.height;
         const tempCtx = tempCanvas.getContext('2d');
-        
+
         tempCtx.drawImage(resultImage, 0, 0, this.width, this.height);
 
         const imageData = tempCtx.getImageData(0, 0, this.width, this.height);
@@ -937,7 +927,7 @@ export class Canvas {
 
         for (let i = 0; i < data.length; i += 4) {
             const originalAlpha = data[i + 3];
-            data[i]     = 255;
+            data[i] = 255;
             data[i + 1] = 255;
             data[i + 2] = 255;
             data[i + 3] = 255 - originalAlpha;
@@ -948,7 +938,7 @@ export class Canvas {
         const maskAsImage = new Image();
         maskAsImage.src = tempCanvas.toDataURL();
         await new Promise(resolve => maskAsImage.onload = resolve);
-        
+
         const maskCtx = this.maskTool.maskCtx;
         const destX = -this.maskTool.x;
         const destY = -this.maskTool.y;
@@ -958,10 +948,10 @@ export class Canvas {
         maskCtx.clearRect(destX, destY, this.width, this.height);
 
         maskCtx.drawImage(maskAsImage, destX, destY);
-        
+
         this.render();
         this.saveState();
-        
+
         const new_preview = new Image();
 
         const blob = await this.canvasLayers.getFlattenedCanvasWithMaskAsBlob();

@@ -283,7 +283,6 @@ export class MaskTool {
     setMask(image) {
 
 
-
         const destX = -this.x;
         const destY = -this.y;
 

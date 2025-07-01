@@ -33,7 +33,7 @@ function get_mask_editor_cancel_button(app) {
         'button[onclick*="Cancel"]',
         'input[value="Cancel"]'
     ];
-    
+
     for (const selector of cancelSelectors) {
         try {
             const button = document.querySelector(selector);
@@ -59,7 +59,7 @@ function get_mask_editor_cancel_button(app) {
     if (editorElement) {
         return editorElement?.parentElement?.lastChild?.childNodes[2];
     }
-    
+
     return null;
 }
 
@@ -72,11 +72,11 @@ export function mask_editor_listen_for_cancel(app, callback) {
 
     let attempts = 0;
     const maxAttempts = 50; // 5 sekund
-    
+
     const findAndAttachListener = () => {
         attempts++;
         const cancel_button = get_mask_editor_cancel_button(app);
-        
+
         if (cancel_button && !cancel_button.filter_listener_added) {
             log.info("Cancel button found, attaching listener");
             cancel_button.addEventListener('click', callback);
@@ -91,7 +91,7 @@ export function mask_editor_listen_for_cancel(app, callback) {
             const globalClickHandler = (event) => {
                 const target = event.target;
                 const text = target.textContent || target.value || '';
-                if (text.toLowerCase().includes('cancel') || 
+                if (text.toLowerCase().includes('cancel') ||
                     target.id.toLowerCase().includes('cancel') ||
                     target.className.toLowerCase().includes('cancel')) {
                     log.info("Cancel detected via global click handler");
@@ -99,12 +99,12 @@ export function mask_editor_listen_for_cancel(app, callback) {
                     document.removeEventListener('click', globalClickHandler);
                 }
             };
-            
+
             document.addEventListener('click', globalClickHandler);
             log.debug("Added global click handler for cancel detection");
         }
     };
-    
+
     findAndAttachListener();
 }
 
@@ -127,7 +127,7 @@ export function start_mask_editor_with_predefined_mask(canvasInstance, maskImage
         log.error('Canvas instance and mask image are required');
         return;
     }
-    
+
     canvasInstance.startMaskEditor(maskImage, sendCleanImage);
 }
 
@@ -140,7 +140,6 @@ export function start_mask_editor_auto(canvasInstance) {
         log.error('Canvas instance is required');
         return;
     }
-
 
 
     canvasInstance.startMaskEditor();

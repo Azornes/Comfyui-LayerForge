@@ -8,7 +8,7 @@
  * @returns {string} UUID w formacie xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
  */
 export function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
     });
@@ -42,7 +42,7 @@ export function getSnapAdjustment(layer, gridSize = 64, snapThreshold = 10) {
         top: layer.y,
         bottom: layer.y + layer.height
     };
-    
+
     const x_adjustments = [
         {type: 'x', delta: snapToGrid(layerEdges.left, gridSize) - layerEdges.left},
         {type: 'x', delta: snapToGrid(layerEdges.right, gridSize) - layerEdges.right}
@@ -52,17 +52,17 @@ export function getSnapAdjustment(layer, gridSize = 64, snapThreshold = 10) {
         {type: 'y', delta: snapToGrid(layerEdges.top, gridSize) - layerEdges.top},
         {type: 'y', delta: snapToGrid(layerEdges.bottom, gridSize) - layerEdges.bottom}
     ];
-    
+
     x_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
     y_adjustments.forEach(adj => adj.abs = Math.abs(adj.delta));
-    
+
     const bestXSnap = x_adjustments
         .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
         .sort((a, b) => a.abs - b.abs)[0];
     const bestYSnap = y_adjustments
         .filter(adj => adj.abs < snapThreshold && adj.abs > 1e-9)
         .sort((a, b) => a.abs - b.abs)[0];
-        
+
     return {
         dx: bestXSnap ? bestXSnap.delta : 0,
         dy: bestYSnap ? bestYSnap.delta : 0
@@ -145,7 +145,7 @@ export function getStateSignature(layers) {
         if (layer.image && layer.image.src) {
             sig.imageSrc = layer.image.src.substring(0, 100); // First 100 chars to avoid huge signatures
         }
-        
+
         return sig;
     }));
 }
@@ -179,7 +179,7 @@ export function debounce(func, wait, immediate) {
  */
 export function throttle(func, limit) {
     let inThrottle;
-    return function(...args) {
+    return function (...args) {
         if (!inThrottle) {
             func.apply(this, args);
             inThrottle = true;
@@ -241,7 +241,7 @@ export function createCanvas(width, height, contextType = '2d', contextOptions =
     if (width) canvas.width = width;
     if (height) canvas.height = height;
     const ctx = canvas.getContext(contextType, contextOptions);
-    return { canvas, ctx };
+    return {canvas, ctx};
 }
 
 /**
@@ -284,5 +284,5 @@ export function generateUniqueFileName(baseName, nodeId) {
  */
 export function isPointInRect(pointX, pointY, rectX, rectY, rectWidth, rectHeight) {
     return pointX >= rectX && pointX <= rectX + rectWidth &&
-           pointY >= rectY && pointY <= rectY + rectHeight;
+        pointY >= rectY && pointY <= rectY + rectHeight;
 }
