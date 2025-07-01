@@ -59,6 +59,127 @@ export class Canvas {
         
         // Delegacja interaction dla kompatybilności wstecznej
         this.interaction = this.canvasInteractions.interaction;
+
+        console.log('Canvas widget element:', this.node);
+        
+        // Dodaj metodę do kontroli widoczności podglądu
+        this.previewVisible = true; // Domyślnie widoczny
+    }
+
+    /**
+     * Kontroluje widoczność podglądu canvas
+     * @param {boolean} visible - Czy podgląd ma być widoczny
+     */
+    setPreviewVisibility(visible) {
+        this.previewVisible = visible;
+        console.log("Canvas preview visibility set to:", visible);
+        
+        // Znajdź i kontroluj ImagePreviewWidget
+        const imagePreviewWidget = this.node.widgets.find(w => w.name === "$$canvas-image-preview");
+        if (imagePreviewWidget) {
+            console.log("Found $$canvas-image-preview widget, controlling visibility");
+            
+            // SZCZEGÓŁOWE LOGOWANIE ROZMIARU
+            console.log("=== WIDGET SIZE DEBUG ===");
+            console.log("Current computeSize function:", imagePreviewWidget.computeSize);
+            console.log("Has originalComputeSize:", !!imagePreviewWidget.originalComputeSize);
+            
+            if (imagePreviewWidget.computeSize) {
+                try {
+                    const currentSize = imagePreviewWidget.computeSize();
+                    console.log("Current size returned by computeSize():", currentSize);
+                } catch (e) {
+                    console.log("Error calling computeSize():", e);
+                }
+            }
+            
+            console.log("Widget properties:", {
+                width: imagePreviewWidget.width,
+                height: imagePreviewWidget.height,
+                size: imagePreviewWidget.size,
+                last_y: imagePreviewWidget.last_y,
+                type: imagePreviewWidget.type
+            });
+            
+            // Spróbuj różnych metod ukrywania
+            if (visible) {
+                console.log("=== SHOWING WIDGET ===");
+                
+                // Pokaż widget
+                if (imagePreviewWidget.options) {
+                    imagePreviewWidget.options.hidden = false;
+                }
+                if ('visible' in imagePreviewWidget) {
+                    imagePreviewWidget.visible = true;
+                }
+                if ('hidden' in imagePreviewWidget) {
+                    imagePreviewWidget.hidden = false;
+                }
+                
+                // Ustaw stały rozmiar 250 gdy podgląd jest pokazany
+                console.log("Setting computeSize to fixed height 250");
+                imagePreviewWidget.computeSize = function() {
+                    return [0, 250]; // Szerokość 0 (auto), wysokość 250
+                };
+                
+                console.log("ImagePreviewWidget shown");
+            } else {
+                console.log("=== HIDING WIDGET ===");
+                
+                // Ukryj widget
+                if (imagePreviewWidget.options) {
+                    imagePreviewWidget.options.hidden = true;
+                }
+                if ('visible' in imagePreviewWidget) {
+                    imagePreviewWidget.visible = false;
+                }
+                if ('hidden' in imagePreviewWidget) {
+                    imagePreviewWidget.hidden = true;
+                }
+                
+                // Zapisz oryginalny computeSize (jeśli istnieje)
+                if (imagePreviewWidget.computeSize) {
+                    console.log("Saving original computeSize function");
+                    imagePreviewWidget.originalComputeSize = imagePreviewWidget.computeSize;
+                } else {
+                    console.log("Widget has no computeSize - will create one");
+                    // Nie zapisujemy niczego, bo nie było computeSize
+                }
+                
+                // Zawsze ustaw computeSize na 0
+                imagePreviewWidget.computeSize = function() {
+                    return [0, 0]; // Szerokość 0, wysokość 0
+                };
+                
+                console.log("ImagePreviewWidget hidden with zero size");
+            }
+            
+            console.log("=== FINAL WIDGET STATE ===");
+            console.log("ImagePreviewWidget state:", {
+                'options.hidden': imagePreviewWidget.options?.hidden,
+                'visible': imagePreviewWidget.visible,
+                'hidden': imagePreviewWidget.hidden,
+                'hasOriginalComputeSize': !!imagePreviewWidget.originalComputeSize,
+                'computeSizeFunction': imagePreviewWidget.computeSize ? imagePreviewWidget.computeSize.toString().substring(0, 100) + "..." : 'undefined'
+            });
+            
+            // Test finalnego rozmiaru
+            if (imagePreviewWidget.computeSize) {
+                try {
+                    const finalSize = imagePreviewWidget.computeSize();
+                    console.log("Final computed size:", finalSize);
+                } catch (e) {
+                    console.log("Error calling final computeSize():", e);
+                }
+            }
+            
+            console.log("=== END SIZE DEBUG ===");
+        } else {
+            console.warn("$$canvas-image-preview widget not found in Canvas.js");
+        }
+        
+        // Wymuś przerysowanie
+        this.render();
     }
 
     /**
@@ -128,6 +249,7 @@ export class Canvas {
         this.incrementOperationCount();
         this._notifyStateChange();
     }
+
 
     /**
      * Ponów cofniętą operację

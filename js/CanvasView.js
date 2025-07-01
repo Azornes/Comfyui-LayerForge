@@ -385,6 +385,8 @@ async function createCanvasWidget(node, widget, app) {
             flex-direction: column;
             position: relative;
         }
+
+
     `;
     document.head.appendChild(style);
 
@@ -945,7 +947,7 @@ async function createCanvasWidget(node, widget, app) {
     const updateOutput = async () => {
         triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         
-        // Aktualizuj podgląd node z maską jako alpha
+        // ZAWSZE generuj obraz (potrzebny dla funkcji masek)
         try {
             const new_preview = new Image();
             const blob = await canvas.getFlattenedCanvasWithMaskAsBlob();
@@ -1106,6 +1108,33 @@ async function createCanvasWidget(node, widget, app) {
 
 
     node.canvasWidget = canvas;
+
+    console.log('Canvas widget element:', node.element);
+    console.log('Canvas widget canvas:', node.canvas);
+    console.log('Canvas widget parent:', node.parent);
+    
+
+    // Konfiguracja opcji ukrywania podglądu
+    const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");
+    if (showPreviewWidget) {
+        const originalCallback = showPreviewWidget.callback;
+        
+        showPreviewWidget.callback = function(value) {
+            if (originalCallback) {
+                originalCallback.call(this, value);
+            }
+            
+            // Kontroluj widoczność podglądu w Canvas
+            if (canvas && canvas.setPreviewVisibility) {
+                canvas.setPreviewVisibility(value);
+            }
+            
+            // Wymuś przerysowanie node'a
+            if (node.graph && node.graph.canvas) {
+                node.setDirtyCanvas(true, true);
+            }
+        };
+    }
 
     setTimeout(() => {
         canvas.loadInitialState();
