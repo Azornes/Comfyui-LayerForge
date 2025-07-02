@@ -19,6 +19,7 @@ export class CanvasInteractions {
             hasClonedInDrag: false,
             lastClickTime: 0,
             transformingLayer: null,
+            keyMovementInProgress: false, // Flaga do śledzenia ruchu klawiszami
         };
         this.originalLayerPositions = new Map();
         this.interaction.canvasResizeRect = null;
@@ -69,44 +70,17 @@ export class CanvasInteractions {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
         const viewCoords = this.canvas.getMouseViewCoordinates(e);
 
-        if (this.canvas.maskTool.isActive) {
-            if (e.button === 1) {
-                this.startPanning(e);
-            } else {
-                this.canvas.maskTool.handleMouseDown(worldCoords, viewCoords);
-            }
-            this.canvas.render();
-            return;
-        }
-
-        const currentTime = Date.now();
-        if (e.shiftKey && e.ctrlKey) {
-            this.startCanvasMove(worldCoords);
-            this.canvas.render();
-            return;
-        }
-
-        if (currentTime - this.interaction.lastClickTime < 300) {
-            this.canvas.updateSelection([]);
-            this.canvas.selectedLayer = null;
-            this.resetInteractionState();
-            this.canvas.render();
-            return;
-        }
-        this.interaction.lastClickTime = currentTime;
-
-        if (e.button === 2) {
+        if (e.button === 2) { // Obsługa prawego przycisku myszy
             const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
             if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
-                e.preventDefault(); // Prevent context menu
-                this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x ,viewCoords.y);
+                e.preventDefault();
+                this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x, viewCoords.y);
                 return;
             }
         }
-
-        if (e.shiftKey) {
-            this.startCanvasResize(worldCoords);
-            this.canvas.render();
+        
+        if (e.button !== 0) { // Ignoruj inne przyciski niż lewy i prawy
+            this.startPanning(e);
             return;
         }
 
@@ -118,32 +92,31 @@ export class CanvasInteractions {
 
         const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
         if (clickedLayerResult) {
-            this.startLayerDrag(clickedLayerResult.layer, worldCoords);
+            // Zaznacz warstwę i przygotuj się do potencjalnego przeciągania
+            this.prepareForDrag(clickedLayerResult.layer, worldCoords);
             return;
         }
         
-        this.startPanning(e);
-
-        this.canvas.render();
+        // Jeśli nie kliknięto na nic, rozpocznij panoramowanie lub wyczyść zaznaczenie
+        this.startPanningOrClearSelection(e);
     }
 
     handleMouseMove(e) {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
-        const viewCoords = this.canvas.getMouseViewCoordinates(e);
-        this.canvas.lastMousePosition = worldCoords;
-
-        if (this.canvas.maskTool.isActive) {
-            if (this.interaction.mode === 'panning') {
-                this.panViewport(e);
-                return;
+        
+        // Sprawdź, czy rozpocząć przeciąganie
+        if (this.interaction.mode === 'potential-drag') {
+            const dx = worldCoords.x - this.interaction.dragStart.x;
+            const dy = worldCoords.y - this.interaction.dragStart.y;
+            if (Math.sqrt(dx * dx + dy * dy) > 3) { // Próg 3 pikseli
+                this.interaction.mode = 'dragging';
+                this.originalLayerPositions.clear();
+                this.canvas.selectedLayers.forEach(l => {
+                    this.originalLayerPositions.set(l, {x: l.x, y: l.y});
+                });
             }
-            this.canvas.maskTool.handleMouseMove(worldCoords, viewCoords);
-            if (this.canvas.maskTool.isDrawing) {
-                this.canvas.render();
-            }
-            return;
         }
-
+        
         switch (this.interaction.mode) {
             case 'panning':
                 this.panViewport(e);
@@ -157,12 +130,7 @@ export class CanvasInteractions {
             case 'rotating':
                 this.rotateLayerFromHandle(worldCoords, e.shiftKey);
                 break;
-            case 'resizingCanvas':
-                this.updateCanvasResize(worldCoords);
-                break;
-            case 'movingCanvas':
-                this.updateCanvasMove(worldCoords);
-                break;
+            // ... inne tryby
             default:
                 this.updateCursor(worldCoords);
                 break;
@@ -170,31 +138,17 @@ export class CanvasInteractions {
     }
 
     handleMouseUp(e) {
-        const viewCoords = this.canvas.getMouseViewCoordinates(e);
-        if (this.canvas.maskTool.isActive) {
-            if (this.interaction.mode === 'panning') {
-                this.resetInteractionState();
-            } else {
-                this.canvas.maskTool.handleMouseUp(viewCoords);
-            }
-            this.canvas.render();
-            return;
-        }
+        // Zapisz stan tylko, jeśli faktycznie doszło do zmiany (przeciąganie, transformacja, duplikacja)
+        const stateChangingInteraction = ['dragging', 'resizing', 'rotating'].includes(this.interaction.mode);
+        const duplicatedInDrag = this.interaction.hasClonedInDrag;
 
-        const interactionEnded = this.interaction.mode !== 'none' && this.interaction.mode !== 'panning';
-
-        if (this.interaction.mode === 'resizingCanvas') {
-            this.finalizeCanvasResize();
-        } else if (this.interaction.mode === 'movingCanvas') {
-            this.finalizeCanvasMove();
-        }
-        this.resetInteractionState();
-        this.canvas.render();
-
-        if (interactionEnded) {
+        if (stateChangingInteraction || duplicatedInDrag) {
             this.canvas.saveState();
             this.canvas.canvasState.saveStateToDB(true);
         }
+
+        this.resetInteractionState();
+        this.canvas.render();
     }
 
     handleMouseLeave(e) {
@@ -307,112 +261,46 @@ export class CanvasInteractions {
         }
         this.canvas.render();
         if (!this.canvas.maskTool.isActive) {
-            this.canvas.saveState(true);
+            this.canvas.requestSaveState(true); // Użyj opóźnionego zapisu
         }
     }
 
     handleKeyDown(e) {
-        if (this.canvas.maskTool.isActive) {
-            if (e.key === 'Control') this.interaction.isCtrlPressed = true;
-            if (e.key === 'Alt') {
-                this.interaction.isAltPressed = true;
-                e.preventDefault();
-            }
-
-            if (e.ctrlKey) {
-                if (e.key.toLowerCase() === 'z') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.shiftKey) {
-                        this.canvas.canvasState.redo();
-                    } else {
-                        this.canvas.canvasState.undo();
-                    }
-                    return;
-                }
-                if (e.key.toLowerCase() === 'y') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.canvas.canvasState.redo();
-                    return;
-                }
-            }
-            return;
-        }
-
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
             e.preventDefault();
         }
 
-        if (e.ctrlKey) {
-            if (e.key.toLowerCase() === 'z') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.shiftKey) {
-                    this.canvas.canvasState.redo();
-                } else {
-                    this.canvas.canvasState.undo();
-                }
-                return;
-            }
-            if (e.key.toLowerCase() === 'y') {
-                e.preventDefault();
-                e.stopPropagation();
-                this.canvas.canvasState.redo();
-                return;
-            }
-            if (e.key.toLowerCase() === 'c') {
-                if (this.canvas.selectedLayers.length > 0) {
-                    this.canvas.canvasLayers.copySelectedLayers();
-                }
-                return;
-            }
-            if (e.key.toLowerCase() === 'v') {
-
-
-                return;
-            }
-        }
-
         if (this.canvas.selectedLayer) {
+            const step = e.shiftKey ? 10 : 1;
+            let needsRender = false;
+            
+            const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
+            if (movementKeys.includes(e.code)) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.interaction.keyMovementInProgress = true;
+
+                if (e.code === 'ArrowLeft') this.canvas.selectedLayers.forEach(l => l.x -= step);
+                if (e.code === 'ArrowRight') this.canvas.selectedLayers.forEach(l => l.x += step);
+                if (e.code === 'ArrowUp') this.canvas.selectedLayers.forEach(l => l.y -= step);
+                if (e.code === 'ArrowDown') this.canvas.selectedLayers.forEach(l => l.y += step);
+                if (e.code === 'BracketLeft') this.canvas.selectedLayers.forEach(l => l.rotation -= step);
+                if (e.code === 'BracketRight') this.canvas.selectedLayers.forEach(l => l.rotation += step);
+
+                needsRender = true;
+            }
+
             if (e.key === 'Delete') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.saveState();
-                this.canvas.layers = this.canvas.layers.filter(l => !this.canvas.selectedLayers.includes(l));
-                this.canvas.updateSelection([]);
-                this.canvas.render();
+                this.canvas.removeSelectedLayers();
                 return;
             }
-
-            const step = e.shiftKey ? 10 : 1;
-            let needsRender = false;
-            switch (e.code) {
-                case 'ArrowLeft':
-                case 'ArrowRight':
-                case 'ArrowUp':
-                case 'ArrowDown':
-                case 'BracketLeft':
-                case 'BracketRight':
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    if (e.code === 'ArrowLeft') this.canvas.selectedLayers.forEach(l => l.x -= step);
-                    if (e.code === 'ArrowRight') this.canvas.selectedLayers.forEach(l => l.x += step);
-                    if (e.code === 'ArrowUp') this.canvas.selectedLayers.forEach(l => l.y -= step);
-                    if (e.code === 'ArrowDown') this.canvas.selectedLayers.forEach(l => l.y += step);
-                    if (e.code === 'BracketLeft') this.canvas.selectedLayers.forEach(l => l.rotation -= step);
-                    if (e.code === 'BracketRight') this.canvas.selectedLayers.forEach(l => l.rotation += step);
-
-                    needsRender = true;
-                    break;
-            }
-
+            
             if (needsRender) {
-                this.canvas.render();
-                this.canvas.saveState();
+                this.canvas.render(); // Tylko renderuj, nie zapisuj stanu
             }
         }
     }
@@ -420,6 +308,12 @@ export class CanvasInteractions {
     handleKeyUp(e) {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
         if (e.key === 'Alt') this.interaction.isAltPressed = false;
+
+        const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
+        if (movementKeys.includes(e.code) && this.interaction.keyMovementInProgress) {
+            this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
+            this.interaction.keyMovementInProgress = false;
+        }
     }
 
     updateCursor(worldCoords) {
@@ -466,31 +360,32 @@ export class CanvasInteractions {
         this.canvas.render();
     }
 
-    startLayerDrag(layer, worldCoords) {
-        this.interaction.mode = 'dragging';
-        this.interaction.dragStart = {...worldCoords};
-
-        let currentSelection = [...this.canvas.selectedLayers];
-
+    prepareForDrag(layer, worldCoords) {
+        // Zaktualizuj zaznaczenie, ale nie zapisuj stanu
         if (this.interaction.isCtrlPressed) {
-            const index = currentSelection.indexOf(layer);
+            const index = this.canvas.selectedLayers.indexOf(layer);
             if (index === -1) {
-                currentSelection.push(layer);
+                this.canvas.updateSelection([...this.canvas.selectedLayers, layer]);
             } else {
-                currentSelection.splice(index, 1);
+                const newSelection = this.canvas.selectedLayers.filter(l => l !== layer);
+                this.canvas.updateSelection(newSelection);
             }
         } else {
-            if (!currentSelection.includes(layer)) {
-                currentSelection = [layer];
+            if (!this.canvas.selectedLayers.includes(layer)) {
+                this.canvas.updateSelection([layer]);
             }
         }
+        
+        this.interaction.mode = 'potential-drag';
+        this.interaction.dragStart = {...worldCoords};
+    }
 
-        this.canvas.updateSelection(currentSelection);
-
-        this.originalLayerPositions.clear();
-        this.canvas.selectedLayers.forEach(l => {
-            this.originalLayerPositions.set(l, {x: l.x, y: l.y});
-        });
+    startPanningOrClearSelection(e) {
+        if (!this.interaction.isCtrlPressed) {
+            this.canvas.updateSelection([]);
+        }
+        this.interaction.mode = 'panning';
+        this.interaction.panStart = {x: e.clientX, y: e.clientY};
     }
 
     startCanvasResize(worldCoords) {
@@ -570,19 +465,12 @@ export class CanvasInteractions {
 
     dragLayers(worldCoords) {
         if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.canvas.selectedLayers.length > 0) {
-            const newLayers = [];
-            this.canvas.selectedLayers.forEach(layer => {
-                const newLayer = {
-                    ...layer,
-                    zIndex: this.canvas.layers.length,
-                };
-                this.canvas.layers.push(newLayer);
-                newLayers.push(newLayer);
-            });
-            this.canvas.updateSelection(newLayers);
-            this.canvas.selectedLayer = newLayers.length > 0 ? newLayers[newLayers.length - 1] : null;
+            // Scentralizowana logika duplikowania
+            const newLayers = this.canvas.duplicateSelectedLayers();
+            
+            // Zresetuj pozycje przeciągania dla nowych, zduplikowanych warstw
             this.originalLayerPositions.clear();
-            this.canvas.selectedLayers.forEach(l => {
+            newLayers.forEach(l => {
                 this.originalLayerPositions.set(l, {x: l.x, y: l.y});
             });
             this.interaction.hasClonedInDrag = true;

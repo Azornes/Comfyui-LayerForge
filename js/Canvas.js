@@ -5,11 +5,13 @@ import {MaskTool} from "./MaskTool.js";
 import {CanvasState} from "./CanvasState.js";
 import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
+import {CanvasLayersPanel} from "./CanvasLayersPanel.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {mask_editor_showing, mask_editor_listen_for_cancel} from "./utils/mask_utils.js";
+import { debounce } from "./utils/CommonUtils.js";
 
 const log = createModuleLogger('Canvas');
 
@@ -141,10 +143,14 @@ export class Canvas {
     _initializeModules(callbacks) {
         log.debug('Initializing Canvas modules...');
 
+        // Stwórz opóźnioną wersję funkcji zapisu stanu
+        this.requestSaveState = debounce(this.saveState.bind(this), 500);
+
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.canvasState = new CanvasState(this);
         this.canvasInteractions = new CanvasInteractions(this);
         this.canvasLayers = new CanvasLayers(this);
+        this.canvasLayersPanel = new CanvasLayersPanel(this);
         this.canvasRenderer = new CanvasRenderer(this);
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
@@ -180,6 +186,11 @@ export class Canvas {
         }
         this.saveState();
         this.render();
+
+        // Dodaj to wywołanie, aby panel renderował się po załadowaniu stanu
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+        }
     }
 
     /**
@@ -205,6 +216,12 @@ export class Canvas {
         this.incrementOperationCount();
         this._notifyStateChange();
 
+        // Powiadom panel warstw o zmianie stanu warstw
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+            this.canvasLayersPanel.onSelectionChanged();
+        }
+
         log.debug('Undo completed, layers count:', this.layers.length);
     }
 
@@ -220,6 +237,12 @@ export class Canvas {
         this.canvasState.redo();
         this.incrementOperationCount();
         this._notifyStateChange();
+
+        // Powiadom panel warstw o zmianie stanu warstw
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+            this.canvasLayersPanel.onSelectionChanged();
+        }
 
         log.debug('Redo completed, layers count:', this.layers.length);
     }
@@ -238,7 +261,14 @@ export class Canvas {
      * @param {string} addMode - Tryb dodawania
      */
     async addLayer(image, layerProps = {}, addMode = 'default') {
-        return this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
+        const result = await this.canvasLayers.addLayerWithImage(image, layerProps, addMode);
+        
+        // Powiadom panel warstw o dodaniu nowej warstwy
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+        }
+        
+        return result;
     }
 
     /**
@@ -253,9 +283,15 @@ export class Canvas {
 
             this.saveState();
             this.layers = this.layers.filter(l => !this.selectedLayers.includes(l));
-            this.updateSelection([]);
+            
+            this.updateSelection([]); 
+            
             this.render();
             this.saveState();
+
+            if (this.canvasLayersPanel) {
+                this.canvasLayersPanel.onLayersChanged();
+            }
 
             log.debug('Layers removed successfully, remaining layers:', this.layers.length);
         } else {
@@ -264,23 +300,104 @@ export class Canvas {
     }
 
     /**
-     * Aktualizuje zaznaczenie warstw
+     * Duplikuje zaznaczone warstwy (w pamięci, bez zapisu stanu)
+     */
+    duplicateSelectedLayers() {
+        if (this.selectedLayers.length === 0) return [];
+
+        const newLayers = [];
+        const sortedLayers = [...this.selectedLayers].sort((a,b) => a.zIndex - b.zIndex);
+        
+        sortedLayers.forEach(layer => {
+            const newLayer = {
+                ...layer,
+                id: `layer_${+new Date()}_${Math.random().toString(36).substr(2, 9)}`,
+                zIndex: this.layers.length, // Nowa warstwa zawsze na wierzchu
+            };
+            this.layers.push(newLayer);
+            newLayers.push(newLayer);
+        });
+
+        // Aktualizuj zaznaczenie, co powiadomi panel (ale nie renderuje go całego)
+        this.updateSelection(newLayers);
+        
+        // Powiadom panel o zmianie struktury, aby się przerysował
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+        }
+        
+        log.info(`Duplicated ${newLayers.length} layers (in-memory).`);
+        return newLayers;
+    }
+
+    /**
+     * Aktualizuje zaznaczenie warstw i powiadamia wszystkie komponenty.
+     * To jest "jedyne źródło prawdy" o zmianie zaznaczenia.
      * @param {Array} newSelection - Nowa lista zaznaczonych warstw
      */
     updateSelection(newSelection) {
         const previousSelection = this.selectedLayers.length;
         this.selectedLayers = newSelection || [];
         this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
+        
+        // Sprawdź, czy zaznaczenie faktycznie się zmieniło, aby uniknąć pętli
+        const hasChanged = previousSelection !== this.selectedLayers.length || 
+                           this.selectedLayers.some((layer, i) => this.selectedLayers[i] !== (newSelection || [])[i]);
+
+        if (!hasChanged && previousSelection > 0) {
+           // return; // Zablokowane na razie, może powodować problemy
+        }
 
         log.debug('Selection updated', {
             previousCount: previousSelection,
             newCount: this.selectedLayers.length,
             selectedLayerIds: this.selectedLayers.map(l => l.id || 'unknown')
         });
+        
+        // 1. Zrenderuj ponownie canvas, aby pokazać nowe kontrolki transformacji
+        this.render();
 
+        // 2. Powiadom inne części aplikacji (jeśli są)
         if (this.onSelectionChange) {
             this.onSelectionChange();
         }
+
+        // 3. Powiadom panel warstw, aby zaktualizował swój wygląd
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onSelectionChanged();
+        }
+    }
+
+    /**
+     * Logika aktualizacji zaznaczenia, wywoływana przez panel warstw.
+     */
+    updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index) {
+        let newSelection = [...this.selectedLayers];
+
+        if (isShiftPressed && this.canvasLayersPanel.lastSelectedIndex !== -1) {
+            const sortedLayers = [...this.layers].sort((a, b) => b.zIndex - a.zIndex);
+            const startIndex = Math.min(this.canvasLayersPanel.lastSelectedIndex, index);
+            const endIndex = Math.max(this.canvasLayersPanel.lastSelectedIndex, index);
+            
+            newSelection = [];
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (sortedLayers[i]) {
+                    newSelection.push(sortedLayers[i]);
+                }
+            }
+        } else if (isCtrlPressed) {
+            const layerIndex = newSelection.indexOf(layer);
+            if (layerIndex === -1) {
+                newSelection.push(layer);
+            } else {
+                newSelection.splice(layerIndex, 1);
+            }
+        } else {
+            newSelection = [layer];
+            this.canvasLayersPanel.lastSelectedIndex = index;
+        }
+
+        this.updateSelection(newSelection);
     }
 
     /**

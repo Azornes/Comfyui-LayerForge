@@ -1068,17 +1068,31 @@ async function createCanvasWidget(node, widget, app) {
 
     };
 
+    // Tworzenie panelu warstw
+    const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
+    
     const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
         style: {
             position: "absolute",
             top: "60px",
             left: "10px",
-            right: "10px",
+            right: "320px", // Zostawiamy miejsce na panel warstw
             bottom: "10px",
-
             overflow: "hidden"
         }
     }, [canvas.canvas]);
+
+    // Kontener dla panelu warstw
+    const layersPanelContainer = $el("div.painterLayersPanelContainer", {
+        style: {
+            position: "absolute",
+            top: "60px",
+            right: "10px",
+            width: "300px",
+            bottom: "10px",
+            overflow: "hidden"
+        }
+    }, [layersPanel]);
 
     canvas.canvas.addEventListener('focus', () => {
         canvasContainer.classList.add('has-focus');
@@ -1100,7 +1114,7 @@ async function createCanvasWidget(node, widget, app) {
             width: "100%",
             height: "100%"
         }
-    }, [controlPanel, canvasContainer]);
+    }, [controlPanel, canvasContainer, layersPanelContainer]);
 
 
 
@@ -1167,6 +1181,10 @@ async function createCanvasWidget(node, widget, app) {
 
     setTimeout(() => {
         canvas.loadInitialState();
+        // Renderuj panel warstw po załadowaniu stanu
+        if (canvas.canvasLayersPanel) {
+            canvas.canvasLayersPanel.renderLayers();
+        }
     }, 100);
 
     const showPreviewWidget = node.widgets.find(w => w.name === "show_preview");

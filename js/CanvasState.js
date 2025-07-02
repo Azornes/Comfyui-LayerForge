@@ -16,6 +16,25 @@ export class CanvasState {
         this.saveTimeout = null;
         this.lastSavedStateSignature = null;
         this._loadInProgress = null;
+
+        // Inicjalizacja Web Workera w sposób odporny na problemy ze ścieżkami
+        try {
+            // new URL(..., import.meta.url) tworzy absolutną ścieżkę do workera
+            this.stateSaverWorker = new Worker(new URL('./state-saver.worker.js', import.meta.url), { type: 'module' });
+            log.info("State saver worker initialized successfully.");
+            
+            this.stateSaverWorker.onmessage = (e) => {
+                log.info("Message from state saver worker:", e.data);
+            };
+            this.stateSaverWorker.onerror = (e) => {
+                log.error("Error in state saver worker:", e.message, e.filename, e.lineno);
+                // Zapobiegaj dalszym próbom, jeśli worker nie działa
+                this.stateSaverWorker = null; 
+            };
+        } catch (e) {
+            log.error("Failed to initialize state saver worker:", e);
+            this.stateSaverWorker = null;
+        }
     }
 
 
@@ -182,47 +201,35 @@ export class CanvasState {
         img.src = imageSrc;
     }
 
-    async saveStateToDB(immediate = false) {
-        log.info("Preparing to save state to IndexedDB for node:", this.canvas.node.id);
+    async saveStateToDB() {
         if (!this.canvas.node.id) {
             log.error("Node ID is not available for saving state to DB.");
             return;
         }
 
-        const currentStateSignature = getStateSignature(this.canvas.layers);
-        if (this.lastSavedStateSignature === currentStateSignature) {
-            log.debug("State unchanged, skipping save to IndexedDB.");
+        log.info("Preparing state to be sent to worker...");
+        const state = {
+            layers: await this._prepareLayers(),
+            viewport: this.canvas.viewport,
+            width: this.canvas.width,
+            height: this.canvas.height,
+        };
+
+        state.layers = state.layers.filter(layer => layer !== null);
+        if (state.layers.length === 0) {
+            log.warn("No valid layers to save, skipping.");
             return;
         }
 
-        if (this.saveTimeout) {
-            clearTimeout(this.saveTimeout);
-        }
-
-        const saveFunction = withErrorHandling(async () => {
-            const state = {
-                layers: await this._prepareLayers(),
-                viewport: this.canvas.viewport,
-                width: this.canvas.width,
-                height: this.canvas.height,
-            };
-
-            state.layers = state.layers.filter(layer => layer !== null);
-            if (state.layers.length === 0) {
-                log.warn("No valid layers to save, skipping save to IndexedDB.");
-                return;
-            }
-
-            await setCanvasState(this.canvas.node.id, state);
-            log.info("Canvas state saved to IndexedDB.");
-            this.lastSavedStateSignature = currentStateSignature;
-            this.canvas.render();
-        }, 'CanvasState.saveStateToDB');
-
-        if (immediate) {
-            await saveFunction();
+        if (this.stateSaverWorker) {
+            log.info("Posting state to worker for background saving.");
+            this.stateSaverWorker.postMessage({
+                nodeId: this.canvas.node.id,
+                state: state
+            });
         } else {
-            this.saveTimeout = setTimeout(saveFunction, 1000);
+            log.warn("State saver worker not available. Saving on main thread.");
+            await setCanvasState(this.canvas.node.id, state);
         }
     }
 
@@ -264,14 +271,15 @@ export class CanvasState {
         }
 
         const currentState = cloneLayers(this.canvas.layers);
+        const currentStateSignature = getStateSignature(currentState);
 
         if (this.layersUndoStack.length > 0) {
             const lastState = this.layersUndoStack[this.layersUndoStack.length - 1];
-            if (getStateSignature(currentState) === getStateSignature(lastState)) {
-                return;
+            if (getStateSignature(lastState) === currentStateSignature) {
+                return; 
             }
         }
-
+        
         this.layersUndoStack.push(currentState);
 
         if (this.layersUndoStack.length > this.historyLimit) {
@@ -279,7 +287,11 @@ export class CanvasState {
         }
         this.layersRedoStack = [];
         this.canvas.updateHistoryButtons();
-        this._debouncedSave = this._debouncedSave || debounce(() => this.saveStateToDB(), 500);
+        
+        // Użyj debouncingu, aby zapobiec zbyt częstym zapisom
+        if (!this._debouncedSave) {
+            this._debouncedSave = debounce(() => this.saveStateToDB(), 1000);
+        }
         this._debouncedSave();
     }
 
