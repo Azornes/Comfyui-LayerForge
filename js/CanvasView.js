@@ -478,6 +478,41 @@ async function createCanvasWidget(node, widget, app) {
     `;
 
     document.body.appendChild(helpTooltip);
+
+    // Helper function for tooltip positioning
+    const showTooltip = (buttonElement, content) => {
+        helpTooltip.innerHTML = content;
+        helpTooltip.style.visibility = 'hidden';
+        helpTooltip.style.display = 'block';
+
+        const buttonRect = buttonElement.getBoundingClientRect();
+        const tooltipRect = helpTooltip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let left = buttonRect.left;
+        let top = buttonRect.bottom + 5;
+
+        if (left + tooltipRect.width > viewportWidth) {
+            left = viewportWidth - tooltipRect.width - 10;
+        }
+
+        if (top + tooltipRect.height > viewportHeight) {
+            top = buttonRect.top - tooltipRect.height - 5;
+        }
+
+        if (left < 10) left = 10;
+        if (top < 10) top = 10;
+
+        helpTooltip.style.left = `${left}px`;
+        helpTooltip.style.top = `${top}px`;
+        helpTooltip.style.visibility = 'visible';
+    };
+
+    const hideTooltip = () => {
+        helpTooltip.style.display = 'none';
+    };
+
     const controlPanel = $el("div.painterControlPanel", {}, [
         $el("div.controls.painter-controls", {
             style: {
@@ -509,43 +544,10 @@ async function createCanvasWidget(node, widget, app) {
                         fontWeight: "bold",
                     },
                     onmouseenter: (e) => {
-                        if (canvas.maskTool.isActive) {
-                            helpTooltip.innerHTML = maskShortcuts;
-                        } else {
-                            helpTooltip.innerHTML = standardShortcuts;
-                        }
-
-                        helpTooltip.style.visibility = 'hidden';
-                        helpTooltip.style.display = 'block';
-
-                        const buttonRect = e.target.getBoundingClientRect();
-                        const tooltipRect = helpTooltip.getBoundingClientRect();
-                        const viewportWidth = window.innerWidth;
-                        const viewportHeight = window.innerHeight;
-
-                        let left = buttonRect.left;
-                        let top = buttonRect.bottom + 5;
-
-                        if (left + tooltipRect.width > viewportWidth) {
-                            left = viewportWidth - tooltipRect.width - 10;
-                        }
-
-                        if (top + tooltipRect.height > viewportHeight) {
-
-                            top = buttonRect.top - tooltipRect.height - 5;
-                        }
-
-                        if (left < 10) left = 10;
-
-                        if (top < 10) top = 10;
-
-                        helpTooltip.style.left = `${left}px`;
-                        helpTooltip.style.top = `${top}px`;
-                        helpTooltip.style.visibility = 'visible';
+                        const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
+                        showTooltip(e.target, content);
                     },
-                    onmouseleave: () => {
-                        helpTooltip.style.display = 'none';
-                    }
+                    onmouseleave: hideTooltip
                 }),
                 $el("button.painter-button.primary", {
                     textContent: "Add Image",
@@ -654,36 +656,9 @@ async function createCanvasWidget(node, widget, app) {
                                 `;
                             }
 
-                            helpTooltip.innerHTML = tooltipContent;
-                            helpTooltip.style.visibility = 'hidden';
-                            helpTooltip.style.display = 'block';
-
-                            const buttonRect = e.target.getBoundingClientRect();
-                            const tooltipRect = helpTooltip.getBoundingClientRect();
-                            const viewportWidth = window.innerWidth;
-                            const viewportHeight = window.innerHeight;
-
-                            let left = buttonRect.left;
-                            let top = buttonRect.bottom + 5;
-
-                            if (left + tooltipRect.width > viewportWidth) {
-                                left = viewportWidth - tooltipRect.width - 10;
-                            }
-
-                            if (top + tooltipRect.height > viewportHeight) {
-                                top = buttonRect.top - tooltipRect.height - 5;
-                            }
-
-                            if (left < 10) left = 10;
-                            if (top < 10) top = 10;
-
-                            helpTooltip.style.left = `${left}px`;
-                            helpTooltip.style.top = `${top}px`;
-                            helpTooltip.style.visibility = 'visible';
+                            showTooltip(e.target, tooltipContent);
                         },
-                        onmouseleave: () => {
-                            helpTooltip.style.display = 'none';
-                        }
+                        onmouseleave: hideTooltip
                     })
                 ]),
             ]),
