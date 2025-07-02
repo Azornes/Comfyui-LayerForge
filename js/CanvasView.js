@@ -429,7 +429,7 @@ async function createCanvasWidget(node, widget, app) {
             <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
             <tr><td><kbd>Shift + Click (background)</kbd></td><td>Start resizing canvas area</td></tr>
             <tr><td><kbd>Shift + Ctrl + Click</kbd></td><td>Start moving entire canvas</td></tr>
-            <tr><td><kbd>Double Click (background)</kbd></td><td>Deselect all layers</td></tr>
+            <tr><td><kbd>Single Click (background)</kbd></td><td>Deselect all layers</td></tr>
         </table>
 
         <h4>Clipboard & I/O</h4>
@@ -444,7 +444,7 @@ async function createCanvasWidget(node, widget, app) {
             <tr><td><kbd>Click + Drag</kbd></td><td>Move selected layer(s)</td></tr>
             <tr><td><kbd>Ctrl + Click</kbd></td><td>Add/Remove layer from selection</td></tr>
             <tr><td><kbd>Alt + Drag</kbd></td><td>Clone selected layer(s)</td></tr>
-            <tr><td><kbd>Shift + Click</kbd></td><td>Show blend mode & opacity menu</td></tr>
+            <tr><td><kbd>Right Click</kbd></td><td>Show blend mode & opacity menu</td></tr>
             <tr><td><kbd>Mouse Wheel</kbd></td><td>Scale layer (snaps to grid)</td></tr>
             <tr><td><kbd>Ctrl + Mouse Wheel</kbd></td><td>Fine-scale layer</td></tr>
             <tr><td><kbd>Shift + Mouse Wheel</kbd></td><td>Rotate layer by 5°</td></tr>

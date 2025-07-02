@@ -70,20 +70,33 @@ export class CanvasInteractions {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
         const viewCoords = this.canvas.getMouseViewCoordinates(e);
 
-        if (e.button === 2) { // Obsługa prawego przycisku myszy
+        // --- Ostateczna, poprawna kolejność sprawdzania ---
+
+        // 1. Akcje globalne z modyfikatorami (mają najwyższy priorytet)
+        if (e.shiftKey && e.ctrlKey) {
+            this.startCanvasMove(worldCoords);
+            return;
+        }
+        if (e.shiftKey) {
+            this.startCanvasResize(worldCoords);
+            return;
+        }
+        
+        // 2. Inne przyciski myszy
+        if (e.button === 2) { // Prawy przycisk myszy
             const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
             if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
                 e.preventDefault();
                 this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x, viewCoords.y);
-                return;
             }
+            return; 
         }
-        
-        if (e.button !== 0) { // Ignoruj inne przyciski niż lewy i prawy
+        if (e.button !== 0) { // Środkowy przycisk
             this.startPanning(e);
             return;
         }
 
+        // 3. Interakcje z elementami na płótnie (lewy przycisk)
         const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
         if (transformTarget) {
             this.startLayerTransform(transformTarget.layer, transformTarget.handle, worldCoords);
@@ -92,17 +105,17 @@ export class CanvasInteractions {
 
         const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
         if (clickedLayerResult) {
-            // Zaznacz warstwę i przygotuj się do potencjalnego przeciągania
             this.prepareForDrag(clickedLayerResult.layer, worldCoords);
             return;
         }
         
-        // Jeśli nie kliknięto na nic, rozpocznij panoramowanie lub wyczyść zaznaczenie
+        // 4. Domyślna akcja na tle (lewy przycisk bez modyfikatorów)
         this.startPanningOrClearSelection(e);
     }
 
     handleMouseMove(e) {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        this.canvas.lastMousePosition = worldCoords; // Zawsze aktualizuj ostatnią pozycję myszy
         
         // Sprawdź, czy rozpocząć przeciąganie
         if (this.interaction.mode === 'potential-drag') {
@@ -284,10 +297,45 @@ export class CanvasInteractions {
             e.preventDefault();
         }
 
-        if (this.canvas.selectedLayer) {
+        // Globalne skróty (Undo/Redo/Copy/Paste)
+        if (e.ctrlKey || e.metaKey) {
+            let handled = true;
+            switch (e.key.toLowerCase()) {
+                case 'z':
+                    if (e.shiftKey) {
+                        this.canvas.redo();
+                    } else {
+                        this.canvas.undo();
+                    }
+                    break;
+                case 'y':
+                    this.canvas.redo();
+                    break;
+                case 'c':
+                    if (this.canvas.selectedLayers.length > 0) {
+                        this.canvas.canvasLayers.copySelectedLayers();
+                    }
+                    break;
+                case 'v':
+                     this.canvas.canvasLayers.handlePaste('mouse');
+                    break;
+                default:
+                    handled = false;
+                    break;
+            }
+            if (handled) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+        }
+
+        // Skróty kontekstowe (zależne od zaznaczenia)
+        if (this.canvas.selectedLayers.length > 0) {
             const step = e.shiftKey ? 10 : 1;
             let needsRender = false;
             
+            // Używamy e.code dla spójności i niezależności od układu klawiatury
             const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
             if (movementKeys.includes(e.code)) {
                 e.preventDefault();
@@ -300,11 +348,11 @@ export class CanvasInteractions {
                 if (e.code === 'ArrowDown') this.canvas.selectedLayers.forEach(l => l.y += step);
                 if (e.code === 'BracketLeft') this.canvas.selectedLayers.forEach(l => l.rotation -= step);
                 if (e.code === 'BracketRight') this.canvas.selectedLayers.forEach(l => l.rotation += step);
-
+                
                 needsRender = true;
             }
 
-            if (e.key === 'Delete') {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();
                 this.canvas.removeSelectedLayers();
@@ -312,7 +360,7 @@ export class CanvasInteractions {
             }
             
             if (needsRender) {
-                this.canvas.render(); // Tylko renderuj, nie zapisuj stanu
+                this.canvas.render();
             }
         }
     }
@@ -393,19 +441,8 @@ export class CanvasInteractions {
     }
 
     startPanningOrClearSelection(e) {
-        const worldCoords = this.canvas.getMouseWorldCoordinates(e);
-        
-        // Sprawdź modyfikatory dla akcji na tle
-        if (e.shiftKey) {
-            this.startCanvasResize(worldCoords);
-            return;
-        }
-        if (e.altKey) {
-            this.startCanvasMove(worldCoords);
-            return;
-        }
-
-        // Domyślna akcja: wyczyść zaznaczenie i rozpocznij panoramowanie
+        // Ta funkcja jest teraz wywoływana tylko gdy kliknięto na tło bez modyfikatorów.
+        // Domyślna akcja: wyczyść zaznaczenie i rozpocznij panoramowanie.
         if (!this.interaction.isCtrlPressed) {
             this.canvas.updateSelection([]);
         }
@@ -469,6 +506,7 @@ export class CanvasInteractions {
             this.canvas.viewport.y -= finalY;
         }
         this.canvas.render();
+        this.canvas.saveState();
     }
 
     startPanning(e) {

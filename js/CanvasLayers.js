@@ -275,7 +275,7 @@ export class CanvasLayers {
         }
 
         this.canvas.render();
-        this.canvas.saveState();
+        this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
         log.info(`Moved ${layersToMove.length} layer(s).`);
     }
 
@@ -301,7 +301,7 @@ export class CanvasLayers {
             layer.height *= scale;
         });
         this.canvas.render();
-        this.canvas.saveState();
+        this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
     }
 
     /**
@@ -315,7 +315,7 @@ export class CanvasLayers {
             layer.rotation += angle;
         });
         this.canvas.render();
-        this.canvas.saveState();
+        this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
     }
 
     getLayerAtPosition(worldX, worldY) {
@@ -371,7 +371,7 @@ export class CanvasLayers {
 
         await Promise.all(promises);
         this.canvas.render();
-        this.canvas.saveState();
+        this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
     }
 
     async mirrorVertical() {
@@ -399,7 +399,7 @@ export class CanvasLayers {
 
         await Promise.all(promises);
         this.canvas.render();
-        this.canvas.saveState();
+        this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
     }
 
     async getLayerImageData(layer) {
