@@ -130,7 +130,12 @@ export class CanvasInteractions {
             case 'rotating':
                 this.rotateLayerFromHandle(worldCoords, e.shiftKey);
                 break;
-            // ... inne tryby
+            case 'resizingCanvas':
+                this.updateCanvasResize(worldCoords);
+                break;
+            case 'movingCanvas':
+                this.updateCanvasMove(worldCoords);
+                break;
             default:
                 this.updateCursor(worldCoords);
                 break;
@@ -138,6 +143,13 @@ export class CanvasInteractions {
     }
 
     handleMouseUp(e) {
+        if (this.interaction.mode === 'resizingCanvas') {
+            this.finalizeCanvasResize();
+        }
+        if (this.interaction.mode === 'movingCanvas') {
+            this.finalizeCanvasMove();
+        }
+
         // Zapisz stan tylko, jeśli faktycznie doszło do zmiany (przeciąganie, transformacja, duplikacja)
         const stateChangingInteraction = ['dragging', 'resizing', 'rotating'].includes(this.interaction.mode);
         const duplicatedInDrag = this.interaction.hasClonedInDrag;
@@ -381,6 +393,19 @@ export class CanvasInteractions {
     }
 
     startPanningOrClearSelection(e) {
+        const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        
+        // Sprawdź modyfikatory dla akcji na tle
+        if (e.shiftKey) {
+            this.startCanvasResize(worldCoords);
+            return;
+        }
+        if (e.altKey) {
+            this.startCanvasMove(worldCoords);
+            return;
+        }
+
+        // Domyślna akcja: wyczyść zaznaczenie i rozpocznij panoramowanie
         if (!this.interaction.isCtrlPressed) {
             this.canvas.updateSelection([]);
         }
