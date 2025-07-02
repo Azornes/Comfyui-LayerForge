@@ -13,6 +13,17 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {mask_editor_showing, mask_editor_listen_for_cancel} from "./utils/mask_utils.js";
 import { debounce } from "./utils/CommonUtils.js";
 
+const useChainCallback = (original, next) => {
+  if (original === undefined || original === null) {
+    return next;
+  }
+  return function(...args) {
+    const originalReturn = original.apply(this, args);
+    const nextReturn = next.apply(this, args);
+    return nextReturn === undefined ? originalReturn : nextReturn;
+  };
+};
+
 const log = createModuleLogger('Canvas');
 
 /**
@@ -146,6 +157,7 @@ export class Canvas {
         // Stwórz opóźnioną wersję funkcji zapisu stanu
         this.requestSaveState = debounce(this.saveState.bind(this), 500);
 
+        this._addAutoRefreshToggle();
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.canvasState = new CanvasState(this);
         this.canvasInteractions = new CanvasInteractions(this);
@@ -443,6 +455,36 @@ export class Canvas {
      */
     async importLatestImage() {
         return this.canvasIO.importLatestImage();
+    }
+
+    _addAutoRefreshToggle() {
+        let autoRefreshEnabled = false;
+
+        const handleExecutionSuccess = () => {
+            if (autoRefreshEnabled) {
+                log.info('Auto-refresh triggered, importing latest image.');
+                this.importLatestImage();
+            }
+        };
+
+        this.node.addWidget(
+            'toggle',
+            'Auto-refresh after generation',
+            false,
+            (value) => {
+                autoRefreshEnabled = value;
+                log.debug('Auto-refresh toggled:', value);
+            }, {
+                serialize: false
+            }
+        );
+
+        api.addEventListener('execution_success', handleExecutionSuccess);
+
+        this.node.onRemoved = useChainCallback(this.node.onRemoved, () => {
+            log.info('Node removed, cleaning up auto-refresh listener.');
+            api.removeEventListener('execution_success', handleExecutionSuccess);
+        });
     }
 
 
