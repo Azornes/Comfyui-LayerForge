@@ -128,6 +128,12 @@ export class CanvasLayers {
 
         this.canvas.updateSelection(newLayers);
         this.canvas.render();
+
+        // Notify the layers panel to update its view
+        if (this.canvas.canvasLayersPanel) {
+            this.canvas.canvasLayersPanel.onLayersChanged();
+        }
+
         log.info(`Pasted ${newLayers.length} layer(s) at mouse position (${mouseX}, ${mouseY}).`);
     }
 
@@ -191,6 +197,11 @@ export class CanvasLayers {
         this.canvas.updateSelection([layer]);
         this.canvas.render();
         this.canvas.saveState();
+
+        // Notify the layers panel to update its view
+        if (this.canvas.canvasLayersPanel) {
+            this.canvas.canvasLayersPanel.onLayersChanged();
+        }
 
         log.info("Layer added successfully");
         return layer;
@@ -1157,6 +1168,11 @@ export class CanvasLayers {
             // Render and save state
             this.canvas.render();
             this.canvas.saveState();
+
+            // Notify the layers panel to update its view
+            if (this.canvas.canvasLayersPanel) {
+                this.canvas.canvasLayersPanel.onLayersChanged();
+            }
 
             log.info("Layers fused successfully", {
                 originalLayerCount: sortedSelection.length,
