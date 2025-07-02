@@ -1077,7 +1077,7 @@ async function createCanvasWidget(node, widget, app) {
             position: "absolute",
             top: "60px",
             left: "10px",
-            right: "320px", // Zostawiamy miejsce na panel warstw
+            right: "270px", // Zostawiamy miejsce na panel warstw
             bottom: "10px",
             overflow: "hidden"
         }
@@ -1089,7 +1089,7 @@ async function createCanvasWidget(node, widget, app) {
             position: "absolute",
             top: "60px",
             right: "10px",
-            width: "300px",
+            width: "250px",
             bottom: "10px",
             overflow: "hidden"
         }
