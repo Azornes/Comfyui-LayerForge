@@ -826,9 +826,15 @@ async function createCanvasWidget(node, widget, app) {
                                 body: JSON.stringify({image: imageData})
                             });
 
-                            if (!response.ok) throw new Error(`Server error: ${response.status} - ${response.statusText}`);
-
                             const result = await response.json();
+
+                            if (!response.ok) {
+                                let errorMsg = `Server error: ${response.status} - ${response.statusText}`;
+                                if (result && result.error) {
+                                    errorMsg = `Error: ${result.error}\n\nDetails: ${result.details}`;
+                                }
+                                throw new Error(errorMsg);
+                            }
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
@@ -840,7 +846,7 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.saveState();
                         } catch (error) {
                             log.error("Matting error:", error);
-                            alert(`Error during matting process: ${error.message}`);
+                            alert(`Matting process failed:\n\n${error.message}`);
                         } finally {
                             button.classList.remove('loading');
                             button.removeChild(spinner);

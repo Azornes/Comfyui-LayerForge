@@ -10,7 +10,12 @@ import threading
 import os
 from tqdm import tqdm
 from torchvision import transforms
-from transformers import AutoModelForImageSegmentation, PretrainedConfig
+try:
+    from transformers import AutoModelForImageSegmentation, PretrainedConfig
+    from requests.exceptions import ConnectionError as RequestsConnectionError
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
 import torch.nn.functional as F
 import traceback
 import uuid
@@ -712,25 +717,31 @@ _matting_lock = None
 async def matting(request):
     global _matting_lock
 
+    if not TRANSFORMERS_AVAILABLE:
+        log_error("Matting request failed: 'transformers' library is not installed.")
+        return web.json_response({
+            "error": "Dependency Not Found",
+            "details": "The 'transformers' library is required for the matting feature. Please install it by running: pip install transformers"
+        }, status=400)
+
     if _matting_lock is not None:
         log_warn("Matting already in progress, rejecting request")
         return web.json_response({
             "error": "Another matting operation is in progress",
             "details": "Please wait for the current operation to complete"
-        }, status=429)  # 429 Too Many Requests
+        }, status=429)
 
     _matting_lock = True
-    
     try:
         log_info("Received matting request")
         data = await request.json()
 
-        matting = BiRefNetMatting()
+        matting_instance = BiRefNetMatting()
 
         image_tensor, original_alpha = convert_base64_to_tensor(data["image"])
         log_debug(f"Input image shape: {image_tensor.shape}")
 
-        matted_image, alpha_mask = matting.execute(
+        matted_image, alpha_mask = matting_instance.execute(
             image_tensor,
             "BiRefNet/model.safetensors",
             threshold=data.get("threshold", 0.5),
@@ -745,14 +756,26 @@ async def matting(request):
             "alpha_mask": result_mask
         })
 
-    except Exception as e:
-        log_exception(f"Error in matting endpoint: {str(e)}")
+    except RequestsConnectionError as e:
+        log_error(f"Connection error during matting model download: {e}")
         return web.json_response({
-            "error": str(e),
+            "error": "Network Connection Error",
+            "details": "Failed to download the matting model from Hugging Face. Please check your internet connection."
+        }, status=400)
+    except Exception as e:
+        log_exception(f"Error in matting endpoint: {e}")
+        # Check for offline error message from Hugging Face
+        if "Offline mode is enabled" in str(e) or "Can't load 'ZhengPeng7/BiRefNet' offline" in str(e):
+            return web.json_response({
+                "error": "Network Connection Error",
+                "details": "Failed to download the matting model from Hugging Face. Please check your internet connection and ensure you are not in offline mode."
+            }, status=400)
+
+        return web.json_response({
+            "error": "An unexpected error occurred",
             "details": traceback.format_exc()
         }, status=500)
     finally:
-
         _matting_lock = None
         log_debug("Matting lock released")
 
