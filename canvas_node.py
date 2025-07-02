@@ -334,6 +334,24 @@ class CanvasNode:
         return latest_image_path
 
     @classmethod
+    def get_latest_images(cls, since_timestamp=0):
+        output_dir = folder_paths.get_output_directory()
+        files = []
+        for f_name in os.listdir(output_dir):
+            file_path = os.path.join(output_dir, f_name)
+            if os.path.isfile(file_path) and file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.gif')):
+                try:
+                    mtime = os.path.getmtime(file_path)
+                    if mtime > since_timestamp:
+                        files.append((mtime, file_path))
+                except OSError:
+                    continue
+        
+        files.sort(key=lambda x: x[0])
+        
+        return [f[1] for f in files]
+
+    @classmethod
     def get_flow_status(cls, flow_id=None):
 
         if flow_id:
@@ -453,6 +471,30 @@ class CanvasNode:
                     'success': False,
                     'error': str(e)
                 })
+
+        @PromptServer.instance.routes.get("/layerforge/get-latest-images/{since}")
+        async def get_latest_images_route(request):
+            try:
+                since_timestamp = float(request.match_info.get('since', 0))
+                # JS Timestamps are in milliseconds, Python's are in seconds
+                latest_image_paths = cls.get_latest_images(since_timestamp / 1000.0)
+
+                images_data = []
+                for image_path in latest_image_paths:
+                    with open(image_path, "rb") as f:
+                        encoded_string = base64.b64encode(f.read()).decode('utf-8')
+                        images_data.append(f"data:image/png;base64,{encoded_string}")
+                
+                return web.json_response({
+                    'success': True,
+                    'images': images_data
+                })
+            except Exception as e:
+                log_error(f"Error in get_latest_images_route: {str(e)}")
+                return web.json_response({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
 
         @PromptServer.instance.routes.get("/ycnode/get_latest_image")
         async def get_latest_image_route(request):

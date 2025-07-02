@@ -459,11 +459,17 @@ export class Canvas {
 
     _addAutoRefreshToggle() {
         let autoRefreshEnabled = false;
+        let lastExecutionStartTime = 0;
+
+        const handleExecutionStart = () => {
+            lastExecutionStartTime = Date.now();
+            log.debug(`Execution started, timestamp set to: ${lastExecutionStartTime}`);
+        };
 
         const handleExecutionSuccess = () => {
             if (autoRefreshEnabled) {
-                log.info('Auto-refresh triggered, importing latest image.');
-                this.importLatestImage();
+                log.info('Auto-refresh triggered, importing latest images.');
+                this.canvasIO.importLatestImages(lastExecutionStartTime);
             }
         };
 
@@ -479,10 +485,12 @@ export class Canvas {
             }
         );
 
+        api.addEventListener('execution_start', handleExecutionStart);
         api.addEventListener('execution_success', handleExecutionSuccess);
 
         this.node.onRemoved = useChainCallback(this.node.onRemoved, () => {
-            log.info('Node removed, cleaning up auto-refresh listener.');
+            log.info('Node removed, cleaning up auto-refresh listeners.');
+            api.removeEventListener('execution_start', handleExecutionStart);
             api.removeEventListener('execution_success', handleExecutionSuccess);
         });
     }

@@ -744,12 +744,7 @@ export class CanvasIO {
                     img.src = result.image_data;
                 });
 
-                await this.canvas.canvasLayers.addLayerWithImage(img, {
-                    x: 0,
-                    y: 0,
-                    width: this.canvas.width,
-                    height: this.canvas.height,
-                });
+                await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
                 log.info("Latest image imported and placed on canvas successfully.");
                 return true;
             } else {
@@ -758,6 +753,41 @@ export class CanvasIO {
         } catch (error) {
             log.error("Error importing latest image:", error);
             alert(`Failed to import latest image: ${error.message}`);
+            return false;
+        }
+    }
+
+    async importLatestImages(sinceTimestamp) {
+        try {
+            log.info(`Fetching latest images since ${sinceTimestamp}...`);
+            const response = await fetch(`/layerforge/get-latest-images/${sinceTimestamp}`);
+            const result = await response.json();
+
+            if (result.success && result.images && result.images.length > 0) {
+                log.info(`Received ${result.images.length} new images, adding to canvas.`);
+
+                for (const imageData of result.images) {
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = imageData;
+                    });
+                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
+                }
+                log.info("All new images imported and placed on canvas successfully.");
+                return true;
+
+            } else if (result.success) {
+                log.info("No new images found since last generation.");
+                return true;
+            }
+            else {
+                throw new Error(result.error || "Failed to fetch latest images.");
+            }
+        } catch (error) {
+            log.error("Error importing latest images:", error);
+            alert(`Failed to import latest images: ${error.message}`);
             return false;
         }
     }
