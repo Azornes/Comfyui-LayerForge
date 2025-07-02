@@ -365,12 +365,11 @@ export class CanvasLayersPanel {
      * Konfiguruje event listenery dla elementu warstwy
      */
     setupLayerEventListeners(layerRow, layer, index) {
-        // Click handler - natychmiastowe zaznaczanie
-        layerRow.addEventListener('click', (e) => {
+        // Mousedown handler - zaznaczanie w momencie wciśnięcia przycisku
+        layerRow.addEventListener('mousedown', (e) => {
+            // Ignoruj, jeśli edytujemy nazwę
             const nameElement = layerRow.querySelector('.layer-name');
             if (nameElement && nameElement.classList.contains('editing')) {
-                e.preventDefault();
-                e.stopPropagation();
                 return;
             }
             this.handleLayerClick(e, layer, index);
@@ -395,9 +394,6 @@ export class CanvasLayersPanel {
      * Obsługuje kliknięcie na warstwę, aktualizując stan bez pełnego renderowania.
      */
     handleLayerClick(e, layer, index) {
-        // Zatrzymujemy, bo dblclick też wywołałby click
-        e.preventDefault(); 
-        
         const isCtrlPressed = e.ctrlKey || e.metaKey;
         const isShiftPressed = e.shiftKey;
 
@@ -599,7 +595,8 @@ export class CanvasLayersPanel {
             insertIndex = targetIndex + 1;
         }
 
-        this.moveLayersToPosition(this.draggedElements, insertIndex);
+        // Użyj nowej, centralnej funkcji do przesuwania warstw
+        this.canvas.canvasLayers.moveLayers(this.draggedElements, { toIndex: insertIndex });
         
         log.info(`Dropped ${this.draggedElements.length} layers at position ${insertIndex}`);
     }
@@ -618,29 +615,6 @@ export class CanvasLayersPanel {
         this.draggedElements = [];
     }
 
-    /**
-     * Przenosi warstwy na nową pozycję
-     */
-    moveLayersToPosition(layers, insertIndex) {
-        const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
-        
-        // Usuń przeciągane warstwy z listy
-        const filteredLayers = sortedLayers.filter(layer => !layers.includes(layer));
-        
-        // Wstaw warstwy w nowej pozycji (odwróć kolejność bo renderujemy od góry)
-        const reverseInsertIndex = filteredLayers.length - insertIndex;
-        filteredLayers.splice(reverseInsertIndex, 0, ...layers);
-        
-        // Zaktualizuj zIndex dla wszystkich warstw
-        filteredLayers.forEach((layer, index) => {
-            layer.zIndex = index;
-        });
-
-        this.canvas.layers = filteredLayers;
-        this.canvas.render();
-        this.renderLayers();
-        this.canvas.saveState();
-    }
 
     /**
      * Aktualizuje panel gdy zmienią się warstwy

@@ -373,6 +373,7 @@ export class Canvas {
      */
     updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index) {
         let newSelection = [...this.selectedLayers];
+        let selectionChanged = false;
 
         if (isShiftPressed && this.canvasLayersPanel.lastSelectedIndex !== -1) {
             const sortedLayers = [...this.layers].sort((a, b) => b.zIndex - a.zIndex);
@@ -385,6 +386,7 @@ export class Canvas {
                     newSelection.push(sortedLayers[i]);
                 }
             }
+            selectionChanged = true;
         } else if (isCtrlPressed) {
             const layerIndex = newSelection.indexOf(layer);
             if (layerIndex === -1) {
@@ -392,12 +394,24 @@ export class Canvas {
             } else {
                 newSelection.splice(layerIndex, 1);
             }
+            this.canvasLayersPanel.lastSelectedIndex = index;
+            selectionChanged = true;
         } else {
-            newSelection = [layer];
+            // Jeśli kliknięta warstwa nie jest częścią obecnego zaznaczenia,
+            // wyczyść zaznaczenie i zaznacz tylko ją.
+            if (!this.selectedLayers.includes(layer)) {
+                newSelection = [layer];
+                selectionChanged = true;
+            }
+            // Jeśli kliknięta warstwa JEST już zaznaczona (potencjalnie z innymi),
+            // NIE rób nic, aby umożliwić przeciąganie całej grupy.
             this.canvasLayersPanel.lastSelectedIndex = index;
         }
 
-        this.updateSelection(newSelection);
+        // Aktualizuj zaznaczenie tylko jeśli faktycznie się zmieniło
+        if (selectionChanged) {
+            this.updateSelection(newSelection);
+        }
     }
 
     /**

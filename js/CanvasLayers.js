@@ -200,40 +200,93 @@ export class CanvasLayers {
         return this.addLayerWithImage(image);
     }
 
-    moveLayerUp() {
-        if (this.canvas.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
+    /**
+     * Centralna funkcja do przesuwania warstw.
+     * @param {Array} layersToMove - Tablica warstw do przesunięcia.
+     * @param {Object} options - Opcje przesunięcia, np. { direction: 'up' } lub { toIndex: 3 }
+     */
+    moveLayers(layersToMove, options = {}) {
+        if (!layersToMove || layersToMove.length === 0) return;
 
-        const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => b - a);
+        let finalLayers;
 
-        sortedIndices.forEach(index => {
-            const targetIndex = index + 1;
-
-            if (targetIndex < this.canvas.layers.length && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
+        if (options.direction) {
+            // Logika dla 'up' i 'down'
+            const allLayers = [...this.canvas.layers];
+            const selectedIndices = new Set(layersToMove.map(l => allLayers.indexOf(l)));
+            
+            if (options.direction === 'up') {
+                const sorted = Array.from(selectedIndices).sort((a, b) => b - a);
+                sorted.forEach(index => {
+                    const targetIndex = index + 1;
+                    if (targetIndex < allLayers.length && !selectedIndices.has(targetIndex)) {
+                        [allLayers[index], allLayers[targetIndex]] = [allLayers[targetIndex], allLayers[index]];
+                    }
+                });
+            } else if (options.direction === 'down') {
+                const sorted = Array.from(selectedIndices).sort((a, b) => a - b);
+                sorted.forEach(index => {
+                    const targetIndex = index - 1;
+                    if (targetIndex >= 0 && !selectedIndices.has(targetIndex)) {
+                        [allLayers[index], allLayers[targetIndex]] = [allLayers[targetIndex], allLayers[index]];
+                    }
+                });
             }
+            finalLayers = allLayers;
+            
+        } else if (options.toIndex !== undefined) {
+            // Logika dla przeciągania i upuszczania (z panelu)
+            const displayedLayers = [...this.canvas.layers].sort((a, b) => b.zIndex - a.zIndex);
+            const reorderedFinal = [];
+            let inserted = false;
+
+            for (let i = 0; i < displayedLayers.length; i++) {
+                if (i === options.toIndex) {
+                    reorderedFinal.push(...layersToMove);
+                    inserted = true;
+                }
+                const currentLayer = displayedLayers[i];
+                if (!layersToMove.includes(currentLayer)) {
+                    reorderedFinal.push(currentLayer);
+                }
+            }
+            if (!inserted) {
+                reorderedFinal.push(...layersToMove);
+            }
+            finalLayers = reorderedFinal;
+        } else {
+            log.warn("Invalid options for moveLayers", options);
+            return;
+        }
+
+        // Zunifikowana końcówka: aktualizacja zIndex i stanu aplikacji
+        const totalLayers = finalLayers.length;
+        finalLayers.forEach((layer, index) => {
+            // Jeśli przyszły z panelu, zIndex jest odwrócony
+            const zIndex = (options.toIndex !== undefined) ? (totalLayers - 1 - index) : index;
+            layer.zIndex = zIndex;
         });
-        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
+
+        this.canvas.layers = finalLayers;
+        this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
+
+        if (this.canvas.canvasLayersPanel) {
+            this.canvas.canvasLayersPanel.onLayersChanged();
+        }
+
         this.canvas.render();
         this.canvas.saveState();
+        log.info(`Moved ${layersToMove.length} layer(s).`);
+    }
+
+    moveLayerUp() {
+        if (this.canvas.selectedLayers.length === 0) return;
+        this.moveLayers(this.canvas.selectedLayers, { direction: 'up' });
     }
 
     moveLayerDown() {
         if (this.canvas.selectedLayers.length === 0) return;
-        const selectedIndicesSet = new Set(this.canvas.selectedLayers.map(layer => this.canvas.layers.indexOf(layer)));
-
-        const sortedIndices = Array.from(selectedIndicesSet).sort((a, b) => a - b);
-
-        sortedIndices.forEach(index => {
-            const targetIndex = index - 1;
-
-            if (targetIndex >= 0 && !selectedIndicesSet.has(targetIndex)) {
-                [this.canvas.layers[index], this.canvas.layers[targetIndex]] = [this.canvas.layers[targetIndex], this.canvas.layers[index]];
-            }
-        });
-        this.canvas.layers.forEach((layer, i) => layer.zIndex = i);
-        this.canvas.render();
-        this.canvas.saveState();
+        this.moveLayers(this.canvas.selectedLayers, { direction: 'down' });
     }
 
     /**
