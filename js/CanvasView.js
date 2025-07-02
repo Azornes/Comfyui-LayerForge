@@ -447,7 +447,8 @@ async function createCanvasWidget(node, widget, app) {
             <tr><td><kbd>Right Click</kbd></td><td>Show blend mode & opacity menu</td></tr>
             <tr><td><kbd>Mouse Wheel</kbd></td><td>Scale layer (snaps to grid)</td></tr>
             <tr><td><kbd>Ctrl + Mouse Wheel</kbd></td><td>Fine-scale layer</td></tr>
-            <tr><td><kbd>Shift + Mouse Wheel</kbd></td><td>Rotate layer by 5°</td></tr>
+            <tr><td><kbd>Shift + Mouse Wheel</kbd></td><td>Rotate layer by 5° steps</td></tr>
+            <tr><td><kbd>Shift + Ctrl + Mouse Wheel</kbd></td><td>Snap rotation to 5° increments</td></tr>
             <tr><td><kbd>Arrow Keys</kbd></td><td>Nudge layer by 1px</td></tr>
             <tr><td><kbd>Shift + Arrow Keys</kbd></td><td>Nudge layer by 10px</td></tr>
             <tr><td><kbd>[</kbd> or <kbd>]</kbd></td><td>Rotate by 1°</td></tr>

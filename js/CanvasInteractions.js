@@ -224,10 +224,22 @@ export class CanvasInteractions {
             this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
         } else if (this.canvas.selectedLayer) {
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
+            const direction = e.deltaY < 0 ? 1 : -1; // 1 = up/right, -1 = down/left
 
             this.canvas.selectedLayers.forEach(layer => {
                 if (e.shiftKey) {
-                    layer.rotation += rotationStep;
+                    // Nowy skrót: Shift + Ctrl + Kółko do przyciągania do absolutnych wartości
+                    if (e.ctrlKey) {
+                        const snapAngle = 5;
+                        if (direction > 0) { // Obrót w górę/prawo
+                            layer.rotation = Math.ceil((layer.rotation + 0.1) / snapAngle) * snapAngle;
+                        } else { // Obrót w dół/lewo
+                            layer.rotation = Math.floor((layer.rotation - 0.1) / snapAngle) * snapAngle;
+                        }
+                    } else {
+                        // Stara funkcjonalność: Shift + Kółko obraca o stały krok
+                        layer.rotation += rotationStep;
+                    }
                 } else {
                     const oldWidth = layer.width;
                     const oldHeight = layer.height;
