@@ -1041,13 +1041,6 @@ async function createCanvasWidget(node, widget, app) {
     canvas.updateHistoryButtons();
 
 
-    const resizeObserver = new ResizeObserver((entries) => {
-        const controlsHeight = entries[0].target.offsetHeight;
-        canvasContainer.style.top = (controlsHeight + 10) + "px";
-    });
-
-    resizeObserver.observe(controlPanel.querySelector('.controls'));
-
     const triggerWidget = node.widgets.find(w => w.name === "trigger");
 
     const updateOutput = async () => {
@@ -1071,13 +1064,13 @@ async function createCanvasWidget(node, widget, app) {
 
     // Tworzenie panelu warstw
     const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
-    
+
     const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
         style: {
             position: "absolute",
-            top: "60px",
+            top: "60px", // Wartość początkowa, zostanie nadpisana przez ResizeObserver
             left: "10px",
-            right: "270px", // Zostawiamy miejsce na panel warstw
+            right: "270px",
             bottom: "10px",
             overflow: "hidden"
         }
@@ -1087,13 +1080,22 @@ async function createCanvasWidget(node, widget, app) {
     const layersPanelContainer = $el("div.painterLayersPanelContainer", {
         style: {
             position: "absolute",
-            top: "60px",
+            top: "60px", // Wartość początkowa, zostanie nadpisana przez ResizeObserver
             right: "10px",
             width: "250px",
             bottom: "10px",
             overflow: "hidden"
         }
     }, [layersPanel]);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+        const controlsHeight = entries[0].target.offsetHeight;
+        const newTop = (controlsHeight + 10) + "px";
+        canvasContainer.style.top = newTop;
+        layersPanelContainer.style.top = newTop;
+    });
+
+    resizeObserver.observe(controlPanel.querySelector('.controls'));
 
     canvas.canvas.addEventListener('focus', () => {
         canvasContainer.classList.add('has-focus');

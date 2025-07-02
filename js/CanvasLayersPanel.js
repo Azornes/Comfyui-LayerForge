@@ -32,10 +32,9 @@ export class CanvasLayersPanel {
         this.container.tabIndex = 0; // Umożliwia fokus na panelu
         this.container.innerHTML = `
             <div class="layers-panel-header">
-                <span class="layers-panel-title">Warstwy</span>
+                <span class="layers-panel-title">Layers</span>
                 <div class="layers-panel-controls">
-                    <button class="layers-btn" id="add-layer-btn" title="Dodaj warstwę">+</button>
-                    <button class="layers-btn" id="delete-layer-btn" title="Usuń warstwę">🗑</button>
+                    <button class="layers-btn" id="delete-layer-btn" title="Delete layer">🗑</button>
                 </div>
             </div>
             <div class="layers-container" id="layers-container">
@@ -262,13 +261,7 @@ export class CanvasLayersPanel {
      * Konfiguruje event listenery dla przycisków kontrolnych
      */
     setupControlButtons() {
-        const addBtn = this.container.querySelector('#add-layer-btn');
         const deleteBtn = this.container.querySelector('#delete-layer-btn');
-
-        addBtn?.addEventListener('click', () => {
-            log.info('Add layer button clicked');
-            // TODO: Implementacja dodawania warstwy
-        });
 
         deleteBtn?.addEventListener('click', () => {
             log.info('Delete layer button clicked');
