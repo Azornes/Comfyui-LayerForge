@@ -29,6 +29,7 @@ export class CanvasLayersPanel {
         // Główny kontener panelu
         this.container = document.createElement('div');
         this.container.className = 'layers-panel';
+        this.container.tabIndex = 0; // Umożliwia fokus na panelu
         this.container.innerHTML = `
             <div class="layers-panel-header">
                 <span class="layers-panel-title">Layers</span>
@@ -48,6 +49,15 @@ export class CanvasLayersPanel {
         
         // Setup event listeners dla przycisków
         this.setupControlButtons();
+
+        // Dodaj listener dla klawiatury, aby usuwanie działało z panelu
+        this.container.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.deleteSelectedLayers();
+            }
+        });
         
         log.debug('Panel structure created');
         return this.container;
