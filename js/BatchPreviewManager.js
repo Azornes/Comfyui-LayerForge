@@ -10,6 +10,7 @@ export class BatchPreviewManager {
         this.currentIndex = 0;
         this.element = null;
         this.uiInitialized = false;
+        this.maskWasVisible = false;
     }
 
     _createUI() {
@@ -90,6 +91,18 @@ export class BatchPreviewManager {
 
         this._createUI();
 
+        // Auto-hide mask logic
+        this.maskWasVisible = this.canvas.maskTool.isOverlayVisible;
+        if (this.maskWasVisible) {
+            this.canvas.maskTool.toggleOverlayVisibility();
+            const toggleBtn = document.getElementById(`toggle-mask-btn-${this.canvas.node.id}`);
+            if (toggleBtn) {
+                toggleBtn.classList.remove('primary');
+                toggleBtn.textContent = "Hide Mask";
+            }
+            this.canvas.render();
+        }
+
         log.info(`Showing batch preview for ${layers.length} layers.`);
         this.layers = layers;
         this.currentIndex = 0;
@@ -104,6 +117,18 @@ export class BatchPreviewManager {
         this.active = false;
         this.layers = [];
         this.currentIndex = 0;
+
+        // Restore mask visibility if it was hidden by this manager
+        if (this.maskWasVisible && !this.canvas.maskTool.isOverlayVisible) {
+            this.canvas.maskTool.toggleOverlayVisibility();
+            const toggleBtn = document.getElementById(`toggle-mask-btn-${this.canvas.node.id}`);
+            if (toggleBtn) {
+                toggleBtn.classList.add('primary');
+                toggleBtn.textContent = "Show Mask";
+            }
+        }
+        this.maskWasVisible = false; // Reset state
+
         // Make all layers visible again upon closing
         this.canvas.layers.forEach(l => l.visible = true);
         this.canvas.render();

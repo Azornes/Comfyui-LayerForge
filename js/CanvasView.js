@@ -871,7 +871,7 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-separator"),
             $el("div.painter-button-group", {id: "mask-controls"}, [
                 $el("button.painter-button.primary", {
-                    id: "toggle-mask-btn",
+                    id: `toggle-mask-btn-${node.id}`,
                     textContent: "Show Mask",
                     title: "Toggle mask overlay visibility",
                     onclick: (e) => {
