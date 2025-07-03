@@ -1,6 +1,7 @@
 import {app} from "../../scripts/app.js";
 import {api} from "../../scripts/api.js";
 import {$el} from "../../scripts/ui.js";
+import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js";
 
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates} from "./db.js";
@@ -16,466 +17,16 @@ async function createCanvasWidget(node, widget, app) {
     });
     const imageCache = new ImageCache();
 
-    const style = document.createElement('style');
-    style.textContent = `
-        .painter-button {
-            background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-            border: 1px solid #2a2a2a;
-            border-radius: 4px;
-            color: #ffffff;
-            padding: 6px 12px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            min-width: 80px;
-            text-align: center;
-            margin: 2px;
-            text-shadow: 0 1px 1px rgba(0,0,0,0.2);
-        }
-
-        .painter-button:hover {
-            background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
-
-        .painter-button:active {
-            background: linear-gradient(to bottom, #3a3a3a, #4a4a4a);
-            transform: translateY(1px);
-        }
-        
-        .painter-button:disabled,
-        .painter-button:disabled:hover {
-            background: #555;
-            color: #888;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-            border-color: #444;
-        }
-
-        .painter-button.primary {
-            background: linear-gradient(to bottom, #4a6cd4, #3a5cc4);
-            border-color: #2a4cb4;
-        }
-
-        .painter-button.primary:hover {
-            background: linear-gradient(to bottom, #5a7ce4, #4a6cd4);
-        }
-
-        .painter-controls {
-            background: linear-gradient(to bottom, #404040, #383838);
-            border-bottom: 1px solid #2a2a2a;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 8px;
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: flex-start;
-        }
-
-       .painter-slider-container {
-           display: flex;
-           align-items: center;
-           gap: 8px;
-           color: #fff;
-           font-size: 12px;
-       }
-
-       .painter-slider-container input[type="range"] {
-           width: 80px;
-       }
-
-
-        .painter-button-group {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background-color: rgba(0,0,0,0.2);
-            padding: 4px;
-            border-radius: 6px;
-        }
-
-        .painter-clipboard-group {
-            display: flex;
-            align-items: center;
-            gap: 2px;
-            background-color: rgba(0,0,0,0.15);
-            padding: 3px;
-            border-radius: 6px;
-            border: 1px solid rgba(255,255,255,0.1);
-            position: relative;
-        }
-
-        .painter-clipboard-group::before {
-            content: "";
-            position: absolute;
-            top: -2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 20px;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(74, 108, 212, 0.6), transparent);
-            border-radius: 1px;
-        }
-
-        .painter-clipboard-group .painter-button {
-            margin: 1px;
-        }
-
-        .painter-separator {
-            width: 1px;
-            height: 28px;
-            background-color: #2a2a2a;
-            margin: 0 8px;
-        }
-
-        .painter-container {
-            background: #607080;  /* 带蓝色的灰色背景 */
-            border: 1px solid #4a5a6a;
-            border-radius: 6px;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
-            transition: border-color 0.3s ease; /* Dodano dla płynnej zmiany ramki */
-        }
-        
-        .painter-container.drag-over {
-            border-color: #00ff00; /* Zielona ramka podczas przeciągania */
-            border-style: dashed;
-        }
-
-        .painter-dialog {
-            background: #404040;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            padding: 20px;
-            color: #ffffff;
-        }
-
-        .painter-dialog input {
-            background: #303030;
-            border: 1px solid #505050;
-            border-radius: 4px;
-            color: #ffffff;
-            padding: 4px 8px;
-            margin: 4px;
-            width: 80px;
-        }
-
-        .painter-dialog button {
-            background: #505050;
-            border: 1px solid #606060;
-            border-radius: 4px;
-            color: #ffffff;
-            padding: 4px 12px;
-            margin: 4px;
-            cursor: pointer;
-        }
-
-        .painter-dialog button:hover {
-            background: #606060;
-        }
-
-        .blend-opacity-slider {
-            width: 100%;
-            margin: 5px 0;
-            display: none;
-        }
-
-        .blend-mode-active .blend-opacity-slider {
-            display: block;
-        }
-
-        .blend-mode-item {
-            padding: 5px;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .blend-mode-item.active {
-            background-color: rgba(0,0,0,0.1);
-        }
-        
-                .blend-mode-item.active {
-            background-color: rgba(0,0,0,0.1);
-        }
-
-        .painter-tooltip {
-            position: fixed;
-            display: none;
-            background: #3a3a3a;
-            color: #f0f0f0;
-            border: 1px solid #555;
-            border-radius: 8px;
-            padding: 12px 18px;
-            z-index: 9999;
-            font-size: 13px;
-            line-height: 1.7;
-            width: auto;
-            max-width: min(500px, calc(100vw - 40px));
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            pointer-events: none;
-            transform-origin: top left;
-            transition: transform 0.2s ease;
-            will-change: transform;
-        }
-
-        .painter-tooltip.scale-down {
-            transform: scale(0.9);
-            transform-origin: top;
-        }
-
-        .painter-tooltip.scale-down-more {
-            transform: scale(0.8);
-            transform-origin: top;
-        }
-
-        .painter-tooltip table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 8px 0;
-        }
-
-        .painter-tooltip table td {
-            padding: 2px 8px;
-            vertical-align: middle;
-        }
-
-        .painter-tooltip table td:first-child {
-            width: auto;
-            white-space: nowrap;
-            min-width: fit-content;
-        }
-
-        .painter-tooltip table td:last-child {
-            width: auto;
-        }
-
-        .painter-tooltip table tr:nth-child(odd) td {
-            background-color: rgba(0,0,0,0.1);
-        }
-
-        @media (max-width: 600px) {
-            .painter-tooltip {
-                font-size: 11px;
-                padding: 8px 12px;
-            }
-            .painter-tooltip table td {
-                padding: 2px 4px;
-            }
-            .painter-tooltip kbd {
-                padding: 1px 4px;
-                font-size: 10px;
-            }
-            .painter-tooltip table td:first-child {
-                width: 40%;
-            }
-            .painter-tooltip table td:last-child {
-                width: 60%;
-            }
-            .painter-tooltip h4 {
-                font-size: 12px;
-                margin-top: 8px;
-                margin-bottom: 4px;
-            }
-        }
-
-        @media (max-width: 400px) {
-            .painter-tooltip {
-                font-size: 10px;
-                padding: 6px 8px;
-            }
-            .painter-tooltip table td {
-                padding: 1px 3px;
-            }
-            .painter-tooltip kbd {
-                padding: 0px 3px;
-                font-size: 9px;
-            }
-            .painter-tooltip table td:first-child {
-                width: 35%;
-            }
-            .painter-tooltip table td:last-child {
-                width: 65%;
-            }
-            .painter-tooltip h4 {
-                font-size: 11px;
-                margin-top: 6px;
-                margin-bottom: 3px;
-            }
-        }
-
-        .painter-tooltip::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .painter-tooltip::-webkit-scrollbar-track {
-            background: #2a2a2a;
-            border-radius: 4px;
-        }
-
-        .painter-tooltip::-webkit-scrollbar-thumb {
-            background: #555;
-            border-radius: 4px;
-        }
-
-        .painter-tooltip::-webkit-scrollbar-thumb:hover {
-            background: #666;
-        }
-        
-        .painter-tooltip h4 {
-            margin-top: 10px;
-            margin-bottom: 5px;
-            color: #4a90e2; /* Jasnoniebieski akcent */
-            border-bottom: 1px solid #555;
-            padding-bottom: 4px;
-        }
-
-        .painter-tooltip ul {
-            list-style: none;
-            padding-left: 10px;
-            margin: 0;
-        }
-        
-        .painter-tooltip kbd {
-            background-color: #2a2a2a;
-            border: 1px solid #1a1a1a;
-            border-radius: 3px;
-            padding: 2px 6px;
-            font-family: monospace;
-            font-size: 12px;
-            color: #d0d0d0;
-        }
-        
-        .painter-container.has-focus {
-            /* Używamy box-shadow, aby stworzyć efekt zewnętrznej ramki,
-               która nie wpłynie na rozmiar ani pozycję elementu. */
-            box-shadow: 0 0 0 2px white;
-            /* Możesz też zmienić kolor istniejącej ramki, ale box-shadow jest bardziej wyrazisty */
-            /* border-color: white; */
-        }
-
-        .painter-button.matting-button {
-            position: relative;
-            transition: all 0.3s ease;
-        }
-
-        .painter-button.matting-button.loading {
-            padding-right: 36px; /* Make space for spinner */
-            cursor: wait;
-        }
-
-        .painter-button.matting-button .matting-spinner {
-            display: none;
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: matting-spin 1s linear infinite;
-        }
-
-        .painter-button.matting-button.loading .matting-spinner {
-            display: block;
-        }
-
-        @keyframes matting-spin {
-            to {
-                transform: translateY(-50%) rotate(360deg);
-            }
-        }
-    `;
-    style.textContent += `
-        .painter-modal-backdrop {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(0, 0, 0, 0.8);
-            z-index: 111;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .painter-modal-content {
-            width: 90vw;
-            height: 90vh;
-            background-color: #353535;
-            border: 1px solid #222;
-            border-radius: 8px;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-
-    `;
-    document.head.appendChild(style);
-
     const helpTooltip = $el("div.painter-tooltip", {
         id: `painter-help-tooltip-${node.id}`,
     });
 
-    const standardShortcuts = `
-        <h4>Canvas Control</h4>
-        <table>
-            <tr><td><kbd>Click + Drag</kbd></td><td>Pan canvas view</td></tr>
-            <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
-            <tr><td><kbd>Shift + Click (background)</kbd></td><td>Start resizing canvas area</td></tr>
-            <tr><td><kbd>Shift + Ctrl + Click</kbd></td><td>Start moving entire canvas</td></tr>
-            <tr><td><kbd>Single Click (background)</kbd></td><td>Deselect all layers</td></tr>
-        </table>
-
-        <h4>Clipboard & I/O</h4>
-        <table>
-            <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layer(s)</td></tr>
-            <tr><td><kbd>Ctrl + V</kbd></td><td>Paste from clipboard (image or internal layers)</td></tr>
-            <tr><td><kbd>Drag & Drop Image File</kbd></td><td>Add image as a new layer</td></tr>
-        </table>
-
-        <h4>Layer Interaction</h4>
-        <table>
-            <tr><td><kbd>Click + Drag</kbd></td><td>Move selected layer(s)</td></tr>
-            <tr><td><kbd>Ctrl + Click</kbd></td><td>Add/Remove layer from selection</td></tr>
-            <tr><td><kbd>Alt + Drag</kbd></td><td>Clone selected layer(s)</td></tr>
-            <tr><td><kbd>Right Click</kbd></td><td>Show blend mode & opacity menu</td></tr>
-            <tr><td><kbd>Mouse Wheel</kbd></td><td>Scale layer (snaps to grid)</td></tr>
-            <tr><td><kbd>Ctrl + Mouse Wheel</kbd></td><td>Fine-scale layer</td></tr>
-            <tr><td><kbd>Shift + Mouse Wheel</kbd></td><td>Rotate layer by 5° steps</td></tr>
-            <tr><td><kbd>Shift + Ctrl + Mouse Wheel</kbd></td><td>Snap rotation to 5° increments</td></tr>
-            <tr><td><kbd>Arrow Keys</kbd></td><td>Nudge layer by 1px</td></tr>
-            <tr><td><kbd>Shift + Arrow Keys</kbd></td><td>Nudge layer by 10px</td></tr>
-            <tr><td><kbd>[</kbd> or <kbd>]</kbd></td><td>Rotate by 1°</td></tr>
-            <tr><td><kbd>Shift + [</kbd> or <kbd>]</kbd></td><td>Rotate by 10°</td></tr>
-            <tr><td><kbd>Delete</kbd></td><td>Delete selected layer(s)</td></tr>
-        </table>
-
-        <h4>Transform Handles (on selected layer)</h4>
-        <table>
-            <tr><td><kbd>Drag Corner/Side</kbd></td><td>Resize layer</td></tr>
-            <tr><td><kbd>Drag Rotation Handle</kbd></td><td>Rotate layer</td></tr>
-            <tr><td><kbd>Hold Shift</kbd></td><td>Keep aspect ratio / Snap rotation to 15°</td></tr>
-            <tr><td><kbd>Hold Ctrl</kbd></td><td>Snap to grid</td></tr>
-        </table>
-    `;
-
-    const maskShortcuts = `
-        <h4>Mask Mode</h4>
-        <table>
-            <tr><td><kbd>Click + Drag</kbd></td><td>Paint on the mask</td></tr>
-            <tr><td><kbd>Middle Mouse Button + Drag</kbd></td><td>Pan canvas view</td></tr>
-            <tr><td><kbd>Mouse Wheel</kbd></td><td>Zoom view in/out</td></tr>
-            <tr><td><strong>Brush Controls</strong></td><td>Use sliders to control brush <strong>Size</strong>, <strong>Strength</strong>, and <strong>Hardness</strong></td></tr>
-            <tr><td><strong>Clear Mask</strong></td><td>Remove the entire mask</td></tr>
-            <tr><td><strong>Exit Mode</strong></td><td>Click the "Draw Mask" button again</td></tr>
-        </table>
-    `;
+    const [standardShortcuts, maskShortcuts, systemClipboardTooltip, clipspaceClipboardTooltip] = await Promise.all([
+        loadTemplate('./templates/standard_shortcuts.html', import.meta.url),
+        loadTemplate('./templates/mask_shortcuts.html', import.meta.url),
+        loadTemplate('./templates/system_clipboard_tooltip.html', import.meta.url),
+        loadTemplate('./templates/clipspace_clipboard_tooltip.html', import.meta.url)
+    ]);
 
     document.body.appendChild(helpTooltip);
 
@@ -617,45 +168,7 @@ async function createCanvasWidget(node, widget, app) {
                         },
                         onmouseenter: (e) => {
                             const currentPreference = canvas.canvasLayers.clipboardPreference;
-                            let tooltipContent = '';
-                            
-                            if (currentPreference === 'system') {
-                                tooltipContent = `
-                                    <h4>📋 System Clipboard Mode</h4>
-                                    <table>
-                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>system clipboard</strong> as flattened image</td></tr>
-                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
-                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
-                                        <tr><td></td><td>2️⃣ System clipboard (images, screenshots)</td></tr>
-                                        <tr><td></td><td>3️⃣ System clipboard (file paths, URLs)</td></tr>
-                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
-                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
-                                    </table>
-                                    <div style="margin-top: 8px; padding: 6px; background: rgba(255,165,0,0.2); border: 1px solid rgba(255,165,0,0.4); border-radius: 4px; font-size: 11px;">
-                                        ⚠️ <strong>Security Note:</strong> "Paste Image" button for external images may not work due to browser security restrictions. Use Ctrl+V instead or Drag & Drop.
-                                    </div>
-                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
-                                        💡 <strong>Best for:</strong> Working with screenshots, copied images, file paths, and urls.
-                                    </div>
-                                `;
-                            } else {
-                                tooltipContent = `
-                                    <h4>📋 ComfyUI Clipspace Mode</h4>
-                                    <table>
-                                        <tr><td><kbd>Ctrl + C</kbd></td><td>Copy selected layers to internal clipboard + <strong>ComfyUI Clipspace</strong> as flattened image</td></tr>
-                                        <tr><td><kbd>Ctrl + V</kbd></td><td><strong>Priority:</strong></td></tr>
-                                        <tr><td></td><td>1️⃣ Internal clipboard (copied layers)</td></tr>
-                                        <tr><td></td><td>2️⃣ ComfyUI Clipspace (workflow images)</td></tr>
-                                        <tr><td></td><td>3️⃣ System clipboard (fallback)</td></tr>
-                                        <tr><td><kbd>Paste Image</kbd></td><td>Same as Ctrl+V but respects fit_on_add setting</td></tr>
-                                        <tr><td><kbd>Drag & Drop</kbd></td><td>Load images directly from files</td></tr>
-                                    </table>
-                                    <div style="margin-top: 8px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px;">
-                                        💡 <strong>Best for:</strong> ComfyUI workflow integration and node-to-node image transfer
-                                    </div>
-                                `;
-                            }
-
+                            const tooltipContent = currentPreference === 'system' ? systemClipboardTooltip : clipspaceClipboardTooltip;
                             showTooltip(e.target, tooltipContent);
                         },
                         onmouseleave: hideTooltip
@@ -1122,8 +635,6 @@ async function createCanvasWidget(node, widget, app) {
 
     const mainWidget = node.addDOMWidget("mainContainer", "widget", mainContainer);
 
-    node.size = [500, 500];
-
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
     let backdrop = null;
     let modalContent = null;
@@ -1224,6 +735,7 @@ app.registerExtension({
     name: "Comfy.CanvasNode",
 
     init() {
+        addStylesheet(getUrl('./css/canvas_view.css', import.meta.url));
 
         const originalQueuePrompt = app.queuePrompt;
         app.queuePrompt = async function (number, prompt) {
@@ -1270,9 +782,8 @@ app.registerExtension({
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");
-
                 const r = onNodeCreated?.apply(this, arguments);
-
+                this.size = [1150, 1000]; 
                 return r;
             };
 
@@ -1301,6 +812,11 @@ app.registerExtension({
                 const canvasWidget = await createCanvasWidget(this, null, app);
                 canvasNodeInstances.set(this.id, canvasWidget);
                 log.info(`Registered CanvasNode instance for ID: ${this.id}`);
+                
+                // Use a timeout to ensure the DOM has updated before we redraw.
+                setTimeout(() => {
+                    this.setDirtyCanvas(true, true);
+                }, 100);
             };
 
             const onRemoved = nodeType.prototype.onRemoved;

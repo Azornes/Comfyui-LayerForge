@@ -1,0 +1,393 @@
+.painter-button {
+    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    color: #ffffff;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+    text-align: center;
+    margin: 2px;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+}
+
+.painter-button:hover {
+    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.painter-button:active {
+    background: linear-gradient(to bottom, #3a3a3a, #4a4a4a);
+    transform: translateY(1px);
+}
+
+.painter-button:disabled,
+.painter-button:disabled:hover {
+    background: #555;
+    color: #888;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    border-color: #444;
+}
+
+.painter-button.primary {
+    background: linear-gradient(to bottom, #4a6cd4, #3a5cc4);
+    border-color: #2a4cb4;
+}
+
+.painter-button.primary:hover {
+    background: linear-gradient(to bottom, #5a7ce4, #4a6cd4);
+}
+
+.painter-controls {
+    background: linear-gradient(to bottom, #404040, #383838);
+    border-bottom: 1px solid #2a2a2a;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.painter-slider-container {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   color: #fff;
+   font-size: 12px;
+}
+
+.painter-slider-container input[type="range"] {
+   width: 80px;
+}
+
+
+.painter-button-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(0,0,0,0.2);
+    padding: 4px;
+    border-radius: 6px;
+}
+
+.painter-clipboard-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background-color: rgba(0,0,0,0.15);
+    padding: 3px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+    position: relative;
+}
+
+.painter-clipboard-group::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(74, 108, 212, 0.6), transparent);
+    border-radius: 1px;
+}
+
+.painter-clipboard-group .painter-button {
+    margin: 1px;
+}
+
+.painter-separator {
+    width: 1px;
+    height: 28px;
+    background-color: #2a2a2a;
+    margin: 0 8px;
+}
+
+.painter-container {
+    background: #607080;  /* 带蓝色的灰色背景 */
+    border: 1px solid #4a5a6a;
+    border-radius: 6px;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    transition: border-color 0.3s ease; /* Dodano dla płynnej zmiany ramki */
+}
+
+.painter-container.drag-over {
+    border-color: #00ff00; /* Zielona ramka podczas przeciągania */
+    border-style: dashed;
+}
+
+.painter-dialog {
+    background: #404040;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    padding: 20px;
+    color: #ffffff;
+}
+
+.painter-dialog input {
+    background: #303030;
+    border: 1px solid #505050;
+    border-radius: 4px;
+    color: #ffffff;
+    padding: 4px 8px;
+    margin: 4px;
+    width: 80px;
+}
+
+.painter-dialog button {
+    background: #505050;
+    border: 1px solid #606060;
+    border-radius: 4px;
+    color: #ffffff;
+    padding: 4px 12px;
+    margin: 4px;
+    cursor: pointer;
+}
+
+.painter-dialog button:hover {
+    background: #606060;
+}
+
+.blend-opacity-slider {
+    width: 100%;
+    margin: 5px 0;
+    display: none;
+}
+
+.blend-mode-active .blend-opacity-slider {
+    display: block;
+}
+
+.blend-mode-item {
+    padding: 5px;
+    cursor: pointer;
+    position: relative;
+}
+
+.blend-mode-item.active {
+    background-color: rgba(0,0,0,0.1);
+}
+
+.blend-mode-item.active {
+    background-color: rgba(0,0,0,0.1);
+}
+
+.painter-tooltip {
+    position: fixed;
+    display: none;
+    background: #3a3a3a;
+    color: #f0f0f0;
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 12px 18px;
+    z-index: 9999;
+    font-size: 13px;
+    line-height: 1.7;
+    width: auto;
+    max-width: min(500px, calc(100vw - 40px));
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: none;
+    transform-origin: top left;
+    transition: transform 0.2s ease;
+    will-change: transform;
+}
+
+.painter-tooltip.scale-down {
+    transform: scale(0.9);
+    transform-origin: top;
+}
+
+.painter-tooltip.scale-down-more {
+    transform: scale(0.8);
+    transform-origin: top;
+}
+
+.painter-tooltip table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+}
+
+.painter-tooltip table td {
+    padding: 2px 8px;
+    vertical-align: middle;
+}
+
+.painter-tooltip table td:first-child {
+    width: auto;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.painter-tooltip table td:last-child {
+    width: auto;
+}
+
+.painter-tooltip table tr:nth-child(odd) td {
+    background-color: rgba(0,0,0,0.1);
+}
+
+@media (max-width: 600px) {
+    .painter-tooltip {
+        font-size: 11px;
+        padding: 8px 12px;
+    }
+    .painter-tooltip table td {
+        padding: 2px 4px;
+    }
+    .painter-tooltip kbd {
+        padding: 1px 4px;
+        font-size: 10px;
+    }
+    .painter-tooltip table td:first-child {
+        width: 40%;
+    }
+    .painter-tooltip table td:last-child {
+        width: 60%;
+    }
+    .painter-tooltip h4 {
+        font-size: 12px;
+        margin-top: 8px;
+        margin-bottom: 4px;
+    }
+}
+
+@media (max-width: 400px) {
+    .painter-tooltip {
+        font-size: 10px;
+        padding: 6px 8px;
+    }
+    .painter-tooltip table td {
+        padding: 1px 3px;
+    }
+    .painter-tooltip kbd {
+        padding: 0px 3px;
+        font-size: 9px;
+    }
+    .painter-tooltip table td:first-child {
+        width: 35%;
+    }
+    .painter-tooltip table td:last-child {
+        width: 65%;
+    }
+    .painter-tooltip h4 {
+        font-size: 11px;
+        margin-top: 6px;
+        margin-bottom: 3px;
+    }
+}
+
+.painter-tooltip::-webkit-scrollbar {
+    width: 8px;
+}
+
+.painter-tooltip::-webkit-scrollbar-track {
+    background: #2a2a2a;
+    border-radius: 4px;
+}
+
+.painter-tooltip::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.painter-tooltip::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+.painter-tooltip h4 {
+    margin-top: 10px;
+    margin-bottom: 5px;
+    color: #4a90e2; /* Jasnoniebieski akcent */
+    border-bottom: 1px solid #555;
+    padding-bottom: 4px;
+}
+
+.painter-tooltip ul {
+    list-style: none;
+    padding-left: 10px;
+    margin: 0;
+}
+
+.painter-tooltip kbd {
+    background-color: #2a2a2a;
+    border: 1px solid #1a1a1a;
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #d0d0d0;
+}
+
+.painter-container.has-focus {
+    /* Używamy box-shadow, aby stworzyć efekt zewnętrznej ramki,
+       która nie wpłynie na rozmiar ani pozycję elementu. */
+    box-shadow: 0 0 0 2px white;
+    /* Możesz też zmienić kolor istniejącej ramki, ale box-shadow jest bardziej wyrazisty */
+    /* border-color: white; */
+}
+
+.painter-button.matting-button {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.painter-button.matting-button.loading {
+    padding-right: 36px; /* Make space for spinner */
+    cursor: wait;
+}
+
+.painter-button.matting-button .matting-spinner {
+    display: none;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: matting-spin 1s linear infinite;
+}
+
+.painter-button.matting-button.loading .matting-spinner {
+    display: block;
+}
+
+@keyframes matting-spin {
+    to {
+        transform: translateY(-50%) rotate(360deg);
+    }
+}
+.painter-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.painter-modal-content {
+    width: 90vw;
+    height: 90vh;
+    background-color: #353535;
+    border: 1px solid #222;
+    border-radius: 8px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}

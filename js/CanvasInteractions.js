@@ -240,7 +240,7 @@ export class CanvasInteractions {
             this.canvas.viewport.zoom = Math.max(0.1, Math.min(10, newZoom));
             this.canvas.viewport.x = worldCoords.x - (mouseBufferX / this.canvas.viewport.zoom);
             this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
-        } else if (this.canvas.selectedLayer) {
+        } else if (this.canvas.canvasSelection.selectedLayer) {
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
             const direction = e.deltaY < 0 ? 1 : -1; // 1 = up/right, -1 = down/left
 
