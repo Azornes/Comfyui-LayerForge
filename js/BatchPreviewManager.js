@@ -3,7 +3,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('BatchPreviewManager');
 
 export class BatchPreviewManager {
-    constructor(canvas) {
+    constructor(canvas, initialPosition = { x: 0, y: 0 }) {
         this.canvas = canvas;
         this.active = false;
         this.layers = [];
@@ -13,8 +13,8 @@ export class BatchPreviewManager {
         this.maskWasVisible = false;
 
         // Position in canvas world coordinates
-        this.worldX = 0;
-        this.worldY = 0;
+        this.worldX = initialPosition.x;
+        this.worldY = initialPosition.y;
         this.isDragging = false;
     }
 
@@ -143,13 +143,6 @@ export class BatchPreviewManager {
 
         this._createUI();
 
-        // Set initial position to be centered horizontally and just below the output area
-        const menuWidthInWorld = this.element.offsetWidth / this.canvas.viewport.zoom;
-        const paddingInWorld = 20 / this.canvas.viewport.zoom; // 20px padding in screen space
-
-        this.worldX = (this.canvas.width / 2) - (menuWidthInWorld / 2);
-        this.worldY = this.canvas.height + paddingInWorld;
-
         // Auto-hide mask logic
         this.maskWasVisible = this.canvas.maskTool.isOverlayVisible;
         if (this.maskWasVisible) {
@@ -165,17 +158,32 @@ export class BatchPreviewManager {
         log.info(`Showing batch preview for ${layers.length} layers.`);
         this.layers = layers;
         this.currentIndex = 0;
+        
+        // Make the element visible BEFORE calculating its size
         this.element.style.display = 'flex';
         this.active = true;
+
+        // Now that it's visible, we can get its dimensions and adjust the position.
+        const menuWidthInWorld = this.element.offsetWidth / this.canvas.viewport.zoom;
+        const paddingInWorld = 20 / this.canvas.viewport.zoom;
+
+        this.worldX -= menuWidthInWorld / 2; // Center horizontally
+        this.worldY += paddingInWorld;       // Add padding below the output area
+
         this._update();
     }
 
     hide() {
         log.info('Hiding batch preview.');
-        this.element.style.display = 'none';
+        if (this.element) {
+            this.element.remove();
+        }
         this.active = false;
-        this.layers = [];
-        this.currentIndex = 0;
+        
+        const index = this.canvas.batchPreviewManagers.indexOf(this);
+        if (index > -1) {
+            this.canvas.batchPreviewManagers.splice(index, 1);
+        }
 
         // Restore mask visibility if it was hidden by this manager
         if (this.maskWasVisible && !this.canvas.maskTool.isOverlayVisible) {

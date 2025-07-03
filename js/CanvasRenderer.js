@@ -113,9 +113,11 @@ export class CanvasRenderer {
         }
         this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
 
-        // Update Batch Preview UI position
-        if (this.canvas.batchPreviewManager) {
-            this.canvas.batchPreviewManager.updateScreenPosition(this.canvas.viewport);
+        // Update Batch Preview UI positions
+        if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
+            this.canvas.batchPreviewManagers.forEach(manager => {
+                manager.updateScreenPosition(this.canvas.viewport);
+            });
         }
     }
 

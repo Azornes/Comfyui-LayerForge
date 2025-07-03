@@ -532,6 +532,14 @@ export class CanvasInteractions {
 
             this.canvas.maskTool.updatePosition(-finalX, -finalY);
 
+            // Also move any active batch preview menus
+            if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
+                this.canvas.batchPreviewManagers.forEach(manager => {
+                    manager.worldX -= finalX;
+                    manager.worldY -= finalY;
+                });
+            }
+
             this.canvas.viewport.x -= finalX;
             this.canvas.viewport.y -= finalY;
         }
