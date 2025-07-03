@@ -82,6 +82,7 @@ export class CanvasRenderer {
         });
 
         this.drawCanvasOutline(ctx);
+        this.drawPendingGenerationAreas(ctx); // Draw snapshot outlines
         const maskImage = this.canvas.maskTool.getMask();
         if (maskImage && this.canvas.maskTool.isOverlayVisible) {
 
@@ -327,5 +328,37 @@ export class CanvasRenderer {
             ctx.fill();
             ctx.stroke();
         }
+    }
+
+    drawPendingGenerationAreas(ctx) {
+        const areasToDraw = [];
+
+        // 1. Get areas from active managers
+        if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
+            this.canvas.batchPreviewManagers.forEach(manager => {
+                if (manager.generationArea) {
+                    areasToDraw.push(manager.generationArea);
+                }
+            });
+        }
+
+        // 2. Get the area from the pending context (if it exists)
+        if (this.canvas.pendingBatchContext && this.canvas.pendingBatchContext.outputArea) {
+            areasToDraw.push(this.canvas.pendingBatchContext.outputArea);
+        }
+
+        if (areasToDraw.length === 0) {
+            return;
+        }
+
+        // 3. Draw all collected areas
+        areasToDraw.forEach(area => {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 150, 255, 0.9)'; // Blue color
+            ctx.lineWidth = 3 / this.canvas.viewport.zoom;
+            ctx.setLineDash([12 / this.canvas.viewport.zoom, 6 / this.canvas.viewport.zoom]);
+            ctx.strokeRect(area.x, area.y, area.width, area.height);
+            ctx.restore();
+        });
     }
 }

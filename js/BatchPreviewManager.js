@@ -3,7 +3,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 const log = createModuleLogger('BatchPreviewManager');
 
 export class BatchPreviewManager {
-    constructor(canvas, initialPosition = { x: 0, y: 0 }) {
+    constructor(canvas, initialPosition = { x: 0, y: 0 }, generationArea = null) {
         this.canvas = canvas;
         this.active = false;
         this.layers = [];
@@ -16,6 +16,7 @@ export class BatchPreviewManager {
         this.worldX = initialPosition.x;
         this.worldY = initialPosition.y;
         this.isDragging = false;
+        this.generationArea = generationArea; // Store the generation area
     }
 
     updateScreenPosition(viewport) {
@@ -184,6 +185,9 @@ export class BatchPreviewManager {
         if (index > -1) {
             this.canvas.batchPreviewManagers.splice(index, 1);
         }
+
+        // Trigger a final render to ensure the generation area outline is removed
+        this.canvas.render();
 
         // Restore mask visibility if it was hidden by this manager
         if (this.maskWasVisible && !this.canvas.maskTool.isOverlayVisible) {

@@ -149,12 +149,12 @@ export class CanvasLayers {
     }
 
 
-    addLayerWithImage = withErrorHandling(async (image, layerProps = {}, addMode = 'default') => {
+    addLayerWithImage = withErrorHandling(async (image, layerProps = {}, addMode = 'default', targetArea = null) => {
         if (!image) {
             throw createValidationError("Image is required for layer creation");
         }
 
-        log.debug("Adding layer with image:", image, "with mode:", addMode);
+        log.debug("Adding layer with image:", image, "with mode:", addMode, "targetArea:", targetArea);
         const imageId = generateUUID();
         await saveImage(imageId, image.src);
         this.canvas.imageCache.set(imageId, image.src);
@@ -163,18 +163,21 @@ export class CanvasLayers {
         let finalHeight = image.height;
         let finalX, finalY;
 
+        // Use the targetArea if provided, otherwise default to the current canvas dimensions
+        const area = targetArea || { width: this.canvas.width, height: this.canvas.height, x: 0, y: 0 };
+
         if (addMode === 'fit') {
-            const scale = Math.min(this.canvas.width / image.width, this.canvas.height / image.height);
+            const scale = Math.min(area.width / image.width, area.height / image.height);
             finalWidth = image.width * scale;
             finalHeight = image.height * scale;
-            finalX = (this.canvas.width - finalWidth) / 2;
-            finalY = (this.canvas.height - finalHeight) / 2;
+            finalX = area.x + (area.width - finalWidth) / 2;
+            finalY = area.y + (area.height - finalHeight) / 2;
         } else if (addMode === 'mouse') {
             finalX = this.canvas.lastMousePosition.x - finalWidth / 2;
             finalY = this.canvas.lastMousePosition.y - finalHeight / 2;
         } else { // 'center' or 'default'
-            finalX = (this.canvas.width - finalWidth) / 2;
-            finalY = (this.canvas.height - finalHeight) / 2;
+            finalX = area.x + (area.width - finalWidth) / 2;
+            finalY = area.y + (area.height - finalHeight) / 2;
         }
 
         const layer = {

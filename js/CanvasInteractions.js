@@ -532,11 +532,26 @@ export class CanvasInteractions {
 
             this.canvas.maskTool.updatePosition(-finalX, -finalY);
 
+            // If a batch generation is in progress, update the captured context as well
+            if (this.canvas.pendingBatchContext) {
+                this.canvas.pendingBatchContext.outputArea.x -= finalX;
+                this.canvas.pendingBatchContext.outputArea.y -= finalY;
+                
+                // Also update the menu spawn position to keep it relative
+                this.canvas.pendingBatchContext.spawnPosition.x -= finalX;
+                this.canvas.pendingBatchContext.spawnPosition.y -= finalY;
+                log.debug("Updated pending batch context during canvas move:", this.canvas.pendingBatchContext);
+            }
+
             // Also move any active batch preview menus
             if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
                 this.canvas.batchPreviewManagers.forEach(manager => {
                     manager.worldX -= finalX;
                     manager.worldY -= finalY;
+                    if (manager.generationArea) {
+                        manager.generationArea.x -= finalX;
+                        manager.generationArea.y -= finalY;
+                    }
                 });
             }
 
@@ -709,20 +724,43 @@ export class CanvasInteractions {
         if (this.interaction.canvasResizeRect && this.interaction.canvasResizeRect.width > 1 && this.interaction.canvasResizeRect.height > 1) {
             const newWidth = Math.round(this.interaction.canvasResizeRect.width);
             const newHeight = Math.round(this.interaction.canvasResizeRect.height);
-            const rectX = this.interaction.canvasResizeRect.x;
-            const rectY = this.interaction.canvasResizeRect.y;
+            const finalX = this.interaction.canvasResizeRect.x;
+            const finalY = this.interaction.canvasResizeRect.y;
 
             this.canvas.updateOutputAreaSize(newWidth, newHeight);
 
             this.canvas.layers.forEach(layer => {
-                layer.x -= rectX;
-                layer.y -= rectY;
+                layer.x -= finalX;
+                layer.y -= finalY;
             });
 
-            this.canvas.maskTool.updatePosition(-rectX, -rectY);
+            this.canvas.maskTool.updatePosition(-finalX, -finalY);
 
-            this.canvas.viewport.x -= rectX;
-            this.canvas.viewport.y -= rectY;
+            // If a batch generation is in progress, update the captured context as well
+            if (this.canvas.pendingBatchContext) {
+                this.canvas.pendingBatchContext.outputArea.x -= finalX;
+                this.canvas.pendingBatchContext.outputArea.y -= finalY;
+                
+                // Also update the menu spawn position to keep it relative
+                this.canvas.pendingBatchContext.spawnPosition.x -= finalX;
+                this.canvas.pendingBatchContext.spawnPosition.y -= finalY;
+                log.debug("Updated pending batch context during canvas resize:", this.canvas.pendingBatchContext);
+            }
+
+            // Also move any active batch preview menus
+            if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
+                this.canvas.batchPreviewManagers.forEach(manager => {
+                    manager.worldX -= finalX;
+                    manager.worldY -= finalY;
+                    if (manager.generationArea) {
+                        manager.generationArea.x -= finalX;
+                        manager.generationArea.y -= finalY;
+                    }
+                });
+            }
+
+            this.canvas.viewport.x -= finalX;
+            this.canvas.viewport.y -= finalY;
         }
     }
 

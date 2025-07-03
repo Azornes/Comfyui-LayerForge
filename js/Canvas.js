@@ -168,7 +168,7 @@ export class Canvas {
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
         this.batchPreviewManagers = [];
-        this.pendingBatchSpawnPosition = null;
+        this.pendingBatchContext = null;
 
         log.debug('Canvas modules initialized successfully');
     }
@@ -485,36 +485,57 @@ export class Canvas {
         let lastExecutionStartTime = 0;
 
         const handleExecutionStart = () => {
-            lastExecutionStartTime = Date.now();
-            // Store the spawn position for the next batch menu, relative to the output area
-            this.pendingBatchSpawnPosition = {
-                x: this.width / 2, // Horizontally centered on the output area
-                y: this.height    // At the bottom of the output area
-            };
-            log.debug(`Execution started, pending spawn position set relative to output area at:`, this.pendingBatchSpawnPosition);
+            if (autoRefreshEnabled) {
+                lastExecutionStartTime = Date.now();
+                // Store a snapshot of the context for the upcoming batch
+                this.pendingBatchContext = {
+                    // For the menu position
+                    spawnPosition: {
+                        x: this.width / 2,
+                        y: this.height
+                    },
+                    // For the image placement
+                    outputArea: {
+                        x: 0,
+                        y: 0,
+                        width: this.width,
+                        height: this.height
+                    }
+                };
+                log.debug(`Execution started, pending batch context captured:`, this.pendingBatchContext);
+                this.render(); // Trigger render to show the pending outline immediately
+            }
         };
 
         const handleExecutionSuccess = async () => {
             if (autoRefreshEnabled) {
                 log.info('Auto-refresh triggered, importing latest images.');
-                const newLayers = await this.canvasIO.importLatestImages(lastExecutionStartTime);
+
+                if (!this.pendingBatchContext) {
+                    log.warn("execution_start did not fire, cannot process batch. Awaiting next execution.");
+                    return;
+                }
+
+                // Use the captured output area for image import
+                const newLayers = await this.canvasIO.importLatestImages(
+                    lastExecutionStartTime,
+                    this.pendingBatchContext.outputArea
+                );
 
                 if (newLayers && newLayers.length > 1) {
-                    if (!this.pendingBatchSpawnPosition) {
-                        // Fallback in case execution_start didn't fire
-                        this.pendingBatchSpawnPosition = {
-                           x: this.width / 2,
-                           y: this.height
-                        };
-                        log.warn("execution_start did not fire, using fallback spawn position.");
-                    }
-                    
-                    const newManager = new BatchPreviewManager(this, this.pendingBatchSpawnPosition);
+                    const newManager = new BatchPreviewManager(
+                        this,
+                        this.pendingBatchContext.spawnPosition,
+                        this.pendingBatchContext.outputArea 
+                    );
                     this.batchPreviewManagers.push(newManager);
                     newManager.show(newLayers);
-                    
-                    this.pendingBatchSpawnPosition = null; // Consume the position
                 }
+                
+                // Consume the context
+                this.pendingBatchContext = null;
+                // Final render to clear the outline if it was the last one
+                this.render();
             }
         };
 

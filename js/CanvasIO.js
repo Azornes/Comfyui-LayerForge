@@ -757,7 +757,7 @@ export class CanvasIO {
         }
     }
 
-    async importLatestImages(sinceTimestamp) {
+    async importLatestImages(sinceTimestamp, targetArea = null) {
         try {
             log.info(`Fetching latest images since ${sinceTimestamp}...`);
             const response = await fetch(`/layerforge/get-latest-images/${sinceTimestamp}`);
@@ -774,7 +774,7 @@ export class CanvasIO {
                         img.onerror = reject;
                         img.src = imageData;
                     });
-                    const newLayer = await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
+                    const newLayer = await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit', targetArea);
                     newLayers.push(newLayer);
                 }
                 log.info("All new images imported and placed on canvas successfully.");
