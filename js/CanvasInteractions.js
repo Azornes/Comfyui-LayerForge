@@ -70,6 +70,12 @@ export class CanvasInteractions {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
         const viewCoords = this.canvas.getMouseViewCoordinates(e);
 
+        if (this.interaction.mode === 'drawingMask') {
+            this.canvas.maskTool.handleMouseDown(worldCoords, viewCoords);
+            this.canvas.render();
+            return;
+        }
+
         // --- Ostateczna, poprawna kolejność sprawdzania ---
 
         // 1. Akcje globalne z modyfikatorami (mają najwyższy priorytet)
@@ -115,6 +121,7 @@ export class CanvasInteractions {
 
     handleMouseMove(e) {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
         this.canvas.lastMousePosition = worldCoords; // Zawsze aktualizuj ostatnią pozycję myszy
         
         // Sprawdź, czy rozpocząć przeciąganie
@@ -131,6 +138,10 @@ export class CanvasInteractions {
         }
         
         switch (this.interaction.mode) {
+            case 'drawingMask':
+                this.canvas.maskTool.handleMouseMove(worldCoords, viewCoords);
+                this.canvas.render();
+                break;
             case 'panning':
                 this.panViewport(e);
                 break;
@@ -156,6 +167,13 @@ export class CanvasInteractions {
     }
 
     handleMouseUp(e) {
+        const viewCoords = this.canvas.getMouseViewCoordinates(e);
+        if (this.interaction.mode === 'drawingMask') {
+            this.canvas.maskTool.handleMouseUp(viewCoords);
+            this.canvas.render();
+            return;
+        }
+
         if (this.interaction.mode === 'resizingCanvas') {
             this.finalizeCanvasResize();
         }
