@@ -112,6 +112,11 @@ export class CanvasRenderer {
             this.canvas.canvas.height = this.canvas.offscreenCanvas.height;
         }
         this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
+
+        // Update Batch Preview UI position
+        if (this.canvas.batchPreviewManager) {
+            this.canvas.batchPreviewManager.updateScreenPosition(this.canvas.viewport);
+        }
     }
 
     renderInteractionElements(ctx) {

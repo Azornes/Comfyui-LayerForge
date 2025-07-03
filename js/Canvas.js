@@ -493,8 +493,8 @@ export class Canvas {
                 log.info('Auto-refresh triggered, importing latest images.');
                 const newLayers = await this.canvasIO.importLatestImages(lastExecutionStartTime);
 
-                if (newLayers && newLayers.length > 0) {
-                    this.batchPreviewManager.addLayers(newLayers);
+                if (newLayers && newLayers.length > 1) {
+                    this.batchPreviewManager.show(newLayers);
                 }
             }
         };

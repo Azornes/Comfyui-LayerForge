@@ -11,6 +11,25 @@ export class BatchPreviewManager {
         this.element = null;
         this.uiInitialized = false;
         this.maskWasVisible = false;
+
+        // Position in canvas world coordinates
+        this.worldX = 0;
+        this.worldY = 0;
+        this.isDragging = false;
+    }
+
+    updateScreenPosition(viewport) {
+        if (!this.active || !this.element) return;
+
+        // Translate world coordinates to screen coordinates
+        const screenX = (this.worldX - viewport.x) * viewport.zoom;
+        const screenY = (this.worldY - viewport.y) * viewport.zoom;
+        
+        // We can also scale the menu with zoom, but let's keep it constant for now for readability
+        const scale = 1; // viewport.zoom; 
+
+        // Use transform for performance
+        this.element.style.transform = `translate(${screenX}px, ${screenY}px) scale(${scale})`;
     }
 
     _createUI() {
@@ -20,9 +39,8 @@ export class BatchPreviewManager {
         this.element.id = 'layerforge-batch-preview';
         this.element.style.cssText = `
             position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 0;
+            left: 0;
             background-color: #333;
             color: white;
             padding: 8px 15px;
@@ -34,7 +52,41 @@ export class BatchPreviewManager {
             font-family: sans-serif;
             z-index: 1001;
             border: 1px solid #555;
+            cursor: move;
+            user-select: none;
         `;
+
+        this.element.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            this.isDragging = true;
+            
+            const handleMouseMove = (moveEvent) => {
+                if (this.isDragging) {
+                    // Convert screen pixel movement to world coordinate movement
+                    const deltaX = moveEvent.movementX / this.canvas.viewport.zoom;
+                    const deltaY = moveEvent.movementY / this.canvas.viewport.zoom;
+
+                    this.worldX += deltaX;
+                    this.worldY += deltaY;
+                    
+                    // The render loop will handle updating the screen position, but we need to trigger it.
+                    this.canvas.render();
+                }
+            };
+
+            const handleMouseUp = () => {
+                this.isDragging = false;
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
 
         const prevButton = this._createButton('&#9664;', 'Previous'); // Left arrow
         const nextButton = this._createButton('&#9654;', 'Next'); // Right arrow
@@ -91,6 +143,13 @@ export class BatchPreviewManager {
 
         this._createUI();
 
+        // Set initial position to be centered horizontally and just below the output area
+        const menuWidthInWorld = this.element.offsetWidth / this.canvas.viewport.zoom;
+        const paddingInWorld = 20 / this.canvas.viewport.zoom; // 20px padding in screen space
+
+        this.worldX = (this.canvas.width / 2) - (menuWidthInWorld / 2);
+        this.worldY = this.canvas.height + paddingInWorld;
+
         // Auto-hide mask logic
         this.maskWasVisible = this.canvas.maskTool.isOverlayVisible;
         if (this.maskWasVisible) {
@@ -132,22 +191,6 @@ export class BatchPreviewManager {
         // Make all layers visible again upon closing
         this.canvas.layers.forEach(l => l.visible = true);
         this.canvas.render();
-    }
-
-    addLayers(newLayers) {
-        if (!newLayers || newLayers.length === 0) {
-            return;
-        }
-
-        if (this.active) {
-            // UI is already open, just add the new layers
-            log.info(`Adding ${newLayers.length} new layers to active batch preview.`);
-            this.layers.push(...newLayers);
-            this._update();
-        } else {
-            // UI is not open, show it with the new layers
-            this.show(newLayers);
-        }
     }
 
     navigate(direction) {
