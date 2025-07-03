@@ -227,6 +227,7 @@ export class CanvasState {
                 nodeId: this.canvas.node.id,
                 state: state
             });
+            this.canvas.render();
         } else {
             log.warn("State saver worker not available. Saving on main thread.");
             await setCanvasState(this.canvas.node.id, state);

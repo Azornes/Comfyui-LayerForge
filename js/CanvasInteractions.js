@@ -346,9 +346,6 @@ export class CanvasInteractions {
                         this.canvas.canvasLayers.copySelectedLayers();
                     }
                     break;
-                case 'v':
-                     this.canvas.canvasLayers.handlePaste('mouse');
-                    break;
                 default:
                     handled = false;
                     break;
