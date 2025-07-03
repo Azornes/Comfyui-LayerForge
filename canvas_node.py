@@ -28,8 +28,9 @@ import os
 
 try:
     from python.logger import logger, LogLevel, debug, info, warn, error, exception
+    from python.config import LOG_LEVEL
 
-    logger.set_module_level('canvas_node', LogLevel.NONE)
+    logger.set_module_level('canvas_node', LogLevel[LOG_LEVEL])
 
     logger.configure({
         'log_to_file': True,

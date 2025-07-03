@@ -4,6 +4,7 @@
  */
 
 import {logger, LogLevel} from "../logger.js";
+import { LOG_LEVEL } from '../config.js';
 
 /**
  * Tworzy obiekt loggera dla modułu z predefiniowanymi metodami
@@ -11,8 +12,8 @@ import {logger, LogLevel} from "../logger.js";
  * @param {LogLevel} level - Poziom logowania (domyślnie DEBUG)
  * @returns {Object} Obiekt z metodami logowania
  */
-export function createModuleLogger(moduleName, level = LogLevel.NONE) {
-    logger.setModuleLevel(moduleName, level);
+export function createModuleLogger(moduleName) {
+    logger.setModuleLevel(moduleName, LogLevel[LOG_LEVEL]);
 
     return {
         debug: (...args) => logger.debug(moduleName, ...args),
