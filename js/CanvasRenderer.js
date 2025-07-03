@@ -75,7 +75,7 @@ export class CanvasRenderer {
             );
             if (layer.mask) {
             }
-            if (this.canvas.selectedLayers.includes(layer)) {
+            if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
                 this.drawSelectionFrame(ctx, layer);
             }
             ctx.restore();
@@ -190,8 +190,8 @@ export class CanvasRenderer {
     }
 
     renderLayerInfo(ctx) {
-        if (this.canvas.selectedLayer) {
-            this.canvas.selectedLayers.forEach(layer => {
+        if (this.canvas.canvasSelection.selectedLayer) {
+            this.canvas.canvasSelection.selectedLayers.forEach(layer => {
                 if (!layer.image) return;
 
                 const layerIndex = this.canvas.layers.indexOf(layer);

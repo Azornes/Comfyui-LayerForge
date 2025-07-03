@@ -815,9 +815,9 @@ async function createCanvasWidget(node, widget, app) {
                         button.classList.add('loading');
 
                         try {
-                            if (canvas.selectedLayers.length !== 1) throw new Error("Please select exactly one image layer for matting.");
+                            if (canvas.canvasSelection.selectedLayers.length !== 1) throw new Error("Please select exactly one image layer for matting.");
 
-                            const selectedLayer = canvas.selectedLayers[0];
+                            const selectedLayer = canvas.canvasSelection.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
                             const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
                             const response = await fetch("/matting", {
@@ -841,7 +841,7 @@ async function createCanvasWidget(node, widget, app) {
                             const newLayer = {...selectedLayer, image: mattedImage};
                             delete newLayer.imageId;
                             canvas.layers[selectedLayerIndex] = newLayer;
-                            canvas.updateSelection([newLayer]);
+                            canvas.canvasSelection.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
                         } catch (error) {
@@ -1010,7 +1010,7 @@ async function createCanvasWidget(node, widget, app) {
 
 
     const updateButtonStates = () => {
-        const selectionCount = canvas.selectedLayers.length;
+        const selectionCount = canvas.canvasSelection.selectedLayers.length;
         const hasSelection = selectionCount > 0;
         controlPanel.querySelectorAll('.requires-selection').forEach(btn => {
             // Special handling for Fuse button - requires at least 2 layers
@@ -1026,7 +1026,7 @@ async function createCanvasWidget(node, widget, app) {
         }
     };
 
-    canvas.onSelectionChange = updateButtonStates;
+    canvas.canvasSelection.onSelectionChange = updateButtonStates;
 
     const undoButton = controlPanel.querySelector(`#undo-button-${node.id}`);
     const redoButton = controlPanel.querySelector(`#redo-button-${node.id}`);

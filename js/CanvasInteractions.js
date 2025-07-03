@@ -91,7 +91,7 @@ export class CanvasInteractions {
         // 2. Inne przyciski myszy
         if (e.button === 2) { // Prawy przycisk myszy
             const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
-            if (clickedLayerResult && this.canvas.selectedLayers.includes(clickedLayerResult.layer)) {
+            if (clickedLayerResult && this.canvas.canvasSelection.selectedLayers.includes(clickedLayerResult.layer)) {
                 e.preventDefault();
                 this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x, viewCoords.y);
             }
@@ -131,7 +131,7 @@ export class CanvasInteractions {
             if (Math.sqrt(dx * dx + dy * dy) > 3) { // Próg 3 pikseli
                 this.interaction.mode = 'dragging';
                 this.originalLayerPositions.clear();
-                this.canvas.selectedLayers.forEach(l => {
+                this.canvas.canvasSelection.selectedLayers.forEach(l => {
                     this.originalLayerPositions.set(l, {x: l.x, y: l.y});
                 });
             }
@@ -244,7 +244,7 @@ export class CanvasInteractions {
             const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
             const direction = e.deltaY < 0 ? 1 : -1; // 1 = up/right, -1 = down/left
 
-            this.canvas.selectedLayers.forEach(layer => {
+            this.canvas.canvasSelection.selectedLayers.forEach(layer => {
                 if (e.shiftKey) {
                     // Nowy skrót: Shift + Ctrl + Kółko do przyciągania do absolutnych wartości
                     if (e.ctrlKey) {
@@ -342,7 +342,7 @@ export class CanvasInteractions {
                     this.canvas.redo();
                     break;
                 case 'c':
-                    if (this.canvas.selectedLayers.length > 0) {
+                    if (this.canvas.canvasSelection.selectedLayers.length > 0) {
                         this.canvas.canvasLayers.copySelectedLayers();
                     }
                     break;
@@ -361,7 +361,7 @@ export class CanvasInteractions {
         }
 
         // Skróty kontekstowe (zależne od zaznaczenia)
-        if (this.canvas.selectedLayers.length > 0) {
+        if (this.canvas.canvasSelection.selectedLayers.length > 0) {
             const step = e.shiftKey ? 10 : 1;
             let needsRender = false;
             
@@ -372,12 +372,12 @@ export class CanvasInteractions {
                 e.stopPropagation();
                 this.interaction.keyMovementInProgress = true;
 
-                if (e.code === 'ArrowLeft') this.canvas.selectedLayers.forEach(l => l.x -= step);
-                if (e.code === 'ArrowRight') this.canvas.selectedLayers.forEach(l => l.x += step);
-                if (e.code === 'ArrowUp') this.canvas.selectedLayers.forEach(l => l.y -= step);
-                if (e.code === 'ArrowDown') this.canvas.selectedLayers.forEach(l => l.y += step);
-                if (e.code === 'BracketLeft') this.canvas.selectedLayers.forEach(l => l.rotation -= step);
-                if (e.code === 'BracketRight') this.canvas.selectedLayers.forEach(l => l.rotation += step);
+                if (e.code === 'ArrowLeft') this.canvas.canvasSelection.selectedLayers.forEach(l => l.x -= step);
+                if (e.code === 'ArrowRight') this.canvas.canvasSelection.selectedLayers.forEach(l => l.x += step);
+                if (e.code === 'ArrowUp') this.canvas.canvasSelection.selectedLayers.forEach(l => l.y -= step);
+                if (e.code === 'ArrowDown') this.canvas.canvasSelection.selectedLayers.forEach(l => l.y += step);
+                if (e.code === 'BracketLeft') this.canvas.canvasSelection.selectedLayers.forEach(l => l.rotation -= step);
+                if (e.code === 'BracketRight') this.canvas.canvasSelection.selectedLayers.forEach(l => l.rotation += step);
                 
                 needsRender = true;
             }
@@ -385,7 +385,7 @@ export class CanvasInteractions {
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();
-                this.canvas.removeSelectedLayers();
+                this.canvas.canvasSelection.removeSelectedLayers();
                 return;
             }
             
@@ -453,16 +453,16 @@ export class CanvasInteractions {
     prepareForDrag(layer, worldCoords) {
         // Zaktualizuj zaznaczenie, ale nie zapisuj stanu
         if (this.interaction.isCtrlPressed) {
-            const index = this.canvas.selectedLayers.indexOf(layer);
+            const index = this.canvas.canvasSelection.selectedLayers.indexOf(layer);
             if (index === -1) {
-                this.canvas.updateSelection([...this.canvas.selectedLayers, layer]);
+                this.canvas.canvasSelection.updateSelection([...this.canvas.canvasSelection.selectedLayers, layer]);
             } else {
-                const newSelection = this.canvas.selectedLayers.filter(l => l !== layer);
-                this.canvas.updateSelection(newSelection);
+                const newSelection = this.canvas.canvasSelection.selectedLayers.filter(l => l !== layer);
+                this.canvas.canvasSelection.updateSelection(newSelection);
             }
         } else {
-            if (!this.canvas.selectedLayers.includes(layer)) {
-                this.canvas.updateSelection([layer]);
+            if (!this.canvas.canvasSelection.selectedLayers.includes(layer)) {
+                this.canvas.canvasSelection.updateSelection([layer]);
             }
         }
         
@@ -474,7 +474,7 @@ export class CanvasInteractions {
         // Ta funkcja jest teraz wywoływana tylko gdy kliknięto na tło bez modyfikatorów.
         // Domyślna akcja: wyczyść zaznaczenie i rozpocznij panoramowanie.
         if (!this.interaction.isCtrlPressed) {
-            this.canvas.updateSelection([]);
+            this.canvas.canvasSelection.updateSelection([]);
         }
         this.interaction.mode = 'panning';
         this.interaction.panStart = {x: e.clientX, y: e.clientY};
@@ -564,7 +564,7 @@ export class CanvasInteractions {
 
     startPanning(e) {
         if (!this.interaction.isCtrlPressed) {
-            this.canvas.updateSelection([]);
+            this.canvas.canvasSelection.updateSelection([]);
         }
         this.interaction.mode = 'panning';
         this.interaction.panStart = {x: e.clientX, y: e.clientY};
@@ -580,9 +580,9 @@ export class CanvasInteractions {
     }
 
     dragLayers(worldCoords) {
-        if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.canvas.selectedLayers.length > 0) {
+        if (this.interaction.isAltPressed && !this.interaction.hasClonedInDrag && this.canvas.canvasSelection.selectedLayers.length > 0) {
             // Scentralizowana logika duplikowania
-            const newLayers = this.canvas.duplicateSelectedLayers();
+            const newLayers = this.canvas.canvasSelection.duplicateSelectedLayers();
             
             // Zresetuj pozycje przeciągania dla nowych, zduplikowanych warstw
             this.originalLayerPositions.clear();
@@ -595,11 +595,11 @@ export class CanvasInteractions {
         const totalDy = worldCoords.y - this.interaction.dragStart.y;
         let finalDx = totalDx, finalDy = totalDy;
 
-        if (this.interaction.isCtrlPressed && this.canvas.selectedLayer) {
-            const originalPos = this.originalLayerPositions.get(this.canvas.selectedLayer);
+        if (this.interaction.isCtrlPressed && this.canvas.canvasSelection.selectedLayer) {
+            const originalPos = this.originalLayerPositions.get(this.canvas.canvasSelection.selectedLayer);
             if (originalPos) {
                 const tempLayerForSnap = {
-                    ...this.canvas.selectedLayer,
+                    ...this.canvas.canvasSelection.selectedLayer,
                     x: originalPos.x + totalDx,
                     y: originalPos.y + totalDy
                 };
@@ -609,7 +609,7 @@ export class CanvasInteractions {
             }
         }
 
-        this.canvas.selectedLayers.forEach(layer => {
+        this.canvas.canvasSelection.selectedLayers.forEach(layer => {
             const originalPos = this.originalLayerPositions.get(layer);
             if (originalPos) {
                 layer.x = originalPos.x + finalDx;

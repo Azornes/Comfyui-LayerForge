@@ -306,7 +306,7 @@ export class CanvasLayersPanel {
         layerRow.dataset.layerIndex = index;
         
         // Sprawdź czy warstwa jest zaznaczona
-        const isSelected = this.canvas.selectedLayers.includes(layer);
+        const isSelected = this.canvas.canvasSelection.selectedLayers.includes(layer);
         if (isSelected) {
             layerRow.classList.add('selected');
         }
@@ -407,7 +407,7 @@ export class CanvasLayersPanel {
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
         this.updateSelectionAppearance(); 
 
-        log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.selectedLayers.length}`);
+        log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
 
 
@@ -492,12 +492,12 @@ export class CanvasLayersPanel {
      * Usuwa zaznaczone warstwy
      */
     deleteSelectedLayers() {
-        if (this.canvas.selectedLayers.length === 0) {
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) {
             log.debug('No layers selected for deletion');
             return;
         }
 
-        log.info(`Deleting ${this.canvas.selectedLayers.length} selected layers`);
+        log.info(`Deleting ${this.canvas.canvasSelection.selectedLayers.length} selected layers`);
         this.canvas.removeSelectedLayers();
         this.renderLayers();
     }
@@ -514,12 +514,12 @@ export class CanvasLayersPanel {
         }
 
         // Jeśli przeciągana warstwa nie jest zaznaczona, zaznacz ją
-        if (!this.canvas.selectedLayers.includes(layer)) {
+        if (!this.canvas.canvasSelection.selectedLayers.includes(layer)) {
             this.canvas.updateSelection([layer]);
             this.renderLayers();
         }
 
-        this.draggedElements = [...this.canvas.selectedLayers];
+        this.draggedElements = [...this.canvas.canvasSelection.selectedLayers];
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', ''); // Wymagane przez standard
 
@@ -635,7 +635,7 @@ export class CanvasLayersPanel {
 
         layerRows.forEach((row, index) => {
             const layer = sortedLayers[index];
-            if (this.canvas.selectedLayers.includes(layer)) {
+            if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
                 row.classList.add('selected');
             } else {
                 row.classList.remove('selected');

@@ -33,9 +33,9 @@ export class CanvasLayers {
     }
 
     async copySelectedLayers() {
-        if (this.canvas.selectedLayers.length === 0) return;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
 
-        this.internalClipboard = this.canvas.selectedLayers.map(layer => ({...layer}));
+        this.internalClipboard = this.canvas.canvasSelection.selectedLayers.map(layer => ({...layer}));
         log.info(`Copied ${this.internalClipboard.length} layer(s) to internal clipboard.`);
 
         const blob = await this.getFlattenedSelectionAsBlob();
@@ -295,13 +295,13 @@ export class CanvasLayers {
     }
 
     moveLayerUp() {
-        if (this.canvas.selectedLayers.length === 0) return;
-        this.moveLayers(this.canvas.selectedLayers, { direction: 'up' });
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
+        this.moveLayers(this.canvas.canvasSelection.selectedLayers, { direction: 'up' });
     }
 
     moveLayerDown() {
-        if (this.canvas.selectedLayers.length === 0) return;
-        this.moveLayers(this.canvas.selectedLayers, { direction: 'down' });
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
+        this.moveLayers(this.canvas.canvasSelection.selectedLayers, { direction: 'down' });
     }
 
     /**
@@ -309,9 +309,9 @@ export class CanvasLayers {
      * @param {number} scale - Skala zmiany rozmiaru
      */
     resizeLayer(scale) {
-        if (this.canvas.selectedLayers.length === 0) return;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
 
-        this.canvas.selectedLayers.forEach(layer => {
+        this.canvas.canvasSelection.selectedLayers.forEach(layer => {
             layer.width *= scale;
             layer.height *= scale;
         });
@@ -324,9 +324,9 @@ export class CanvasLayers {
      * @param {number} angle - Kąt obrotu w stopniach
      */
     rotateLayer(angle) {
-        if (this.canvas.selectedLayers.length === 0) return;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
 
-        this.canvas.selectedLayers.forEach(layer => {
+        this.canvas.canvasSelection.selectedLayers.forEach(layer => {
             layer.rotation += angle;
         });
         this.canvas.render();
@@ -362,9 +362,9 @@ export class CanvasLayers {
     }
 
     async mirrorHorizontal() {
-        if (this.canvas.selectedLayers.length === 0) return;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
 
-        const promises = this.canvas.selectedLayers.map(layer => {
+        const promises = this.canvas.canvasSelection.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
@@ -390,9 +390,9 @@ export class CanvasLayers {
     }
 
     async mirrorVertical() {
-        if (this.canvas.selectedLayers.length === 0) return;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
 
-        const promises = this.canvas.selectedLayers.map(layer => {
+        const promises = this.canvas.canvasSelection.selectedLayers.map(layer => {
             return new Promise(resolve => {
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
@@ -504,11 +504,11 @@ export class CanvasLayers {
     }
 
     getHandleAtPosition(worldX, worldY) {
-        if (this.canvas.selectedLayers.length === 0) return null;
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) return null;
 
         const handleRadius = 8 / this.canvas.viewport.zoom;
-        for (let i = this.canvas.selectedLayers.length - 1; i >= 0; i--) {
-            const layer = this.canvas.selectedLayers[i];
+        for (let i = this.canvas.canvasSelection.selectedLayers.length - 1; i >= 0; i--) {
+            const layer = this.canvas.canvasSelection.selectedLayers[i];
             const handles = this.getHandles(layer);
 
             for (const key in handles) {
@@ -963,13 +963,13 @@ export class CanvasLayers {
     }
 
     async getFlattenedSelectionAsBlob() {
-        if (this.canvas.selectedLayers.length === 0) {
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) {
             return null;
         }
 
         return new Promise((resolve) => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvas.selectedLayers.forEach(layer => {
+            this.canvas.canvasSelection.selectedLayers.forEach(layer => {
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
                 const rad = layer.rotation * Math.PI / 180;
@@ -1011,7 +1011,7 @@ export class CanvasLayers {
 
             tempCtx.translate(-minX, -minY);
 
-            const sortedSelection = [...this.canvas.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedSelection.forEach(layer => {
                 if (!layer.image) return;
@@ -1041,12 +1041,12 @@ export class CanvasLayers {
      * Fuses (flattens and merges) selected layers into a single layer
      */
     async fuseLayers() {
-        if (this.canvas.selectedLayers.length < 2) {
+        if (this.canvas.canvasSelection.selectedLayers.length < 2) {
             alert("Please select at least 2 layers to fuse.");
             return;
         }
 
-        log.info(`Fusing ${this.canvas.selectedLayers.length} selected layers`);
+        log.info(`Fusing ${this.canvas.canvasSelection.selectedLayers.length} selected layers`);
 
         try {
             // Save state for undo
@@ -1054,7 +1054,7 @@ export class CanvasLayers {
 
             // Calculate bounding box of all selected layers
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvas.selectedLayers.forEach(layer => {
+            this.canvas.canvasSelection.selectedLayers.forEach(layer => {
                 const centerX = layer.x + layer.width / 2;
                 const centerY = layer.y + layer.height / 2;
                 const rad = layer.rotation * Math.PI / 180;
@@ -1101,7 +1101,7 @@ export class CanvasLayers {
             tempCtx.translate(-minX, -minY);
 
             // Sort selected layers by z-index and render them
-            const sortedSelection = [...this.canvas.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
+            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
 
             sortedSelection.forEach(layer => {
                 if (!layer.image) return;
@@ -1131,7 +1131,7 @@ export class CanvasLayers {
             });
 
             // Find the lowest z-index among selected layers to maintain visual order
-            const minZIndex = Math.min(...this.canvas.selectedLayers.map(layer => layer.zIndex));
+            const minZIndex = Math.min(...this.canvas.canvasSelection.selectedLayers.map(layer => layer.zIndex));
 
             // Generate unique ID for the new fused layer
             const imageId = generateUUID();
@@ -1155,7 +1155,7 @@ export class CanvasLayers {
             };
 
             // Remove selected layers from canvas
-            this.canvas.layers = this.canvas.layers.filter(layer => !this.canvas.selectedLayers.includes(layer));
+            this.canvas.layers = this.canvas.layers.filter(layer => !this.canvas.canvasSelection.selectedLayers.includes(layer));
 
             // Insert the fused layer at the correct position
             this.canvas.layers.push(fusedLayer);
