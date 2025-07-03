@@ -134,6 +134,22 @@ export class BatchPreviewManager {
         this.canvas.render();
     }
 
+    addLayers(newLayers) {
+        if (!newLayers || newLayers.length === 0) {
+            return;
+        }
+
+        if (this.active) {
+            // UI is already open, just add the new layers
+            log.info(`Adding ${newLayers.length} new layers to active batch preview.`);
+            this.layers.push(...newLayers);
+            this._update();
+        } else {
+            // UI is not open, show it with the new layers
+            this.show(newLayers);
+        }
+    }
+
     navigate(direction) {
         this.currentIndex += direction;
         if (this.currentIndex < 0) {
