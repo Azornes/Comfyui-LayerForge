@@ -765,6 +765,7 @@ export class CanvasIO {
 
             if (result.success && result.images && result.images.length > 0) {
                 log.info(`Received ${result.images.length} new images, adding to canvas.`);
+                const newLayers = [];
 
                 for (const imageData of result.images) {
                     const img = new Image();
@@ -773,14 +774,15 @@ export class CanvasIO {
                         img.onerror = reject;
                         img.src = imageData;
                     });
-                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
+                    const newLayer = await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
+                    newLayers.push(newLayer);
                 }
                 log.info("All new images imported and placed on canvas successfully.");
-                return true;
+                return newLayers;
 
             } else if (result.success) {
                 log.info("No new images found since last generation.");
-                return true;
+                return [];
             }
             else {
                 throw new Error(result.error || "Failed to fetch latest images.");
@@ -788,7 +790,7 @@ export class CanvasIO {
         } catch (error) {
             log.error("Error importing latest images:", error);
             alert(`Failed to import latest images: ${error.message}`);
-            return false;
+            return [];
         }
     }
 }

@@ -178,6 +178,7 @@ export class CanvasLayers {
         }
 
         const layer = {
+            id: generateUUID(),
             image: image,
             imageId: imageId,
             x: finalX,

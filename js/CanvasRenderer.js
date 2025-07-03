@@ -83,7 +83,7 @@ export class CanvasRenderer {
 
         this.drawCanvasOutline(ctx);
         const maskImage = this.canvas.maskTool.getMask();
-        if (maskImage) {
+        if (maskImage && this.canvas.maskTool.isOverlayVisible) {
 
             ctx.save();
 

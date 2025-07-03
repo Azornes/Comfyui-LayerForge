@@ -870,6 +870,24 @@ async function createCanvasWidget(node, widget, app) {
             ]),
             $el("div.painter-separator"),
             $el("div.painter-button-group", {id: "mask-controls"}, [
+                $el("button.painter-button.primary", {
+                    id: "toggle-mask-btn",
+                    textContent: "Show Mask",
+                    title: "Toggle mask overlay visibility",
+                    onclick: (e) => {
+                        const button = e.target;
+                        canvas.maskTool.toggleOverlayVisibility();
+                        canvas.render();
+                        
+                        if (canvas.maskTool.isOverlayVisible) {
+                            button.classList.add('primary');
+                            button.textContent = "Show Mask";
+                        } else {
+                            button.classList.remove('primary');
+                            button.textContent = "Hide Mask";
+                        }
+                    }
+                }),
                 $el("button.painter-button", {
                     textContent: "Edit Mask",
                     title: "Open the current canvas view in the mask editor",

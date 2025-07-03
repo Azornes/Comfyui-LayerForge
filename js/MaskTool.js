@@ -13,6 +13,7 @@ export class MaskTool {
         this.x = 0;
         this.y = 0;
 
+        this.isOverlayVisible = true;
         this.isActive = false;
         this.brushSize = 20;
         this.brushStrength = 0.5;
@@ -278,6 +279,11 @@ export class MaskTool {
         this.x += dx;
         this.y += dy;
         log.info(`Mask position updated to (${this.x}, ${this.y})`);
+    }
+
+    toggleOverlayVisibility() {
+        this.isOverlayVisible = !this.isOverlayVisible;
+        log.info(`Mask overlay visibility toggled to: ${this.isOverlayVisible}`);
     }
 
     setMask(image) {

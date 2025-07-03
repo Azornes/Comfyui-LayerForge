@@ -9,6 +9,7 @@ import {CanvasLayersPanel} from "./CanvasLayersPanel.js";
 import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
+import {BatchPreviewManager} from "./BatchPreviewManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {mask_editor_showing, mask_editor_listen_for_cancel} from "./utils/mask_utils.js";
 import { debounce } from "./utils/CommonUtils.js";
@@ -166,6 +167,7 @@ export class Canvas {
         this.canvasRenderer = new CanvasRenderer(this);
         this.canvasIO = new CanvasIO(this);
         this.imageReferenceManager = new ImageReferenceManager(this);
+        this.batchPreviewManager = new BatchPreviewManager(this);
 
         log.debug('Canvas modules initialized successfully');
     }
@@ -286,6 +288,26 @@ export class Canvas {
     /**
      * Usuwa wybrane warstwy
      */
+    removeLayersByIds(layerIds) {
+        if (!layerIds || layerIds.length === 0) return;
+
+        const initialCount = this.layers.length;
+        this.saveState();
+        this.layers = this.layers.filter(l => !layerIds.includes(l.id));
+        
+        // If the current selection was part of the removal, clear it
+        const newSelection = this.selectedLayers.filter(l => !layerIds.includes(l.id));
+        this.updateSelection(newSelection);
+        
+        this.render();
+        this.saveState();
+
+        if (this.canvasLayersPanel) {
+            this.canvasLayersPanel.onLayersChanged();
+        }
+        log.info(`Removed ${initialCount - this.layers.length} layers by ID.`);
+    }
+
     removeSelectedLayers() {
         if (this.selectedLayers.length > 0) {
             log.info('Removing selected layers', {
@@ -466,10 +488,14 @@ export class Canvas {
             log.debug(`Execution started, timestamp set to: ${lastExecutionStartTime}`);
         };
 
-        const handleExecutionSuccess = () => {
+        const handleExecutionSuccess = async () => {
             if (autoRefreshEnabled) {
                 log.info('Auto-refresh triggered, importing latest images.');
-                this.canvasIO.importLatestImages(lastExecutionStartTime);
+                const newLayers = await this.canvasIO.importLatestImages(lastExecutionStartTime);
+
+                if (newLayers && newLayers.length > 1) {
+                    this.batchPreviewManager.show(newLayers);
+                }
             }
         };
 
