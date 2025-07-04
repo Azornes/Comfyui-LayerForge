@@ -7,19 +7,46 @@ body:
     attributes:
       value: |
         **Thank you for reporting a bug!**  
-        Please follow these steps to capture useful info:
+        Please follow these steps to capture all necessary information:
 
-        ### How to gather the necessary information:
-        🌐 **Browser & Version:**  
-        - Chrome: Click the three dots → Help → About Google Chrome  
-        - Firefox: Click the three bars → Help → About Firefox  
-        - Edge: Click the three dots → Help and feedback → About Microsoft Edge
+        ### ✅ Before You Report:
+        1. Make sure you have the **latest versions**:
+           - [ComfyUI Github](https://github.com/comfyanonymous/ComfyUI/releases)
+           - [LayerForge Github](https://github.com/Azornes/Comfyui-LayerForge/releases) or via [ComfyUI Node Manager](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
+        2. Gather the required logs:
+        
+        ### 🔍 Enable Debug Logs (for **full** logs):
+        
+        #### 1. Edit `config.js` (Frontend Logs):
+        Path:
+        ```
+        ComfyUI/custom_nodes/Comfyui-LayerForge/js/config.js
+        ```
+        Find:
+        ```js
+        export const LOG_LEVEL = 'NONE';
+        ```
+        Change to:
+        ```js
+        export const LOG_LEVEL = 'DEBUG';
+        ```
+        
+        #### 2. Edit `config.py` (Backend Logs):
+        Path:
+        ```
+        ComfyUI/custom_nodes/Comfyui-LayerForge/python/config.py
+        ```
+        Find:
+        ```python
+        LOG_LEVEL = 'NONE'
+        ```
+        Change to:
+        ```python
+        LOG_LEVEL = 'DEBUG'
+        ```
 
-        🔗 **Where to find the latest versions of ComfyUI and LayerForge:**  
-        - [ComfyUI Github](https://github.com/comfyanonymous/ComfyUI/releases)
-        - [LayerForge Github](https://github.com/Azornes/Comfyui-LayerForge/releases/tag/v1.2.4) or [LayerForge from manager Comfyui](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
+        ➡️ **Restart ComfyUI** after applying these changes to activate full logging.
 
-        Make sure you have the latest versions before reporting an issue.
   - type: input
     id: environment
     attributes:
@@ -72,22 +99,35 @@ body:
       required: true
 
   - type: textarea
+    id: backend_logs
+    attributes:
+      label: ComfyUI (Backend) Logs
+      description: |
+        After enabling DEBUG logs, please:
+        1. Restart ComfyUI.
+        2. Reproduce the issue.
+        3. Copy-paste the newest **TEXT** logs from the terminal/console here.
+    validations:
+      required: true
+
+  - type: textarea
     id: console_logs
     attributes:
       label: Browser Console Logs
       description: |
-        **How to capture logs:**
-        - **Open console:**
+        After enabling DEBUG logs:
+        1. Open Developer Tools → Console.
           - Chrome/Edge (Win/Linux): `Ctrl+Shift+J`  
             Mac: `Cmd+Option+J`
           - Firefox (Win/Linux): `Ctrl+Shift+K`  
             Mac: `Cmd+Option+K`
           - Safari (Mac): enable **Develop** menu in Preferences → Advanced, then `Cmd+Option+C`
-        - **Clear console** before reproducing:
-          - Chrome/Edge: click “🚫 Clear console” or press `Ctrl+L` (Win/Linux) / `Cmd+K` (Mac)
-          - Firefox: `Ctrl+Shift+L` (newer) or `Ctrl+L` (older) (Win/Linux), Mac: `Cmd+K`
-          - Safari: click 🗑 icon or press `Cmd+K` / `Ctrl+L`
-        - Reproduce the issue and paste new logs here.
+        2. Clear console (before reproducing):
+           - Chrome/Edge: “🚫 Clear console” or `Ctrl+L` (Win/Linux) / `Cmd+K` (Mac).
+           - Firefox: `Ctrl+Shift+L` (newer) or `Ctrl+L` (older) (Win/Linux) / `Cmd+K` (Mac).
+           - Safari: 🗑 icon or `Cmd+K`.
+        3. Reproduce the issue.
+        4. Copy-paste the **TEXT** logs here (no screenshots).
     validations:
       required: true
 
@@ -95,4 +135,4 @@ body:
     attributes:
       value: |
         **Optional:** You can also **attach a screenshot or video** to demonstrate the issue visually.  
-        To add media, simply drag & drop or paste image/video files into this issue form. GitHub supports common image formats and MP4/GIF files.
+        Simply drag & drop or paste image/video files into this issue form. GitHub supports common image formats and MP4/GIF files.
