@@ -612,11 +612,11 @@ class BiRefNetMatting:
                                       "models")
 
     def load_model(self, model_path):
+        from json.decoder import JSONDecodeError
         try:
             if model_path not in self.model_cache:
                 full_model_path = os.path.join(self.base_path, "BiRefNet")
                 log_info(f"Loading BiRefNet model from {full_model_path}...")
-
                 try:
                     self.model = AutoModelForImageSegmentation.from_pretrained(
                         "ZhengPeng7/BiRefNet",
@@ -628,6 +628,13 @@ class BiRefNetMatting:
                         self.model = self.model.cuda()
                     self.model_cache[model_path] = self.model
                     log_info("Model loaded successfully from Hugging Face")
+                except JSONDecodeError as e:                    
+                    log_error(f"JSONDecodeError: Failed to load model from {full_model_path}. The model's config.json may be corrupted.")
+                    raise RuntimeError(
+                        "The matting model's configuration file (config.json) appears to be corrupted. "
+                        f"Please manually delete the directory '{full_model_path}' and try again. "
+                        "This will force a fresh download of the model."
+                    ) from e
                 except Exception as e:
                     log_error(f"Failed to load model from Hugging Face: {str(e)}")
                     # Re-raise with a more informative message
@@ -799,6 +806,12 @@ async def matting(request):
             "error": "Network Connection Error",
             "details": "Failed to download the matting model from Hugging Face. Please check your internet connection."
         }, status=400)
+    except RuntimeError as e:
+        log_error(f"Runtime error during matting: {e}")
+        return web.json_response({
+            "error": "Matting Model Error",
+            "details": str(e)
+        }, status=500)
     except Exception as e:
         log_exception(f"Error in matting endpoint: {e}")
         # Check for offline error message from Hugging Face

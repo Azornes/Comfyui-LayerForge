@@ -371,10 +371,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             canvas.saveState();
                         } catch (error: any) {
                             log.error("Matting error:", error);
-                            alert(`Matting process failed:\n\n${error.message}`);
+                            const errorMessage = error.message || "An unknown error occurred.";
+                            const errorDetails = error.stack || (error.details ? JSON.stringify(error.details, null, 2) : "No details available.");
+                            showErrorDialog(errorMessage, errorDetails);
                         } finally {
                             button.classList.remove('loading');
-                            button.removeChild(spinner);
+                            if (button.contains(spinner)) {
+                                button.removeChild(spinner);
+                            }
                         }
                     }
                 }),
@@ -732,6 +736,57 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         canvas: canvas,
         panel: controlPanel
     };
+}
+
+function showErrorDialog(message: string, details: string) {
+    const dialog = $el("div.painter-dialog.error-dialog", {
+        style: {
+            position: 'fixed',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            zIndex: '9999',
+            padding: '20px',
+            background: '#282828',
+            border: '1px solid #ff4444',
+            borderRadius: '8px',
+            minWidth: '400px',
+            maxWidth: '80vw',
+        }
+    }, [
+        $el("h3", { textContent: "Matting Error", style: { color: "#ff4444", marginTop: "0" } }),
+        $el("p", { textContent: message, style: { color: "white" } }),
+        $el("pre.error-details", {
+            textContent: details,
+            style: {
+                background: "#1e1e1e",
+                border: "1px solid #444",
+                padding: "10px",
+                maxHeight: "300px",
+                overflowY: "auto",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+                color: "#ccc"
+            }
+        }),
+        $el("div.dialog-buttons", { style: { textAlign: "right", marginTop: "20px" } }, [
+            $el("button", {
+                textContent: "Copy Details",
+                onclick: () => {
+                    navigator.clipboard.writeText(details)
+                        .then(() => alert("Error details copied to clipboard!"))
+                        .catch(err => alert("Failed to copy details: " + err));
+                }
+            }),
+            $el("button", {
+                textContent: "Close",
+                style: { marginLeft: "10px" },
+                onclick: () => document.body.removeChild(dialog)
+            })
+        ])
+    ]);
+
+    document.body.appendChild(dialog);
 }
 
 const canvasNodeInstances = new Map<number, CanvasWidget>();
