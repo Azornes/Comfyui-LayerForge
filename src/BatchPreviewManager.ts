@@ -1,7 +1,31 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./utils/LoggerUtils.js";
+import type { Canvas } from './Canvas';
+import type { Layer, Point } from './types';
+
 const log = createModuleLogger('BatchPreviewManager');
+
+interface GenerationArea {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
 export class BatchPreviewManager {
-    constructor(canvas, initialPosition = { x: 0, y: 0 }, generationArea = null) {
+    public active: boolean;
+    private canvas: Canvas;
+    private counterElement: HTMLSpanElement | null;
+    private currentIndex: number;
+    private element: HTMLDivElement | null;
+    public generationArea: GenerationArea | null;
+    private isDragging: boolean;
+    private layers: Layer[];
+    private maskWasVisible: boolean;
+    private uiInitialized: boolean;
+    private worldX: number;
+    private worldY: number;
+
+    constructor(canvas: Canvas, initialPosition: Point = { x: 0, y: 0 }, generationArea: GenerationArea | null = null) {
         this.canvas = canvas;
         this.active = false;
         this.layers = [];
@@ -10,22 +34,27 @@ export class BatchPreviewManager {
         this.counterElement = null;
         this.uiInitialized = false;
         this.maskWasVisible = false;
+
         this.worldX = initialPosition.x;
         this.worldY = initialPosition.y;
         this.isDragging = false;
         this.generationArea = generationArea;
     }
-    updateScreenPosition(viewport) {
-        if (!this.active || !this.element)
-            return;
+
+    updateScreenPosition(viewport: { x: number, y: number, zoom: number }): void {
+        if (!this.active || !this.element) return;
+
         const screenX = (this.worldX - viewport.x) * viewport.zoom;
         const screenY = (this.worldY - viewport.y) * viewport.zoom;
+
         const scale = 1;
+
         this.element.style.transform = `translate(${screenX}px, ${screenY}px) scale(${scale})`;
     }
-    _createUI() {
-        if (this.uiInitialized)
-            return;
+
+    private _createUI(): void {
+        if (this.uiInitialized) return;
+        
         this.element = document.createElement('div');
         this.element.id = 'layerforge-batch-preview';
         this.element.style.cssText = `
@@ -46,54 +75,65 @@ export class BatchPreviewManager {
             cursor: move;
             user-select: none;
         `;
-        this.element.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'BUTTON')
-                return;
+
+        this.element.addEventListener('mousedown', (e: MouseEvent) => {
+            if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+
             e.preventDefault();
             e.stopPropagation();
+
             this.isDragging = true;
-            const handleMouseMove = (moveEvent) => {
+            
+            const handleMouseMove = (moveEvent: MouseEvent) => {
                 if (this.isDragging) {
                     const deltaX = moveEvent.movementX / this.canvas.viewport.zoom;
                     const deltaY = moveEvent.movementY / this.canvas.viewport.zoom;
+
                     this.worldX += deltaX;
                     this.worldY += deltaY;
+                    
                     // The render loop will handle updating the screen position, but we need to trigger it.
                     this.canvas.render();
                 }
             };
+
             const handleMouseUp = () => {
                 this.isDragging = false;
                 document.removeEventListener('mousemove', handleMouseMove);
                 document.removeEventListener('mouseup', handleMouseUp);
             };
+
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
         });
+
         const prevButton = this._createButton('&#9664;', 'Previous'); // Left arrow
         const nextButton = this._createButton('&#9654;', 'Next'); // Right arrow
         const confirmButton = this._createButton('&#10004;', 'Confirm'); // Checkmark
         const cancelButton = this._createButton('&#10006;', 'Cancel All');
         const closeButton = this._createButton('&#10162;', 'Close');
+
         this.counterElement = document.createElement('span');
         this.counterElement.style.minWidth = '40px';
         this.counterElement.style.textAlign = 'center';
         this.counterElement.style.fontWeight = 'bold';
+
         prevButton.onclick = () => this.navigate(-1);
         nextButton.onclick = () => this.navigate(1);
         confirmButton.onclick = () => this.confirm();
         cancelButton.onclick = () => this.cancelAndRemoveAll();
         closeButton.onclick = () => this.hide();
+
         this.element.append(prevButton, this.counterElement, nextButton, confirmButton, cancelButton, closeButton);
         if (this.canvas.canvas.parentElement) {
             this.canvas.canvas.parentElement.appendChild(this.element);
-        }
-        else {
+        } else {
             log.error("Could not find parent node to attach batch preview UI.");
         }
         this.uiInitialized = true;
     }
-    _createButton(innerHTML, title) {
+
+    private _createButton(innerHTML: string, title: string): HTMLButtonElement {
         const button = document.createElement('button');
         button.innerHTML = innerHTML;
         button.title = title;
@@ -114,11 +154,14 @@ export class BatchPreviewManager {
         button.onmouseout = () => button.style.background = '#555';
         return button;
     }
-    show(layers) {
+
+    show(layers: Layer[]): void {
         if (!layers || layers.length <= 1) {
             return;
         }
+
         this._createUI();
+
         // Auto-hide mask logic
         this.maskWasVisible = this.canvas.maskTool.isOverlayVisible;
         if (this.maskWasVisible) {
@@ -130,32 +173,41 @@ export class BatchPreviewManager {
             }
             this.canvas.render();
         }
+
         log.info(`Showing batch preview for ${layers.length} layers.`);
         this.layers = layers;
         this.currentIndex = 0;
+        
         if (this.element) {
             this.element.style.display = 'flex';
         }
         this.active = true;
+
         if (this.element) {
             const menuWidthInWorld = this.element.offsetWidth / this.canvas.viewport.zoom;
             const paddingInWorld = 20 / this.canvas.viewport.zoom;
+
             this.worldX -= menuWidthInWorld / 2;
             this.worldY += paddingInWorld;
         }
+
         this._update();
     }
-    hide() {
+
+    hide(): void {
         log.info('Hiding batch preview.');
         if (this.element) {
             this.element.remove();
         }
         this.active = false;
+        
         const index = this.canvas.batchPreviewManagers.indexOf(this);
         if (index > -1) {
             this.canvas.batchPreviewManagers.splice(index, 1);
         }
+
         this.canvas.render();
+
         if (this.maskWasVisible && !this.canvas.maskTool.isOverlayVisible) {
             this.canvas.maskTool.toggleOverlayVisibility();
             const toggleBtn = document.getElementById(`toggle-mask-btn-${String(this.canvas.node.id)}`);
@@ -165,48 +217,60 @@ export class BatchPreviewManager {
             }
         }
         this.maskWasVisible = false;
-        this.canvas.layers.forEach((l) => l.visible = true);
+
+        this.canvas.layers.forEach((l: Layer) => (l as any).visible = true);
         this.canvas.render();
     }
-    navigate(direction) {
+
+    navigate(direction: number): void {
         this.currentIndex += direction;
         if (this.currentIndex < 0) {
-            this.currentIndex = this.layers.length - 1;
-        }
-        else if (this.currentIndex >= this.layers.length) {
+        this.currentIndex = this.layers.length - 1;
+        } else if (this.currentIndex >= this.layers.length) {
             this.currentIndex = 0;
         }
         this._update();
     }
-    confirm() {
+
+    confirm(): void {
         const layerToKeep = this.layers[this.currentIndex];
         log.info(`Confirming selection: Keeping layer ${layerToKeep.id}.`);
-        const layersToDelete = this.layers.filter((l) => l.id !== layerToKeep.id);
-        const layerIdsToDelete = layersToDelete.map((l) => l.id);
+
+        const layersToDelete = this.layers.filter((l: Layer) => l.id !== layerToKeep.id);
+        const layerIdsToDelete = layersToDelete.map((l: Layer) => l.id);
+
         this.canvas.removeLayersByIds(layerIdsToDelete);
         log.info(`Deleted ${layersToDelete.length} other layers.`);
+
         this.hide();
     }
-    cancelAndRemoveAll() {
+
+    cancelAndRemoveAll(): void {
         log.info('Cancel clicked. Removing all new layers.');
-        const layerIdsToDelete = this.layers.map((l) => l.id);
+
+        const layerIdsToDelete = this.layers.map((l: Layer) => l.id);
         this.canvas.removeLayersByIds(layerIdsToDelete);
         log.info(`Deleted all ${layerIdsToDelete.length} new layers.`);
+
         this.hide();
     }
-    _update() {
+
+    private _update(): void {
         if (this.counterElement) {
             this.counterElement.textContent = `${this.currentIndex + 1} / ${this.layers.length}`;
         }
         this._focusOnLayer(this.layers[this.currentIndex]);
     }
-    _focusOnLayer(layer) {
-        if (!layer)
-            return;
+
+    private _focusOnLayer(layer: Layer): void {
+        if (!layer) return;
         log.debug(`Focusing on layer ${layer.id}`);
+
         // Move the selected layer to the top of the layer stack
         this.canvas.canvasLayers.moveLayers([layer], { toIndex: 0 });
+        
         this.canvas.updateSelection([layer]);
+        
         // Render is called by moveLayers, but we call it again to be safe
         this.canvas.render();
     }

@@ -1,7 +1,19 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import type { Canvas } from './Canvas';
+import type { Layer } from './types';
+
 const log = createModuleLogger('CanvasLayersPanel');
+
 export class CanvasLayersPanel {
-    constructor(canvas) {
+    private canvas: Canvas;
+    private container: HTMLElement | null;
+    private layersContainer: HTMLElement | null;
+    private draggedElements: Layer[];
+    private dragInsertionLine: HTMLElement | null;
+    private isMultiSelecting: boolean;
+    private lastSelectedIndex: number;
+
+    constructor(canvas: Canvas) {
         this.canvas = canvas;
         this.container = null;
         this.layersContainer = null;
@@ -9,14 +21,17 @@ export class CanvasLayersPanel {
         this.dragInsertionLine = null;
         this.isMultiSelecting = false;
         this.lastSelectedIndex = -1;
+
         this.handleLayerClick = this.handleLayerClick.bind(this);
         this.handleDragStart = this.handleDragStart.bind(this);
         this.handleDragOver = this.handleDragOver.bind(this);
         this.handleDragEnd = this.handleDragEnd.bind(this);
         this.handleDrop = this.handleDrop.bind(this);
+
         log.info('CanvasLayersPanel initialized');
     }
-    createPanelStructure() {
+
+    createPanelStructure(): HTMLElement {
         this.container = document.createElement('div');
         this.container.className = 'layers-panel';
         this.container.tabIndex = 0; // Umożliwia fokus na panelu
@@ -31,26 +46,33 @@ export class CanvasLayersPanel {
                 <!-- Lista warstw będzie renderowana tutaj -->
             </div>
         `;
-        this.layersContainer = this.container.querySelector('#layers-container');
+
+        this.layersContainer = this.container.querySelector<HTMLElement>('#layers-container');
+
         this.injectStyles();
+        
         // Setup event listeners dla przycisków
         this.setupControlButtons();
+
         // Dodaj listener dla klawiatury, aby usuwanie działało z panelu
-        this.container.addEventListener('keydown', (e) => {
+        this.container.addEventListener('keydown', (e: KeyboardEvent) => {
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();
                 this.deleteSelectedLayers();
             }
         });
+
         log.debug('Panel structure created');
         return this.container;
     }
-    injectStyles() {
+
+    injectStyles(): void {
         const styleId = 'layers-panel-styles';
         if (document.getElementById(styleId)) {
             return; // Style już istnieją
         }
+
         const style = document.createElement('style');
         style.id = styleId;
         style.textContent = `
@@ -232,290 +254,352 @@ export class CanvasLayersPanel {
                 background: #5a5a5a;
             }
         `;
+        
         document.head.appendChild(style);
         log.debug('Styles injected');
     }
-    setupControlButtons() {
-        if (!this.container)
-            return;
+
+    setupControlButtons(): void {
+        if (!this.container) return;
         const deleteBtn = this.container.querySelector('#delete-layer-btn');
+
         deleteBtn?.addEventListener('click', () => {
             log.info('Delete layer button clicked');
             this.deleteSelectedLayers();
         });
     }
-    renderLayers() {
+
+    renderLayers(): void {
         if (!this.layersContainer) {
             log.warn('Layers container not initialized');
             return;
         }
+
         // Wyczyść istniejącą zawartość
         this.layersContainer.innerHTML = '';
+
         // Usuń linię wstawiania jeśli istnieje
         this.removeDragInsertionLine();
+
         // Sortuj warstwy według zIndex (od najwyższej do najniższej)
-        const sortedLayers = [...this.canvas.layers].sort((a, b) => b.zIndex - a.zIndex);
-        sortedLayers.forEach((layer, index) => {
+        const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
+
+        sortedLayers.forEach((layer: Layer, index: number) => {
             const layerElement = this.createLayerElement(layer, index);
-            if (this.layersContainer)
+            if(this.layersContainer)
                 this.layersContainer.appendChild(layerElement);
         });
+
         log.debug(`Rendered ${sortedLayers.length} layers`);
     }
-    createLayerElement(layer, index) {
+
+    createLayerElement(layer: Layer, index: number): HTMLElement {
         const layerRow = document.createElement('div');
         layerRow.className = 'layer-row';
         layerRow.draggable = true;
         layerRow.dataset.layerIndex = String(index);
+        
         const isSelected = this.canvas.canvasSelection.selectedLayers.includes(layer);
         if (isSelected) {
             layerRow.classList.add('selected');
         }
+
         // Ustawienie domyślnych właściwości jeśli nie istnieją
         if (!layer.name) {
             layer.name = this.ensureUniqueName(`Layer ${layer.zIndex + 1}`, layer);
-        }
-        else {
+        } else {
             // Sprawdź unikalność istniejącej nazwy (np. przy duplikowaniu)
             layer.name = this.ensureUniqueName(layer.name, layer);
         }
+
         layerRow.innerHTML = `
             <div class="layer-thumbnail" data-layer-index="${index}"></div>
             <span class="layer-name" data-layer-index="${index}">${layer.name}</span>
         `;
-        const thumbnailContainer = layerRow.querySelector('.layer-thumbnail');
+
+        const thumbnailContainer = layerRow.querySelector<HTMLElement>('.layer-thumbnail');
         if (thumbnailContainer) {
             this.generateThumbnail(layer, thumbnailContainer);
         }
+
         this.setupLayerEventListeners(layerRow, layer, index);
+
         return layerRow;
     }
-    generateThumbnail(layer, thumbnailContainer) {
+
+    generateThumbnail(layer: Layer, thumbnailContainer: HTMLElement): void {
         if (!layer.image) {
             thumbnailContainer.style.background = '#4a4a4a';
             return;
         }
+
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx)
-            return;
+        if (!ctx) return;
         canvas.width = 48;
         canvas.height = 48;
+
         const scale = Math.min(48 / layer.image.width, 48 / layer.image.height);
         const scaledWidth = layer.image.width * scale;
         const scaledHeight = layer.image.height * scale;
+        
         // Wycentruj obraz
         const x = (48 - scaledWidth) / 2;
         const y = (48 - scaledHeight) / 2;
+
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(layer.image, x, y, scaledWidth, scaledHeight);
+
         thumbnailContainer.appendChild(canvas);
     }
-    setupLayerEventListeners(layerRow, layer, index) {
-        layerRow.addEventListener('mousedown', (e) => {
-            const nameElement = layerRow.querySelector('.layer-name');
+
+    setupLayerEventListeners(layerRow: HTMLElement, layer: Layer, index: number): void {
+        layerRow.addEventListener('mousedown', (e: MouseEvent) => {
+            const nameElement = layerRow.querySelector<HTMLElement>('.layer-name');
             if (nameElement && nameElement.classList.contains('editing')) {
                 return;
             }
             this.handleLayerClick(e, layer, index);
         });
-        layerRow.addEventListener('dblclick', (e) => {
+
+        layerRow.addEventListener('dblclick', (e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
-            const nameElement = layerRow.querySelector('.layer-name');
+            const nameElement = layerRow.querySelector<HTMLElement>('.layer-name');
             if (nameElement) {
                 this.startEditingLayerName(nameElement, layer);
             }
         });
-        layerRow.addEventListener('dragstart', (e) => this.handleDragStart(e, layer, index));
+
+        layerRow.addEventListener('dragstart', (e: DragEvent) => this.handleDragStart(e, layer, index));
         layerRow.addEventListener('dragover', this.handleDragOver.bind(this));
         layerRow.addEventListener('dragend', this.handleDragEnd.bind(this));
-        layerRow.addEventListener('drop', (e) => this.handleDrop(e, index));
+        layerRow.addEventListener('drop', (e: DragEvent) => this.handleDrop(e, index));
     }
-    handleLayerClick(e, layer, index) {
+
+    handleLayerClick(e: MouseEvent, layer: Layer, index: number): void {
         const isCtrlPressed = e.ctrlKey || e.metaKey;
         const isShiftPressed = e.shiftKey;
+
         // Aktualizuj wewnętrzny stan zaznaczenia w obiekcie canvas
         // Ta funkcja NIE powinna już wywoływać onSelectionChanged w panelu.
         this.canvas.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
+        
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
-        this.updateSelectionAppearance();
+        this.updateSelectionAppearance(); 
+
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
-    startEditingLayerName(nameElement, layer) {
+
+
+    startEditingLayerName(nameElement: HTMLElement, layer: Layer): void {
         const currentName = layer.name;
         nameElement.classList.add('editing');
+        
         const input = document.createElement('input');
         input.type = 'text';
         input.value = currentName;
         input.style.width = '100%';
+        
         nameElement.innerHTML = '';
         nameElement.appendChild(input);
+        
         input.focus();
         input.select();
+
         const finishEditing = () => {
             let newName = input.value.trim() || `Layer ${layer.zIndex + 1}`;
             newName = this.ensureUniqueName(newName, layer);
             layer.name = newName;
             nameElement.classList.remove('editing');
             nameElement.textContent = newName;
+            
             this.canvas.saveState();
             log.info(`Layer renamed to: ${newName}`);
         };
+
         input.addEventListener('blur', finishEditing);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 finishEditing();
-            }
-            else if (e.key === 'Escape') {
+            } else if (e.key === 'Escape') {
                 nameElement.classList.remove('editing');
                 nameElement.textContent = currentName;
             }
         });
     }
-    ensureUniqueName(proposedName, currentLayer) {
+
+
+    ensureUniqueName(proposedName: string, currentLayer: Layer): string {
         const existingNames = this.canvas.layers
-            .filter((layer) => layer !== currentLayer)
-            .map((layer) => layer.name);
+            .filter((layer: Layer) => layer !== currentLayer)
+            .map((layer: Layer) => layer.name);
+
         if (!existingNames.includes(proposedName)) {
             return proposedName;
         }
+        
         // Sprawdź czy nazwa już ma numerację w nawiasach
         const match = proposedName.match(/^(.+?)\s*\((\d+)\)$/);
         let baseName, startNumber;
+        
         if (match) {
             baseName = match[1].trim();
             startNumber = parseInt(match[2]) + 1;
-        }
-        else {
+        } else {
             baseName = proposedName;
             startNumber = 1;
         }
+        
         // Znajdź pierwszą dostępną numerację
         let counter = startNumber;
         let uniqueName;
+        
         do {
             uniqueName = `${baseName} (${counter})`;
             counter++;
         } while (existingNames.includes(uniqueName));
+        
         return uniqueName;
     }
-    deleteSelectedLayers() {
+
+    deleteSelectedLayers(): void {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) {
             log.debug('No layers selected for deletion');
             return;
         }
+
         log.info(`Deleting ${this.canvas.canvasSelection.selectedLayers.length} selected layers`);
         this.canvas.removeSelectedLayers();
         this.renderLayers();
     }
-    handleDragStart(e, layer, index) {
-        if (!this.layersContainer || !e.dataTransfer)
-            return;
+
+    handleDragStart(e: DragEvent, layer: Layer, index: number): void {
+        if (!this.layersContainer || !e.dataTransfer) return;
         const editingElement = this.layersContainer.querySelector('.layer-name.editing');
         if (editingElement) {
             e.preventDefault();
             return;
         }
+
         // Jeśli przeciągana warstwa nie jest zaznaczona, zaznacz ją
         if (!this.canvas.canvasSelection.selectedLayers.includes(layer)) {
             this.canvas.updateSelection([layer]);
             this.renderLayers();
         }
+
         this.draggedElements = [...this.canvas.canvasSelection.selectedLayers];
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
-        this.layersContainer.querySelectorAll('.layer-row').forEach((row, idx) => {
-            const sortedLayers = [...this.canvas.layers].sort((a, b) => b.zIndex - a.zIndex);
+
+        this.layersContainer.querySelectorAll('.layer-row').forEach((row: Element, idx: number) => {
+            const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
             if (this.draggedElements.includes(sortedLayers[idx])) {
                 row.classList.add('dragging');
             }
         });
+
         log.debug(`Started dragging ${this.draggedElements.length} layers`);
     }
-    handleDragOver(e) {
+
+    handleDragOver(e: DragEvent): void {
         e.preventDefault();
-        if (e.dataTransfer)
-            e.dataTransfer.dropEffect = 'move';
-        const layerRow = e.currentTarget;
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+
+        const layerRow = e.currentTarget as HTMLElement;
         const rect = layerRow.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const isUpperHalf = e.clientY < midpoint;
+
         this.showDragInsertionLine(layerRow, isUpperHalf);
     }
-    showDragInsertionLine(targetRow, isUpperHalf) {
+
+    showDragInsertionLine(targetRow: HTMLElement, isUpperHalf: boolean): void {
         this.removeDragInsertionLine();
+
         const line = document.createElement('div');
         line.className = 'drag-insertion-line';
+        
         if (isUpperHalf) {
             line.style.top = '-1px';
-        }
-        else {
+        } else {
             line.style.bottom = '-1px';
         }
+
         targetRow.style.position = 'relative';
         targetRow.appendChild(line);
         this.dragInsertionLine = line;
     }
-    removeDragInsertionLine() {
+
+    removeDragInsertionLine(): void {
         if (this.dragInsertionLine) {
             this.dragInsertionLine.remove();
             this.dragInsertionLine = null;
         }
     }
-    handleDrop(e, targetIndex) {
+
+    handleDrop(e: DragEvent, targetIndex: number): void {
         e.preventDefault();
         this.removeDragInsertionLine();
-        if (this.draggedElements.length === 0 || !(e.currentTarget instanceof HTMLElement))
-            return;
+
+        if (this.draggedElements.length === 0 || !(e.currentTarget instanceof HTMLElement)) return;
+
         const rect = e.currentTarget.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const isUpperHalf = e.clientY < midpoint;
+        
         // Oblicz docelowy indeks
         let insertIndex = targetIndex;
         if (!isUpperHalf) {
             insertIndex = targetIndex + 1;
         }
+
         // Użyj nowej, centralnej funkcji do przesuwania warstw
         this.canvas.canvasLayers.moveLayers(this.draggedElements, { toIndex: insertIndex });
+        
         log.info(`Dropped ${this.draggedElements.length} layers at position ${insertIndex}`);
     }
-    handleDragEnd(e) {
+
+    handleDragEnd(e: DragEvent): void {
         this.removeDragInsertionLine();
-        if (!this.layersContainer)
-            return;
-        this.layersContainer.querySelectorAll('.layer-row').forEach((row) => {
+        if (!this.layersContainer) return;
+        this.layersContainer.querySelectorAll('.layer-row').forEach((row: Element) => {
             row.classList.remove('dragging');
         });
+
         this.draggedElements = [];
     }
-    onLayersChanged() {
+
+
+    onLayersChanged(): void {
         this.renderLayers();
     }
-    updateSelectionAppearance() {
-        if (!this.layersContainer)
-            return;
-        const sortedLayers = [...this.canvas.layers].sort((a, b) => b.zIndex - a.zIndex);
+
+    updateSelectionAppearance(): void {
+        if (!this.layersContainer) return;
+        const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
         const layerRows = this.layersContainer.querySelectorAll('.layer-row');
-        layerRows.forEach((row, index) => {
+
+        layerRows.forEach((row: Element, index: number) => {
             const layer = sortedLayers[index];
             if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
                 row.classList.add('selected');
-            }
-            else {
+            } else {
                 row.classList.remove('selected');
             }
         });
     }
+
     /**
      * Aktualizuje panel gdy zmieni się zaznaczenie (wywoływane z zewnątrz).
      * Zamiast pełnego renderowania, tylko aktualizujemy wygląd.
      */
-    onSelectionChanged() {
+    onSelectionChanged(): void {
         this.updateSelectionAppearance();
     }
-    destroy() {
+
+    destroy(): void {
         if (this.container && this.container.parentNode) {
             this.container.parentNode.removeChild(this.container);
         }
@@ -523,6 +607,7 @@ export class CanvasLayersPanel {
         this.layersContainer = null;
         this.draggedElements = [];
         this.removeDragInsertionLine();
+        
         log.info('CanvasLayersPanel destroyed');
     }
 }
