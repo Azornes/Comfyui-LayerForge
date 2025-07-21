@@ -35,7 +35,7 @@ jobs:
         run: |
           echo "final_tag=v${{ steps.version.outputs.base_version }}" >> $GITHUB_OUTPUT
 
-      # ZMIANA: Zamiast tylko ostatniego commita, pobierz historię commitów od ostatniego tagu
+      # ZMIANA: Poprawione obsługa multi-line output (z delimiterem EOF, bez zastępowania \n)
       - name: Get commit history since last tag
         id: commit_history
         run: |
@@ -52,15 +52,15 @@ jobs:
           # Pobierz listę commitów (tylko subject/tytuł, format: - Commit message)
           HISTORY=$(git log --pretty=format:"- %s" $RANGE)
           
-          # Zastąp nowe linie na \\n, aby dobrze wyglądało w output
-          HISTORY=${HISTORY//$'\n'/\\n}
-          
           # Jeśli brak commitów, ustaw domyślną wiadomość
           if [ -z "$HISTORY" ]; then
             HISTORY="No changes since last release."
           fi
           
-          echo "commit_history=$HISTORY" >> $GITHUB_OUTPUT
+          # Ustaw multi-line output z delimiterem (zachowuje oryginalne nowe linie)
+          echo "commit_history<<EOF" >> $GITHUB_OUTPUT
+          echo "$HISTORY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
