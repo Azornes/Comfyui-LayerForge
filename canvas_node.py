@@ -175,8 +175,9 @@ class CanvasNode:
             "required": {
                 "fit_on_add": ("BOOLEAN", {"default": False, "label_on": "Fit on Add/Paste", "label_off": "Default Behavior"}),
                 "show_preview": ("BOOLEAN", {"default": False, "label_on": "Show Preview", "label_off": "Hide Preview"}),
-                "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1, "hidden": True}),
-                "node_id": ("STRING", {"default": "0", "hidden": True}),
+                "auto_refresh_after_generation": ("BOOLEAN", {"default": False, "label_on": "True", "label_off": "False"}),
+                "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1}),
+                "node_id": ("STRING", {"default": "0"}),
             },
             "hidden": {
                 "prompt": ("PROMPT",),
@@ -238,7 +239,7 @@ class CanvasNode:
 
     _processing_lock = threading.Lock()
 
-    def process_canvas_image(self, fit_on_add, show_preview, trigger, node_id, prompt=None, unique_id=None):
+    def process_canvas_image(self, fit_on_add, show_preview, auto_refresh_after_generation, trigger, node_id, prompt=None, unique_id=None):
         
         try:
 

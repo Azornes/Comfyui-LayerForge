@@ -212,7 +212,7 @@ export class Canvas {
         // Stwórz opóźnioną wersję funkcji zapisu stanu
         this.requestSaveState = debounce(() => this.saveState(), 500);
 
-        this._addAutoRefreshToggle();
+        this._setupAutoRefreshHandlers();
 
         log.debug('Canvas modules initialized successfully');
     }
@@ -411,12 +411,17 @@ export class Canvas {
         return this.canvasIO.importLatestImage();
     }
 
-    _addAutoRefreshToggle() {
-        let autoRefreshEnabled = false;
+    _setupAutoRefreshHandlers() {
         let lastExecutionStartTime = 0;
 
+        // Helper function to get auto-refresh value from node widget
+        const getAutoRefreshValue = (): boolean => {
+            const widget = this.node.widgets.find((w: any) => w.name === 'auto_refresh_after_generation');
+            return widget ? widget.value : false;
+        };
+
         const handleExecutionStart = () => {
-            if (autoRefreshEnabled) {
+            if (getAutoRefreshValue()) {
                 lastExecutionStartTime = Date.now();
                 // Store a snapshot of the context for the upcoming batch
                 this.pendingBatchContext = {
@@ -439,7 +444,7 @@ export class Canvas {
         };
 
         const handleExecutionSuccess = async () => {
-            if (autoRefreshEnabled) {
+            if (getAutoRefreshValue()) {
                 log.info('Auto-refresh triggered, importing latest images.');
 
                 if (!this.pendingBatchContext) {
@@ -470,18 +475,6 @@ export class Canvas {
             }
         };
 
-        this.node.addWidget(
-            'toggle',
-            'Auto-refresh after generation',
-            false,
-            (value: boolean) => {
-                autoRefreshEnabled = value;
-                log.debug('Auto-refresh toggled:', value);
-            }, {
-                serialize: false
-            }
-        );
-
         api.addEventListener('execution_start', handleExecutionStart);
         api.addEventListener('execution_success', handleExecutionSuccess);
 
@@ -490,6 +483,8 @@ export class Canvas {
             api.removeEventListener('execution_start', handleExecutionStart);
             api.removeEventListener('execution_success', handleExecutionSuccess);
         });
+
+        log.debug('Auto-refresh handlers setup complete, reading from node widget: auto_refresh_after_generation');
     }
 
 
