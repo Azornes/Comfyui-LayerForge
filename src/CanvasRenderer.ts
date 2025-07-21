@@ -71,6 +71,13 @@ export class CanvasRenderer {
             const centerY = layer.y + layer.height / 2;
             ctx.translate(centerX, centerY);
             ctx.rotate(layer.rotation * Math.PI / 180);
+
+            const scaleH = layer.flipH ? -1 : 1;
+            const scaleV = layer.flipV ? -1 : 1;
+            if (layer.flipH || layer.flipV) {
+                ctx.scale(scaleH, scaleV);
+            }
+            
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(

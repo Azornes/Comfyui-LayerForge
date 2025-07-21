@@ -351,58 +351,18 @@ export class CanvasLayers {
 
     async mirrorHorizontal(): Promise<void> {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
-
-        const promises = this.canvas.canvasSelection.selectedLayers.map((layer: Layer) => {
-            return new Promise<void>(resolve => {
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                if (!tempCtx) return;
-                tempCanvas.width = layer.image.width;
-                tempCanvas.height = layer.image.height;
-
-                tempCtx.translate(tempCanvas.width, 0);
-                tempCtx.scale(-1, 1);
-                tempCtx.drawImage(layer.image, 0, 0);
-
-                const newImage = new Image();
-                newImage.onload = () => {
-                    layer.image = newImage;
-                    resolve();
-                };
-                newImage.src = tempCanvas.toDataURL();
-            });
+        this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
+            layer.flipH = !layer.flipH;
         });
-
-        await Promise.all(promises);
         this.canvas.render();
         this.canvas.requestSaveState();
     }
 
     async mirrorVertical(): Promise<void> {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
-
-        const promises = this.canvas.canvasSelection.selectedLayers.map((layer: Layer) => {
-            return new Promise<void>(resolve => {
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                if (!tempCtx) return;
-                tempCanvas.width = layer.image.width;
-                tempCanvas.height = layer.image.height;
-
-                tempCtx.translate(0, tempCanvas.height);
-                tempCtx.scale(1, -1);
-                tempCtx.drawImage(layer.image, 0, 0);
-
-                const newImage = new Image();
-                newImage.onload = () => {
-                    layer.image = newImage;
-                    resolve();
-                };
-                newImage.src = tempCanvas.toDataURL();
-            });
+        this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
+            layer.flipV = !layer.flipV;
         });
-
-        await Promise.all(promises);
         this.canvas.render();
         this.canvas.requestSaveState();
     }
@@ -896,6 +856,13 @@ export class CanvasLayers {
                 const centerY = layer.y + layer.height / 2;
                 tempCtx.translate(centerX, centerY);
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
+                
+                const scaleH = layer.flipH ? -1 : 1;
+                const scaleV = layer.flipV ? -1 : 1;
+                if (layer.flipH || layer.flipV) {
+                    tempCtx.scale(scaleH, scaleV);
+                }
+
                 tempCtx.drawImage(
                     layer.image,
                     -layer.width / 2, -layer.height / 2,
@@ -979,6 +946,13 @@ export class CanvasLayers {
                 const centerY = layer.y + layer.height / 2;
                 tempCtx.translate(centerX, centerY);
                 tempCtx.rotate(layer.rotation * Math.PI / 180);
+
+                const scaleH = layer.flipH ? -1 : 1;
+                const scaleV = layer.flipV ? -1 : 1;
+                if (layer.flipH || layer.flipV) {
+                    tempCtx.scale(scaleH, scaleV);
+                }
+                
                 tempCtx.drawImage(
                     layer.image,
                     -layer.width / 2, -layer.height / 2,

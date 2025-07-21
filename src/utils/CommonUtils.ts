@@ -136,7 +136,9 @@ export function getStateSignature(layers: Layer[]): string {
             rotation: Math.round((layer.rotation || 0) * 100) / 100,
             zIndex: layer.zIndex,
             blendMode: layer.blendMode || 'normal',
-            opacity: layer.opacity !== undefined ? Math.round(layer.opacity * 100) / 100 : 1
+            opacity: layer.opacity !== undefined ? Math.round(layer.opacity * 100) / 100 : 1,
+            flipH: !!layer.flipH,
+            flipV: !!layer.flipV
         };
 
         if (layer.imageId) {

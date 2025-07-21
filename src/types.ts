@@ -17,6 +17,8 @@ export interface Layer {
     blendMode: string;
     opacity: number;
     mask?: Float32Array;
+    flipH?: boolean;
+    flipV?: boolean;
 }
 
 export interface ComfyNode {
