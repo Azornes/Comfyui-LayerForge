@@ -132,7 +132,7 @@ export class Canvas {
             viewport: this.viewport
         });
 
-        this.setPreviewVisibility(false);
+        this.previewVisible = false;
     }
 
 

@@ -730,6 +730,11 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                 node.setDirtyCanvas(true, true);
             }
         };
+
+        // Inicjalizuj stan preview na podstawie aktualnej wartości widget'u
+        if (canvas && canvas.setPreviewVisibility) {
+            canvas.setPreviewVisibility(showPreviewWidget.value);
+        }
     }
 
     return {

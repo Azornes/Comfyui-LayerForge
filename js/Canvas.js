@@ -83,7 +83,7 @@ export class Canvas {
             dimensions: { width: this.width, height: this.height },
             viewport: this.viewport
         });
-        this.setPreviewVisibility(false);
+        this.previewVisible = false;
     }
     async waitForWidget(name, node, interval = 100, timeout = 20000) {
         const startTime = Date.now();

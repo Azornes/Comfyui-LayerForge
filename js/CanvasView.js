@@ -667,6 +667,10 @@ async function createCanvasWidget(node, widget, app) {
                 node.setDirtyCanvas(true, true);
             }
         };
+        // Inicjalizuj stan preview na podstawie aktualnej wartości widget'u
+        if (canvas && canvas.setPreviewVisibility) {
+            canvas.setPreviewVisibility(showPreviewWidget.value);
+        }
     }
     return {
         canvas: canvas,
