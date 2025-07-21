@@ -349,6 +349,46 @@ export class CanvasLayers {
         return null;
     }
 
+    private _drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, options: { offsetX?: number, offsetY?: number } = {}): void {
+        if (!layer.image) return;
+
+        const { offsetX = 0, offsetY = 0 } = options;
+
+        ctx.save();
+        ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+
+        const centerX = layer.x + layer.width / 2 - offsetX;
+        const centerY = layer.y + layer.height / 2 - offsetY;
+
+        ctx.translate(centerX, centerY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+
+        const scaleH = layer.flipH ? -1 : 1;
+        const scaleV = layer.flipV ? -1 : 1;
+        if (layer.flipH || layer.flipV) {
+            ctx.scale(scaleH, scaleV);
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(
+            layer.image,
+            -layer.width / 2, -layer.height / 2,
+            layer.width, layer.height
+        );
+        ctx.restore();
+    }
+
+    private _drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
+        const sortedLayers = [...layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
+        sortedLayers.forEach(layer => this._drawLayer(ctx, layer, options));
+    }
+
+    public drawLayersToContext(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
+        this._drawLayers(ctx, layers, options);
+    }
+
     async mirrorHorizontal(): Promise<void> {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
@@ -376,19 +416,15 @@ export class CanvasLayers {
             tempCanvas.width = layer.width;
             tempCanvas.height = layer.height;
 
-            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+            // We need to draw the layer relative to the new canvas, so we "move" it to 0,0
+            // by creating a temporary layer object for drawing.
+            const layerToDraw = {
+                ...layer,
+                x: 0,
+                y: 0,
+            };
 
-            tempCtx.save();
-            tempCtx.translate(layer.width / 2, layer.height / 2);
-            tempCtx.rotate(layer.rotation * Math.PI / 180);
-            tempCtx.drawImage(
-                layer.image,
-                -layer.width / 2,
-                -layer.height / 2,
-                layer.width,
-                layer.height
-            );
-            tempCtx.restore();
+            this._drawLayer(tempCtx, layerToDraw);
 
             const dataUrl = tempCanvas.toDataURL('image/png');
             if (!dataUrl.startsWith('data:image/png;base64,')) {
@@ -657,27 +693,7 @@ export class CanvasLayers {
                 return;
             }
 
-            const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
-
-            sortedLayers.forEach((layer: Layer) => {
-                if (!layer.image) return;
-
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(
-                    layer.image,
-                    -layer.width / 2,
-                    -layer.height / 2,
-                    layer.width,
-                    layer.height
-                );
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.layers);
 
             const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             const data = imageData.data;
@@ -754,27 +770,7 @@ export class CanvasLayers {
                 return;
             }
 
-            const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
-
-            sortedLayers.forEach((layer: Layer) => {
-                if (!layer.image) return;
-
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(
-                    layer.image,
-                    -layer.width / 2,
-                    -layer.height / 2,
-                    layer.width,
-                    layer.height
-                );
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.layers);
 
             tempCanvas.toBlob((blob) => {
                 if (blob) {
@@ -843,33 +839,7 @@ export class CanvasLayers {
 
             tempCtx.translate(-minX, -minY);
 
-            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
-
-            sortedSelection.forEach((layer: Layer) => {
-                if (!layer.image) return;
-
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                
-                const scaleH = layer.flipH ? -1 : 1;
-                const scaleV = layer.flipV ? -1 : 1;
-                if (layer.flipH || layer.flipV) {
-                    tempCtx.scale(scaleH, scaleV);
-                }
-
-                tempCtx.drawImage(
-                    layer.image,
-                    -layer.width / 2, -layer.height / 2,
-                    layer.width, layer.height
-                );
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
 
             tempCanvas.toBlob((blob) => {
                 resolve(blob);
@@ -933,33 +903,7 @@ export class CanvasLayers {
 
             tempCtx.translate(-minX, -minY);
 
-            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
-
-            sortedSelection.forEach((layer: Layer) => {
-                if (!layer.image) return;
-
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-
-                const scaleH = layer.flipH ? -1 : 1;
-                const scaleV = layer.flipV ? -1 : 1;
-                if (layer.flipH || layer.flipV) {
-                    tempCtx.scale(scaleH, scaleV);
-                }
-                
-                tempCtx.drawImage(
-                    layer.image,
-                    -layer.width / 2, -layer.height / 2,
-                    layer.width, layer.height
-                );
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
 
             const fusedImage = new Image();
             fusedImage.src = tempCanvas.toDataURL();
@@ -1006,7 +950,7 @@ export class CanvasLayers {
             }
 
             log.info("Layers fused successfully", {
-                originalLayerCount: sortedSelection.length,
+                originalLayerCount: this.canvas.canvasSelection.selectedLayers.length,
                 fusedDimensions: { width: fusedWidth, height: fusedHeight },
                 fusedPosition: { x: minX, y: minY }
             });

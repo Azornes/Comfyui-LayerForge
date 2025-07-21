@@ -303,6 +303,34 @@ export class CanvasLayers {
         }
         return null;
     }
+    _drawLayer(ctx, layer, options = {}) {
+        if (!layer.image)
+            return;
+        const { offsetX = 0, offsetY = 0 } = options;
+        ctx.save();
+        ctx.globalCompositeOperation = layer.blendMode || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        const centerX = layer.x + layer.width / 2 - offsetX;
+        const centerY = layer.y + layer.height / 2 - offsetY;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+        const scaleH = layer.flipH ? -1 : 1;
+        const scaleV = layer.flipV ? -1 : 1;
+        if (layer.flipH || layer.flipV) {
+            ctx.scale(scaleH, scaleV);
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        ctx.restore();
+    }
+    _drawLayers(ctx, layers, options = {}) {
+        const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+        sortedLayers.forEach(layer => this._drawLayer(ctx, layer, options));
+    }
+    drawLayersToContext(ctx, layers, options = {}) {
+        this._drawLayers(ctx, layers, options);
+    }
     async mirrorHorizontal() {
         if (this.canvas.canvasSelection.selectedLayers.length === 0)
             return;
@@ -329,12 +357,14 @@ export class CanvasLayers {
                 throw new Error("Could not create canvas context");
             tempCanvas.width = layer.width;
             tempCanvas.height = layer.height;
-            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.save();
-            tempCtx.translate(layer.width / 2, layer.height / 2);
-            tempCtx.rotate(layer.rotation * Math.PI / 180);
-            tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-            tempCtx.restore();
+            // We need to draw the layer relative to the new canvas, so we "move" it to 0,0
+            // by creating a temporary layer object for drawing.
+            const layerToDraw = {
+                ...layer,
+                x: 0,
+                y: 0,
+            };
+            this._drawLayer(tempCtx, layerToDraw);
             const dataUrl = tempCanvas.toDataURL('image/png');
             if (!dataUrl.startsWith('data:image/png;base64,')) {
                 throw new Error("Invalid image data format");
@@ -568,20 +598,7 @@ export class CanvasLayers {
                 reject(new Error("Could not create canvas context"));
                 return;
             }
-            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
-            sortedLayers.forEach((layer) => {
-                if (!layer.image)
-                    return;
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.layers);
             const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             const data = imageData.data;
             const toolMaskCanvas = this.canvas.maskTool.getMask();
@@ -643,20 +660,7 @@ export class CanvasLayers {
                 reject(new Error("Could not create canvas context"));
                 return;
             }
-            const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
-            sortedLayers.forEach((layer) => {
-                if (!layer.image)
-                    return;
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.layers);
             tempCanvas.toBlob((blob) => {
                 if (blob) {
                     resolve(blob);
@@ -714,25 +718,7 @@ export class CanvasLayers {
                 return;
             }
             tempCtx.translate(-minX, -minY);
-            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
-            sortedSelection.forEach((layer) => {
-                if (!layer.image)
-                    return;
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                const scaleH = layer.flipH ? -1 : 1;
-                const scaleV = layer.flipV ? -1 : 1;
-                if (layer.flipH || layer.flipV) {
-                    tempCtx.scale(scaleH, scaleV);
-                }
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
             tempCanvas.toBlob((blob) => {
                 resolve(blob);
             }, 'image/png');
@@ -784,25 +770,7 @@ export class CanvasLayers {
             if (!tempCtx)
                 throw new Error("Could not create canvas context");
             tempCtx.translate(-minX, -minY);
-            const sortedSelection = [...this.canvas.canvasSelection.selectedLayers].sort((a, b) => a.zIndex - b.zIndex);
-            sortedSelection.forEach((layer) => {
-                if (!layer.image)
-                    return;
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                tempCtx.translate(centerX, centerY);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                const scaleH = layer.flipH ? -1 : 1;
-                const scaleV = layer.flipV ? -1 : 1;
-                if (layer.flipH || layer.flipV) {
-                    tempCtx.scale(scaleH, scaleV);
-                }
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-            });
+            this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
             const fusedImage = new Image();
             fusedImage.src = tempCanvas.toDataURL();
             await new Promise((resolve, reject) => {
@@ -842,7 +810,7 @@ export class CanvasLayers {
                 this.canvas.canvasLayersPanel.onLayersChanged();
             }
             log.info("Layers fused successfully", {
-                originalLayerCount: sortedSelection.length,
+                originalLayerCount: this.canvas.canvasSelection.selectedLayers.length,
                 fusedDimensions: { width: fusedWidth, height: fusedHeight },
                 fusedPosition: { x: minX, y: minY }
             });

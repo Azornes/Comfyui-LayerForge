@@ -62,25 +62,9 @@ export class CanvasIO {
             maskCtx.fillStyle = '#ffffff';
             maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             log.debug(`Canvas contexts created, starting layer rendering`);
-            const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
-            log.debug(`Processing ${sortedLayers.length} layers in order`);
-            sortedLayers.forEach((layer, index) => {
-                log.debug(`Processing layer ${index}: zIndex=${layer.zIndex}, size=${layer.width}x${layer.height}, pos=(${layer.x},${layer.y})`);
-                log.debug(`Layer ${index}: blendMode=${layer.blendMode || 'normal'}, opacity=${layer.opacity !== undefined ? layer.opacity : 1}`);
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                tempCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-                log.debug(`Layer ${index} rendered successfully`);
-                visibilityCtx.save();
-                visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
-                visibilityCtx.rotate(layer.rotation * Math.PI / 180);
-                visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                visibilityCtx.restore();
-            });
+            this.canvas.canvasLayers.drawLayersToContext(tempCtx, this.canvas.layers);
+            this.canvas.canvasLayers.drawLayersToContext(visibilityCtx, this.canvas.layers);
+            log.debug(`Finished rendering layers`);
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             for (let i = 0; i < visibilityData.data.length; i += 4) {
@@ -232,21 +216,8 @@ export class CanvasIO {
                 throw new Error("Could not create temp context");
             maskCtx.fillStyle = '#ffffff'; // Start with a white mask (nothing masked)
             maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-            const sortedLayers = this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
-            sortedLayers.forEach((layer) => {
-                tempCtx.save();
-                tempCtx.globalCompositeOperation = layer.blendMode || 'normal';
-                tempCtx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                tempCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
-                tempCtx.rotate(layer.rotation * Math.PI / 180);
-                tempCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                tempCtx.restore();
-                visibilityCtx.save();
-                visibilityCtx.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
-                visibilityCtx.rotate(layer.rotation * Math.PI / 180);
-                visibilityCtx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-                visibilityCtx.restore();
-            });
+            this.canvas.canvasLayers.drawLayersToContext(tempCtx, this.canvas.layers);
+            this.canvas.canvasLayers.drawLayersToContext(visibilityCtx, this.canvas.layers);
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             for (let i = 0; i < visibilityData.data.length; i += 4) {

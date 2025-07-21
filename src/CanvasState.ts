@@ -297,13 +297,14 @@ export class CanvasState {
             delete (newLayer as any).image;
 
             if (layer.image instanceof HTMLImageElement) {
-                log.debug(`Layer ${index}: Using imageId instead of serializing image.`);
-                if (!layer.imageId) {
+                if (layer.imageId) {
+                    newLayer.imageId = layer.imageId;
+                } else {
+                    log.debug(`Layer ${index}: No imageId found, generating new one and saving image.`);
                     newLayer.imageId = generateUUID();
                     const imageBitmap = await createImageBitmap(layer.image);
                     await saveImage(newLayer.imageId, imageBitmap);
                 }
-                newLayer.imageId = layer.imageId;
             } else if (!layer.imageId) {
                 log.error(`Layer ${index}: No image or imageId found, skipping layer.`);
                 return null;

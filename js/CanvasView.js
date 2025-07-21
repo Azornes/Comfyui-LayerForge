@@ -330,7 +330,7 @@ async function createCanvasWidget(node, widget, app) {
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
-                            const newLayer = { ...selectedLayer, image: mattedImage };
+                            const newLayer = { ...selectedLayer, image: mattedImage, flipH: false, flipV: false };
                             delete newLayer.imageId;
                             canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.canvasSelection.updateSelection([newLayer]);

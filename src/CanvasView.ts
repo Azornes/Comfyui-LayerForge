@@ -363,7 +363,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
-                            const newLayer = {...selectedLayer, image: mattedImage} as Layer;
+                            const newLayer = {...selectedLayer, image: mattedImage, flipH: false, flipV: false} as Layer;
                             delete (newLayer as any).imageId;
                             canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.canvasSelection.updateSelection([newLayer]);
