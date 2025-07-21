@@ -392,7 +392,7 @@ class CanvasNode:
     def setup_routes(cls):
         @PromptServer.instance.routes.get("/layerforge/canvas_ws")
         async def handle_canvas_websocket(request):
-            ws = web.WebSocketResponse()
+            ws = web.WebSocketResponse(max_msg_size=33554432)
             await ws.prepare(request)
             
             async for msg in ws:
