@@ -1,16 +1,14 @@
 [project]
-name = "layerforge"
+name = "comfyui-layerforge"
 description = "Photoshop-like layered canvas editor to your ComfyUI workflow. This node is perfect for complex compositing, inpainting, and outpainting, featuring multi-layer support, masking, blend modes, and precise transformations. Includes optional AI-powered background removal for streamlined image editing."
 version = "1.3.8"
-license = {file = "LICENSE"}
+license = { text = "MIT License" }
 dependencies = ["torch", "torchvision", "transformers", "aiohttp", "numpy", "tqdm", "Pillow"]
 
 [project.urls]
 Repository = "https://github.com/Azornes/Comfyui-LayerForge"
-#  Used by Comfy Registry https://registry.comfy.org
 
 [tool.comfy]
 PublisherId = "azornes"
 DisplayName = "Comfyui-LayerForge"
 Icon = ""
-includes = []
