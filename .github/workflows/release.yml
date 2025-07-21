@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Pobierz pełną historię Git (potrzebne do git log)
 
       - name: Extract base version from pyproject.toml
         id: version
@@ -33,12 +35,32 @@ jobs:
         run: |
           echo "final_tag=v${{ steps.version.outputs.base_version }}" >> $GITHUB_OUTPUT
 
-      - name: Get latest commit message
-        id: last_commit
+      # ZMIANA: Zamiast tylko ostatniego commita, pobierz historię commitów od ostatniego tagu
+      - name: Get commit history since last tag
+        id: commit_history
         run: |
-          msg=$(git log -1 --pretty=%B)
-          msg=${msg//$'\n'/\\n}
-          echo "commit_msg=$msg" >> $GITHUB_OUTPUT
+          # Znajdź ostatni tag (jeśli istnieje)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          # Jeśli nie ma ostatniego tagu, użyj pustego (pobierz od początku repo)
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
+          
+          # Pobierz listę commitów (tylko subject/tytuł, format: - Commit message)
+          HISTORY=$(git log --pretty=format:"- %s" $RANGE)
+          
+          # Zastąp nowe linie na \\n, aby dobrze wyglądało w output
+          HISTORY=${HISTORY//$'\n'/\\n}
+          
+          # Jeśli brak commitów, ustaw domyślną wiadomość
+          if [ -z "$HISTORY" ]; then
+            HISTORY="No changes since last release."
+          fi
+          
+          echo "commit_history=$HISTORY" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -48,9 +70,9 @@ jobs:
           body: |
             📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`
             
-            📝 Last commit message:
+            📝 Changes since last release:
             ```
-            ${{ steps.last_commit.outputs.commit_msg }}
+            ${{ steps.commit_history.outputs.commit_history }}
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
