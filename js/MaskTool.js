@@ -258,4 +258,16 @@ export class MaskTool {
         this.canvasInstance.render();
         log.info(`MaskTool updated with a new mask image at correct canvas position (${destX}, ${destY}).`);
     }
+    addMask(image) {
+        const destX = -this.x;
+        const destY = -this.y;
+        // Don't clear existing mask - just add to it
+        this.maskCtx.globalCompositeOperation = 'source-over';
+        this.maskCtx.drawImage(image, destX, destY);
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+        this.canvasInstance.render();
+        log.info(`MaskTool added mask overlay at correct canvas position (${destX}, ${destY}) without clearing existing mask.`);
+    }
 }

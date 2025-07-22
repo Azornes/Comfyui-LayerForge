@@ -1170,10 +1170,10 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
             throw new Error("Mask tool not available or not initialized");
         }
 
-        log.debug("Applying SAM mask to canvas using setMask method");
+        log.debug("Applying SAM mask to canvas using addMask method");
 
-        // Use the setMask method which handles positioning automatically
-        canvas.maskTool.setMask(maskAsImage);
+        // Use the addMask method which overlays on existing mask without clearing it
+        canvas.maskTool.addMask(maskAsImage);
 
         // Update canvas and save state (same as CanvasMask)
         canvas.render();
