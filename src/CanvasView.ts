@@ -575,18 +575,67 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         }
 
         try {
-            const new_preview = new Image();
             const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
             if (blob) {
-                new_preview.src = URL.createObjectURL(blob);
-                await new Promise(r => new_preview.onload = r);
-                node.imgs = [new_preview];
+                // Auto-register in clipspace for Impact Pack compatibility and get server URL
+                const serverImg = await registerImageInClipspace(node, blob);
+                
+                if (serverImg) {
+                    // Use server URL image as the main image for Impact Pack compatibility
+                    node.imgs = [serverImg];
+                    (node as any).clipspaceImg = serverImg;
+                    log.debug(`Using server URL for node.imgs: ${serverImg.src}`);
+                } else {
+                    // Fallback to blob URL if server upload failed
+                    const new_preview = new Image();
+                    new_preview.src = URL.createObjectURL(blob);
+                    await new Promise(r => new_preview.onload = r);
+                    node.imgs = [new_preview];
+                    log.debug(`Fallback to blob URL for node.imgs: ${new_preview.src}`);
+                }
             } else {
                 node.imgs = [];
             }
         } catch (error) {
             console.error("Error updating node preview:", error);
         }
+    };
+
+    // Function to register image in clipspace for Impact Pack compatibility
+    const registerImageInClipspace = async (node: ComfyNode, blob: Blob): Promise<HTMLImageElement | null> => {
+        try {
+            // Upload the image to ComfyUI's temp storage for clipspace access
+            const formData = new FormData();
+            const filename = `layerforge-auto-${node.id}-${Date.now()}.png`;
+            formData.append("image", blob, filename);
+            formData.append("overwrite", "true");
+            formData.append("type", "temp");
+
+            const response = await api.fetchApi("/upload/image", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Create a proper image element with the server URL
+                const clipspaceImg = new Image();
+                clipspaceImg.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
+                
+                // Wait for image to load
+                await new Promise((resolve, reject) => {
+                    clipspaceImg.onload = resolve;
+                    clipspaceImg.onerror = reject;
+                });
+
+                log.debug(`Image registered in clipspace for node ${node.id}: ${filename}`);
+                return clipspaceImg;
+            }
+        } catch (error) {
+            log.debug("Failed to register image in clipspace:", error);
+        }
+        return null;
     };
 
     const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
@@ -743,6 +792,283 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     };
 }
 
+// Function to monitor for SAM Detector results and apply masks to LayerForge
+function startSAMDetectorMonitoring(node: ComfyNode) {
+    if ((node as any).samMonitoringActive) {
+        log.debug("SAM Detector monitoring already active for node", node.id);
+        return;
+    }
+
+    (node as any).samMonitoringActive = true;
+    log.info("Starting SAM Detector monitoring for node", node.id);
+
+    // Store original image source for comparison
+    const originalImgSrc = node.imgs?.[0]?.src;
+    (node as any).samOriginalImgSrc = originalImgSrc;
+
+    // Start monitoring for changes in node.imgs (simple polling like original approach)
+    monitorSAMDetectorChanges(node);
+}
+
+// Function to monitor changes in node.imgs (simple polling approach)
+function monitorSAMDetectorChanges(node: ComfyNode) {
+    let checkCount = 0;
+    const maxChecks = 300; // 30 seconds maximum monitoring
+
+    const checkForChanges = () => {
+        checkCount++;
+
+        if (!((node as any).samMonitoringActive)) {
+            log.debug("SAM monitoring stopped for node", node.id);
+            return;
+        }
+
+        log.debug(`SAM monitoring check ${checkCount}/${maxChecks} for node ${node.id}`);
+
+        // Check if the node's image has been updated (this happens when "Save to node" is clicked)
+        if (node.imgs && node.imgs.length > 0) {
+            const currentImgSrc = node.imgs[0].src;
+            const originalImgSrc = (node as any).samOriginalImgSrc;
+            
+            if (currentImgSrc && currentImgSrc !== originalImgSrc) {
+                log.info("SAM Detector result detected in node.imgs, processing mask...");
+                handleSAMDetectorResult(node, node.imgs[0]);
+                (node as any).samMonitoringActive = false;
+                return;
+            }
+        }
+
+        // Continue monitoring if not exceeded max checks
+        if (checkCount < maxChecks && (node as any).samMonitoringActive) {
+            setTimeout(checkForChanges, 100);
+        } else {
+            log.debug("SAM Detector monitoring timeout or stopped for node", node.id);
+            (node as any).samMonitoringActive = false;
+        }
+    };
+
+    // Start monitoring after a short delay
+    setTimeout(checkForChanges, 500);
+}
+
+// Function to handle SAM Detector result (using same logic as CanvasMask.handleMaskEditorClose)
+async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageElement) {
+    try {
+        log.info("Handling SAM Detector result for node", node.id);
+        log.debug("Result image source:", resultImage.src.substring(0, 100) + '...');
+
+        const canvasWidget = (node as any).canvasWidget;
+        if (!canvasWidget || !canvasWidget.canvas) {
+            log.error("Canvas widget not available for SAM result processing");
+            return;
+        }
+
+        const canvas = canvasWidget; // canvasWidget is the Canvas object, not canvasWidget.canvas
+
+        // Wait for the result image to load (same as CanvasMask)
+        try {
+            // First check if the image is already loaded
+            if (resultImage.complete && resultImage.naturalWidth > 0) {
+                log.debug("SAM result image already loaded", {
+                    width: resultImage.width,
+                    height: resultImage.height
+                });
+            } else {
+                // Try to reload the image with a fresh request
+                log.debug("Attempting to reload SAM result image");
+                const originalSrc = resultImage.src;
+                
+                // Add cache-busting parameter to force fresh load
+                const url = new URL(originalSrc);
+                url.searchParams.set('_t', Date.now().toString());
+                
+                await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.onload = () => {
+                        // Copy the loaded image data to the original image
+                        resultImage.src = img.src;
+                        resultImage.width = img.width;
+                        resultImage.height = img.height;
+                        log.debug("SAM result image reloaded successfully", {
+                            width: img.width,
+                            height: img.height,
+                            originalSrc: originalSrc,
+                            newSrc: img.src
+                        });
+                        resolve(img);
+                    };
+                    img.onerror = (error) => {
+                        log.error("Failed to reload SAM result image", {
+                            originalSrc: originalSrc,
+                            newSrc: url.toString(),
+                            error: error
+                        });
+                        reject(error);
+                    };
+                    img.src = url.toString();
+                });
+            }
+        } catch (error) {
+            log.error("Failed to load image from SAM Detector.", error);
+            
+            // Show error notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #c54747;
+                color: white;
+                padding: 12px 16px;
+                border-radius: 4px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                z-index: 10001;
+                font-size: 14px;
+            `;
+            notification.textContent = "Failed to load SAM Detector result. The mask file may not be available.";
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 5000);
+            
+            return;
+        }
+
+        // Create temporary canvas for mask processing (same as CanvasMask)
+        log.debug("Creating temporary canvas for mask processing");
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
+
+        if (tempCtx) {
+            tempCtx.drawImage(resultImage, 0, 0, canvas.width, canvas.height);
+
+            log.debug("Processing image data to create mask");
+            const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            // Convert to mask format (same as CanvasMask)
+            for (let i = 0; i < data.length; i += 4) {
+                const originalAlpha = data[i + 3];
+                data[i] = 255;
+                data[i + 1] = 255;
+                data[i + 2] = 255;
+                data[i + 3] = 255 - originalAlpha;
+            }
+
+            tempCtx.putImageData(imageData, 0, 0);
+        }
+
+        // Convert processed mask to image (same as CanvasMask)
+        log.debug("Converting processed mask to image");
+        const maskAsImage = new Image();
+        maskAsImage.src = tempCanvas.toDataURL();
+        await new Promise(resolve => maskAsImage.onload = resolve);
+
+        // Apply mask to LayerForge canvas using MaskTool.setMask method
+        log.debug("Checking canvas and maskTool availability", {
+            hasCanvas: !!canvas,
+            hasMaskTool: !!canvas.maskTool,
+            maskToolType: typeof canvas.maskTool,
+            canvasKeys: Object.keys(canvas)
+        });
+
+        if (!canvas.maskTool) {
+            log.error("MaskTool is not available. Canvas state:", {
+                hasCanvas: !!canvas,
+                canvasConstructor: canvas.constructor.name,
+                canvasKeys: Object.keys(canvas),
+                maskToolValue: canvas.maskTool
+            });
+            throw new Error("Mask tool not available or not initialized");
+        }
+
+        log.debug("Applying SAM mask to canvas using setMask method");
+
+        // Use the setMask method which handles positioning automatically
+        canvas.maskTool.setMask(maskAsImage);
+
+        // Update canvas and save state (same as CanvasMask)
+        canvas.render();
+        canvas.saveState();
+
+        // Create new preview image (same as CanvasMask)
+        log.debug("Creating new preview image");
+        const new_preview = new Image();
+        const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+        if (blob) {
+            new_preview.src = URL.createObjectURL(blob);
+            await new Promise(r => new_preview.onload = r);
+            node.imgs = [new_preview];
+            log.debug("New preview image created successfully");
+        } else {
+            log.warn("Failed to create preview blob");
+        }
+
+        canvas.render();
+
+        log.info("SAM Detector mask applied successfully to LayerForge canvas");
+
+        // Show success notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4a7c59;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 10001;
+            font-size: 14px;
+        `;
+        notification.textContent = "SAM Detector mask applied to LayerForge!";
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+
+    } catch (error: any) {
+        log.error("Error processing SAM Detector result:", error);
+        
+        // Show error notification
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #c54747;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 10001;
+            font-size: 14px;
+        `;
+        notification.textContent = `Failed to apply SAM mask: ${error.message}`;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 5000);
+    } finally {
+        (node as any).samMonitoringActive = false;
+        (node as any).samOriginalImgSrc = null;
+    }
+}
+
+
 function showErrorDialog(message: string, details: string) {
     const dialog = $el("div.painter-dialog.error-dialog", {
         style: {
@@ -875,6 +1201,128 @@ app.registerExtension({
                 }, 100);
             };
 
+            // Add method to send canvas to clipspace for Impact Pack compatibility
+            nodeType.prototype.sendCanvasToClipspace = async function (this: ComfyNode) {
+                try {
+                    log.info(`Sending canvas to clipspace for node ${this.id}`);
+                    
+                    if (!(this as any).canvasWidget || !(this as any).canvasWidget.canvas) {
+                        throw new Error("Canvas widget not available");
+                    }
+
+                    // Check if we already have a clipspace-compatible image
+                    if ((this as any).clipspaceImg) {
+                        log.info("Using existing clipspace image");
+                        this.imgs = [(this as any).clipspaceImg];
+                        ComfyApp.copyToClipspace(this);
+                        
+                        // Start monitoring for SAM Detector results
+                        startSAMDetectorMonitoring(this);
+                        
+                        // Show success message
+                        const notification = document.createElement('div');
+                        notification.style.cssText = `
+                            position: fixed;
+                            top: 20px;
+                            right: 20px;
+                            background: #4a7c59;
+                            color: white;
+                            padding: 12px 16px;
+                            border-radius: 4px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                            z-index: 10001;
+                            font-size: 14px;
+                        `;
+                        notification.textContent = "Canvas sent to Clipspace successfully!";
+                        document.body.appendChild(notification);
+                        
+                        setTimeout(() => {
+                            if (notification.parentNode) {
+                                notification.parentNode.removeChild(notification);
+                            }
+                        }, 3000);
+                        
+                        return;
+                    }
+
+                    const canvas = (this as any).canvasWidget.canvas;
+                    
+                    // Get the flattened canvas as blob
+                    const blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
+                    if (!blob) {
+                        throw new Error("Failed to generate canvas blob");
+                    }
+
+                    // Upload the image to ComfyUI's temp storage
+                    const formData = new FormData();
+                    const filename = `layerforge-clipspace-${this.id}-${Date.now()}.png`;
+                    formData.append("image", blob, filename);
+                    formData.append("overwrite", "true");
+                    formData.append("type", "temp");
+
+                    const response = await api.fetchApi("/upload/image", {
+                        method: "POST",
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to upload image: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    log.debug('Image uploaded for clipspace:', data);
+
+                    // Create image element with proper URL
+                    const img = new Image();
+                    img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
+                    
+                    // Wait for image to load
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                    });
+
+                    // Set the image to the node for clipspace
+                    this.imgs = [img];
+                    (this as any).clipspaceImg = img;
+
+                    // Copy to ComfyUI clipspace
+                    ComfyApp.copyToClipspace(this);
+                    
+                    // Start monitoring for SAM Detector results
+                    startSAMDetectorMonitoring(this);
+                    
+                    log.info("Canvas successfully sent to ComfyUI clipspace");
+                    
+                    // Show success message
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #4a7c59;
+                        color: white;
+                        padding: 12px 16px;
+                        border-radius: 4px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                        z-index: 10001;
+                        font-size: 14px;
+                    `;
+                    notification.textContent = "Canvas sent to Clipspace successfully!";
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 3000);
+
+                } catch (error: any) {
+                    log.error("Error sending canvas to clipspace:", error);
+                    throw error;
+                }
+            };
+
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function (this: ComfyNode) {
                 log.info(`Cleaning up canvas node ${this.id}`);
@@ -904,13 +1352,206 @@ app.registerExtension({
 
             const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
             nodeType.prototype.getExtraMenuOptions = function (this: ComfyNode, _: any, options: any[]) {
+                // FIRST: Call original to let other extensions add their options
                 originalGetExtraMenuOptions?.apply(this, arguments as any);
 
                 const self = this;
 
+                // Debug: Log all menu options AFTER other extensions have added theirs
+                log.info("Available menu options AFTER original call:", options.map((opt, idx) => ({
+                    index: idx,
+                    content: opt?.content,
+                    hasCallback: !!opt?.callback
+                })));
+
+                // Debug: Check node data to see what Impact Pack sees
+                const nodeData = (self as any).constructor.nodeData || {};
+                log.info("Node data for Impact Pack check:", {
+                    output: nodeData.output,
+                    outputType: typeof nodeData.output,
+                    isArray: Array.isArray(nodeData.output),
+                    nodeType: (self as any).type,
+                    comfyClass: (self as any).comfyClass
+                });
+
+                // Additional debug: Check if any option contains common Impact Pack keywords
+                const impactOptions = options.filter((opt, idx) => {
+                    if (!opt || !opt.content) return false;
+                    const content = opt.content.toLowerCase();
+                    return content.includes('impact') || 
+                           content.includes('sam') || 
+                           content.includes('detector') || 
+                           content.includes('segment') ||
+                           content.includes('mask') ||
+                           content.includes('open in');
+                });
+                
+                if (impactOptions.length > 0) {
+                    log.info("Found potential Impact Pack options:", impactOptions.map(opt => opt.content));
+                } else {
+                    log.info("No Impact Pack-related options found in menu");
+                }
+
+                // Debug: Check if Impact Pack extension is loaded
+                const impactExtensions = app.extensions.filter((ext: any) => 
+                    ext.name && ext.name.toLowerCase().includes('impact')
+                );
+                log.info("Impact Pack extensions found:", impactExtensions.map((ext: any) => ext.name));
+
+                // Debug: Check menu options again after a delay to see if Impact Pack adds options later
+                setTimeout(() => {
+                    log.info("Menu options after 100ms delay:", options.map((opt, idx) => ({
+                        index: idx,
+                        content: opt?.content,
+                        hasCallback: !!opt?.callback
+                    })));
+                    
+                    // Try to find SAM Detector again
+                    const delayedSamDetectorIndex = options.findIndex((option) => 
+                        option && option.content && (
+                            option.content.includes("SAM Detector") ||
+                            option.content.includes("SAM") ||
+                            option.content.includes("Detector") ||
+                            option.content.toLowerCase().includes("sam") ||
+                            option.content.toLowerCase().includes("detector")
+                        )
+                    );
+                    
+                    if (delayedSamDetectorIndex !== -1) {
+                        log.info(`Found SAM Detector after delay at index ${delayedSamDetectorIndex}: "${options[delayedSamDetectorIndex].content}"`);
+                    } else {
+                        log.info("SAM Detector still not found after delay");
+                    }
+                }, 100);
+
+                // Debug: Let's also check what the Impact Pack extension actually does
+                const samExtension = app.extensions.find((ext: any) => ext.name === 'Comfy.Impact.SAMEditor');
+                if (samExtension) {
+                    log.info("SAM Extension details:", {
+                        name: samExtension.name,
+                        hasBeforeRegisterNodeDef: !!samExtension.beforeRegisterNodeDef,
+                        hasInit: !!samExtension.init
+                    });
+                }
+
+                // Remove our old MaskEditor if it exists
                 const maskEditorIndex = options.findIndex((option) => option && option.content === "Open in MaskEditor");
                 if (maskEditorIndex !== -1) {
                     options.splice(maskEditorIndex, 1);
+                }
+
+                // Hook into "Open in SAM Detector" with delay since Impact Pack adds it asynchronously
+                const hookSAMDetector = () => {
+                    const samDetectorIndex = options.findIndex((option) => 
+                        option && option.content && (
+                            option.content.includes("SAM Detector") ||
+                            option.content === "Open in SAM Detector"
+                        )
+                    );
+
+                    if (samDetectorIndex !== -1) {
+                        log.info(`Found SAM Detector menu item at index ${samDetectorIndex}: "${options[samDetectorIndex].content}"`);
+                        const originalSamCallback = options[samDetectorIndex].callback;
+                        options[samDetectorIndex].callback = async () => {
+                            try {
+                                log.info("Intercepted 'Open in SAM Detector' - automatically sending to clipspace and starting monitoring");
+                                
+                                // Automatically send canvas to clipspace and start monitoring
+                                if ((self as any).canvasWidget && (self as any).canvasWidget.canvas) {
+                                    const canvas = (self as any).canvasWidget; // canvasWidget IS the Canvas object
+                                    
+                                    // Get the flattened canvas as blob
+                                    const blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
+                                    if (!blob) {
+                                        throw new Error("Failed to generate canvas blob");
+                                    }
+
+                                    // Upload the image to ComfyUI's temp storage
+                                    const formData = new FormData();
+                                    const filename = `layerforge-sam-${self.id}-${Date.now()}.png`; // Unique filename with timestamp
+                                    formData.append("image", blob, filename);
+                                    formData.append("overwrite", "true");
+                                    formData.append("type", "temp");
+
+                                    const response = await api.fetchApi("/upload/image", {
+                                        method: "POST",
+                                        body: formData,
+                                    });
+
+                                    if (!response.ok) {
+                                        throw new Error(`Failed to upload image: ${response.statusText}`);
+                                    }
+
+                                    const data = await response.json();
+                                    log.debug('Image uploaded for SAM Detector:', data);
+
+                                    // Create image element with proper URL
+                                    const img = new Image();
+                                    img.crossOrigin = "anonymous"; // Add CORS support
+                                    
+                                    // Wait for image to load before setting src
+                                    const imageLoadPromise = new Promise((resolve, reject) => {
+                                        img.onload = () => {
+                                            log.debug("SAM Detector image loaded successfully", {
+                                                width: img.width,
+                                                height: img.height,
+                                                src: img.src.substring(0, 100) + '...'
+                                            });
+                                            resolve(img);
+                                        };
+                                        img.onerror = (error) => {
+                                            log.error("Failed to load SAM Detector image", error);
+                                            reject(new Error("Failed to load uploaded image"));
+                                        };
+                                    });
+                                    
+                                    // Set src after setting up event handlers
+                                    img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
+                                    
+                                    // Wait for image to load
+                                    await imageLoadPromise;
+
+                                    // Set the image to the node for clipspace
+                                    self.imgs = [img];
+                                    (self as any).clipspaceImg = img;
+
+                                    // Copy to ComfyUI clipspace
+                                    ComfyApp.copyToClipspace(self);
+                                    
+                                    // Start monitoring for SAM Detector results
+                                    startSAMDetectorMonitoring(self);
+                                    
+                                    log.info("Canvas automatically sent to clipspace and monitoring started");
+                                }
+                                
+                                // Call the original SAM Detector callback
+                                if (originalSamCallback) {
+                                    await originalSamCallback();
+                                }
+                                
+                            } catch (e: any) {
+                                log.error("Error in SAM Detector hook:", e);
+                                // Still try to call original callback
+                                if (originalSamCallback) {
+                                    await originalSamCallback();
+                                }
+                            }
+                        };
+                        return true; // Found and hooked
+                    }
+                    return false; // Not found
+                };
+
+                // Try to hook immediately
+                if (!hookSAMDetector()) {
+                    // If not found immediately, try again after Impact Pack adds it
+                    setTimeout(() => {
+                        if (hookSAMDetector()) {
+                            log.info("Successfully hooked SAM Detector after delay");
+                        } else {
+                            log.debug("SAM Detector menu item not found even after delay");
+                        }
+                    }, 150); // Slightly longer delay to ensure Impact Pack has added it
                 }
 
                 const newOptions = [
@@ -928,6 +1569,23 @@ app.registerExtension({
                             } catch (e: any) {
                                 log.error("Error opening MaskEditor:", e);
                                 alert(`Failed to open MaskEditor: ${e.message}`);
+                            }
+                        },
+                    },
+                    {
+                        content: "Send to Clipspace",
+                        callback: async () => {
+                            try {
+                                log.info("Sending LayerForge canvas to ComfyUI Clipspace");
+                                if ((self as any).canvasWidget && (self as any).canvasWidget.canvas && self.sendCanvasToClipspace) {
+                                    await self.sendCanvasToClipspace();
+                                } else {
+                                    log.error("Canvas widget not available or sendCanvasToClipspace method missing");
+                                    alert("Canvas not ready. Please try again.");
+                                }
+                            } catch (e: any) {
+                                log.error("Error sending to Clipspace:", e);
+                                alert(`Failed to send to Clipspace: ${e.message}`);
                             }
                         },
                     },

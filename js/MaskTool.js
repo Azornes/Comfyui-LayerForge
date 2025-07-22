@@ -209,6 +209,9 @@ export class MaskTool {
         maskImage.src = tempCanvas.toDataURL();
         return maskImage;
     }
+    get maskContext() {
+        return this.maskCtx;
+    }
     resize(width, height) {
         this.initPreviewCanvas();
         const oldMask = this.maskCanvas;

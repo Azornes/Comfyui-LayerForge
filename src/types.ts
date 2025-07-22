@@ -32,6 +32,7 @@ export interface ComfyNode {
     addDOMWidget: (name: string, type: string, element: HTMLElement, options?: any) => any;
     addWidget: (type: string, name: string, value: any, callback?: (value: any) => void, options?: any) => any;
     setDirtyCanvas: (force: boolean, dirty: boolean) => void;
+    sendCanvasToClipspace?: () => Promise<void>;
 }
 
 declare global {
