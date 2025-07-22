@@ -725,21 +725,182 @@ async function createCanvasWidget(node, widget, app) {
         panel: controlPanel
     };
 }
-// Function to monitor for SAM Detector results and apply masks to LayerForge
+// Function to monitor for SAM Detector modal closure and apply masks to LayerForge
 function startSAMDetectorMonitoring(node) {
     if (node.samMonitoringActive) {
         log.debug("SAM Detector monitoring already active for node", node.id);
         return;
     }
     node.samMonitoringActive = true;
-    log.info("Starting SAM Detector monitoring for node", node.id);
+    log.info("Starting SAM Detector modal monitoring for node", node.id);
     // Store original image source for comparison
     const originalImgSrc = node.imgs?.[0]?.src;
     node.samOriginalImgSrc = originalImgSrc;
-    // Start monitoring for changes in node.imgs (simple polling like original approach)
-    monitorSAMDetectorChanges(node);
+    // Start monitoring for SAM Detector modal closure
+    monitorSAMDetectorModal(node);
 }
-// Function to monitor changes in node.imgs (simple polling approach)
+// Function to monitor SAM Detector modal closure
+function monitorSAMDetectorModal(node) {
+    log.info("Starting SAM Detector modal monitoring for node", node.id);
+    // Try to find modal multiple times with increasing delays
+    let attempts = 0;
+    const maxAttempts = 10; // Try for 5 seconds total
+    const findModal = () => {
+        attempts++;
+        log.debug(`Looking for SAM Detector modal, attempt ${attempts}/${maxAttempts}`);
+        // Look for SAM Detector specific elements instead of generic modal
+        const samCanvas = document.querySelector('#samEditorMaskCanvas');
+        const pointsCanvas = document.querySelector('#pointsCanvas');
+        const imageCanvas = document.querySelector('#imageCanvas');
+        // Debug: Log SAM specific elements
+        log.debug(`SAM specific elements found:`, {
+            samCanvas: !!samCanvas,
+            pointsCanvas: !!pointsCanvas,
+            imageCanvas: !!imageCanvas
+        });
+        // Find the modal that contains SAM Detector elements
+        let modal = null;
+        if (samCanvas || pointsCanvas || imageCanvas) {
+            // Find the parent modal of SAM elements
+            const samElement = samCanvas || pointsCanvas || imageCanvas;
+            let parent = samElement?.parentElement;
+            while (parent && !parent.classList.contains('comfy-modal')) {
+                parent = parent.parentElement;
+            }
+            modal = parent;
+        }
+        if (!modal) {
+            if (attempts < maxAttempts) {
+                log.debug(`SAM Detector modal not found on attempt ${attempts}, retrying in 500ms...`);
+                setTimeout(findModal, 500);
+                return;
+            }
+            else {
+                log.warn("SAM Detector modal not found after all attempts, falling back to polling");
+                // Fallback to old polling method if modal not found
+                monitorSAMDetectorChanges(node);
+                return;
+            }
+        }
+        log.info("Found SAM Detector modal, setting up observers", {
+            className: modal.className,
+            id: modal.id,
+            display: window.getComputedStyle(modal).display,
+            children: modal.children.length,
+            hasSamCanvas: !!modal.querySelector('#samEditorMaskCanvas'),
+            hasPointsCanvas: !!modal.querySelector('#pointsCanvas'),
+            hasImageCanvas: !!modal.querySelector('#imageCanvas')
+        });
+        // Create a MutationObserver to watch for modal removal or style changes
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                // Check if the modal was removed from DOM
+                if (mutation.type === 'childList') {
+                    mutation.removedNodes.forEach((removedNode) => {
+                        if (removedNode === modal || removedNode?.contains?.(modal)) {
+                            log.info("SAM Detector modal removed from DOM");
+                            handleSAMDetectorModalClosed(node);
+                            observer.disconnect();
+                        }
+                    });
+                }
+                // Check if modal style changed to hidden
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    const target = mutation.target;
+                    if (target === modal) {
+                        const display = window.getComputedStyle(modal).display;
+                        if (display === 'none') {
+                            log.info("SAM Detector modal hidden via style");
+                            // Add delay to allow SAM Detector to process and save the mask
+                            setTimeout(() => {
+                                handleSAMDetectorModalClosed(node);
+                            }, 1000); // 1 second delay
+                            observer.disconnect();
+                        }
+                    }
+                }
+            });
+        });
+        // Observe the document body for child removals (modal removal)
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style']
+        });
+        // Also observe the modal itself for style changes
+        observer.observe(modal, {
+            attributes: true,
+            attributeFilter: ['style']
+        });
+        // Store observer reference for cleanup
+        node.samModalObserver = observer;
+        // Fallback timeout in case observer doesn't catch the closure
+        setTimeout(() => {
+            if (node.samMonitoringActive) {
+                log.debug("SAM Detector modal monitoring timeout, cleaning up");
+                observer.disconnect();
+                node.samMonitoringActive = false;
+            }
+        }, 60000); // 1 minute timeout
+        log.info("SAM Detector modal observers set up successfully");
+    };
+    // Start the modal finding process
+    findModal();
+}
+// Function to handle SAM Detector modal closure
+function handleSAMDetectorModalClosed(node) {
+    if (!node.samMonitoringActive) {
+        log.debug("SAM monitoring already inactive for node", node.id);
+        return;
+    }
+    log.info("SAM Detector modal closed for node", node.id);
+    node.samMonitoringActive = false;
+    // Clean up observer
+    if (node.samModalObserver) {
+        node.samModalObserver.disconnect();
+        delete node.samModalObserver;
+    }
+    // Check if there's a new image to process
+    if (node.imgs && node.imgs.length > 0) {
+        const currentImgSrc = node.imgs[0].src;
+        const originalImgSrc = node.samOriginalImgSrc;
+        if (currentImgSrc && currentImgSrc !== originalImgSrc) {
+            log.info("SAM Detector result detected after modal closure, processing mask...");
+            handleSAMDetectorResult(node, node.imgs[0]);
+        }
+        else {
+            log.info("No new image detected after SAM Detector modal closure");
+            // Show info notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #4a6cd4;
+                color: white;
+                padding: 12px 16px;
+                border-radius: 4px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                z-index: 10001;
+                font-size: 14px;
+            `;
+            notification.textContent = "SAM Detector closed. No mask was applied.";
+            document.body.appendChild(notification);
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+    }
+    else {
+        log.info("No image available after SAM Detector modal closure");
+    }
+    // Clean up stored references
+    delete node.samOriginalImgSrc;
+}
+// Fallback function to monitor changes in node.imgs (old polling approach)
 function monitorSAMDetectorChanges(node) {
     let checkCount = 0;
     const maxChecks = 300; // 30 seconds maximum monitoring
