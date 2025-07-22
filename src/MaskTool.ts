@@ -272,10 +272,6 @@ export class MaskTool {
         return maskImage;
     }
 
-    get maskContext(): CanvasRenderingContext2D {
-        return this.maskCtx;
-    }
-
     resize(width: number, height: number): void {
         this.initPreviewCanvas();
         const oldMask = this.maskCanvas;

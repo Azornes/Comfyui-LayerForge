@@ -1085,107 +1085,6 @@ app.registerExtension({
                     this.setDirtyCanvas(true, true);
                 }, 100);
             };
-            // Add method to send canvas to clipspace for Impact Pack compatibility
-            nodeType.prototype.sendCanvasToClipspace = async function () {
-                try {
-                    log.info(`Sending canvas to clipspace for node ${this.id}`);
-                    if (!this.canvasWidget || !this.canvasWidget.canvas) {
-                        throw new Error("Canvas widget not available");
-                    }
-                    // Check if we already have a clipspace-compatible image
-                    if (this.clipspaceImg) {
-                        log.info("Using existing clipspace image");
-                        this.imgs = [this.clipspaceImg];
-                        ComfyApp.copyToClipspace(this);
-                        // Start monitoring for SAM Detector results
-                        startSAMDetectorMonitoring(this);
-                        // Show success message
-                        const notification = document.createElement('div');
-                        notification.style.cssText = `
-                            position: fixed;
-                            top: 20px;
-                            right: 20px;
-                            background: #4a7c59;
-                            color: white;
-                            padding: 12px 16px;
-                            border-radius: 4px;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                            z-index: 10001;
-                            font-size: 14px;
-                        `;
-                        notification.textContent = "Canvas sent to Clipspace successfully!";
-                        document.body.appendChild(notification);
-                        setTimeout(() => {
-                            if (notification.parentNode) {
-                                notification.parentNode.removeChild(notification);
-                            }
-                        }, 3000);
-                        return;
-                    }
-                    const canvas = this.canvasWidget.canvas;
-                    // Get the flattened canvas as blob
-                    const blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
-                    if (!blob) {
-                        throw new Error("Failed to generate canvas blob");
-                    }
-                    // Upload the image to ComfyUI's temp storage
-                    const formData = new FormData();
-                    const filename = `layerforge-clipspace-${this.id}-${Date.now()}.png`;
-                    formData.append("image", blob, filename);
-                    formData.append("overwrite", "true");
-                    formData.append("type", "temp");
-                    const response = await api.fetchApi("/upload/image", {
-                        method: "POST",
-                        body: formData,
-                    });
-                    if (!response.ok) {
-                        throw new Error(`Failed to upload image: ${response.statusText}`);
-                    }
-                    const data = await response.json();
-                    log.debug('Image uploaded for clipspace:', data);
-                    // Create image element with proper URL
-                    const img = new Image();
-                    img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-                    // Wait for image to load
-                    await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
-                    });
-                    // Set the image to the node for clipspace
-                    this.imgs = [img];
-                    this.clipspaceImg = img;
-                    // Copy to ComfyUI clipspace
-                    ComfyApp.copyToClipspace(this);
-                    // Start monitoring for SAM Detector results
-                    startSAMDetectorMonitoring(this);
-                    log.info("Canvas successfully sent to ComfyUI clipspace");
-                    // Show success message
-                    const notification = document.createElement('div');
-                    notification.style.cssText = `
-                        position: fixed;
-                        top: 20px;
-                        right: 20px;
-                        background: #4a7c59;
-                        color: white;
-                        padding: 12px 16px;
-                        border-radius: 4px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-                        z-index: 10001;
-                        font-size: 14px;
-                    `;
-                    notification.textContent = "Canvas sent to Clipspace successfully!";
-                    document.body.appendChild(notification);
-                    setTimeout(() => {
-                        if (notification.parentNode) {
-                            notification.parentNode.removeChild(notification);
-                        }
-                    }, 3000);
-                }
-                catch (error) {
-                    log.error("Error sending canvas to clipspace:", error);
-                    throw error;
-                }
-            };
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {
                 log.info(`Cleaning up canvas node ${this.id}`);
@@ -1392,25 +1291,6 @@ app.registerExtension({
                             catch (e) {
                                 log.error("Error opening MaskEditor:", e);
                                 alert(`Failed to open MaskEditor: ${e.message}`);
-                            }
-                        },
-                    },
-                    {
-                        content: "Send to Clipspace",
-                        callback: async () => {
-                            try {
-                                log.info("Sending LayerForge canvas to ComfyUI Clipspace");
-                                if (self.canvasWidget && self.canvasWidget.canvas && self.sendCanvasToClipspace) {
-                                    await self.sendCanvasToClipspace();
-                                }
-                                else {
-                                    log.error("Canvas widget not available or sendCanvasToClipspace method missing");
-                                    alert("Canvas not ready. Please try again.");
-                                }
-                            }
-                            catch (e) {
-                                log.error("Error sending to Clipspace:", e);
-                                alert(`Failed to send to Clipspace: ${e.message}`);
                             }
                         },
                     },
