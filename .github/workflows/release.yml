@@ -67,11 +67,7 @@ jobs:
           tag_name: ${{ steps.unique_tag.outputs.final_tag }}
           name: Release ${{ steps.unique_tag.outputs.final_tag }}
           body: |
-            📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`
-            
-            📝 Changes since last release:
-            ```
-            ${{ steps.commit_history.outputs.commit_history }}
-            ```
+            📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`        
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
