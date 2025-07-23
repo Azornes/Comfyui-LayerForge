@@ -577,6 +577,10 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         const showPreviewWidget = node.widgets.find((w) => w.name === "show_preview");
         if (showPreviewWidget && !showPreviewWidget.value) {
             log.debug("Preview disabled, skipping updateOutput");
+            const PLACEHOLDER_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+            const placeholder = new Image();
+            placeholder.src = PLACEHOLDER_IMAGE;
+            node.imgs = [placeholder];
             return;
         }
 
