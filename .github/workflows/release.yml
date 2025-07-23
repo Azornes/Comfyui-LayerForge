@@ -65,9 +65,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.unique_tag.outputs.final_tag }}
-          name: Release ${{ steps.unique_tag.outputs.final_tag }}
-          body: |
-            📦 Release based on pyproject.toml version `${{ steps.version.outputs.base_version }}`        
+          name: Release ${{ steps.unique_tag.outputs.final_tag }}    
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
