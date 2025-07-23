@@ -31,6 +31,8 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
         this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this));
         this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this));
+        // Add a blur event listener to the window to reset key states
+        window.addEventListener('blur', this.handleBlur.bind(this));
         document.addEventListener('paste', this.handlePasteEvent.bind(this));
         this.canvas.canvas.addEventListener('mouseenter', (e) => {
             this.canvas.isMouseOver = true;
@@ -371,6 +373,23 @@ export class CanvasInteractions {
         if (movementKeys.includes(e.code) && this.interaction.keyMovementInProgress) {
             this.canvas.requestSaveState(); // Użyj opóźnionego zapisu
             this.interaction.keyMovementInProgress = false;
+        }
+    }
+    handleBlur() {
+        log.debug('Window lost focus, resetting key states.');
+        this.interaction.isCtrlPressed = false;
+        this.interaction.isAltPressed = false;
+        this.interaction.keyMovementInProgress = false;
+        // Also reset any interaction that relies on a key being held down
+        if (this.interaction.mode === 'dragging' && this.interaction.hasClonedInDrag) {
+            // If we were in the middle of a cloning drag, finalize it
+            this.canvas.saveState();
+            this.canvas.canvasState.saveStateToDB();
+        }
+        // Reset interaction mode if it's something that can get "stuck"
+        if (this.interaction.mode !== 'none' && this.interaction.mode !== 'drawingMask') {
+            this.resetInteractionState();
+            this.canvas.render();
         }
     }
     updateCursor(worldCoords) {
