@@ -39,25 +39,24 @@ jobs:
       - name: Get commit history since last tag
         id: commit_history
         run: |
-          # Znajdź ostatni tag (jeśli istnieje)
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           
-          # Jeśli nie ma ostatniego tagu, użyj pustego (pobierz od początku repo)
           if [ -z "$LAST_TAG" ]; then
             RANGE="HEAD"
           else
             RANGE="$LAST_TAG..HEAD"
           fi
-          
-          # Pobierz listę commitów (tylko subject/tytuł, format: - Commit message)
-          HISTORY=$(git log --pretty=format:"- %s" $RANGE)
-          
-          # Jeśli brak commitów, ustaw domyślną wiadomość
+
+          # Pobierz listę commitów i przefiltruj tylko te znaczące
+          HISTORY=$(git log --pretty=format:"%s" $RANGE | \
+            grep -vE '^\s*(add|update|fix|change|edit|mod|modify|cleanup|misc|typo|readme|temp|test|debug)\b' | \
+            grep -vE '^(\s*Update|Add|Fix|Change|Edit|Refactor|Bump|Minor|Misc|Readme|Test)[^a-zA-Z0-9]*$' | \
+            sed 's/^/- /')
+
           if [ -z "$HISTORY" ]; then
-            HISTORY="No changes since last release."
+            HISTORY="No significant changes since last release."
           fi
-          
-          # Ustaw multi-line output z delimiterem (zachowuje oryginalne nowe linie)
+
           echo "commit_history<<EOF" >> $GITHUB_OUTPUT
           echo "$HISTORY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
