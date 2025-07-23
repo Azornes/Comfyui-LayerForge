@@ -98,7 +98,8 @@ export class Canvas {
 
         this.offscreenCanvas = document.createElement('canvas');
         this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
-            alpha: false
+            alpha: false,
+            willReadFrequently: true
         });
 
         this.dataInitialized = false;

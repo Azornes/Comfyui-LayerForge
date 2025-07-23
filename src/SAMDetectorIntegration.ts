@@ -338,7 +338,7 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = canvas.width;
         tempCanvas.height = canvas.height;
-        const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
         if (tempCtx) {
             tempCtx.drawImage(resultImage, 0, 0, canvas.width, canvas.height);

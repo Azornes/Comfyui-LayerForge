@@ -410,7 +410,7 @@ export class CanvasLayers {
     async getLayerImageData(layer: Layer): Promise<string> {
         try {
             const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
 
             tempCanvas.width = layer.width;
@@ -687,7 +687,7 @@ export class CanvasLayers {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = this.canvas.width;
             tempCanvas.height = this.canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) {
                 reject(new Error("Could not create canvas context"));
                 return;
@@ -703,7 +703,7 @@ export class CanvasLayers {
                 const tempMaskCanvas = document.createElement('canvas');
                 tempMaskCanvas.width = this.canvas.width;
                 tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d');
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
                 if (!tempMaskCtx) {
                     reject(new Error("Could not create mask canvas context"));
                     return;
@@ -764,7 +764,7 @@ export class CanvasLayers {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = this.canvas.width;
             tempCanvas.height = this.canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) {
                 reject(new Error("Could not create canvas context"));
                 return;
@@ -831,7 +831,7 @@ export class CanvasLayers {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = newWidth;
             tempCanvas.height = newHeight;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) {
                 reject(new Error("Could not create canvas context"));
                 return;
@@ -898,7 +898,7 @@ export class CanvasLayers {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = fusedWidth;
             tempCanvas.height = fusedHeight;
-            const tempCtx = tempCanvas.getContext('2d');
+            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
 
             tempCtx.translate(-minX, -minY);
