@@ -534,45 +534,80 @@ async function createCanvasWidget(node, widget, app) {
     };
     updateButtonStates();
     canvas.updateHistoryButtons();
+    // Debounce timer for updateOutput to prevent excessive updates
+    let updateOutputTimer = null;
     const updateOutput = async (node, canvas) => {
+        // Check if preview is disabled - if so, skip updateOutput entirely
+        const showPreviewWidget = node.widgets.find((w) => w.name === "show_preview");
+        if (showPreviewWidget && !showPreviewWidget.value) {
+            log.debug("Preview disabled, skipping updateOutput");
+            return;
+        }
         const triggerWidget = node.widgets.find((w) => w.name === "trigger");
         if (triggerWidget) {
             triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         }
-        try {
-            const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-            if (blob) {
-                // Auto-register in clipspace for Impact Pack compatibility and get server URL
-                const serverImg = await registerImageInClipspace(node, blob);
-                if (serverImg) {
-                    // Use server URL image as the main image for Impact Pack compatibility
-                    node.imgs = [serverImg];
-                    node.clipspaceImg = serverImg;
-                    log.debug(`Using server URL for node.imgs: ${serverImg.src}`);
+        // Clear previous timer
+        if (updateOutputTimer) {
+            clearTimeout(updateOutputTimer);
+        }
+        // Debounce the update to prevent excessive processing during rapid changes
+        updateOutputTimer = setTimeout(async () => {
+            try {
+                const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+                if (blob) {
+                    // For large images, use blob URL for better performance
+                    if (blob.size > 2 * 1024 * 1024) { // 2MB threshold
+                        const blobUrl = URL.createObjectURL(blob);
+                        const img = new Image();
+                        img.onload = () => {
+                            node.imgs = [img];
+                            log.debug(`Using blob URL for large image (${(blob.size / 1024 / 1024).toFixed(1)}MB): ${blobUrl.substring(0, 50)}...`);
+                            // Clean up old blob URLs to prevent memory leaks
+                            if (node.imgs.length > 1) {
+                                const oldImg = node.imgs[0];
+                                if (oldImg.src.startsWith('blob:')) {
+                                    URL.revokeObjectURL(oldImg.src);
+                                }
+                            }
+                        };
+                        img.src = blobUrl;
+                    }
+                    else {
+                        // For smaller images, use data URI as before
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            const dataUrl = reader.result;
+                            const img = new Image();
+                            img.onload = () => {
+                                node.imgs = [img];
+                                log.debug(`Using data URI for small image (${(blob.size / 1024).toFixed(1)}KB): ${dataUrl.substring(0, 50)}...`);
+                            };
+                            img.src = dataUrl;
+                        };
+                        reader.readAsDataURL(blob);
+                    }
                 }
                 else {
-                    // Fallback to blob URL if server upload failed
-                    const new_preview = new Image();
-                    new_preview.src = URL.createObjectURL(blob);
-                    await new Promise(r => new_preview.onload = r);
-                    node.imgs = [new_preview];
-                    log.debug(`Fallback to blob URL for node.imgs: ${new_preview.src}`);
+                    node.imgs = [];
                 }
             }
-            else {
-                node.imgs = [];
+            catch (error) {
+                console.error("Error updating node preview:", error);
             }
-        }
-        catch (error) {
-            console.error("Error updating node preview:", error);
-        }
+        }, 150); // 150ms debounce delay
     };
+    // Store previous temp filenames for cleanup (make it globally accessible)
+    if (!window.layerForgeTempFileTracker) {
+        window.layerForgeTempFileTracker = new Map();
+    }
+    const tempFileTracker = window.layerForgeTempFileTracker;
     // Function to register image in clipspace for Impact Pack compatibility
     const registerImageInClipspace = async (node, blob) => {
         try {
             // Upload the image to ComfyUI's temp storage for clipspace access
             const formData = new FormData();
-            const filename = `layerforge-auto-${node.id}-${Date.now()}.png`;
+            const filename = `layerforge-sam-${node.id}-${Date.now()}.png`; // Use timestamp for SAM Detector
             formData.append("image", blob, filename);
             formData.append("overwrite", "true");
             formData.append("type", "temp");
@@ -1249,6 +1284,13 @@ app.registerExtension({
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {
                 log.info(`Cleaning up canvas node ${this.id}`);
+                // Clean up temp file tracker for this node (just remove from tracker)
+                const nodeKey = `node-${this.id}`;
+                const tempFileTracker = window.layerForgeTempFileTracker;
+                if (tempFileTracker && tempFileTracker.has(nodeKey)) {
+                    tempFileTracker.delete(nodeKey);
+                    log.debug(`Removed temp file tracker for node ${this.id}`);
+                }
                 canvasNodeInstances.delete(this.id);
                 log.info(`Deregistered CanvasNode instance for ID: ${this.id}`);
                 if (window.canvasExecutionStates) {
