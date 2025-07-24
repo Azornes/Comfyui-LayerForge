@@ -639,6 +639,11 @@ export class CanvasLayers {
             container.appendChild(slider);
             content.appendChild(container);
         });
+        // Add contextmenu event listener to the menu itself to prevent browser context menu
+        menu.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
         const container = this.canvas.canvas.parentElement || document.body;
         container.appendChild(menu);
         const closeMenu = (e) => {

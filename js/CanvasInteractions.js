@@ -90,9 +90,10 @@ export class CanvasInteractions {
         }
         // 2. Inne przyciski myszy
         if (e.button === 2) { // Prawy przycisk myszy
+            e.preventDefault(); // Always prevent right-click default behavior
+            e.stopPropagation(); // Stop event propagation
             const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(worldCoords.x, worldCoords.y);
             if (clickedLayerResult && this.canvas.canvasSelection.selectedLayers.includes(clickedLayerResult.layer)) {
-                e.preventDefault();
                 this.canvas.canvasLayers.showBlendModeMenu(viewCoords.x, viewCoords.y);
             }
             return;
@@ -207,7 +208,9 @@ export class CanvasInteractions {
         }
     }
     handleContextMenu(e) {
+        // Always prevent browser context menu - we handle all right-click interactions ourselves
         e.preventDefault();
+        e.stopPropagation();
     }
     handleWheel(e) {
         e.preventDefault();
