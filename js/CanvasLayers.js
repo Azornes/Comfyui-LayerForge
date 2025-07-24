@@ -7,6 +7,7 @@ import { app } from "../../scripts/app.js";
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
 import { ClipboardManager } from "./utils/ClipboardManager.js";
+import { createDistanceFieldMask } from "./utils/ImageAnalysis.js";
 const log = createModuleLogger('CanvasLayers');
 export class CanvasLayers {
     constructor(canvas) {
@@ -100,6 +101,7 @@ export class CanvasLayers {
         }, 'CanvasLayers.addLayerWithImage');
         this.canvas = canvas;
         this.clipboardManager = new ClipboardManager(canvas);
+        this.distanceFieldCache = new WeakMap();
         this.blendModes = [
             { name: 'normal', label: 'Normal' },
             { name: 'multiply', label: 'Multiply' },
@@ -348,8 +350,6 @@ export class CanvasLayers {
             return;
         const { offsetX = 0, offsetY = 0 } = options;
         ctx.save();
-        ctx.globalCompositeOperation = layer.blendMode || 'normal';
-        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
         const centerX = layer.x + layer.width / 2 - offsetX;
         const centerY = layer.y + layer.height / 2 - offsetY;
         ctx.translate(centerX, centerY);
@@ -361,8 +361,77 @@ export class CanvasLayers {
         }
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        // Check if we need to apply blend area effect
+        const blendArea = layer.blendArea ?? 0;
+        const needsBlendAreaEffect = blendArea > 0;
+        log.info(`Drawing layer ${layer.id}: blendArea=${blendArea}, needsBlendAreaEffect=${needsBlendAreaEffect}`);
+        if (needsBlendAreaEffect) {
+            log.info(`Applying blend area effect for layer ${layer.id}`);
+            // Get or create distance field mask
+            let maskCanvas = this.getDistanceFieldMask(layer.image, blendArea);
+            if (maskCanvas) {
+                // Create a temporary canvas for the masked layer
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = layer.width;
+                tempCanvas.height = layer.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                if (tempCtx) {
+                    // Draw the original image
+                    tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
+                    // Apply the distance field mask using destination-in for transparency effect
+                    tempCtx.globalCompositeOperation = 'destination-in';
+                    tempCtx.drawImage(maskCanvas, 0, 0, layer.width, layer.height);
+                    // Draw the result
+                    ctx.globalCompositeOperation = layer.blendMode || 'normal';
+                    ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                    ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                }
+                else {
+                    // Fallback to normal drawing
+                    ctx.globalCompositeOperation = layer.blendMode || 'normal';
+                    ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                    ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                }
+            }
+            else {
+                // Fallback to normal drawing
+                ctx.globalCompositeOperation = layer.blendMode || 'normal';
+                ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+                ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            }
+        }
+        else {
+            // Normal drawing without blend area effect
+            ctx.globalCompositeOperation = layer.blendMode || 'normal';
+            ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+            ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        }
         ctx.restore();
+    }
+    getDistanceFieldMask(image, blendArea) {
+        // Check cache first
+        let imageCache = this.distanceFieldCache.get(image);
+        if (!imageCache) {
+            imageCache = new Map();
+            this.distanceFieldCache.set(image, imageCache);
+        }
+        let maskCanvas = imageCache.get(blendArea);
+        if (!maskCanvas) {
+            try {
+                log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
+                maskCanvas = createDistanceFieldMask(image, blendArea);
+                log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
+                imageCache.set(blendArea, maskCanvas);
+            }
+            catch (error) {
+                log.error('Failed to create distance field mask:', error);
+                return null;
+            }
+        }
+        else {
+            log.info(`Using cached distance field mask for blendArea: ${blendArea}%`);
+        }
+        return maskCanvas;
     }
     _drawLayers(ctx, layers, options = {}) {
         const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
@@ -551,6 +620,31 @@ export class CanvasLayers {
         content.style.cssText = `padding: 5px;`;
         menu.appendChild(titleBar);
         menu.appendChild(content);
+        const blendAreaContainer = document.createElement('div');
+        blendAreaContainer.style.cssText = `padding: 5px 10px; border-bottom: 1px solid #4a4a4a;`;
+        const blendAreaLabel = document.createElement('label');
+        blendAreaLabel.textContent = 'Blend Area';
+        blendAreaLabel.style.color = 'white';
+        const blendAreaSlider = document.createElement('input');
+        blendAreaSlider.type = 'range';
+        blendAreaSlider.min = '0';
+        blendAreaSlider.max = '100';
+        const selectedLayerForBlendArea = this.canvas.canvasSelection.selectedLayers[0];
+        blendAreaSlider.value = selectedLayerForBlendArea?.blendArea?.toString() ?? '0';
+        blendAreaSlider.oninput = () => {
+            if (selectedLayerForBlendArea) {
+                const newValue = parseInt(blendAreaSlider.value, 10);
+                selectedLayerForBlendArea.blendArea = newValue;
+                log.info(`Blend Area changed to: ${newValue}% for layer: ${selectedLayerForBlendArea.id}`);
+                this.canvas.render();
+            }
+        };
+        blendAreaSlider.addEventListener('change', () => {
+            this.canvas.saveState();
+        });
+        blendAreaContainer.appendChild(blendAreaLabel);
+        blendAreaContainer.appendChild(blendAreaSlider);
+        content.appendChild(blendAreaContainer);
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
         const handleMouseMove = (e) => {
@@ -598,8 +692,17 @@ export class CanvasLayers {
                 option.style.backgroundColor = '#3a3a3a';
             }
             option.onclick = () => {
-                content.querySelectorAll('input[type="range"]').forEach(s => s.style.display = 'none');
-                content.querySelectorAll('.blend-mode-container div').forEach(d => d.style.backgroundColor = '');
+                // Hide only the opacity sliders within other blend mode containers
+                content.querySelectorAll('.blend-mode-container').forEach(c => {
+                    const opacitySlider = c.querySelector('input[type="range"]');
+                    if (opacitySlider) {
+                        opacitySlider.style.display = 'none';
+                    }
+                    const optionDiv = c.querySelector('div');
+                    if (optionDiv) {
+                        optionDiv.style.backgroundColor = '';
+                    }
+                });
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
                 if (selectedLayer) {

@@ -20,6 +20,7 @@ export interface Layer {
     mask?: Float32Array;
     flipH?: boolean;
     flipV?: boolean;
+    blendArea?: number;
 }
 
 export interface ComfyNode {

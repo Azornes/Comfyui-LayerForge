@@ -58,39 +58,29 @@ export class CanvasRenderer {
 
         this.drawGrid(ctx);
 
+        // Use CanvasLayers to draw layers with proper blend area support
+        this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
+        
+        // Draw selection frames for selected layers
         const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
             if (!layer.image || !layer.visible) return;
-            ctx.save();
-            const currentTransform = ctx.getTransform();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.globalCompositeOperation = layer.blendMode || 'normal';
-            ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-            ctx.setTransform(currentTransform);
-            const centerX = layer.x + layer.width / 2;
-            const centerY = layer.y + layer.height / 2;
-            ctx.translate(centerX, centerY);
-            ctx.rotate(layer.rotation * Math.PI / 180);
-
-            const scaleH = layer.flipH ? -1 : 1;
-            const scaleV = layer.flipV ? -1 : 1;
-            if (layer.flipH || layer.flipV) {
-                ctx.scale(scaleH, scaleV);
-            }
-            
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(
-                layer.image, -layer.width / 2, -layer.height / 2,
-                layer.width,
-                layer.height
-            );
-            if (layer.mask) {
-            }
             if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
+                ctx.save();
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate(layer.rotation * Math.PI / 180);
+
+                const scaleH = layer.flipH ? -1 : 1;
+                const scaleV = layer.flipV ? -1 : 1;
+                if (layer.flipH || layer.flipV) {
+                    ctx.scale(scaleH, scaleV);
+                }
+                
                 this.drawSelectionFrame(ctx, layer);
+                ctx.restore();
             }
-            ctx.restore();
         });
 
         this.drawCanvasOutline(ctx);
