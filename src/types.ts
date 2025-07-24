@@ -16,6 +16,7 @@ export interface Layer {
     zIndex: number;
     blendMode: string;
     opacity: number;
+    visible: boolean;
     mask?: Float32Array;
     flipH?: boolean;
     flipV?: boolean;

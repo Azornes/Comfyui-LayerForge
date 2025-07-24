@@ -451,7 +451,8 @@ export class CanvasIO {
                 originalWidth: image.width,
                 originalHeight: image.height,
                 blendMode: 'normal',
-                opacity: 1
+                opacity: 1,
+                visible: true
             };
             this.canvas.layers.push(layer);
             this.canvas.updateSelection([layer]);
@@ -610,6 +611,7 @@ export class CanvasIO {
                 zIndex: this.canvas.layers.length,
                 blendMode: 'normal',
                 opacity: 1,
+                visible: true,
             };
             this.canvas.layers.push(layer);
             this.canvas.updateSelection([layer]);

@@ -60,7 +60,7 @@ export class CanvasRenderer {
 
         const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
-            if (!layer.image) return;
+            if (!layer.image || !layer.visible) return;
             ctx.save();
             const currentTransform = ctx.getTransform();
             ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -205,7 +205,7 @@ export class CanvasRenderer {
     renderLayerInfo(ctx: any) {
         if (this.canvas.canvasSelection.selectedLayer) {
             this.canvas.canvasSelection.selectedLayers.forEach((layer: any) => {
-                if (!layer.image) return;
+                if (!layer.image || !layer.visible) return;
 
                 const layerIndex = this.canvas.layers.indexOf(layer);
                 const currentWidth = Math.round(layer.width);

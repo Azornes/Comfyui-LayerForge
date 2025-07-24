@@ -14,6 +14,7 @@ import {clearAllCanvasStates} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
 import {generateUniqueFileName} from "./utils/CommonUtils.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
 
@@ -402,19 +403,32 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             $el("div.painter-button-group", {id: "mask-controls"}, [
                 $el("button.painter-button.primary", {
                     id: `toggle-mask-btn-${node.id}`,
-                    textContent: "Show Mask",
+                    textContent: "M", // Fallback text until icon loads
                     title: "Toggle mask overlay visibility",
+                    style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '32px',
+                        maxWidth: '32px',
+                        padding: '4px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                    },
                     onclick: (e: MouseEvent) => {
-                        const button = e.target as HTMLButtonElement;
+                        const button = e.currentTarget as HTMLButtonElement;
                         canvas.maskTool.toggleOverlayVisibility();
                         canvas.render();
                         
-                        if (canvas.maskTool.isOverlayVisible) {
-                            button.classList.add('primary');
-                            button.textContent = "Show Mask";
-                        } else {
-                            button.classList.remove('primary');
-                            button.textContent = "Hide Mask";
+                        const iconContainer = button.querySelector('.mask-icon-container') as HTMLElement;
+                        if (iconContainer) {
+                            if (canvas.maskTool.isOverlayVisible) {
+                                button.classList.add('primary');
+                                iconContainer.style.opacity = '1';
+                            } else {
+                                button.classList.remove('primary');
+                                iconContainer.style.opacity = '0.5';
+                            }
                         }
                     }
                 }),
@@ -539,6 +553,48 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     ]);
 
 
+    // Function to create mask icon
+    const createMaskIcon = (): HTMLElement => {
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'mask-icon-container';
+        iconContainer.style.cssText = `
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        const icon = iconLoader.getIcon(LAYERFORGE_TOOLS.MASK);
+        if (icon) {
+            if (icon instanceof HTMLImageElement) {
+                const img = icon.cloneNode() as HTMLImageElement;
+                img.style.cssText = `
+                    width: 16px;
+                    height: 16px;
+                    filter: brightness(0) invert(1);
+                `;
+                iconContainer.appendChild(img);
+            } else if (icon instanceof HTMLCanvasElement) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(icon, 0, 0, 16, 16);
+                }
+                iconContainer.appendChild(canvas);
+            }
+        } else {
+            // Fallback text
+            iconContainer.textContent = 'M';
+            iconContainer.style.fontSize = '12px';
+            iconContainer.style.color = '#ffffff';
+        }
+
+        return iconContainer;
+    };
+
     const updateButtonStates = () => {
         const selectionCount = canvas.canvasSelection.selectedLayers.length;
         const hasSelection = selectionCount > 0;
@@ -569,11 +625,44 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     updateButtonStates();
     canvas.updateHistoryButtons();
 
+    // Add mask icon to toggle mask button after icons are loaded
+    setTimeout(async () => {
+        try {
+            await iconLoader.preloadToolIcons();
+            const toggleMaskBtn = controlPanel.querySelector(`#toggle-mask-btn-${node.id}`) as HTMLButtonElement;
+            if (toggleMaskBtn && !toggleMaskBtn.querySelector('.mask-icon-container')) {
+                // Clear fallback text
+                toggleMaskBtn.textContent = '';
+                
+                const maskIcon = createMaskIcon();
+                toggleMaskBtn.appendChild(maskIcon);
+                
+                // Set initial state based on mask visibility
+                if (canvas.maskTool.isOverlayVisible) {
+                    toggleMaskBtn.classList.add('primary');
+                    maskIcon.style.opacity = '1';
+                } else {
+                    toggleMaskBtn.classList.remove('primary');
+                    maskIcon.style.opacity = '0.5';
+                }
+            }
+        } catch (error) {
+            log.warn('Failed to load mask icon:', error);
+        }
+    }, 200);
+
     // Debounce timer for updateOutput to prevent excessive updates
     let updateOutputTimer: NodeJS.Timeout | null = null;
     
     const updateOutput = async (node: ComfyNode, canvas: Canvas) => {
         // Check if preview is disabled - if so, skip updateOutput entirely
+
+
+        const triggerWidget = node.widgets.find((w) => w.name === "trigger");
+        if (triggerWidget) {
+            triggerWidget.value = (triggerWidget.value + 1) % 99999999;
+        }
+
         const showPreviewWidget = node.widgets.find((w) => w.name === "show_preview");
         if (showPreviewWidget && !showPreviewWidget.value) {
             log.debug("Preview disabled, skipping updateOutput");
@@ -582,11 +671,6 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             placeholder.src = PLACEHOLDER_IMAGE;
             node.imgs = [placeholder];
             return;
-        }
-
-        const triggerWidget = node.widgets.find((w) => w.name === "trigger");
-        if (triggerWidget) {
-            triggerWidget.value = (triggerWidget.value + 1) % 99999999;
         }
 
         // Clear previous timer

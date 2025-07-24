@@ -46,7 +46,7 @@ export class CanvasRenderer {
         this.drawGrid(ctx);
         const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
-            if (!layer.image)
+            if (!layer.image || !layer.visible)
                 return;
             ctx.save();
             const currentTransform = ctx.getTransform();
@@ -171,7 +171,7 @@ export class CanvasRenderer {
     renderLayerInfo(ctx) {
         if (this.canvas.canvasSelection.selectedLayer) {
             this.canvas.canvasSelection.selectedLayers.forEach((layer) => {
-                if (!layer.image)
+                if (!layer.image || !layer.visible)
                     return;
                 const layerIndex = this.canvas.layers.indexOf(layer);
                 const currentWidth = Math.round(layer.width);

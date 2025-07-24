@@ -52,7 +52,8 @@ export class CanvasSelection {
      */
     updateSelection(newSelection: any) {
         const previousSelection = this.selectedLayers.length;
-        this.selectedLayers = newSelection || [];
+        // Filter out invisible layers from selection
+        this.selectedLayers = (newSelection || []).filter((layer: any) => layer.visible !== false);
         this.selectedLayer = this.selectedLayers.length > 0 ? this.selectedLayers[this.selectedLayers.length - 1] : null;
         
         // Sprawdź, czy zaznaczenie faktycznie się zmieniło, aby uniknąć pętli

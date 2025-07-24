@@ -126,7 +126,10 @@ export class BatchPreviewManager {
             const toggleBtn = document.getElementById(`toggle-mask-btn-${this.canvas.node.id}`);
             if (toggleBtn) {
                 toggleBtn.classList.remove('primary');
-                toggleBtn.textContent = "Hide Mask";
+                const iconContainer = toggleBtn.querySelector('.mask-icon-container');
+                if (iconContainer) {
+                    iconContainer.style.opacity = '0.5';
+                }
             }
             this.canvas.render();
         }
@@ -143,6 +146,10 @@ export class BatchPreviewManager {
             this.worldX -= menuWidthInWorld / 2;
             this.worldY += paddingInWorld;
         }
+        // Hide all batch layers initially, then show only the first one
+        this.layers.forEach((layer) => {
+            layer.visible = false;
+        });
         this._update();
     }
     hide() {
@@ -161,11 +168,21 @@ export class BatchPreviewManager {
             const toggleBtn = document.getElementById(`toggle-mask-btn-${String(this.canvas.node.id)}`);
             if (toggleBtn) {
                 toggleBtn.classList.add('primary');
-                toggleBtn.textContent = "Show Mask";
+                const iconContainer = toggleBtn.querySelector('.mask-icon-container');
+                if (iconContainer) {
+                    iconContainer.style.opacity = '1';
+                }
             }
         }
         this.maskWasVisible = false;
-        this.canvas.layers.forEach((l) => l.visible = true);
+        // Only make visible the layers that were part of the batch preview
+        this.layers.forEach((layer) => {
+            layer.visible = true;
+        });
+        // Update the layers panel to reflect visibility changes
+        if (this.canvas.canvasLayersPanel) {
+            this.canvas.canvasLayersPanel.onLayersChanged();
+        }
         this.canvas.render();
     }
     navigate(direction) {
@@ -203,11 +220,18 @@ export class BatchPreviewManager {
     _focusOnLayer(layer) {
         if (!layer)
             return;
-        log.debug(`Focusing on layer ${layer.id}`);
-        // Move the selected layer to the top of the layer stack
-        this.canvas.canvasLayers.moveLayers([layer], { toIndex: 0 });
+        log.debug(`Focusing on layer ${layer.id} using visibility toggle`);
+        // Hide all batch layers first
+        this.layers.forEach((l) => {
+            l.visible = false;
+        });
+        // Show only the current layer
+        layer.visible = true;
         this.canvas.updateSelection([layer]);
-        // Render is called by moveLayers, but we call it again to be safe
+        // Update the layers panel to reflect visibility changes
+        if (this.canvas.canvasLayersPanel) {
+            this.canvas.canvasLayersPanel.onLayersChanged();
+        }
         this.canvas.render();
     }
 }

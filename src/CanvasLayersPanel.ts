@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import type { Canvas } from './Canvas';
 import type { Layer } from './types';
 
@@ -28,7 +29,107 @@ export class CanvasLayersPanel {
         this.handleDragEnd = this.handleDragEnd.bind(this);
         this.handleDrop = this.handleDrop.bind(this);
 
+        // Preload icons
+        this.initializeIcons();
+
         log.info('CanvasLayersPanel initialized');
+    }
+
+    private async initializeIcons(): Promise<void> {
+        try {
+            await iconLoader.preloadToolIcons();
+            log.debug('Icons preloaded successfully');
+        } catch (error) {
+            log.warn('Failed to preload icons, using fallbacks:', error);
+        }
+    }
+
+    private createIconElement(toolName: string, size: number = 16): HTMLElement {
+        const iconContainer = document.createElement('div');
+        iconContainer.style.cssText = `
+            width: ${size}px;
+            height: ${size}px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        const icon = iconLoader.getIcon(toolName);
+        if (icon) {
+            if (icon instanceof HTMLImageElement) {
+                const img = icon.cloneNode() as HTMLImageElement;
+                img.style.cssText = `
+                    width: ${size}px;
+                    height: ${size}px;
+                    filter: brightness(0) invert(1);
+                `;
+                iconContainer.appendChild(img);
+            } else if (icon instanceof HTMLCanvasElement) {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(icon, 0, 0, size, size);
+                }
+                iconContainer.appendChild(canvas);
+            }
+        } else {
+            // Fallback text
+            iconContainer.textContent = toolName.charAt(0).toUpperCase();
+            iconContainer.style.fontSize = `${size * 0.6}px`;
+            iconContainer.style.color = '#ffffff';
+        }
+
+        return iconContainer;
+    }
+
+    private createVisibilityIcon(isVisible: boolean): HTMLElement {
+        if (isVisible) {
+            return this.createIconElement(LAYERFORGE_TOOLS.VISIBILITY, 16);
+        } else {
+            // Create a "hidden" version of the visibility icon
+            const iconContainer = document.createElement('div');
+            iconContainer.style.cssText = `
+                width: 16px;
+                height: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                opacity: 0.5;
+            `;
+
+            const icon = iconLoader.getIcon(LAYERFORGE_TOOLS.VISIBILITY);
+            if (icon) {
+                if (icon instanceof HTMLImageElement) {
+                    const img = icon.cloneNode() as HTMLImageElement;
+                    img.style.cssText = `
+                        width: 16px;
+                        height: 16px;
+                        filter: brightness(0) invert(1);
+                        opacity: 0.3;
+                    `;
+                    iconContainer.appendChild(img);
+                } else if (icon instanceof HTMLCanvasElement) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 16;
+                    canvas.height = 16;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.globalAlpha = 0.3;
+                        ctx.drawImage(icon, 0, 0, 16, 16);
+                    }
+                    iconContainer.appendChild(canvas);
+                }
+            } else {
+                // Fallback
+                iconContainer.textContent = 'H';
+                iconContainer.style.fontSize = '10px';
+                iconContainer.style.color = '#888888';
+            }
+
+            return iconContainer;
+        }
     }
 
     createPanelStructure(): HTMLElement {
@@ -39,7 +140,7 @@ export class CanvasLayersPanel {
             <div class="layers-panel-header">
                 <span class="layers-panel-title">Layers</span>
                 <div class="layers-panel-controls">
-                    <button class="layers-btn" id="delete-layer-btn" title="Delete layer">🗑</button>
+                    <button class="layers-btn" id="delete-layer-btn" title="Delete layer"></button>
                 </div>
             </div>
             <div class="layers-container" id="layers-container">
@@ -253,6 +354,23 @@ export class CanvasLayersPanel {
             .layers-container::-webkit-scrollbar-thumb:hover {
                 background: #5a5a5a;
             }
+
+            .layer-visibility-toggle {
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                border-radius: 2px;
+                font-size: 14px;
+                flex-shrink: 0;
+                transition: background-color 0.15s ease;
+            }
+
+            .layer-visibility-toggle:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
         `;
         
         document.head.appendChild(style);
@@ -262,6 +380,12 @@ export class CanvasLayersPanel {
     setupControlButtons(): void {
         if (!this.container) return;
         const deleteBtn = this.container.querySelector('#delete-layer-btn');
+
+        // Add delete icon to button
+        if (deleteBtn) {
+            const deleteIcon = this.createIconElement(LAYERFORGE_TOOLS.DELETE, 16);
+            deleteBtn.appendChild(deleteIcon);
+        }
 
         deleteBtn?.addEventListener('click', () => {
             log.info('Delete layer button clicked');
@@ -313,9 +437,17 @@ export class CanvasLayersPanel {
         }
 
         layerRow.innerHTML = `
+            <div class="layer-visibility-toggle" data-layer-index="${index}" title="Toggle layer visibility"></div>
             <div class="layer-thumbnail" data-layer-index="${index}"></div>
             <span class="layer-name" data-layer-index="${index}">${layer.name}</span>
         `;
+
+        // Add visibility icon
+        const visibilityToggle = layerRow.querySelector<HTMLElement>('.layer-visibility-toggle');
+        if (visibilityToggle) {
+            const visibilityIcon = this.createVisibilityIcon(layer.visible);
+            visibilityToggle.appendChild(visibilityIcon);
+        }
 
         const thumbnailContainer = layerRow.querySelector<HTMLElement>('.layer-thumbnail');
         if (thumbnailContainer) {
@@ -371,6 +503,16 @@ export class CanvasLayersPanel {
                 this.startEditingLayerName(nameElement, layer);
             }
         });
+
+        // Add visibility toggle event listener
+        const visibilityToggle = layerRow.querySelector<HTMLElement>('.layer-visibility-toggle');
+        if (visibilityToggle) {
+            visibilityToggle.addEventListener('click', (e: MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleLayerVisibility(layer);
+            });
+        }
 
         layerRow.addEventListener('dragstart', (e: DragEvent) => this.handleDragStart(e, layer, index));
         layerRow.addEventListener('dragover', this.handleDragOver.bind(this));
@@ -462,6 +604,24 @@ export class CanvasLayersPanel {
         } while (existingNames.includes(uniqueName));
         
         return uniqueName;
+    }
+
+    toggleLayerVisibility(layer: Layer): void {
+        layer.visible = !layer.visible;
+        
+        // If layer became invisible and is selected, deselect it
+        if (!layer.visible && this.canvas.canvasSelection.selectedLayers.includes(layer)) {
+            const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l: Layer) => l !== layer);
+            this.canvas.updateSelection(newSelection);
+        }
+        
+        this.canvas.render();
+        this.canvas.requestSaveState();
+        
+        // Update the eye icon in the panel
+        this.renderLayers();
+        
+        log.info(`Layer "${layer.name}" visibility toggled to: ${layer.visible}`);
     }
 
     deleteSelectedLayers(): void {

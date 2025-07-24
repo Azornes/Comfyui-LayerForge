@@ -319,6 +319,26 @@ export class Canvas {
                 layer.y -= finalY;
             });
             this.maskTool.updatePosition(-finalX, -finalY);
+            // Update batch preview managers like in canvas resize/move operations
+            if (this.pendingBatchContext) {
+                this.pendingBatchContext.outputArea.x -= finalX;
+                this.pendingBatchContext.outputArea.y -= finalY;
+                // Also update the menu spawn position to keep it relative
+                this.pendingBatchContext.spawnPosition.x -= finalX;
+                this.pendingBatchContext.spawnPosition.y -= finalY;
+                log.debug("Updated pending batch context during shape definition:", this.pendingBatchContext);
+            }
+            // Also move any active batch preview menus
+            if (this.batchPreviewManagers && this.batchPreviewManagers.length > 0) {
+                this.batchPreviewManagers.forEach((manager) => {
+                    manager.worldX -= finalX;
+                    manager.worldY -= finalY;
+                    if (manager.generationArea) {
+                        manager.generationArea.x -= finalX;
+                        manager.generationArea.y -= finalY;
+                    }
+                });
+            }
             this.viewport.x -= finalX;
             this.viewport.y -= finalY;
             this.saveState();

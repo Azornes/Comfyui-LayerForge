@@ -128,12 +128,17 @@ export class CanvasLayers {
         const offsetX = mouseX - centerX;
         const offsetY = mouseY - centerY;
 
-        this.internalClipboard.forEach((clipboardLayer: Layer) => {
+        // Find the highest zIndex among existing layers
+        const maxZIndex = this.canvas.layers.length > 0 
+            ? Math.max(...this.canvas.layers.map(l => l.zIndex)) 
+            : -1;
+
+        this.internalClipboard.forEach((clipboardLayer: Layer, index: number) => {
             const newLayer: Layer = {
                 ...clipboardLayer,
                 x: clipboardLayer.x + offsetX,
                 y: clipboardLayer.y + offsetY,
-                zIndex: this.canvas.layers.length
+                zIndex: maxZIndex + 1 + index  // Ensure pasted layers maintain their relative order
             };
             this.canvas.layers.push(newLayer);
             newLayers.push(newLayer);
@@ -189,6 +194,11 @@ export class CanvasLayers {
             finalY = area.y + (area.height - finalHeight) / 2;
         }
 
+        // Find the highest zIndex among existing layers
+        const maxZIndex = this.canvas.layers.length > 0 
+            ? Math.max(...this.canvas.layers.map(l => l.zIndex)) 
+            : -1;
+
         const layer: Layer = {
             id: generateUUID(),
             image: image,
@@ -201,9 +211,10 @@ export class CanvasLayers {
             originalWidth: image.width,
             originalHeight: image.height,
             rotation: 0,
-            zIndex: this.canvas.layers.length,
+            zIndex: maxZIndex + 1,  // Always add new layer on top
             blendMode: 'normal',
             opacity: 1,
+            visible: true,
             ...layerProps
         };
 
@@ -360,6 +371,9 @@ export class CanvasLayers {
         for (let i = this.canvas.layers.length - 1; i >= 0; i--) {
             const layer = this.canvas.layers[i];
 
+            // Skip invisible layers
+            if (!layer.visible) continue;
+
             const centerX = layer.x + layer.width / 2;
             const centerY = layer.y + layer.height / 2;
 
@@ -414,7 +428,11 @@ export class CanvasLayers {
 
     private _drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
         const sortedLayers = [...layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
-        sortedLayers.forEach(layer => this._drawLayer(ctx, layer, options));
+        sortedLayers.forEach(layer => {
+            if (layer.visible) {
+                this._drawLayer(ctx, layer, options);
+            }
+        });
     }
 
     public drawLayersToContext(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
@@ -567,8 +585,52 @@ export class CanvasLayers {
             font-size: 12px;
             font-weight: bold;
             border-bottom: 1px solid #4a4a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         `;
-        titleBar.textContent = 'Blend Mode';
+        
+        const titleText = document.createElement('span');
+        titleText.textContent = 'Blend Mode';
+        titleText.style.cssText = `
+            flex: 1;
+            cursor: move;
+        `;
+        
+        const closeButton = document.createElement('button');
+        closeButton.textContent = '×';
+        closeButton.style.cssText = `
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            margin: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        `;
+        
+        closeButton.onmouseover = () => {
+            closeButton.style.backgroundColor = '#4a4a4a';
+        };
+        
+        closeButton.onmouseout = () => {
+            closeButton.style.backgroundColor = 'transparent';
+        };
+        
+        closeButton.onclick = (e: MouseEvent) => {
+            e.stopPropagation();
+            this.closeBlendModeMenu();
+        };
+        
+        titleBar.appendChild(titleText);
+        titleBar.appendChild(closeButton);
 
         const content = document.createElement('div');
         content.style.cssText = `padding: 5px;`;
@@ -963,7 +1025,8 @@ export class CanvasLayers {
                 rotation: 0,
                 zIndex: minZIndex,
                 blendMode: 'normal',
-                opacity: 1
+                opacity: 1,
+                visible: true
             };
 
             this.canvas.layers = this.canvas.layers.filter((layer: Layer) => !this.canvas.canvasSelection.selectedLayers.includes(layer));
