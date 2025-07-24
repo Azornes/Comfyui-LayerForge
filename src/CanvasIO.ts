@@ -2,7 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import type { Canvas } from './Canvas';
-import type { Layer } from './types';
+import type { Layer, Shape } from './types';
 
 const log = createModuleLogger('CanvasIO');
 
@@ -61,6 +61,9 @@ export class CanvasIO {
             const {canvas: tempCanvas, ctx: tempCtx} = createCanvas(this.canvas.width, this.canvas.height);
             const {canvas: maskCanvas, ctx: maskCtx} = createCanvas(this.canvas.width, this.canvas.height);
 
+            const originalShape = this.canvas.outputAreaShape;
+            this.canvas.outputAreaShape = null;
+
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
@@ -75,7 +78,6 @@ export class CanvasIO {
             
             this.canvas.canvasLayers.drawLayersToContext(tempCtx, this.canvas.layers);
             this.canvas.canvasLayers.drawLayersToContext(visibilityCtx, this.canvas.layers);
-            
             log.debug(`Finished rendering layers`);
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
@@ -87,6 +89,9 @@ export class CanvasIO {
             }
 
             maskCtx.putImageData(maskData, 0, 0);
+
+            this.canvas.outputAreaShape = originalShape;
+
             const toolMaskCanvas = this.canvas.maskTool.getMask();
             if (toolMaskCanvas) {
 
@@ -233,6 +238,9 @@ export class CanvasIO {
             const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
             const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
 
+            const originalShape = this.canvas.outputAreaShape;
+            this.canvas.outputAreaShape = null;
+
             const visibilityCanvas = document.createElement('canvas');
             visibilityCanvas.width = this.canvas.width;
             visibilityCanvas.height = this.canvas.height;
@@ -298,12 +306,14 @@ export class CanvasIO {
                 tempMaskCtx.putImageData(tempMaskData, 0, 0);
 
 
-                maskCtx.globalCompositeOperation = 'screen';
-                maskCtx.drawImage(tempMaskCanvas, 0, 0);
+            maskCtx.globalCompositeOperation = 'screen';
+            maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
 
             const imageDataUrl = tempCanvas.toDataURL('image/png');
             const maskDataUrl = maskCanvas.toDataURL('image/png');
+
+            this.canvas.outputAreaShape = originalShape;
 
             resolve({image: imageDataUrl, mask: maskDataUrl});
         });
@@ -775,7 +785,15 @@ export class CanvasIO {
                         img.onerror = reject;
                         img.src = imageData;
                     });
-                    const newLayer = await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit', targetArea);
+                    
+                    let processedImage = img;
+                    
+                    // If there's a custom shape, clip the image to that shape
+                    if (this.canvas.outputAreaShape && this.canvas.outputAreaShape.isClosed) {
+                        processedImage = await this.clipImageToShape(img, this.canvas.outputAreaShape);
+                    }
+                    
+                    const newLayer = await this.canvas.canvasLayers.addLayerWithImage(processedImage, {}, 'fit', targetArea);
                     newLayers.push(newLayer);
                 }
                 log.info("All new images imported and placed on canvas successfully.");
@@ -792,5 +810,60 @@ export class CanvasIO {
             alert(`Failed to import latest images: ${error.message}`);
             return [];
         }
+    }
+
+    async clipImageToShape(image: HTMLImageElement, shape: Shape): Promise<HTMLImageElement> {
+        return new Promise((resolve, reject) => {
+            const { canvas, ctx } = createCanvas(image.width, image.height);
+            if (!ctx) {
+                reject(new Error("Could not create canvas context for clipping"));
+                return;
+            }
+
+            // Draw the image first
+            ctx.drawImage(image, 0, 0);
+
+            // Create a clipping mask using the shape
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.beginPath();
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Create a new image from the clipped canvas
+            const clippedImage = new Image();
+            clippedImage.onload = () => resolve(clippedImage);
+            clippedImage.onerror = () => reject(new Error("Failed to create clipped image"));
+            clippedImage.src = canvas.toDataURL();
+        });
+    }
+
+    createMaskFromShape(shape: Shape, width: number, height: number): Float32Array {
+        const { canvas, ctx } = createCanvas(width, height);
+        if (!ctx) {
+            throw new Error("Could not create canvas context for mask");
+        }
+        
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.moveTo(shape.points[0].x, shape.points[0].y);
+        for (let i = 1; i < shape.points.length; i++) {
+            ctx.lineTo(shape.points[i].x, shape.points[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const maskData = new Float32Array(width * height);
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            maskData[i / 4] = imageData.data[i] / 255;
+        }
+        return maskData;
     }
 }

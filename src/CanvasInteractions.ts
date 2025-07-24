@@ -6,7 +6,7 @@ import type { Layer, Point } from './types';
 const log = createModuleLogger('CanvasInteractions');
 
 interface InteractionState {
-    mode: 'none' | 'panning' | 'dragging' | 'resizing' | 'rotating' | 'drawingMask' | 'resizingCanvas' | 'movingCanvas' | 'potential-drag';
+    mode: 'none' | 'panning' | 'dragging' | 'resizing' | 'rotating' | 'drawingMask' | 'resizingCanvas' | 'movingCanvas' | 'potential-drag' | 'drawingShape';
     panStart: Point;
     dragStart: Point;
     transformOrigin: Partial<Layer> & { centerX?: number, centerY?: number };
@@ -15,6 +15,8 @@ interface InteractionState {
     canvasResizeStart: Point;
     isCtrlPressed: boolean;
     isAltPressed: boolean;
+    isShiftPressed: boolean;
+    isSPressed: boolean;
     hasClonedInDrag: boolean;
     lastClickTime: number;
     transformingLayer: Layer | null;
@@ -40,6 +42,8 @@ export class CanvasInteractions {
             canvasResizeStart: { x: 0, y: 0 },
             isCtrlPressed: false,
             isAltPressed: false,
+            isShiftPressed: false,
+            isSPressed: false,
             hasClonedInDrag: false,
             lastClickTime: 0,
             transformingLayer: null,
@@ -103,6 +107,11 @@ export class CanvasInteractions {
             return;
         }
 
+        if (this.canvas.shapeTool.isActive) {
+            this.canvas.shapeTool.addPoint(worldCoords);
+            return;
+        }
+
         // --- Ostateczna, poprawna kolejność sprawdzania ---
 
         // 1. Akcje globalne z modyfikatorami (mają najwyższy priorytet)
@@ -111,6 +120,11 @@ export class CanvasInteractions {
             return;
         }
         if (e.shiftKey) {
+            // Clear custom shape when starting canvas resize
+            if (this.canvas.outputAreaShape) {
+                this.canvas.outputAreaShape = null;
+                this.canvas.render();
+            }
             this.startCanvasResize(worldCoords);
             return;
         }
@@ -348,11 +362,23 @@ export class CanvasInteractions {
 
     handleKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
+        if (e.key === 'Shift') this.interaction.isShiftPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
             e.preventDefault();
         }
+        if (e.key.toLowerCase() === 's') {
+            this.interaction.isSPressed = true;
+            e.preventDefault();
+            e.stopPropagation();
+        }
 
+        // Check if Shift+S is being held down
+        if (this.interaction.isShiftPressed && this.interaction.isSPressed && !this.interaction.isCtrlPressed && !this.canvas.shapeTool.isActive) {
+            this.canvas.shapeTool.activate();
+            return;
+        }
+        
         // Globalne skróty (Undo/Redo/Copy/Paste)
         if (e.ctrlKey || e.metaKey) {
             let handled = true;
@@ -420,7 +446,14 @@ export class CanvasInteractions {
 
     handleKeyUp(e: KeyboardEvent): void {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
+        if (e.key === 'Shift') this.interaction.isShiftPressed = false;
         if (e.key === 'Alt') this.interaction.isAltPressed = false;
+        if (e.key.toLowerCase() === 's') this.interaction.isSPressed = false;
+
+        // Deactivate shape tool when Shift or S is released
+        if (this.canvas.shapeTool.isActive && (!this.interaction.isShiftPressed || !this.interaction.isSPressed)) {
+            this.canvas.shapeTool.deactivate();
+        }
 
         const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
         if (movementKeys.includes(e.code) && this.interaction.keyMovementInProgress) {
@@ -433,7 +466,14 @@ export class CanvasInteractions {
         log.debug('Window lost focus, resetting key states.');
         this.interaction.isCtrlPressed = false;
         this.interaction.isAltPressed = false;
+        this.interaction.isShiftPressed = false;
+        this.interaction.isSPressed = false;
         this.interaction.keyMovementInProgress = false;
+
+        // Deactivate shape tool when window loses focus
+        if (this.canvas.shapeTool.isActive) {
+            this.canvas.shapeTool.deactivate();
+        }
 
         // Also reset any interaction that relies on a key being held down
         if (this.interaction.mode === 'dragging' && this.interaction.hasClonedInDrag) {

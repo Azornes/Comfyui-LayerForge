@@ -7,6 +7,7 @@ import {ComfyApp} from "../../scripts/app.js";
 
 import {removeImage} from "./db.js";
 import {MaskTool} from "./MaskTool.js";
+import {ShapeTool} from "./ShapeTool.js";
 import {CanvasState} from "./CanvasState.js";
 import {CanvasInteractions} from "./CanvasInteractions.js";
 import {CanvasLayers} from "./CanvasLayers.js";
@@ -19,7 +20,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 import { debounce } from "./utils/CommonUtils.js";
 import {CanvasMask} from "./CanvasMask.js";
 import {CanvasSelection} from "./CanvasSelection.js";
-import type { ComfyNode, Layer, Viewport, Point, AddMode } from './types';
+import type { ComfyNode, Layer, Viewport, Point, AddMode, Shape } from './types';
 
 const useChainCallback = (original: any, next: any) => {
   if (original === undefined || original === null) {
@@ -63,6 +64,8 @@ export class Canvas {
     lastMousePosition: Point;
     layers: Layer[];
     maskTool: MaskTool;
+    shapeTool: ShapeTool;
+    outputAreaShape: Shape | null;
     node: ComfyNode;
     offscreenCanvas: HTMLCanvasElement;
     offscreenCtx: CanvasRenderingContext2D | null;
@@ -108,6 +111,8 @@ export class Canvas {
 
         this.requestSaveState = () => {};
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
+        this.shapeTool = new ShapeTool(this);
+        this.outputAreaShape = null;
         this.canvasMask = new CanvasMask(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
@@ -379,6 +384,41 @@ export class Canvas {
      */
     updateSelectionLogic(layer: Layer, isCtrlPressed: boolean, isShiftPressed: boolean, index: number) {
         return this.canvasSelection.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
+    }
+
+    defineOutputAreaWithShape(shape: Shape): void {
+        const boundingBox = this.shapeTool.getBoundingBox();
+        if (boundingBox && boundingBox.width > 1 && boundingBox.height > 1) {
+            this.saveState();
+
+            this.outputAreaShape = {
+                ...shape,
+                points: shape.points.map(p => ({
+                    x: p.x - boundingBox.x,
+                    y: p.y - boundingBox.y
+                }))
+            };
+
+            const newWidth = Math.round(boundingBox.width);
+            const newHeight = Math.round(boundingBox.height);
+            const finalX = boundingBox.x;
+            const finalY = boundingBox.y;
+
+            this.updateOutputAreaSize(newWidth, newHeight, false);
+
+            this.layers.forEach((layer: Layer) => {
+                layer.x -= finalX;
+                layer.y -= finalY;
+            });
+
+            this.maskTool.updatePosition(-finalX, -finalY);
+
+            this.viewport.x -= finalX;
+            this.viewport.y -= finalY;
+
+            this.saveState();
+            this.render();
+        }
     }
 
     /**

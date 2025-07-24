@@ -91,6 +91,7 @@ export class CanvasRenderer {
             ctx.restore();
         }
         this.renderInteractionElements(ctx);
+        this.canvas.shapeTool.render(ctx);
         this.renderLayerInfo(ctx);
         ctx.restore();
         if (this.canvas.canvas.width !== this.canvas.offscreenCanvas.width ||
@@ -257,6 +258,21 @@ export class CanvasRenderer {
         ctx.rect(0, 0, this.canvas.width, this.canvas.height);
         ctx.stroke();
         ctx.setLineDash([]);
+        if (this.canvas.outputAreaShape) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+            ctx.lineWidth = 2 / this.canvas.viewport.zoom;
+            ctx.setLineDash([]);
+            const shape = this.canvas.outputAreaShape;
+            ctx.beginPath();
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+        }
     }
     drawSelectionFrame(ctx, layer) {
         const lineWidth = 2 / this.canvas.viewport.zoom;

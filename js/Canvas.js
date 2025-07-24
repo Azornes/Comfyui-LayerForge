@@ -1,6 +1,7 @@
 // @ts-ignore
 import { api } from "../../scripts/api.js";
 import { MaskTool } from "./MaskTool.js";
+import { ShapeTool } from "./ShapeTool.js";
 import { CanvasState } from "./CanvasState.js";
 import { CanvasInteractions } from "./CanvasInteractions.js";
 import { CanvasLayers } from "./CanvasLayers.js";
@@ -62,6 +63,8 @@ export class Canvas {
         this.imageCache = new Map();
         this.requestSaveState = () => { };
         this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
+        this.shapeTool = new ShapeTool(this);
+        this.outputAreaShape = null;
         this.canvasMask = new CanvasMask(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
@@ -294,6 +297,33 @@ export class Canvas {
      */
     updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index) {
         return this.canvasSelection.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
+    }
+    defineOutputAreaWithShape(shape) {
+        const boundingBox = this.shapeTool.getBoundingBox();
+        if (boundingBox && boundingBox.width > 1 && boundingBox.height > 1) {
+            this.saveState();
+            this.outputAreaShape = {
+                ...shape,
+                points: shape.points.map(p => ({
+                    x: p.x - boundingBox.x,
+                    y: p.y - boundingBox.y
+                }))
+            };
+            const newWidth = Math.round(boundingBox.width);
+            const newHeight = Math.round(boundingBox.height);
+            const finalX = boundingBox.x;
+            const finalY = boundingBox.y;
+            this.updateOutputAreaSize(newWidth, newHeight, false);
+            this.layers.forEach((layer) => {
+                layer.x -= finalX;
+                layer.y -= finalY;
+            });
+            this.maskTool.updatePosition(-finalX, -finalY);
+            this.viewport.x -= finalX;
+            this.viewport.y -= finalY;
+            this.saveState();
+            this.render();
+        }
     }
     /**
      * Zmienia rozmiar obszaru wyjściowego

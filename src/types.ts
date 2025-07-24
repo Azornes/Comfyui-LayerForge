@@ -129,6 +129,11 @@ export interface Point {
     y: number;
 }
 
+export interface Shape {
+    points: Point[];
+    isClosed: boolean;
+}
+
 export interface Viewport {
     x: number;
     y: number;

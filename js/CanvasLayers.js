@@ -55,6 +55,34 @@ export class CanvasLayers {
                 opacity: 1,
                 ...layerProps
             };
+            if (layer.mask) {
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                if (tempCtx) {
+                    tempCanvas.width = layer.width;
+                    tempCanvas.height = layer.height;
+                    tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
+                    const maskCanvas = document.createElement('canvas');
+                    const maskCtx = maskCanvas.getContext('2d');
+                    if (maskCtx) {
+                        maskCanvas.width = layer.width;
+                        maskCanvas.height = layer.height;
+                        const maskImageData = maskCtx.createImageData(layer.width, layer.height);
+                        for (let i = 0; i < layer.mask.length; i++) {
+                            maskImageData.data[i * 4] = 255;
+                            maskImageData.data[i * 4 + 1] = 255;
+                            maskImageData.data[i * 4 + 2] = 255;
+                            maskImageData.data[i * 4 + 3] = layer.mask[i] * 255;
+                        }
+                        maskCtx.putImageData(maskImageData, 0, 0);
+                        tempCtx.globalCompositeOperation = 'destination-in';
+                        tempCtx.drawImage(maskCanvas, 0, 0);
+                        const newImage = new Image();
+                        newImage.src = tempCanvas.toDataURL();
+                        layer.image = newImage;
+                    }
+                }
+            }
             this.canvas.layers.push(layer);
             this.canvas.updateSelection([layer]);
             this.canvas.render();

@@ -115,6 +115,7 @@ export class CanvasRenderer {
         }
 
         this.renderInteractionElements(ctx);
+        this.canvas.shapeTool.render(ctx);
         this.renderLayerInfo(ctx);
 
         ctx.restore();
@@ -307,6 +308,22 @@ export class CanvasRenderer {
 
         ctx.stroke();
         ctx.setLineDash([]);
+
+        if (this.canvas.outputAreaShape) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+            ctx.lineWidth = 2 / this.canvas.viewport.zoom;
+            ctx.setLineDash([]);
+            const shape = this.canvas.outputAreaShape;
+            ctx.beginPath();
+            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            for (let i = 1; i < shape.points.length; i++) {
+                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 
     drawSelectionFrame(ctx: any, layer: any) {
