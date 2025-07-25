@@ -101,6 +101,7 @@ export class CanvasInteractions {
         const worldCoords = this.canvas.getMouseWorldCoordinates(e);
         const viewCoords = this.canvas.getMouseViewCoordinates(e);
 
+
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseDown(worldCoords, viewCoords);
             this.canvas.render();
@@ -987,4 +988,5 @@ export class CanvasInteractions {
 
         await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
     }
+
 }

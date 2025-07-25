@@ -86,6 +86,14 @@ export class CanvasRenderer {
         this.renderInteractionElements(ctx);
         this.canvas.shapeTool.render(ctx);
         this.renderLayerInfo(ctx);
+        // Update custom shape menu position and visibility
+        if (this.canvas.outputAreaShape) {
+            this.canvas.customShapeMenu.show();
+            this.canvas.customShapeMenu.updateScreenPosition();
+        }
+        else {
+            this.canvas.customShapeMenu.hide();
+        }
         ctx.restore();
         if (this.canvas.canvas.width !== this.canvas.offscreenCanvas.width ||
             this.canvas.canvas.height !== this.canvas.offscreenCanvas.height) {

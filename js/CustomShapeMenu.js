@@ -1,0 +1,317 @@
+import { createModuleLogger } from "./utils/LoggerUtils.js";
+const log = createModuleLogger('CustomShapeMenu');
+export class CustomShapeMenu {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.element = null;
+        this.worldX = 0;
+        this.worldY = 0;
+        this.uiInitialized = false;
+    }
+    show() {
+        if (!this.canvas.outputAreaShape) {
+            return;
+        }
+        this._createUI();
+        if (this.element) {
+            this.element.style.display = 'block';
+        }
+        // Position in top-left corner of viewport (closer to edge)
+        const viewLeft = this.canvas.viewport.x;
+        const viewTop = this.canvas.viewport.y;
+        this.worldX = viewLeft + (8 / this.canvas.viewport.zoom);
+        this.worldY = viewTop + (8 / this.canvas.viewport.zoom);
+        this.updateScreenPosition();
+    }
+    hide() {
+        if (this.element) {
+            this.element.remove();
+            this.element = null;
+            this.uiInitialized = false;
+        }
+    }
+    updateScreenPosition() {
+        if (!this.element)
+            return;
+        const screenX = (this.worldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
+        const screenY = (this.worldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
+        this.element.style.transform = `translate(${screenX}px, ${screenY}px)`;
+    }
+    _createUI() {
+        if (this.uiInitialized)
+            return;
+        this.element = document.createElement('div');
+        this.element.id = 'layerforge-custom-shape-menu';
+        this.element.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #333;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            font-family: sans-serif;
+            font-size: 12px;
+            z-index: 1001;
+            border: 1px solid #555;
+            user-select: none;
+            min-width: 200px;
+        `;
+        // Create menu content
+        const lines = [
+            "🎯 Custom Output Area Active",
+            "Press Shift+S to modify shape",
+            "Shape defines generation area"
+        ];
+        lines.forEach(line => {
+            const lineElement = document.createElement('div');
+            lineElement.textContent = line;
+            lineElement.style.cssText = `
+                margin: 2px 0;
+                line-height: 18px;
+            `;
+            this.element.appendChild(lineElement);
+        });
+        // Add main auto-apply checkbox
+        const checkboxContainer = this._createCheckbox(() => `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`, () => {
+            this.canvas.autoApplyShapeMask = !this.canvas.autoApplyShapeMask;
+            if (this.canvas.autoApplyShapeMask) {
+                this.canvas.maskTool.applyShapeMask();
+                log.info("Auto-apply shape mask enabled - mask applied automatically");
+            }
+            else {
+                this.canvas.maskTool.removeShapeMask();
+                log.info("Auto-apply shape mask disabled - mask removed automatically");
+            }
+            this._updateUI();
+            this.canvas.render();
+        });
+        this.element.appendChild(checkboxContainer);
+        // Add expansion checkbox (only visible when auto-apply is enabled)
+        const expansionContainer = this._createCheckbox(() => `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Expand/Contract mask`, () => {
+            this.canvas.shapeMaskExpansion = !this.canvas.shapeMaskExpansion;
+            this._updateUI();
+            if (this.canvas.autoApplyShapeMask) {
+                this.canvas.maskTool.applyShapeMask();
+                this.canvas.render();
+            }
+        });
+        expansionContainer.id = 'expansion-checkbox';
+        this.element.appendChild(expansionContainer);
+        // Add expansion slider container (only visible when expansion is enabled)
+        const expansionSliderContainer = document.createElement('div');
+        expansionSliderContainer.id = 'expansion-slider-container';
+        expansionSliderContainer.style.cssText = `
+            margin: 6px 0;
+            padding: 4px 8px;
+            display: none;
+        `;
+        const expansionSliderLabel = document.createElement('div');
+        expansionSliderLabel.textContent = 'Expansion amount:';
+        expansionSliderLabel.style.cssText = `
+            font-size: 11px;
+            margin-bottom: 4px;
+            color: #ccc;
+        `;
+        const expansionSlider = document.createElement('input');
+        expansionSlider.type = 'range';
+        expansionSlider.min = '-300';
+        expansionSlider.max = '300';
+        expansionSlider.value = '0';
+        expansionSlider.style.cssText = `
+            width: 100%;
+            height: 4px;
+            background: #555;
+            outline: none;
+            border-radius: 2px;
+        `;
+        const expansionValueDisplay = document.createElement('div');
+        expansionValueDisplay.style.cssText = `
+            font-size: 10px;
+            text-align: center;
+            margin-top: 2px;
+            color: #aaa;
+        `;
+        const updateExpansionSliderDisplay = () => {
+            const value = parseInt(expansionSlider.value);
+            this.canvas.shapeMaskExpansionValue = value;
+            expansionValueDisplay.textContent = value > 0 ? `+${value}px` : `${value}px`;
+        };
+        // Add debouncing for expansion slider
+        let expansionTimeout = null;
+        expansionSlider.oninput = () => {
+            updateExpansionSliderDisplay();
+            if (this.canvas.autoApplyShapeMask) {
+                // Clear previous timeout
+                if (expansionTimeout) {
+                    clearTimeout(expansionTimeout);
+                }
+                // Apply mask immediately for visual feedback (without saving state)
+                this.canvas.maskTool.applyShapeMask(false); // false = don't save state
+                this.canvas.render();
+                // Save state after 500ms of no changes
+                expansionTimeout = window.setTimeout(() => {
+                    this.canvas.canvasState.saveMaskState();
+                }, 500);
+            }
+        };
+        updateExpansionSliderDisplay();
+        expansionSliderContainer.appendChild(expansionSliderLabel);
+        expansionSliderContainer.appendChild(expansionSlider);
+        expansionSliderContainer.appendChild(expansionValueDisplay);
+        this.element.appendChild(expansionSliderContainer);
+        // Add feather checkbox (only visible when auto-apply is enabled)
+        const featherContainer = this._createCheckbox(() => `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`, () => {
+            this.canvas.shapeMaskFeather = !this.canvas.shapeMaskFeather;
+            this._updateUI();
+            if (this.canvas.autoApplyShapeMask) {
+                this.canvas.maskTool.applyShapeMask();
+                this.canvas.render();
+            }
+        });
+        featherContainer.id = 'feather-checkbox';
+        this.element.appendChild(featherContainer);
+        // Add feather slider container (only visible when feather is enabled)
+        const featherSliderContainer = document.createElement('div');
+        featherSliderContainer.id = 'feather-slider-container';
+        featherSliderContainer.style.cssText = `
+            margin: 6px 0;
+            padding: 4px 8px;
+            display: none;
+        `;
+        const featherSliderLabel = document.createElement('div');
+        featherSliderLabel.textContent = 'Feather amount:';
+        featherSliderLabel.style.cssText = `
+            font-size: 11px;
+            margin-bottom: 4px;
+            color: #ccc;
+        `;
+        const featherSlider = document.createElement('input');
+        featherSlider.type = 'range';
+        featherSlider.min = '0';
+        featherSlider.max = '300';
+        featherSlider.value = '0';
+        featherSlider.style.cssText = `
+            width: 100%;
+            height: 4px;
+            background: #555;
+            outline: none;
+            border-radius: 2px;
+        `;
+        const featherValueDisplay = document.createElement('div');
+        featherValueDisplay.style.cssText = `
+            font-size: 10px;
+            text-align: center;
+            margin-top: 2px;
+            color: #aaa;
+        `;
+        const updateFeatherSliderDisplay = () => {
+            const value = parseInt(featherSlider.value);
+            this.canvas.shapeMaskFeatherValue = value;
+            featherValueDisplay.textContent = `${value}px`;
+        };
+        // Add debouncing for feather slider
+        let featherTimeout = null;
+        featherSlider.oninput = () => {
+            updateFeatherSliderDisplay();
+            if (this.canvas.autoApplyShapeMask) {
+                // Clear previous timeout
+                if (featherTimeout) {
+                    clearTimeout(featherTimeout);
+                }
+                // Apply mask immediately for visual feedback (without saving state)
+                this.canvas.maskTool.applyShapeMask(false); // false = don't save state
+                this.canvas.render();
+                // Save state after 500ms of no changes
+                featherTimeout = window.setTimeout(() => {
+                    this.canvas.canvasState.saveMaskState();
+                }, 500);
+            }
+        };
+        updateFeatherSliderDisplay();
+        featherSliderContainer.appendChild(featherSliderLabel);
+        featherSliderContainer.appendChild(featherSlider);
+        featherSliderContainer.appendChild(featherValueDisplay);
+        this.element.appendChild(featherSliderContainer);
+        // Add to DOM
+        if (this.canvas.canvas.parentElement) {
+            this.canvas.canvas.parentElement.appendChild(this.element);
+        }
+        else {
+            log.error("Could not find parent node to attach custom shape menu.");
+        }
+        this.uiInitialized = true;
+        this._updateUI();
+    }
+    _createCheckbox(textFn, clickHandler) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            margin: 6px 0 2px 0;
+            padding: 4px 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            line-height: 18px;
+        `;
+        container.onmouseover = () => {
+            container.style.backgroundColor = '#555';
+        };
+        container.onmouseout = () => {
+            container.style.backgroundColor = 'transparent';
+        };
+        const updateText = () => {
+            container.textContent = textFn();
+        };
+        updateText();
+        container.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clickHandler();
+            updateText();
+        };
+        return container;
+    }
+    _updateUI() {
+        if (!this.element)
+            return;
+        // Update expansion checkbox visibility
+        const expansionCheckbox = this.element.querySelector('#expansion-checkbox');
+        if (expansionCheckbox) {
+            expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
+        }
+        // Update expansion slider container visibility
+        const expansionSliderContainer = this.element.querySelector('#expansion-slider-container');
+        if (expansionSliderContainer) {
+            expansionSliderContainer.style.display =
+                (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
+        }
+        // Update feather checkbox visibility
+        const featherCheckbox = this.element.querySelector('#feather-checkbox');
+        if (featherCheckbox) {
+            featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
+        }
+        // Update feather slider container visibility
+        const featherSliderContainer = this.element.querySelector('#feather-slider-container');
+        if (featherSliderContainer) {
+            featherSliderContainer.style.display =
+                (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
+        }
+        // Update checkbox texts
+        const checkboxes = this.element.querySelectorAll('div[style*="cursor: pointer"]');
+        checkboxes.forEach((checkbox, index) => {
+            if (index === 0) { // Main checkbox
+                checkbox.textContent = `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`;
+            }
+            else if (index === 1) { // Expansion checkbox
+                checkbox.textContent = `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Expand/Contract mask`;
+            }
+            else if (index === 2) { // Feather checkbox
+                checkbox.textContent = `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`;
+            }
+        });
+    }
+}

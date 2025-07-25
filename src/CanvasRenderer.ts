@@ -107,6 +107,14 @@ export class CanvasRenderer {
         this.renderInteractionElements(ctx);
         this.canvas.shapeTool.render(ctx);
         this.renderLayerInfo(ctx);
+        
+        // Update custom shape menu position and visibility
+        if (this.canvas.outputAreaShape) {
+            this.canvas.customShapeMenu.show();
+            this.canvas.customShapeMenu.updateScreenPosition();
+        } else {
+            this.canvas.customShapeMenu.hide();
+        }
 
         ctx.restore();
 
@@ -261,6 +269,7 @@ export class CanvasRenderer {
             });
         }
     }
+
 
     drawGrid(ctx: any) {
         const gridSize = 64;

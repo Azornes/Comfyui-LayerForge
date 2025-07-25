@@ -270,4 +270,496 @@ export class MaskTool {
         this.canvasInstance.render();
         log.info(`MaskTool added mask overlay at correct canvas position (${destX}, ${destY}) without clearing existing mask.`);
     }
+    applyShapeMask(saveState = true) {
+        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+            log.warn("Cannot apply shape mask: shape is not defined or has too few points.");
+            return;
+        }
+        if (saveState) {
+            this.canvasInstance.canvasState.saveMaskState();
+        }
+        const shape = this.canvasInstance.outputAreaShape;
+        const destX = -this.x;
+        const destY = -this.y;
+        // Clear the entire mask canvas first
+        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        // Create points relative to the mask canvas's coordinate system (by applying the offset)
+        const maskPoints = shape.points.map(p => ({ x: p.x + destX, y: p.y + destY }));
+        // Check if we need expansion or feathering
+        const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
+        const needsFeather = this.canvasInstance.shapeMaskFeather && this.canvasInstance.shapeMaskFeatherValue > 0;
+        if (!needsExpansion && !needsFeather) {
+            // Simple case: just draw the original shape
+            this.maskCtx.fillStyle = 'white';
+            this.maskCtx.beginPath();
+            this.maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
+            for (let i = 1; i < maskPoints.length; i++) {
+                this.maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
+            }
+            this.maskCtx.closePath();
+            this.maskCtx.fill();
+        }
+        else if (needsExpansion && !needsFeather) {
+            // Expansion only: use the new distance transform expansion
+            const expandedMaskCanvas = this._createExpandedMaskCanvas(maskPoints, this.canvasInstance.shapeMaskExpansionValue, this.maskCanvas.width, this.maskCanvas.height);
+            this.maskCtx.drawImage(expandedMaskCanvas, 0, 0);
+        }
+        else if (!needsExpansion && needsFeather) {
+            // Feather only: apply feathering to the original shape
+            const featheredMaskCanvas = this._createFeatheredMaskCanvas(maskPoints, this.canvasInstance.shapeMaskFeatherValue, this.maskCanvas.width, this.maskCanvas.height);
+            this.maskCtx.drawImage(featheredMaskCanvas, 0, 0);
+        }
+        else {
+            // Both expansion and feather: first expand, then apply feather to the expanded shape
+            // Step 1: Create expanded shape
+            const expandedMaskCanvas = this._createExpandedMaskCanvas(maskPoints, this.canvasInstance.shapeMaskExpansionValue, this.maskCanvas.width, this.maskCanvas.height);
+            // Step 2: Extract points from the expanded canvas and apply feathering
+            // For now, we'll apply feathering to the expanded canvas directly
+            // This is a simplified approach - we could extract the outline points for more precision
+            const tempCtx = expandedMaskCanvas.getContext('2d', { willReadFrequently: true });
+            const expandedImageData = tempCtx.getImageData(0, 0, expandedMaskCanvas.width, expandedMaskCanvas.height);
+            // Apply feathering to the expanded shape
+            const featheredMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, this.maskCanvas.width, this.maskCanvas.height);
+            this.maskCtx.drawImage(featheredMaskCanvas, 0, 0);
+        }
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+        this.canvasInstance.render();
+        log.info(`Applied shape mask with expansion: ${needsExpansion}, feather: ${needsFeather}.`);
+    }
+    /**
+     * Removes mask in the area of the custom output area shape
+     */
+    removeShapeMask() {
+        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+            log.warn("Shape has insufficient points for mask removal");
+            return;
+        }
+        this.canvasInstance.canvasState.saveMaskState();
+        const shape = this.canvasInstance.outputAreaShape;
+        const destX = -this.x;
+        const destY = -this.y;
+        this.maskCtx.save();
+        this.maskCtx.globalCompositeOperation = 'destination-out';
+        this.maskCtx.translate(destX, destY);
+        this.maskCtx.beginPath();
+        this.maskCtx.moveTo(shape.points[0].x, shape.points[0].y);
+        for (let i = 1; i < shape.points.length; i++) {
+            this.maskCtx.lineTo(shape.points[i].x, shape.points[i].y);
+        }
+        this.maskCtx.closePath();
+        this.maskCtx.fill();
+        this.maskCtx.restore();
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+        this.canvasInstance.render();
+        log.info(`Removed shape mask with ${shape.points.length} points`);
+    }
+    _createFeatheredMaskCanvas(points, featherRadius, width, height) {
+        // 1. Create a binary mask on a temporary canvas.
+        const binaryCanvas = document.createElement('canvas');
+        binaryCanvas.width = width;
+        binaryCanvas.height = height;
+        const binaryCtx = binaryCanvas.getContext('2d', { willReadFrequently: true });
+        binaryCtx.fillStyle = 'white';
+        binaryCtx.beginPath();
+        binaryCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            binaryCtx.lineTo(points[i].x, points[i].y);
+        }
+        binaryCtx.closePath();
+        binaryCtx.fill();
+        const maskImage = binaryCtx.getImageData(0, 0, width, height);
+        const binaryData = new Uint8Array(width * height);
+        for (let i = 0; i < binaryData.length; i++) {
+            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0; // 1 = inside, 0 = outside
+        }
+        // 2. Calculate the fast distance transform (from ImageAnalysis.ts approach).
+        const distanceMap = this._fastDistanceTransform(binaryData, width, height);
+        // Find the maximum distance to normalize
+        let maxDistance = 0;
+        for (let i = 0; i < distanceMap.length; i++) {
+            if (distanceMap[i] > maxDistance) {
+                maxDistance = distanceMap[i];
+            }
+        }
+        // 3. Create the final output canvas with the complete mask (solid + feather).
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = width;
+        outputCanvas.height = height;
+        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
+        const outputData = outputCtx.createImageData(width, height);
+        // Use featherRadius as the threshold for the gradient
+        const threshold = Math.min(featherRadius, maxDistance);
+        for (let i = 0; i < distanceMap.length; i++) {
+            const distance = distanceMap[i];
+            const originalAlpha = maskImage.data[i * 4 + 3];
+            if (originalAlpha === 0) {
+                // Transparent pixels remain transparent
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 0;
+            }
+            else if (distance <= threshold) {
+                // Edge area - apply gradient alpha (from edge inward)
+                const gradientValue = distance / threshold;
+                const alphaValue = Math.floor(gradientValue * 255);
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = alphaValue;
+            }
+            else {
+                // Inner area - full alpha (no blending effect)
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 255;
+            }
+        }
+        outputCtx.putImageData(outputData, 0, 0);
+        return outputCanvas;
+    }
+    /**
+     * Fast distance transform using the simple two-pass algorithm from ImageAnalysis.ts
+     * Much faster than the complex Felzenszwalb algorithm
+     */
+    _fastDistanceTransform(binaryMask, width, height) {
+        const distances = new Float32Array(width * height);
+        const infinity = width + height; // A value larger than any possible distance
+        // Initialize distances
+        for (let i = 0; i < width * height; i++) {
+            distances[i] = binaryMask[i] === 1 ? infinity : 0;
+        }
+        // Forward pass (top-left to bottom-right)
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const idx = y * width + x;
+                if (distances[idx] > 0) {
+                    let minDist = distances[idx];
+                    // Check top neighbor
+                    if (y > 0) {
+                        minDist = Math.min(minDist, distances[(y - 1) * width + x] + 1);
+                    }
+                    // Check left neighbor
+                    if (x > 0) {
+                        minDist = Math.min(minDist, distances[y * width + (x - 1)] + 1);
+                    }
+                    // Check top-left diagonal
+                    if (x > 0 && y > 0) {
+                        minDist = Math.min(minDist, distances[(y - 1) * width + (x - 1)] + Math.sqrt(2));
+                    }
+                    // Check top-right diagonal
+                    if (x < width - 1 && y > 0) {
+                        minDist = Math.min(minDist, distances[(y - 1) * width + (x + 1)] + Math.sqrt(2));
+                    }
+                    distances[idx] = minDist;
+                }
+            }
+        }
+        // Backward pass (bottom-right to top-left)
+        for (let y = height - 1; y >= 0; y--) {
+            for (let x = width - 1; x >= 0; x--) {
+                const idx = y * width + x;
+                if (distances[idx] > 0) {
+                    let minDist = distances[idx];
+                    // Check bottom neighbor
+                    if (y < height - 1) {
+                        minDist = Math.min(minDist, distances[(y + 1) * width + x] + 1);
+                    }
+                    // Check right neighbor
+                    if (x < width - 1) {
+                        minDist = Math.min(minDist, distances[y * width + (x + 1)] + 1);
+                    }
+                    // Check bottom-right diagonal
+                    if (x < width - 1 && y < height - 1) {
+                        minDist = Math.min(minDist, distances[(y + 1) * width + (x + 1)] + Math.sqrt(2));
+                    }
+                    // Check bottom-left diagonal
+                    if (x > 0 && y < height - 1) {
+                        minDist = Math.min(minDist, distances[(y + 1) * width + (x - 1)] + Math.sqrt(2));
+                    }
+                    distances[idx] = minDist;
+                }
+            }
+        }
+        return distances;
+    }
+    /**
+     * Creates an expanded mask using distance transform - much better for complex shapes
+     * than the centroid-based approach. This version only does expansion without transparency calculations.
+     */
+    _calculateExpandedPoints(points, expansionValue) {
+        if (points.length < 3 || expansionValue === 0)
+            return points;
+        // For expansion, we need to create a temporary canvas to use the distance transform approach
+        // This will give us much better results for complex shapes than the centroid method
+        const tempCanvas = this._createExpandedMaskCanvas(points, expansionValue, this.maskCanvas.width, this.maskCanvas.height);
+        // Extract the expanded shape outline from the canvas
+        // For now, return the original points as a fallback - the real expansion happens in the canvas
+        // The calling code will use the canvas directly instead of these points
+        return points;
+    }
+    /**
+     * Creates an expanded/contracted mask canvas using distance transform
+     * Supports both positive values (expansion) and negative values (contraction)
+     */
+    _createExpandedMaskCanvas(points, expansionValue, width, height) {
+        // 1. Create a binary mask on a temporary canvas.
+        const binaryCanvas = document.createElement('canvas');
+        binaryCanvas.width = width;
+        binaryCanvas.height = height;
+        const binaryCtx = binaryCanvas.getContext('2d', { willReadFrequently: true });
+        binaryCtx.fillStyle = 'white';
+        binaryCtx.beginPath();
+        binaryCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            binaryCtx.lineTo(points[i].x, points[i].y);
+        }
+        binaryCtx.closePath();
+        binaryCtx.fill();
+        const maskImage = binaryCtx.getImageData(0, 0, width, height);
+        const binaryData = new Uint8Array(width * height);
+        for (let i = 0; i < binaryData.length; i++) {
+            binaryData[i] = maskImage.data[i * 4] > 0 ? 0 : 1; // 0 = inside, 1 = outside
+        }
+        // 2. Calculate the distance transform using the original Felzenszwalb algorithm
+        const distanceMap = this._distanceTransform(binaryData, width, height);
+        // 3. Create the final output canvas with the expanded/contracted mask
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = width;
+        outputCanvas.height = height;
+        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
+        const outputData = outputCtx.createImageData(width, height);
+        const absExpansionValue = Math.abs(expansionValue);
+        const isExpansion = expansionValue >= 0;
+        for (let i = 0; i < distanceMap.length; i++) {
+            const dist = distanceMap[i];
+            let alpha = 0;
+            if (isExpansion) {
+                // Positive values: EXPANSION (rozszerzanie)
+                if (dist === 0) { // Inside the original shape
+                    alpha = 1.0;
+                }
+                else if (dist < absExpansionValue) { // In the expansion region
+                    alpha = 1.0; // Solid expansion
+                }
+            }
+            else {
+                // Negative values: CONTRACTION (zmniejszanie)
+                // Use distance transform but with inverted logic for contraction
+                if (dist === 0) { // Inside the original shape
+                    // For contraction, only keep pixels that are far enough from the edge
+                    // We need to check if this pixel is more than absExpansionValue away from any edge
+                    // Simple approach: use the distance transform but only keep pixels
+                    // that are "deep inside" the shape (far from edges)
+                    // This is much faster than morphological erosion
+                    // Since dist=0 means we're inside, we need to calculate inward distance
+                    // For now, use a simplified approach: assume pixels are kept if they're not too close to edge
+                    // This is a placeholder - we'll use the distance transform result differently
+                    alpha = 1.0; // We'll refine this below
+                }
+                // Actually, let's use a much simpler approach for contraction:
+                // Just shrink the shape by moving all edge pixels inward by absExpansionValue
+                // This is done by only keeping pixels that have distance > absExpansionValue from outside
+                // Reset alpha and use proper contraction logic
+                alpha = 0;
+                if (dist === 0) { // We're inside the shape
+                    // Check if we're far enough from the edge by looking at surrounding area
+                    const x = i % width;
+                    const y = Math.floor(i / width);
+                    // Check if we're near an edge by looking in the full contraction radius
+                    let nearEdge = false;
+                    const checkRadius = absExpansionValue + 1; // Full radius for accurate contraction
+                    for (let dy = -checkRadius; dy <= checkRadius && !nearEdge; dy++) {
+                        for (let dx = -checkRadius; dx <= checkRadius && !nearEdge; dx++) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                const ni = ny * width + nx;
+                                if (binaryData[ni] === 1) { // Found an outside pixel
+                                    const distToEdge = Math.sqrt(dx * dx + dy * dy);
+                                    if (distToEdge <= absExpansionValue) {
+                                        nearEdge = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (!nearEdge) {
+                        alpha = 1.0; // Keep this pixel - it's far enough from edges
+                    }
+                }
+            }
+            const a = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+            outputData.data[i * 4 + 3] = a; // Set alpha
+            // Set color to white
+            outputData.data[i * 4] = 255;
+            outputData.data[i * 4 + 1] = 255;
+            outputData.data[i * 4 + 2] = 255;
+        }
+        outputCtx.putImageData(outputData, 0, 0);
+        return outputCanvas;
+    }
+    /**
+     * Original Felzenszwalb distance transform - more accurate than the fast version for expansion
+     */
+    _distanceTransform(data, width, height) {
+        const INF = 1e20;
+        const d = new Float32Array(width * height);
+        // 1. Transform along columns
+        for (let x = 0; x < width; x++) {
+            const f = new Float32Array(height);
+            for (let y = 0; y < height; y++) {
+                f[y] = data[y * width + x] === 0 ? 0 : INF;
+            }
+            const dt = this._edt1D(f);
+            for (let y = 0; y < height; y++) {
+                d[y * width + x] = dt[y];
+            }
+        }
+        // 2. Transform along rows
+        for (let y = 0; y < height; y++) {
+            const f = new Float32Array(width);
+            for (let x = 0; x < width; x++) {
+                f[x] = d[y * width + x];
+            }
+            const dt = this._edt1D(f);
+            for (let x = 0; x < width; x++) {
+                d[y * width + x] = Math.sqrt(dt[x]); // Final Euclidean distance
+            }
+        }
+        return d;
+    }
+    _edt1D(f) {
+        const n = f.length;
+        const d = new Float32Array(n);
+        const v = new Int32Array(n);
+        const z = new Float32Array(n + 1);
+        let k = 0;
+        v[0] = 0;
+        z[0] = -Infinity;
+        z[1] = Infinity;
+        for (let q = 1; q < n; q++) {
+            let s;
+            do {
+                const p = v[k];
+                s = ((f[q] + q * q) - (f[p] + p * p)) / (2 * q - 2 * p);
+            } while (s <= z[k] && --k >= 0);
+            k++;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = Infinity;
+        }
+        k = 0;
+        for (let q = 0; q < n; q++) {
+            while (z[k + 1] < q)
+                k++;
+            const dx = q - v[k];
+            d[q] = dx * dx + f[v[k]];
+        }
+        return d;
+    }
+    /**
+     * Morphological erosion - similar to the Python WAS Suite implementation
+     * This is much more efficient and accurate for contraction than distance transform
+     */
+    _morphologicalErosion(binaryMask, width, height, iterations) {
+        let currentMask = new Uint8Array(binaryMask);
+        let tempMask = new Uint8Array(width * height);
+        // Apply erosion for the specified number of iterations (pixels)
+        for (let iter = 0; iter < iterations; iter++) {
+            // Clear temp mask
+            tempMask.fill(0);
+            // Apply erosion with a 3x3 kernel (cross pattern)
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const idx = y * width + x;
+                    if (currentMask[idx] === 0) { // Only process pixels that are inside (0 = inside)
+                        // Check if all neighbors in the cross pattern are also inside
+                        const top = currentMask[(y - 1) * width + x];
+                        const bottom = currentMask[(y + 1) * width + x];
+                        const left = currentMask[y * width + (x - 1)];
+                        const right = currentMask[y * width + (x + 1)];
+                        const center = currentMask[idx];
+                        // Keep pixel only if all cross neighbors are inside (0)
+                        if (top === 0 && bottom === 0 && left === 0 && right === 0 && center === 0) {
+                            tempMask[idx] = 0; // Keep as inside
+                        }
+                        else {
+                            tempMask[idx] = 1; // Erode to outside
+                        }
+                    }
+                    else {
+                        tempMask[idx] = 1; // Already outside, stay outside
+                    }
+                }
+            }
+            // Swap masks for next iteration
+            const swap = currentMask;
+            currentMask = tempMask;
+            tempMask = swap;
+        }
+        return currentMask;
+    }
+    /**
+     * Creates a feathered mask from existing ImageData (used when combining expansion + feather)
+     */
+    _createFeatheredMaskFromImageData(imageData, featherRadius, width, height) {
+        const data = imageData.data;
+        const binaryData = new Uint8Array(width * height);
+        // Convert ImageData to binary mask
+        for (let i = 0; i < width * height; i++) {
+            binaryData[i] = data[i * 4 + 3] > 0 ? 1 : 0; // 1 = inside, 0 = outside
+        }
+        // Calculate the fast distance transform
+        const distanceMap = this._fastDistanceTransform(binaryData, width, height);
+        // Find the maximum distance to normalize
+        let maxDistance = 0;
+        for (let i = 0; i < distanceMap.length; i++) {
+            if (distanceMap[i] > maxDistance) {
+                maxDistance = distanceMap[i];
+            }
+        }
+        // Create the final output canvas with feathering applied
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = width;
+        outputCanvas.height = height;
+        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
+        const outputData = outputCtx.createImageData(width, height);
+        // Use featherRadius as the threshold for the gradient
+        const threshold = Math.min(featherRadius, maxDistance);
+        for (let i = 0; i < distanceMap.length; i++) {
+            const distance = distanceMap[i];
+            const originalAlpha = data[i * 4 + 3];
+            if (originalAlpha === 0) {
+                // Transparent pixels remain transparent
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 0;
+            }
+            else if (distance <= threshold) {
+                // Edge area - apply gradient alpha (from edge inward)
+                const gradientValue = distance / threshold;
+                const alphaValue = Math.floor(gradientValue * 255);
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = alphaValue;
+            }
+            else {
+                // Inner area - full alpha (no blending effect)
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 255;
+            }
+        }
+        outputCtx.putImageData(outputData, 0, 0);
+        return outputCanvas;
+    }
 }

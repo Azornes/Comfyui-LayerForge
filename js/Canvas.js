@@ -2,6 +2,7 @@
 import { api } from "../../scripts/api.js";
 import { MaskTool } from "./MaskTool.js";
 import { ShapeTool } from "./ShapeTool.js";
+import { CustomShapeMenu } from "./CustomShapeMenu.js";
 import { CanvasState } from "./CanvasState.js";
 import { CanvasInteractions } from "./CanvasInteractions.js";
 import { CanvasLayers } from "./CanvasLayers.js";
@@ -64,7 +65,13 @@ export class Canvas {
         this.requestSaveState = () => { };
         this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
         this.shapeTool = new ShapeTool(this);
+        this.customShapeMenu = new CustomShapeMenu(this);
         this.outputAreaShape = null;
+        this.autoApplyShapeMask = false;
+        this.shapeMaskExpansion = false;
+        this.shapeMaskExpansionValue = 0;
+        this.shapeMaskFeather = false;
+        this.shapeMaskFeatherValue = 0;
         this.canvasMask = new CanvasMask(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
