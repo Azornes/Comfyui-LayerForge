@@ -177,8 +177,13 @@ export class CustomShapeMenu {
             expansionValueDisplay.textContent = value > 0 ? `+${value}px` : `${value}px`;
         };
 
-        // Add debouncing for expansion slider
+        // Add preview system for expansion slider
         let expansionTimeout: number | null = null;
+        let isExpansionDragging = false;
+        
+        expansionSlider.onmousedown = () => {
+            isExpansionDragging = true;
+        };
         
         expansionSlider.oninput = () => {
             updateExpansionSliderDisplay();
@@ -189,14 +194,32 @@ export class CustomShapeMenu {
                     clearTimeout(expansionTimeout);
                 }
                 
-                // Apply mask immediately for visual feedback (without saving state)
-                this.canvas.maskTool.applyShapeMask(false); // false = don't save state
-                this.canvas.render();
+                if (isExpansionDragging) {
+                    // Show blue preview line while dragging - NO mask application
+                    const featherValue = this.canvas.shapeMaskFeather ? this.canvas.shapeMaskFeatherValue : 0;
+                    this.canvas.maskTool.showShapePreview(this.canvas.shapeMaskExpansionValue, featherValue);
+                } else {
+                    // Apply mask immediately for programmatic changes (not user dragging)
+                    this.canvas.maskTool.hideShapePreview();
+                    this.canvas.maskTool.applyShapeMask(false);
+                    this.canvas.render();
+                }
                 
-                // Save state after 500ms of no changes
-                expansionTimeout = window.setTimeout(() => {
-                    this.canvas.canvasState.saveMaskState();
-                }, 500);
+                // Clear any pending timeout - we only apply mask on mouseup now
+                if (expansionTimeout) {
+                    clearTimeout(expansionTimeout);
+                    expansionTimeout = null;
+                }
+            }
+        };
+        
+        expansionSlider.onmouseup = () => {
+            isExpansionDragging = false;
+            if (this.canvas.autoApplyShapeMask) {
+                // Apply final mask immediately when user releases slider
+                this.canvas.maskTool.hideShapePreview();
+                this.canvas.maskTool.applyShapeMask(true);
+                this.canvas.render();
             }
         };
 
@@ -267,26 +290,38 @@ export class CustomShapeMenu {
             featherValueDisplay.textContent = `${value}px`;
         };
 
-        // Add debouncing for feather slider
+        // Add preview system for feather slider (mirrors expansion slider)
         let featherTimeout: number | null = null;
+        let isFeatherDragging = false;
+        
+        featherSlider.onmousedown = () => {
+            isFeatherDragging = true;
+        };
         
         featherSlider.oninput = () => {
             updateFeatherSliderDisplay();
             
             if (this.canvas.autoApplyShapeMask) {
-                // Clear previous timeout
-                if (featherTimeout) {
-                    clearTimeout(featherTimeout);
+                if (isFeatherDragging) {
+                    // Show blue preview line while dragging
+                    const expansionValue = this.canvas.shapeMaskExpansion ? this.canvas.shapeMaskExpansionValue : 0;
+                    this.canvas.maskTool.showShapePreview(expansionValue, this.canvas.shapeMaskFeatherValue);
+                } else {
+                    // Apply immediately for programmatic changes
+                    this.canvas.maskTool.hideShapePreview();
+                    this.canvas.maskTool.applyShapeMask(false);
+                    this.canvas.render();
                 }
-                
-                // Apply mask immediately for visual feedback (without saving state)
-                this.canvas.maskTool.applyShapeMask(false); // false = don't save state
+            }
+        };
+        
+        featherSlider.onmouseup = () => {
+            isFeatherDragging = false;
+            if (this.canvas.autoApplyShapeMask) {
+                // Apply final mask when user releases slider
+                this.canvas.maskTool.hideShapePreview();
+                this.canvas.maskTool.applyShapeMask(true); // true = save state
                 this.canvas.render();
-                
-                // Save state after 500ms of no changes
-                featherTimeout = window.setTimeout(() => {
-                    this.canvas.canvasState.saveMaskState();
-                }, 500);
             }
         };
 
@@ -306,6 +341,9 @@ export class CustomShapeMenu {
         
         this.uiInitialized = true;
         this._updateUI();
+        
+        // Add viewport change listener to update shape preview when zooming/panning
+        this._addViewportChangeListener();
     }
 
     private _createCheckbox(textFn: () => string, clickHandler: () => void): HTMLDivElement {
@@ -382,5 +420,50 @@ export class CustomShapeMenu {
                 checkbox.textContent = `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`;
             }
         });
+    }
+
+    /**
+     * Add viewport change listener to update shape preview when zooming/panning
+     */
+    private _addViewportChangeListener(): void {
+        // Store previous viewport state to detect changes
+        let previousViewport = {
+            x: this.canvas.viewport.x,
+            y: this.canvas.viewport.y,
+            zoom: this.canvas.viewport.zoom
+        };
+
+        // Check for viewport changes in render loop
+        const checkViewportChange = () => {
+            if (this.canvas.maskTool.shapePreviewVisible) {
+                const current = this.canvas.viewport;
+                
+                // Check if viewport has changed
+                if (current.x !== previousViewport.x || 
+                    current.y !== previousViewport.y || 
+                    current.zoom !== previousViewport.zoom) {
+                    
+                    // Update shape preview with current expansion/feather values
+                    const expansionValue = this.canvas.shapeMaskExpansionValue || 0;
+                    const featherValue = this.canvas.shapeMaskFeather ? (this.canvas.shapeMaskFeatherValue || 0) : 0;
+                    this.canvas.maskTool.showShapePreview(expansionValue, featherValue);
+                    
+                    // Update previous viewport state
+                    previousViewport = {
+                        x: current.x,
+                        y: current.y,
+                        zoom: current.zoom
+                    };
+                }
+            }
+            
+            // Continue checking if UI is still active
+            if (this.uiInitialized) {
+                requestAnimationFrame(checkViewportChange);
+            }
+        };
+
+        // Start the viewport change detection
+        requestAnimationFrame(checkViewportChange);
     }
 }
