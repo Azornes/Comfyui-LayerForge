@@ -28,6 +28,15 @@ export class MaskTool {
         this.previewCtx = previewCtx;
         this.previewVisible = false;
         this.previewCanvasInitialized = false;
+        // Initialize shape preview system
+        this.shapePreviewCanvas = document.createElement('canvas');
+        const shapePreviewCtx = this.shapePreviewCanvas.getContext('2d', { willReadFrequently: true });
+        if (!shapePreviewCtx) {
+            throw new Error("Failed to get 2D context for shape preview canvas");
+        }
+        this.shapePreviewCtx = shapePreviewCtx;
+        this.shapePreviewVisible = false;
+        this.isPreviewMode = false;
         this.initMaskCanvas();
     }
     initPreviewCanvas() {
@@ -176,6 +185,336 @@ export class MaskTool {
     }
     clearPreview() {
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
+        this.clearShapePreview();
+    }
+    /**
+     * Initialize shape preview canvas for showing blue outline during slider adjustments
+     * Canvas is pinned to viewport and covers the entire visible area
+     */
+    initShapePreviewCanvas() {
+        if (this.shapePreviewCanvas.parentElement) {
+            this.shapePreviewCanvas.parentElement.removeChild(this.shapePreviewCanvas);
+        }
+        // Canvas covers entire viewport - pinned to screen, not world
+        this.shapePreviewCanvas.width = this.canvasInstance.canvas.width;
+        this.shapePreviewCanvas.height = this.canvasInstance.canvas.height;
+        // Pin canvas to viewport - no world coordinate positioning
+        this.shapePreviewCanvas.style.position = 'absolute';
+        this.shapePreviewCanvas.style.left = '0px';
+        this.shapePreviewCanvas.style.top = '0px';
+        this.shapePreviewCanvas.style.width = '100%';
+        this.shapePreviewCanvas.style.height = '100%';
+        this.shapePreviewCanvas.style.pointerEvents = 'none';
+        this.shapePreviewCanvas.style.zIndex = '15'; // Above regular preview
+        this.shapePreviewCanvas.style.imageRendering = 'pixelated'; // Sharp rendering
+        if (this.canvasInstance.canvas.parentElement) {
+            this.canvasInstance.canvas.parentElement.appendChild(this.shapePreviewCanvas);
+        }
+    }
+    /**
+     * Show blue outline preview of expansion/contraction during slider adjustment
+     */
+    showShapePreview(expansionValue, featherValue = 0) {
+        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+            return;
+        }
+        if (!this.shapePreviewCanvas.parentElement)
+            this.initShapePreviewCanvas();
+        this.isPreviewMode = true;
+        this.shapePreviewVisible = true;
+        this.shapePreviewCanvas.style.display = 'block';
+        this.clearShapePreview();
+        const shape = this.canvasInstance.outputAreaShape;
+        const viewport = this.canvasInstance.viewport;
+        const screenPoints = shape.points.map(p => ({
+            x: (p.x - viewport.x) * viewport.zoom,
+            y: (p.y - viewport.y) * viewport.zoom
+        }));
+        // This function now returns Point[][] to handle islands.
+        const allContours = this._calculatePreviewPointsScreen([screenPoints], expansionValue, viewport.zoom);
+        // Draw main expansion/contraction preview
+        this.shapePreviewCtx.strokeStyle = '#4A9EFF';
+        this.shapePreviewCtx.lineWidth = 2;
+        this.shapePreviewCtx.setLineDash([4, 4]);
+        this.shapePreviewCtx.globalAlpha = 0.8;
+        for (const contour of allContours) {
+            if (contour.length < 2)
+                continue;
+            this.shapePreviewCtx.beginPath();
+            this.shapePreviewCtx.moveTo(contour[0].x, contour[0].y);
+            for (let i = 1; i < contour.length; i++) {
+                this.shapePreviewCtx.lineTo(contour[i].x, contour[i].y);
+            }
+            this.shapePreviewCtx.closePath();
+            this.shapePreviewCtx.stroke();
+        }
+        // Draw feather preview
+        if (featherValue > 0) {
+            const allFeatherContours = this._calculatePreviewPointsScreen(allContours, -featherValue, viewport.zoom);
+            this.shapePreviewCtx.strokeStyle = '#4A9EFF';
+            this.shapePreviewCtx.lineWidth = 1;
+            this.shapePreviewCtx.setLineDash([3, 5]);
+            this.shapePreviewCtx.globalAlpha = 0.6;
+            for (const contour of allFeatherContours) {
+                if (contour.length < 2)
+                    continue;
+                this.shapePreviewCtx.beginPath();
+                this.shapePreviewCtx.moveTo(contour[0].x, contour[0].y);
+                for (let i = 1; i < contour.length; i++) {
+                    this.shapePreviewCtx.lineTo(contour[i].x, contour[i].y);
+                }
+                this.shapePreviewCtx.closePath();
+                this.shapePreviewCtx.stroke();
+            }
+        }
+        log.debug(`Shape preview shown with expansion: ${expansionValue}px, feather: ${featherValue}px`);
+    }
+    /**
+     * Hide shape preview and switch back to normal mode
+     */
+    hideShapePreview() {
+        this.isPreviewMode = false;
+        this.shapePreviewVisible = false;
+        this.clearShapePreview();
+        this.shapePreviewCanvas.style.display = 'none';
+        log.debug("Shape preview hidden");
+    }
+    /**
+     * Clear shape preview canvas
+     */
+    clearShapePreview() {
+        if (this.shapePreviewCtx) {
+            this.shapePreviewCtx.clearRect(0, 0, this.shapePreviewCanvas.width, this.shapePreviewCanvas.height);
+        }
+    }
+    /**
+     * Update shape preview canvas position and scale when viewport changes
+     * This ensures the preview stays synchronized with the world coordinates
+     */
+    updateShapePreviewPosition() {
+        if (!this.shapePreviewCanvas.parentElement || !this.shapePreviewVisible) {
+            return;
+        }
+        const viewport = this.canvasInstance.viewport;
+        const bufferSize = 300;
+        // Calculate world position (output area + buffer)
+        const previewX = -bufferSize; // World coordinates
+        const previewY = -bufferSize;
+        // Convert to screen coordinates
+        const screenX = (previewX - viewport.x) * viewport.zoom;
+        const screenY = (previewY - viewport.y) * viewport.zoom;
+        // Update position and scale
+        this.shapePreviewCanvas.style.left = `${screenX}px`;
+        this.shapePreviewCanvas.style.top = `${screenY}px`;
+        const previewWidth = this.canvasInstance.width + (bufferSize * 2);
+        const previewHeight = this.canvasInstance.height + (bufferSize * 2);
+        this.shapePreviewCanvas.style.width = `${previewWidth * viewport.zoom}px`;
+        this.shapePreviewCanvas.style.height = `${previewHeight * viewport.zoom}px`;
+    }
+    /**
+     * Ultra-fast dilation using Distance Transform + thresholding (Manhattan distance for speed)
+     */
+    _fastDilateDT(mask, width, height, radius) {
+        const INF = 1e9;
+        const dist = new Float32Array(width * height);
+        // 1. Initialize: 0 for foreground, INF for background
+        for (let i = 0; i < width * height; ++i) {
+            dist[i] = mask[i] ? 0 : INF;
+        }
+        // 2. Forward pass: top-left -> bottom-right
+        for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+                const i = y * width + x;
+                if (mask[i])
+                    continue;
+                if (x > 0)
+                    dist[i] = Math.min(dist[i], dist[y * width + (x - 1)] + 1);
+                if (y > 0)
+                    dist[i] = Math.min(dist[i], dist[(y - 1) * width + x] + 1);
+            }
+        }
+        // 3. Backward pass: bottom-right -> top-left
+        for (let y = height - 1; y >= 0; --y) {
+            for (let x = width - 1; x >= 0; --x) {
+                const i = y * width + x;
+                if (mask[i])
+                    continue;
+                if (x < width - 1)
+                    dist[i] = Math.min(dist[i], dist[y * width + (x + 1)] + 1);
+                if (y < height - 1)
+                    dist[i] = Math.min(dist[i], dist[(y + 1) * width + x] + 1);
+            }
+        }
+        // 4. Thresholding: if distance <= radius, it's part of the expanded mask
+        const expanded = new Uint8Array(width * height);
+        for (let i = 0; i < width * height; ++i) {
+            expanded[i] = dist[i] <= radius ? 1 : 0;
+        }
+        return expanded;
+    }
+    /**
+     * Ultra-fast erosion using Distance Transform + thresholding
+     */
+    _fastErodeDT(mask, width, height, radius) {
+        const INF = 1e9;
+        const dist = new Float32Array(width * height);
+        // 1. Initialize: 0 for background, INF for foreground (inverse of dilation)
+        for (let i = 0; i < width * height; ++i) {
+            dist[i] = mask[i] ? INF : 0;
+        }
+        // 2. Forward pass: top-left -> bottom-right
+        for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+                const i = y * width + x;
+                if (!mask[i])
+                    continue;
+                if (x > 0)
+                    dist[i] = Math.min(dist[i], dist[y * width + (x - 1)] + 1);
+                if (y > 0)
+                    dist[i] = Math.min(dist[i], dist[(y - 1) * width + x] + 1);
+            }
+        }
+        // 3. Backward pass: bottom-right -> top-left
+        for (let y = height - 1; y >= 0; --y) {
+            for (let x = width - 1; x >= 0; --x) {
+                const i = y * width + x;
+                if (!mask[i])
+                    continue;
+                if (x < width - 1)
+                    dist[i] = Math.min(dist[i], dist[y * width + (x + 1)] + 1);
+                if (y < height - 1)
+                    dist[i] = Math.min(dist[i], dist[(y + 1) * width + x] + 1);
+            }
+        }
+        // 4. Thresholding: if distance > radius, it's part of the eroded mask
+        const eroded = new Uint8Array(width * height);
+        for (let i = 0; i < width * height; ++i) {
+            eroded[i] = dist[i] > radius ? 1 : 0;
+        }
+        return eroded;
+    }
+    /**
+     * Calculate preview points using screen coordinates for pinned canvas.
+     * This version now accepts multiple contours and returns multiple contours.
+     */
+    _calculatePreviewPointsScreen(contours, expansionValue, zoom) {
+        if (contours.length === 0 || expansionValue === 0)
+            return contours;
+        const width = this.canvasInstance.canvas.width;
+        const height = this.canvasInstance.canvas.height;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        // Draw all contours to create the initial mask
+        tempCtx.fillStyle = 'white';
+        for (const points of contours) {
+            if (points.length < 3)
+                continue;
+            tempCtx.beginPath();
+            tempCtx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                tempCtx.lineTo(points[i].x, points[i].y);
+            }
+            tempCtx.closePath();
+            tempCtx.fill('evenodd'); // Use evenodd to handle holes correctly
+        }
+        const maskImage = tempCtx.getImageData(0, 0, width, height);
+        const binaryData = new Uint8Array(width * height);
+        for (let i = 0; i < binaryData.length; i++) {
+            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0;
+        }
+        let resultMask;
+        const scaledExpansionValue = Math.round(Math.abs(expansionValue * zoom));
+        if (expansionValue >= 0) {
+            resultMask = this._fastDilateDT(binaryData, width, height, scaledExpansionValue);
+        }
+        else {
+            resultMask = this._fastErodeDT(binaryData, width, height, scaledExpansionValue);
+        }
+        // Extract all contours (outer and inner) from the resulting mask
+        const allResultContours = this._traceAllContours(resultMask, width, height);
+        return allResultContours.length > 0 ? allResultContours : contours;
+    }
+    /**
+     * Calculate preview points in world coordinates using morphological operations
+     * This version works directly with mask canvas coordinates
+     */
+    /**
+     * Traces all contours (outer and inner islands) from a binary mask.
+     * @returns An array of contours, where each contour is an array of points.
+     */
+    _traceAllContours(mask, width, height) {
+        const contours = [];
+        const visited = new Uint8Array(mask.length); // Keep track of visited pixels
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+                // Check for a potential starting point: a foreground pixel that hasn't been visited
+                // and is on a boundary (next to a background pixel).
+                if (mask[idx] === 1 && visited[idx] === 0) {
+                    // Check if it's a boundary pixel
+                    const isBoundary = mask[idx - 1] === 0 ||
+                        mask[idx + 1] === 0 ||
+                        mask[idx - width] === 0 ||
+                        mask[idx + width] === 0;
+                    if (isBoundary) {
+                        // Found a new contour, let's trace it.
+                        const contour = this._traceSingleContour({ x, y }, mask, width, height, visited);
+                        if (contour.length > 2) {
+                            // --- Path Simplification ---
+                            const simplifiedContour = [];
+                            const simplificationFactor = Math.max(1, Math.floor(contour.length / 200));
+                            for (let i = 0; i < contour.length; i += simplificationFactor) {
+                                simplifiedContour.push(contour[i]);
+                            }
+                            contours.push(simplifiedContour);
+                        }
+                    }
+                }
+            }
+        }
+        return contours;
+    }
+    /**
+     * Traces a single contour from a starting point using Moore-Neighbor algorithm.
+     */
+    _traceSingleContour(startPoint, mask, width, height, visited) {
+        const contour = [];
+        let { x, y } = startPoint;
+        // Neighbor checking order (clockwise)
+        const neighbors = [
+            { dx: 0, dy: -1 }, // N
+            { dx: 1, dy: -1 }, // NE
+            { dx: 1, dy: 0 }, // E
+            { dx: 1, dy: 1 }, // SE
+            { dx: 0, dy: 1 }, // S
+            { dx: -1, dy: 1 }, // SW
+            { dx: -1, dy: 0 }, // W
+            { dx: -1, dy: -1 } // NW
+        ];
+        let initialNeighborIndex = 0;
+        do {
+            let foundNext = false;
+            for (let i = 0; i < 8; i++) {
+                const neighborIndex = (initialNeighborIndex + i) % 8;
+                const nx = x + neighbors[neighborIndex].dx;
+                const ny = y + neighbors[neighborIndex].dy;
+                const nIdx = ny * width + nx;
+                if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[nIdx] === 1) {
+                    contour.push({ x, y });
+                    visited[y * width + x] = 1; // Mark current point as visited
+                    x = nx;
+                    y = ny;
+                    initialNeighborIndex = (neighborIndex + 5) % 8;
+                    foundNext = true;
+                    break;
+                }
+            }
+            if (!foundNext)
+                break; // End if no next point found
+        } while (x !== startPoint.x || y !== startPoint.y);
+        return contour;
     }
     clear() {
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
@@ -297,7 +636,7 @@ export class MaskTool {
                 this.maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
             }
             this.maskCtx.closePath();
-            this.maskCtx.fill();
+            this.maskCtx.fill('evenodd'); // Use evenodd to handle holes correctly
         }
         else if (needsExpansion && !needsFeather) {
             // Expansion only: use the new distance transform expansion
@@ -504,8 +843,8 @@ export class MaskTool {
         return points;
     }
     /**
-     * Creates an expanded/contracted mask canvas using distance transform
-     * Supports both positive values (expansion) and negative values (contraction)
+     * Creates an expanded/contracted mask canvas using simple morphological operations
+     * This gives SHARP edges without smoothing, unlike distance transform
      */
     _createExpandedMaskCanvas(points, expansionValue, width, height) {
         // 1. Create a binary mask on a temporary canvas.
@@ -520,190 +859,38 @@ export class MaskTool {
             binaryCtx.lineTo(points[i].x, points[i].y);
         }
         binaryCtx.closePath();
-        binaryCtx.fill();
+        binaryCtx.fill('evenodd'); // Use evenodd to handle holes correctly
         const maskImage = binaryCtx.getImageData(0, 0, width, height);
         const binaryData = new Uint8Array(width * height);
         for (let i = 0; i < binaryData.length; i++) {
-            binaryData[i] = maskImage.data[i * 4] > 0 ? 0 : 1; // 0 = inside, 1 = outside
+            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0; // 1 = inside, 0 = outside
         }
-        // 2. Calculate the distance transform using the original Felzenszwalb algorithm
-        const distanceMap = this._distanceTransform(binaryData, width, height);
-        // 3. Create the final output canvas with the expanded/contracted mask
+        // 2. Apply fast morphological operations for sharp edges
+        let resultMask;
+        const absExpansionValue = Math.abs(expansionValue);
+        if (expansionValue >= 0) {
+            // EXPANSION: Use new fast dilation algorithm
+            resultMask = this._fastDilateDT(binaryData, width, height, absExpansionValue);
+        }
+        else {
+            // CONTRACTION: Use new fast erosion algorithm  
+            resultMask = this._fastErodeDT(binaryData, width, height, absExpansionValue);
+        }
+        // 3. Create the final output canvas with sharp edges
         const outputCanvas = document.createElement('canvas');
         outputCanvas.width = width;
         outputCanvas.height = height;
         const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
         const outputData = outputCtx.createImageData(width, height);
-        const absExpansionValue = Math.abs(expansionValue);
-        const isExpansion = expansionValue >= 0;
-        for (let i = 0; i < distanceMap.length; i++) {
-            const dist = distanceMap[i];
-            let alpha = 0;
-            if (isExpansion) {
-                // Positive values: EXPANSION (rozszerzanie)
-                if (dist === 0) { // Inside the original shape
-                    alpha = 1.0;
-                }
-                else if (dist < absExpansionValue) { // In the expansion region
-                    alpha = 1.0; // Solid expansion
-                }
-            }
-            else {
-                // Negative values: CONTRACTION (zmniejszanie)
-                // Use distance transform but with inverted logic for contraction
-                if (dist === 0) { // Inside the original shape
-                    // For contraction, only keep pixels that are far enough from the edge
-                    // We need to check if this pixel is more than absExpansionValue away from any edge
-                    // Simple approach: use the distance transform but only keep pixels
-                    // that are "deep inside" the shape (far from edges)
-                    // This is much faster than morphological erosion
-                    // Since dist=0 means we're inside, we need to calculate inward distance
-                    // For now, use a simplified approach: assume pixels are kept if they're not too close to edge
-                    // This is a placeholder - we'll use the distance transform result differently
-                    alpha = 1.0; // We'll refine this below
-                }
-                // Actually, let's use a much simpler approach for contraction:
-                // Just shrink the shape by moving all edge pixels inward by absExpansionValue
-                // This is done by only keeping pixels that have distance > absExpansionValue from outside
-                // Reset alpha and use proper contraction logic
-                alpha = 0;
-                if (dist === 0) { // We're inside the shape
-                    // Check if we're far enough from the edge by looking at surrounding area
-                    const x = i % width;
-                    const y = Math.floor(i / width);
-                    // Check if we're near an edge by looking in the full contraction radius
-                    let nearEdge = false;
-                    const checkRadius = absExpansionValue + 1; // Full radius for accurate contraction
-                    for (let dy = -checkRadius; dy <= checkRadius && !nearEdge; dy++) {
-                        for (let dx = -checkRadius; dx <= checkRadius && !nearEdge; dx++) {
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                const ni = ny * width + nx;
-                                if (binaryData[ni] === 1) { // Found an outside pixel
-                                    const distToEdge = Math.sqrt(dx * dx + dy * dy);
-                                    if (distToEdge <= absExpansionValue) {
-                                        nearEdge = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (!nearEdge) {
-                        alpha = 1.0; // Keep this pixel - it's far enough from edges
-                    }
-                }
-            }
-            const a = Math.max(0, Math.min(255, Math.round(alpha * 255)));
-            outputData.data[i * 4 + 3] = a; // Set alpha
-            // Set color to white
-            outputData.data[i * 4] = 255;
-            outputData.data[i * 4 + 1] = 255;
-            outputData.data[i * 4 + 2] = 255;
+        for (let i = 0; i < resultMask.length; i++) {
+            const alpha = resultMask[i] === 1 ? 255 : 0; // Sharp binary mask - no smoothing
+            outputData.data[i * 4] = 255; // R
+            outputData.data[i * 4 + 1] = 255; // G  
+            outputData.data[i * 4 + 2] = 255; // B
+            outputData.data[i * 4 + 3] = alpha; // A - sharp edges
         }
         outputCtx.putImageData(outputData, 0, 0);
         return outputCanvas;
-    }
-    /**
-     * Original Felzenszwalb distance transform - more accurate than the fast version for expansion
-     */
-    _distanceTransform(data, width, height) {
-        const INF = 1e20;
-        const d = new Float32Array(width * height);
-        // 1. Transform along columns
-        for (let x = 0; x < width; x++) {
-            const f = new Float32Array(height);
-            for (let y = 0; y < height; y++) {
-                f[y] = data[y * width + x] === 0 ? 0 : INF;
-            }
-            const dt = this._edt1D(f);
-            for (let y = 0; y < height; y++) {
-                d[y * width + x] = dt[y];
-            }
-        }
-        // 2. Transform along rows
-        for (let y = 0; y < height; y++) {
-            const f = new Float32Array(width);
-            for (let x = 0; x < width; x++) {
-                f[x] = d[y * width + x];
-            }
-            const dt = this._edt1D(f);
-            for (let x = 0; x < width; x++) {
-                d[y * width + x] = Math.sqrt(dt[x]); // Final Euclidean distance
-            }
-        }
-        return d;
-    }
-    _edt1D(f) {
-        const n = f.length;
-        const d = new Float32Array(n);
-        const v = new Int32Array(n);
-        const z = new Float32Array(n + 1);
-        let k = 0;
-        v[0] = 0;
-        z[0] = -Infinity;
-        z[1] = Infinity;
-        for (let q = 1; q < n; q++) {
-            let s;
-            do {
-                const p = v[k];
-                s = ((f[q] + q * q) - (f[p] + p * p)) / (2 * q - 2 * p);
-            } while (s <= z[k] && --k >= 0);
-            k++;
-            v[k] = q;
-            z[k] = s;
-            z[k + 1] = Infinity;
-        }
-        k = 0;
-        for (let q = 0; q < n; q++) {
-            while (z[k + 1] < q)
-                k++;
-            const dx = q - v[k];
-            d[q] = dx * dx + f[v[k]];
-        }
-        return d;
-    }
-    /**
-     * Morphological erosion - similar to the Python WAS Suite implementation
-     * This is much more efficient and accurate for contraction than distance transform
-     */
-    _morphologicalErosion(binaryMask, width, height, iterations) {
-        let currentMask = new Uint8Array(binaryMask);
-        let tempMask = new Uint8Array(width * height);
-        // Apply erosion for the specified number of iterations (pixels)
-        for (let iter = 0; iter < iterations; iter++) {
-            // Clear temp mask
-            tempMask.fill(0);
-            // Apply erosion with a 3x3 kernel (cross pattern)
-            for (let y = 1; y < height - 1; y++) {
-                for (let x = 1; x < width - 1; x++) {
-                    const idx = y * width + x;
-                    if (currentMask[idx] === 0) { // Only process pixels that are inside (0 = inside)
-                        // Check if all neighbors in the cross pattern are also inside
-                        const top = currentMask[(y - 1) * width + x];
-                        const bottom = currentMask[(y + 1) * width + x];
-                        const left = currentMask[y * width + (x - 1)];
-                        const right = currentMask[y * width + (x + 1)];
-                        const center = currentMask[idx];
-                        // Keep pixel only if all cross neighbors are inside (0)
-                        if (top === 0 && bottom === 0 && left === 0 && right === 0 && center === 0) {
-                            tempMask[idx] = 0; // Keep as inside
-                        }
-                        else {
-                            tempMask[idx] = 1; // Erode to outside
-                        }
-                    }
-                    else {
-                        tempMask[idx] = 1; // Already outside, stay outside
-                    }
-                }
-            }
-            // Swap masks for next iteration
-            const swap = currentMask;
-            currentMask = tempMask;
-            tempMask = swap;
-        }
-        return currentMask;
     }
     /**
      * Creates a feathered mask from existing ImageData (used when combining expansion + feather)
