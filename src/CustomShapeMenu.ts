@@ -82,9 +82,7 @@ export class CustomShapeMenu {
 
         // Create menu content
         const lines = [
-            "🎯 Custom Output Area Active",
-            "Press Shift+S to modify shape",
-            "Shape defines generation area"
+            "🎯 Custom Output Area Active"
         ];
 
         lines.forEach(line => {
@@ -97,7 +95,18 @@ export class CustomShapeMenu {
             this.element!.appendChild(lineElement);
         });
 
-        // Add main auto-apply checkbox
+        // Create a container for the entire shape mask feature set
+        const featureContainer = document.createElement('div');
+        featureContainer.id = 'shape-mask-feature-container';
+        featureContainer.style.cssText = `
+            background-color: #282828;
+            border-radius: 6px;
+            margin-top: 6px;
+            padding: 4px 0;
+            border: 1px solid #444;
+        `;
+
+        // Add main auto-apply checkbox to the new container
         const checkboxContainer = this._createCheckbox(
             () => `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`,
             () => {
@@ -108,16 +117,18 @@ export class CustomShapeMenu {
                     log.info("Auto-apply shape mask enabled - mask applied automatically");
                 } else {
                     this.canvas.maskTool.removeShapeMask();
-                    log.info("Auto-apply shape mask disabled - mask removed automatically");
+                    this.canvas.shapeMaskExpansion = false;
+                    this.canvas.shapeMaskFeather = false;
+                    log.info("Auto-apply shape mask disabled - mask area removed and sub-options reset.");
                 }
                 
                 this._updateUI();
                 this.canvas.render();
             }
         );
-        this.element.appendChild(checkboxContainer);
-
-        // Add expansion checkbox (only visible when auto-apply is enabled)
+        featureContainer.appendChild(checkboxContainer);
+        
+        // Add expansion checkbox
         const expansionContainer = this._createCheckbox(
             () => `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Expand/Contract mask`,
             () => {
@@ -131,13 +142,13 @@ export class CustomShapeMenu {
             }
         );
         expansionContainer.id = 'expansion-checkbox';
-        this.element.appendChild(expansionContainer);
+        featureContainer.appendChild(expansionContainer);
 
-        // Add expansion slider container (only visible when expansion is enabled)
+        // Add expansion slider container
         const expansionSliderContainer = document.createElement('div');
         expansionSliderContainer.id = 'expansion-slider-container';
         expansionSliderContainer.style.cssText = `
-            margin: 6px 0;
+            margin: 0 8px 6px 8px;
             padding: 4px 8px;
             display: none;
         `;
@@ -154,7 +165,7 @@ export class CustomShapeMenu {
         expansionSlider.type = 'range';
         expansionSlider.min = '-300';
         expansionSlider.max = '300';
-        expansionSlider.value = '0';
+        expansionSlider.value = String(this.canvas.shapeMaskExpansionValue);
         expansionSlider.style.cssText = `
             width: 100%;
             height: 4px;
@@ -177,38 +188,20 @@ export class CustomShapeMenu {
             expansionValueDisplay.textContent = value > 0 ? `+${value}px` : `${value}px`;
         };
 
-        // Add preview system for expansion slider
-        let expansionTimeout: number | null = null;
         let isExpansionDragging = false;
         
-        expansionSlider.onmousedown = () => {
-            isExpansionDragging = true;
-        };
+        expansionSlider.onmousedown = () => { isExpansionDragging = true; };
         
         expansionSlider.oninput = () => {
             updateExpansionSliderDisplay();
-            
             if (this.canvas.autoApplyShapeMask) {
-                // Clear previous timeout
-                if (expansionTimeout) {
-                    clearTimeout(expansionTimeout);
-                }
-                
                 if (isExpansionDragging) {
-                    // Show blue preview line while dragging - NO mask application
                     const featherValue = this.canvas.shapeMaskFeather ? this.canvas.shapeMaskFeatherValue : 0;
                     this.canvas.maskTool.showShapePreview(this.canvas.shapeMaskExpansionValue, featherValue);
                 } else {
-                    // Apply mask immediately for programmatic changes (not user dragging)
                     this.canvas.maskTool.hideShapePreview();
                     this.canvas.maskTool.applyShapeMask(false);
                     this.canvas.render();
-                }
-                
-                // Clear any pending timeout - we only apply mask on mouseup now
-                if (expansionTimeout) {
-                    clearTimeout(expansionTimeout);
-                    expansionTimeout = null;
                 }
             }
         };
@@ -216,7 +209,6 @@ export class CustomShapeMenu {
         expansionSlider.onmouseup = () => {
             isExpansionDragging = false;
             if (this.canvas.autoApplyShapeMask) {
-                // Apply final mask immediately when user releases slider
                 this.canvas.maskTool.hideShapePreview();
                 this.canvas.maskTool.applyShapeMask(true);
                 this.canvas.render();
@@ -228,9 +220,9 @@ export class CustomShapeMenu {
         expansionSliderContainer.appendChild(expansionSliderLabel);
         expansionSliderContainer.appendChild(expansionSlider);
         expansionSliderContainer.appendChild(expansionValueDisplay);
-        this.element.appendChild(expansionSliderContainer);
+        featureContainer.appendChild(expansionSliderContainer);
 
-        // Add feather checkbox (only visible when auto-apply is enabled)
+        // Add feather checkbox
         const featherContainer = this._createCheckbox(
             () => `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`,
             () => {
@@ -244,13 +236,13 @@ export class CustomShapeMenu {
             }
         );
         featherContainer.id = 'feather-checkbox';
-        this.element.appendChild(featherContainer);
+        featureContainer.appendChild(featherContainer);
 
-        // Add feather slider container (only visible when feather is enabled)
+        // Add feather slider container
         const featherSliderContainer = document.createElement('div');
         featherSliderContainer.id = 'feather-slider-container';
         featherSliderContainer.style.cssText = `
-            margin: 6px 0;
+            margin: 0 8px 6px 8px;
             padding: 4px 8px;
             display: none;
         `;
@@ -267,7 +259,7 @@ export class CustomShapeMenu {
         featherSlider.type = 'range';
         featherSlider.min = '0';
         featherSlider.max = '300';
-        featherSlider.value = '0';
+        featherSlider.value = String(this.canvas.shapeMaskFeatherValue);
         featherSlider.style.cssText = `
             width: 100%;
             height: 4px;
@@ -289,25 +281,18 @@ export class CustomShapeMenu {
             this.canvas.shapeMaskFeatherValue = value;
             featherValueDisplay.textContent = `${value}px`;
         };
-
-        // Add preview system for feather slider (mirrors expansion slider)
-        let featherTimeout: number | null = null;
+        
         let isFeatherDragging = false;
         
-        featherSlider.onmousedown = () => {
-            isFeatherDragging = true;
-        };
+        featherSlider.onmousedown = () => { isFeatherDragging = true; };
         
         featherSlider.oninput = () => {
             updateFeatherSliderDisplay();
-            
             if (this.canvas.autoApplyShapeMask) {
                 if (isFeatherDragging) {
-                    // Show blue preview line while dragging
                     const expansionValue = this.canvas.shapeMaskExpansion ? this.canvas.shapeMaskExpansionValue : 0;
                     this.canvas.maskTool.showShapePreview(expansionValue, this.canvas.shapeMaskFeatherValue);
                 } else {
-                    // Apply immediately for programmatic changes
                     this.canvas.maskTool.hideShapePreview();
                     this.canvas.maskTool.applyShapeMask(false);
                     this.canvas.render();
@@ -318,7 +303,6 @@ export class CustomShapeMenu {
         featherSlider.onmouseup = () => {
             isFeatherDragging = false;
             if (this.canvas.autoApplyShapeMask) {
-                // Apply final mask when user releases slider
                 this.canvas.maskTool.hideShapePreview();
                 this.canvas.maskTool.applyShapeMask(true); // true = save state
                 this.canvas.render();
@@ -330,8 +314,10 @@ export class CustomShapeMenu {
         featherSliderContainer.appendChild(featherSliderLabel);
         featherSliderContainer.appendChild(featherSlider);
         featherSliderContainer.appendChild(featherValueDisplay);
-        this.element.appendChild(featherSliderContainer);
+        featureContainer.appendChild(featherSliderContainer);
 
+        this.element.appendChild(featureContainer);
+        
         // Add to DOM
         if (this.canvas.canvas.parentElement) {
             this.canvas.canvas.parentElement.appendChild(this.element);
@@ -383,30 +369,26 @@ export class CustomShapeMenu {
     private _updateUI(): void {
         if (!this.element) return;
 
-        // Update expansion checkbox visibility
+        // Toggle visibility of sub-options based on the main checkbox state
         const expansionCheckbox = this.element.querySelector('#expansion-checkbox') as HTMLElement;
         if (expansionCheckbox) {
             expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
         }
-
-        // Update expansion slider container visibility
-        const expansionSliderContainer = this.element.querySelector('#expansion-slider-container') as HTMLElement;
-        if (expansionSliderContainer) {
-            expansionSliderContainer.style.display = 
-                (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
-        }
-
-        // Update feather checkbox visibility
+        
         const featherCheckbox = this.element.querySelector('#feather-checkbox') as HTMLElement;
         if (featherCheckbox) {
             featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
         }
 
-        // Update feather slider container visibility
+        // Update sliders visibility based on their respective checkboxes
+        const expansionSliderContainer = this.element.querySelector('#expansion-slider-container') as HTMLElement;
+        if (expansionSliderContainer) {
+            expansionSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
+        }
+
         const featherSliderContainer = this.element.querySelector('#feather-slider-container') as HTMLElement;
         if (featherSliderContainer) {
-            featherSliderContainer.style.display = 
-                (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
+            featherSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
         }
 
         // Update checkbox texts
@@ -415,7 +397,7 @@ export class CustomShapeMenu {
             if (index === 0) { // Main checkbox
                 checkbox.textContent = `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`;
             } else if (index === 1) { // Expansion checkbox
-                checkbox.textContent = `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Expand/Contract mask`;
+                checkbox.textContent = `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Dilate/Erode mask`;
             } else if (index === 2) { // Feather checkbox
                 checkbox.textContent = `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`;
             }

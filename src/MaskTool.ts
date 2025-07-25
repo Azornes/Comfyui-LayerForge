@@ -750,11 +750,20 @@ export class MaskTool {
         const destX = -this.x;
         const destY = -this.y;
 
-        // Clear the entire mask canvas first
-        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-
-        // Create points relative to the mask canvas's coordinate system (by applying the offset)
         const maskPoints = shape.points.map(p => ({ x: p.x + destX, y: p.y + destY }));
+
+        // --- Clear Previous State ---
+        // To prevent artifacts from previous slider values, we first clear the maximum
+        // possible area the shape could have occupied.
+        const maxExpansion = 300; // The maximum value of the expansion slider
+        const clearingMaskCanvas = this._createExpandedMaskCanvas(maskPoints, maxExpansion, this.maskCanvas.width, this.maskCanvas.height);
+        
+        this.maskCtx.globalCompositeOperation = 'destination-out';
+        this.maskCtx.drawImage(clearingMaskCanvas, 0, 0);
+        
+        // --- Apply Current State ---
+        // Now, apply the new, correct mask additively.
+        this.maskCtx.globalCompositeOperation = 'source-over';
 
         // Check if we need expansion or feathering
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
@@ -802,37 +811,57 @@ export class MaskTool {
     }
 
     /**
-     * Removes mask in the area of the custom output area shape
+     * Removes mask in the area of the custom output area shape. This must use a hard-edged
+     * shape to correctly erase any feathered "glow" that might have been applied.
      */
     removeShapeMask(): void {
         if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
             log.warn("Shape has insufficient points for mask removal");
             return;
         }
-
+        
         this.canvasInstance.canvasState.saveMaskState();
+
         const shape = this.canvasInstance.outputAreaShape;
         const destX = -this.x;
         const destY = -this.y;
-        
-        this.maskCtx.save();
+
+        // Use 'destination-out' to erase the shape area
         this.maskCtx.globalCompositeOperation = 'destination-out';
-        this.maskCtx.translate(destX, destY);
-        
-        this.maskCtx.beginPath();
-        this.maskCtx.moveTo(shape.points[0].x, shape.points[0].y);
-        for (let i = 1; i < shape.points.length; i++) {
-            this.maskCtx.lineTo(shape.points[i].x, shape.points[i].y);
+
+        const maskPoints = shape.points.map(p => ({ x: p.x + destX, y: p.y + destY }));
+        const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
+
+        // IMPORTANT: Removal should always be hard-edged, even if feather was on.
+        // This ensures the feathered "glow" is completely removed. We only care about expansion.
+        if (needsExpansion) {
+            // If expansion was active, remove the expanded area with a hard edge.
+            const expandedMaskCanvas = this._createExpandedMaskCanvas(
+                maskPoints, 
+                this.canvasInstance.shapeMaskExpansionValue, 
+                this.maskCanvas.width, 
+                this.maskCanvas.height
+            );
+            this.maskCtx.drawImage(expandedMaskCanvas, 0, 0);
+        } else {
+            // If no expansion, just remove the base shape with a hard edge.
+            this.maskCtx.beginPath();
+            this.maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
+            for (let i = 1; i < maskPoints.length; i++) {
+                this.maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
+            }
+            this.maskCtx.closePath();
+            this.maskCtx.fill('evenodd');
         }
-        this.maskCtx.closePath();
-        this.maskCtx.fill();
-        this.maskCtx.restore();
+
+        // Restore default composite operation
+        this.maskCtx.globalCompositeOperation = 'source-over';
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`Removed shape mask with ${shape.points.length} points`);
+        log.info(`Removed shape mask area (hard-edged) with expansion: ${needsExpansion}.`);
     }
 
     private _createFeatheredMaskCanvas(points: Point[], featherRadius: number, width: number, height: number): HTMLCanvasElement {
