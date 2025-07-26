@@ -424,8 +424,6 @@ export class CanvasLayers {
         // Check if we need to apply blend area effect
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
-        
-        log.info(`Drawing layer ${layer.id}: blendArea=${blendArea}, needsBlendAreaEffect=${needsBlendAreaEffect}`);
 
         if (needsBlendAreaEffect) {
             log.info(`Applying blend area effect for layer ${layer.id}`);

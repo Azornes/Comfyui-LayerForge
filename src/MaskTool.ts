@@ -49,6 +49,11 @@ export class MaskTool {
     public shapePreviewVisible: boolean;
     private isPreviewMode: boolean;
 
+    // Performance optimization for active canvas updates
+    private activeMaskNeedsUpdate: boolean;
+    private activeMaskUpdateTimeout: number | null;
+    private readonly ACTIVE_MASK_UPDATE_DELAY = 16; // ~60fps throttling
+
     constructor(canvasInstance: Canvas & { canvasState: CanvasState, width: number, height: number }, callbacks: MaskToolCallbacks = {}) {
         this.canvasInstance = canvasInstance;
         this.mainCanvas = canvasInstance.canvas;
@@ -96,6 +101,10 @@ export class MaskTool {
         this.shapePreviewCtx = shapePreviewCtx;
         this.shapePreviewVisible = false;
         this.isPreviewMode = false;
+
+        // Initialize performance optimization flags
+        this.activeMaskNeedsUpdate = false;
+        this.activeMaskUpdateTimeout = null;
 
         this.initMaskCanvas();
     }
@@ -190,9 +199,7 @@ export class MaskTool {
                     this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
                 }
             }
-        }
-        
-        log.info(`Updated active mask canvas to show ALL chunks: ${canvasWidth}x${canvasHeight} at (${canvasLeft}, ${canvasTop}), chunks: ${chunkBounds.minX},${chunkBounds.minY} to ${chunkBounds.maxX},${chunkBounds.maxY}`);
+        } 
     }
 
     /**
@@ -449,8 +456,8 @@ export class MaskTool {
     }
 
     /**
-     * Updates active canvas when drawing affects chunks
-     * Now always updates when new chunks are created to ensure immediate visibility
+     * Updates active canvas when drawing affects chunks with throttling to prevent lag
+     * Uses throttling to limit updates to ~60fps during drawing operations
      */
     private updateActiveCanvasIfNeeded(startWorld: Point, endWorld: Point): void {
         // Calculate which chunks were affected by this drawing operation
@@ -477,14 +484,38 @@ export class MaskTool {
         }
 
         if (drewOnNewChunks) {
-            // Drawing extended beyond current active bounds - do full update to include new chunks
+            // Drawing extended beyond current active bounds - immediate update required
             this.updateActiveMaskCanvas();
-            log.debug("Drew on new chunks - performed full active canvas update");
+            log.debug("Drew on new chunks - performed immediate full active canvas update");
         } else {
-            // Drawing within existing bounds - do partial update for performance
-            this.updateActiveCanvasPartial(affectedChunkMinX, affectedChunkMinY, affectedChunkMaxX, affectedChunkMaxY);
-            log.debug("Drew within existing bounds - performed partial update");
+            // Drawing within existing bounds - use throttled update for performance
+            this.scheduleThrottledActiveMaskUpdate(affectedChunkMinX, affectedChunkMinY, affectedChunkMaxX, affectedChunkMaxY);
         }
+    }
+
+    /**
+     * Schedules a throttled update of the active mask canvas to prevent excessive redraws
+     * Only updates at most once per ACTIVE_MASK_UPDATE_DELAY milliseconds
+     */
+    private scheduleThrottledActiveMaskUpdate(chunkMinX: number, chunkMinY: number, chunkMaxX: number, chunkMaxY: number): void {
+        // Mark that an update is needed
+        this.activeMaskNeedsUpdate = true;
+
+        // If there's already a pending update, don't schedule another one
+        if (this.activeMaskUpdateTimeout !== null) {
+            return;
+        }
+
+        // Schedule the update with throttling
+        this.activeMaskUpdateTimeout = window.setTimeout(() => {
+            if (this.activeMaskNeedsUpdate) {
+                // Perform partial update for the affected chunks
+                this.updateActiveCanvasPartial(chunkMinX, chunkMinY, chunkMaxX, chunkMaxY);
+                this.activeMaskNeedsUpdate = false;
+                log.debug("Performed throttled partial active canvas update");
+            }
+            this.activeMaskUpdateTimeout = null;
+        }, this.ACTIVE_MASK_UPDATE_DELAY);
     }
 
     /**
@@ -940,9 +971,12 @@ export class MaskTool {
     }
 
     getMask(): HTMLCanvasElement {
-        // Always return the current active mask canvas which shows all chunks
-        // Make sure it's up to date before returning
-        this.updateActiveMaskCanvas();
+        // Return the current active mask canvas which shows all chunks
+        // Only update if there are pending changes to avoid unnecessary redraws
+        if (this.activeMaskNeedsUpdate) {
+            this.updateActiveMaskCanvas();
+            this.activeMaskNeedsUpdate = false;
+        }
         return this.activeMaskCanvas;
     }
 
