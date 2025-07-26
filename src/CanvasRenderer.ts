@@ -321,10 +321,13 @@ export class CanvasRenderer {
             ctx.lineWidth = 2 / this.canvas.viewport.zoom;
             ctx.setLineDash([]);
             const shape = this.canvas.outputAreaShape;
+            const bounds = this.canvas.outputAreaBounds;
+            
             ctx.beginPath();
-            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            // Render custom shape relative to outputAreaBounds, not (0,0)
+            ctx.moveTo(bounds.x + shape.points[0].x, bounds.y + shape.points[0].y);
             for (let i = 1; i < shape.points.length; i++) {
-                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+                ctx.lineTo(bounds.x + shape.points[i].x, bounds.y + shape.points[i].y);
             }
             ctx.closePath();
             ctx.stroke();

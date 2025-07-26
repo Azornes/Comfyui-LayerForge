@@ -610,10 +610,12 @@ export class CustomShapeMenu {
     }
     _updateCanvasSize() {
         if (!this.canvas.outputAreaExtensionEnabled) {
-            // Reset to original bounds when disabled
+            // When extensions are disabled, preserve the current outputAreaBounds position
+            // Only update the size to match originalCanvasSize
+            const currentBounds = this.canvas.outputAreaBounds;
             this.canvas.outputAreaBounds = {
-                x: 0,
-                y: 0,
+                x: currentBounds.x, // ✅ Preserve current position
+                y: currentBounds.y, // ✅ Preserve current position
                 width: this.canvas.originalCanvasSize.width,
                 height: this.canvas.originalCanvasSize.height
             };
@@ -623,10 +625,11 @@ export class CustomShapeMenu {
         const ext = this.canvas.outputAreaExtensions;
         const newWidth = this.canvas.originalCanvasSize.width + ext.left + ext.right;
         const newHeight = this.canvas.originalCanvasSize.height + ext.top + ext.bottom;
-        // Aktualizuj outputAreaBounds - "okno" w świecie które zostanie wyrenderowane
+        // When extensions are enabled, calculate new bounds relative to current position
+        const currentBounds = this.canvas.outputAreaBounds;
         this.canvas.outputAreaBounds = {
-            x: -ext.left, // Może być ujemne - wycinamy fragment świata
-            y: -ext.top, // Może być ujemne - wycinamy fragment świata
+            x: currentBounds.x - ext.left, // Adjust position by left extension
+            y: currentBounds.y - ext.top, // Adjust position by top extension
             width: newWidth,
             height: newHeight
         };

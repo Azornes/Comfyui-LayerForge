@@ -73,7 +73,13 @@ export class Canvas {
         this.outputAreaExtensionEnabled = false;
         this.outputAreaExtensionPreview = null;
         this.originalCanvasSize = { width: this.width, height: this.height };
-        this.outputAreaBounds = { x: 0, y: 0, width: this.width, height: this.height };
+        // Initialize outputAreaBounds centered in viewport, similar to how canvas resize/move work
+        this.outputAreaBounds = {
+            x: -(this.width / 4),
+            y: -(this.height / 4),
+            width: this.width,
+            height: this.height
+        };
         this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
         this.shapeTool = new ShapeTool(this);
         this.customShapeMenu = new CustomShapeMenu(this);
@@ -323,36 +329,22 @@ export class Canvas {
             };
             const newWidth = Math.round(boundingBox.width);
             const newHeight = Math.round(boundingBox.height);
-            const finalX = boundingBox.x;
-            const finalY = boundingBox.y;
+            const newX = Math.round(boundingBox.x);
+            const newY = Math.round(boundingBox.y);
+            // Store the original canvas size for extension calculations
+            this.originalCanvasSize = { width: newWidth, height: newHeight };
+            // Update canvas size but don't change outputAreaBounds yet
             this.updateOutputAreaSize(newWidth, newHeight, false);
-            this.layers.forEach((layer) => {
-                layer.x -= finalX;
-                layer.y -= finalY;
-            });
-            this.maskTool.updatePosition(-finalX, -finalY);
-            // Update batch preview managers like in canvas resize/move operations
-            if (this.pendingBatchContext) {
-                this.pendingBatchContext.outputArea.x -= finalX;
-                this.pendingBatchContext.outputArea.y -= finalY;
-                // Also update the menu spawn position to keep it relative
-                this.pendingBatchContext.spawnPosition.x -= finalX;
-                this.pendingBatchContext.spawnPosition.y -= finalY;
-                log.debug("Updated pending batch context during shape definition:", this.pendingBatchContext);
-            }
-            // Also move any active batch preview menus
-            if (this.batchPreviewManagers && this.batchPreviewManagers.length > 0) {
-                this.batchPreviewManagers.forEach((manager) => {
-                    manager.worldX -= finalX;
-                    manager.worldY -= finalY;
-                    if (manager.generationArea) {
-                        manager.generationArea.x -= finalX;
-                        manager.generationArea.y -= finalY;
-                    }
-                });
-            }
-            this.viewport.x -= finalX;
-            this.viewport.y -= finalY;
+            // Set outputAreaBounds to where the custom shape was drawn in the world
+            // Similar to finalizeCanvasMove - just update outputAreaBounds position
+            this.outputAreaBounds = {
+                x: newX,
+                y: newY,
+                width: newWidth,
+                height: newHeight
+            };
+            // Update mask canvas to ensure it covers the new output area position
+            this.maskTool.updateMaskCanvasForOutputArea();
             this.saveState();
             this.render();
         }
@@ -399,17 +391,17 @@ export class Canvas {
                 lastExecutionStartTime = Date.now();
                 // Store a snapshot of the context for the upcoming batch
                 this.pendingBatchContext = {
-                    // For the menu position
+                    // For the menu position - position relative to outputAreaBounds, not canvas center
                     spawnPosition: {
-                        x: this.width / 2,
-                        y: this.height
+                        x: this.outputAreaBounds.x + this.outputAreaBounds.width / 2,
+                        y: this.outputAreaBounds.y + this.outputAreaBounds.height
                     },
-                    // For the image placement
+                    // For the image placement - use actual outputAreaBounds instead of hardcoded (0,0)
                     outputArea: {
-                        x: 0,
-                        y: 0,
-                        width: this.width,
-                        height: this.height
+                        x: this.outputAreaBounds.x,
+                        y: this.outputAreaBounds.y,
+                        width: this.outputAreaBounds.width,
+                        height: this.outputAreaBounds.height
                     }
                 };
                 log.debug(`Execution started, pending batch context captured:`, this.pendingBatchContext);
