@@ -21,7 +21,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 import { debounce } from "./utils/CommonUtils.js";
 import {CanvasMask} from "./CanvasMask.js";
 import {CanvasSelection} from "./CanvasSelection.js";
-import type { ComfyNode, Layer, Viewport, Point, AddMode, Shape } from './types';
+import type { ComfyNode, Layer, Viewport, Point, AddMode, Shape, OutputAreaBounds } from './types';
 
 const useChainCallback = (original: any, next: any) => {
   if (original === undefined || original === null) {
@@ -73,6 +73,11 @@ export class Canvas {
     shapeMaskExpansionValue: number;
     shapeMaskFeather: boolean;
     shapeMaskFeatherValue: number;
+    outputAreaExtensions: { top: number, bottom: number, left: number, right: number };
+    outputAreaExtensionEnabled: boolean;
+    outputAreaExtensionPreview: { top: number, bottom: number, left: number, right: number } | null;
+    originalCanvasSize: { width: number, height: number };
+    outputAreaBounds: OutputAreaBounds;
     node: ComfyNode;
     offscreenCanvas: HTMLCanvasElement;
     offscreenCtx: CanvasRenderingContext2D | null;
@@ -117,15 +122,20 @@ export class Canvas {
         this.imageCache = new Map();
 
         this.requestSaveState = () => {};
-        this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
-        this.shapeTool = new ShapeTool(this);
-        this.customShapeMenu = new CustomShapeMenu(this);
         this.outputAreaShape = null;
         this.autoApplyShapeMask = false;
         this.shapeMaskExpansion = false;
         this.shapeMaskExpansionValue = 0;
         this.shapeMaskFeather = false;
         this.shapeMaskFeatherValue = 0;
+        this.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        this.outputAreaExtensionEnabled = false;
+        this.outputAreaExtensionPreview = null;
+        this.originalCanvasSize = { width: this.width, height: this.height };
+        this.outputAreaBounds = { x: 0, y: 0, width: this.width, height: this.height };
+        this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
+        this.shapeTool = new ShapeTool(this);
+        this.customShapeMenu = new CustomShapeMenu(this);
         this.canvasMask = new CanvasMask(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
@@ -464,7 +474,12 @@ export class Canvas {
      * @param {boolean} saveHistory - Czy zapisać w historii
      */
     updateOutputAreaSize(width: number, height: number, saveHistory = true) {
-        return this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
+        const result = this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
+        
+        // Update mask canvas to ensure it covers the new output area
+        this.maskTool.updateMaskCanvasForOutputArea();
+        
+        return result;
     }
 
     /**

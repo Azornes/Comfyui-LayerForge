@@ -234,89 +234,38 @@ export class CanvasIO {
     }
 
     async _renderOutputData(): Promise<{ image: string, mask: string }> {
-        return new Promise((resolve) => {
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
-            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
-
-            const originalShape = this.canvas.outputAreaShape;
-            this.canvas.outputAreaShape = null;
-
-            const visibilityCanvas = document.createElement('canvas');
-            visibilityCanvas.width = this.canvas.width;
-            visibilityCanvas.height = this.canvas.height;
-            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
-            if (!visibilityCtx) throw new Error("Could not create visibility context");
-            if (!maskCtx) throw new Error("Could not create mask context");
-            if (!tempCtx) throw new Error("Could not create temp context");
-            maskCtx.fillStyle = '#ffffff'; // Start with a white mask (nothing masked)
-            maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-            this.canvas.canvasLayers.drawLayersToContext(tempCtx, this.canvas.layers);
-            this.canvas.canvasLayers.drawLayersToContext(visibilityCtx, this.canvas.layers);
-
-            const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            for (let i = 0; i < visibilityData.data.length; i += 4) {
-                const alpha = visibilityData.data[i + 3];
-                const maskValue = 255 - alpha; // Invert alpha to create the mask
-                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
-                maskData.data[i + 3] = 255; // Solid mask
-            }
-            maskCtx.putImageData(maskData, 0, 0);
-
-            const toolMaskCanvas = this.canvas.maskTool.getMask();
-            if (toolMaskCanvas) {
-
-                const tempMaskCanvas = document.createElement('canvas');
-                tempMaskCanvas.width = this.canvas.width;
-                tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
-                if (!tempMaskCtx) throw new Error("Could not create temp mask context");
-
-                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-
-                const maskX = this.canvas.maskTool.x;
-                const maskY = this.canvas.maskTool.y;
-
-                log.debug(`[renderOutputData] Extracting mask from world position (${maskX}, ${maskY})`);
-
-                const sourceX = Math.max(0, -maskX);
-                const sourceY = Math.max(0, -maskY);
-                const destX = Math.max(0, maskX);
-                const destY = Math.max(0, maskY);
-
-                const copyWidth = Math.min(toolMaskCanvas.width - sourceX, this.canvas.width - destX);
-                const copyHeight = Math.min(toolMaskCanvas.height - sourceY, this.canvas.height - destY);
-
-                if (copyWidth > 0 && copyHeight > 0) {
-                    tempMaskCtx.drawImage(
-                        toolMaskCanvas,
-                        sourceX, sourceY, copyWidth, copyHeight,
-                        destX, destY, copyWidth, copyHeight
-                    );
-                }
-
-                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                for (let i = 0; i < tempMaskData.data.length; i += 4) {
-                    const alpha = tempMaskData.data[i + 3];
-
-                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = alpha;
-                    tempMaskData.data[i + 3] = 255; // Solid alpha
-                }
-                tempMaskCtx.putImageData(tempMaskData, 0, 0);
-
-
-            maskCtx.globalCompositeOperation = 'screen';
-            maskCtx.drawImage(tempMaskCanvas, 0, 0);
-            }
-
-            const imageDataUrl = tempCanvas.toDataURL('image/png');
-            const maskDataUrl = maskCanvas.toDataURL('image/png');
-
-            this.canvas.outputAreaShape = originalShape;
-
-            resolve({image: imageDataUrl, mask: maskDataUrl});
+        log.info("=== RENDERING OUTPUT DATA FOR COMFYUI ===");
+        
+        // Użyj zunifikowanych funkcji z CanvasLayers
+        const imageBlob = await this.canvas.canvasLayers.getFlattenedCanvasAsBlob();
+        const maskBlob = await this.canvas.canvasLayers.getFlattenedMaskAsBlob();
+        
+        if (!imageBlob || !maskBlob) {
+            throw new Error("Failed to generate canvas or mask blobs");
+        }
+        
+        // Konwertuj blob na data URL
+        const imageDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(imageBlob);
         });
+        
+        const maskDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(maskBlob);
+        });
+        
+        const bounds = this.canvas.outputAreaBounds;
+        log.info(`=== OUTPUT DATA GENERATED ===`);
+        log.info(`Image size: ${bounds.width}x${bounds.height}`);
+        log.info(`Image data URL length: ${imageDataUrl.length}`);
+        log.info(`Mask data URL length: ${maskDataUrl.length}`);
+
+        return { image: imageDataUrl, mask: maskDataUrl };
     }
 
     async sendDataViaWebSocket(nodeId: number): Promise<boolean> {
@@ -364,14 +313,15 @@ export class CanvasIO {
                 image.src = tempCanvas.toDataURL();
             });
 
+            const bounds = this.canvas.outputAreaBounds;
             const scale = Math.min(
-                this.canvas.width / inputImage.width * 0.8,
-                this.canvas.height / inputImage.height * 0.8
+                bounds.width / inputImage.width * 0.8,
+                bounds.height / inputImage.height * 0.8
             );
 
             const layer = await this.canvas.canvasLayers.addLayerWithImage(image, {
-                x: (this.canvas.width - inputImage.width * scale) / 2,
-                y: (this.canvas.height - inputImage.height * scale) / 2,
+                x: bounds.x + (bounds.width - inputImage.width * scale) / 2,
+                y: bounds.y + (bounds.height - inputImage.height * scale) / 2,
                 width: inputImage.width * scale,
                 height: inputImage.height * scale,
             });

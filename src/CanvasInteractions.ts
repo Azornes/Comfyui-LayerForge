@@ -212,6 +212,8 @@ export class CanvasInteractions {
 
     handleMouseUp(e: MouseEvent): void {
         const viewCoords = this.canvas.getMouseViewCoordinates(e);
+        const worldCoords = this.canvas.getMouseWorldCoordinates(e);
+        
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseUp(viewCoords);
             this.canvas.render();
@@ -223,6 +225,24 @@ export class CanvasInteractions {
         }
         if (this.interaction.mode === 'movingCanvas') {
             this.finalizeCanvasMove();
+        }
+
+        // Log layer positions when dragging ends
+        if (this.interaction.mode === 'dragging' && this.canvas.canvasSelection.selectedLayers.length > 0) {
+            const bounds = this.canvas.outputAreaBounds;
+            log.info("=== LAYER DRAG COMPLETED ===");
+            log.info(`Mouse position: world(${worldCoords.x.toFixed(1)}, ${worldCoords.y.toFixed(1)}) view(${viewCoords.x.toFixed(1)}, ${viewCoords.y.toFixed(1)})`);
+            log.info(`Output Area Bounds: x=${bounds.x}, y=${bounds.y}, w=${bounds.width}, h=${bounds.height}`);
+            log.info(`Viewport: x=${this.canvas.viewport.x.toFixed(1)}, y=${this.canvas.viewport.y.toFixed(1)}, zoom=${this.canvas.viewport.zoom.toFixed(2)}`);
+            
+            this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer, index: number) => {
+                const relativeToOutput = {
+                    x: layer.x - bounds.x,
+                    y: layer.y - bounds.y
+                };
+                log.info(`Layer ${index + 1} "${layer.name}": world(${layer.x.toFixed(1)}, ${layer.y.toFixed(1)}) relative_to_output(${relativeToOutput.x.toFixed(1)}, ${relativeToOutput.y.toFixed(1)}) size(${layer.width.toFixed(1)}x${layer.height.toFixed(1)})`);
+            });
+            log.info("=== END LAYER DRAG ===");
         }
 
         // Zapisz stan tylko, jeśli faktycznie doszło do zmiany (przeciąganie, transformacja, duplikacja)
@@ -580,28 +600,22 @@ export class CanvasInteractions {
     startCanvasMove(worldCoords: Point): void {
         this.interaction.mode = 'movingCanvas';
         this.interaction.dragStart = { ...worldCoords };
-        const initialX = snapToGrid(worldCoords.x - this.canvas.width / 2);
-        const initialY = snapToGrid(worldCoords.y - this.canvas.height / 2);
-
-        this.interaction.canvasMoveRect = {
-            x: initialX,
-            y: initialY,
-            width: this.canvas.width,
-            height: this.canvas.height
-        };
-
         this.canvas.canvas.style.cursor = 'grabbing';
         this.canvas.render();
     }
 
     updateCanvasMove(worldCoords: Point): void {
-        if (!this.interaction.canvasMoveRect) return;
         const dx = worldCoords.x - this.interaction.dragStart.x;
         const dy = worldCoords.y - this.interaction.dragStart.y;
-        const initialRectX = snapToGrid(this.interaction.dragStart.x - this.canvas.width / 2);
-        const initialRectY = snapToGrid(this.interaction.dragStart.y - this.canvas.height / 2);
-        this.interaction.canvasMoveRect.x = snapToGrid(initialRectX + dx);
-        this.interaction.canvasMoveRect.y = snapToGrid(initialRectY + dy);
+        
+        // Po prostu przesuwamy outputAreaBounds
+        const bounds = this.canvas.outputAreaBounds;
+        this.interaction.canvasMoveRect = {
+            x: snapToGrid(bounds.x + dx),
+            y: snapToGrid(bounds.y + dy),
+            width: bounds.width,
+            height: bounds.height
+        };
 
         this.canvas.render();
     }
@@ -609,43 +623,19 @@ export class CanvasInteractions {
     finalizeCanvasMove(): void {
         const moveRect = this.interaction.canvasMoveRect;
 
-        if (moveRect && (moveRect.x !== 0 || moveRect.y !== 0)) {
-            const finalX = moveRect.x;
-            const finalY = moveRect.y;
-
-            this.canvas.layers.forEach((layer: Layer) => {
-                layer.x -= finalX;
-                layer.y -= finalY;
-            });
-
-            this.canvas.maskTool.updatePosition(-finalX, -finalY);
-
-            // If a batch generation is in progress, update the captured context as well
-            if (this.canvas.pendingBatchContext) {
-                this.canvas.pendingBatchContext.outputArea.x -= finalX;
-                this.canvas.pendingBatchContext.outputArea.y -= finalY;
-                
-                // Also update the menu spawn position to keep it relative
-                this.canvas.pendingBatchContext.spawnPosition.x -= finalX;
-                this.canvas.pendingBatchContext.spawnPosition.y -= finalY;
-                log.debug("Updated pending batch context during canvas move:", this.canvas.pendingBatchContext);
-            }
-
-            // Also move any active batch preview menus
-            if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
-                this.canvas.batchPreviewManagers.forEach((manager: any) => { // TODO: Type for manager
-                    manager.worldX -= finalX;
-                    manager.worldY -= finalY;
-                    if (manager.generationArea) {
-                        manager.generationArea.x -= finalX;
-                        manager.generationArea.y -= finalY;
-                    }
-                });
-            }
-
-            this.canvas.viewport.x -= finalX;
-            this.canvas.viewport.y -= finalY;
+        if (moveRect) {
+            // Po prostu aktualizujemy outputAreaBounds na nową pozycję
+            this.canvas.outputAreaBounds = {
+                x: moveRect.x,
+                y: moveRect.y,
+                width: moveRect.width,
+                height: moveRect.height
+            };
+            
+            // Update mask canvas to ensure it covers the new output area position
+            this.canvas.maskTool.updateMaskCanvasForOutputArea();
         }
+        
         this.canvas.render();
         this.canvas.saveState();
     }
@@ -821,41 +811,19 @@ export class CanvasInteractions {
             const finalX = this.interaction.canvasResizeRect.x;
             const finalY = this.interaction.canvasResizeRect.y;
 
+            // Po prostu aktualizujemy outputAreaBounds na nowy obszar
+            this.canvas.outputAreaBounds = {
+                x: finalX,
+                y: finalY,
+                width: newWidth,
+                height: newHeight
+            };
+
             this.canvas.updateOutputAreaSize(newWidth, newHeight);
-
-            this.canvas.layers.forEach((layer: Layer) => {
-                layer.x -= finalX;
-                layer.y -= finalY;
-            });
-
-            this.canvas.maskTool.updatePosition(-finalX, -finalY);
-
-            // If a batch generation is in progress, update the captured context as well
-            if (this.canvas.pendingBatchContext) {
-                this.canvas.pendingBatchContext.outputArea.x -= finalX;
-                this.canvas.pendingBatchContext.outputArea.y -= finalY;
-                
-                // Also update the menu spawn position to keep it relative
-                this.canvas.pendingBatchContext.spawnPosition.x -= finalX;
-                this.canvas.pendingBatchContext.spawnPosition.y -= finalY;
-                log.debug("Updated pending batch context during canvas resize:", this.canvas.pendingBatchContext);
-            }
-
-            // Also move any active batch preview menus
-            if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
-                this.canvas.batchPreviewManagers.forEach((manager: any) => { // TODO: Type for manager
-                    manager.worldX -= finalX;
-                    manager.worldY -= finalY;
-                    if (manager.generationArea) {
-                        manager.generationArea.x -= finalX;
-                        manager.generationArea.y -= finalY;
-                    }
-                });
-            }
-
-            this.canvas.viewport.x -= finalX;
-            this.canvas.viewport.y -= finalY;
         }
+        
+        this.canvas.render();
+        this.canvas.saveState();
     }
 
     handleDragOver(e: DragEvent): void {

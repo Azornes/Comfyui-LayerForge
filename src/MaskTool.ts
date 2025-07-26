@@ -100,15 +100,21 @@ export class MaskTool {
 
     initMaskCanvas(): void {
         const extraSpace = 2000; // Allow for a generous drawing area outside the output area
-        this.maskCanvas.width = this.canvasInstance.width + extraSpace;
-        this.maskCanvas.height = this.canvasInstance.height + extraSpace;
-
-
-        this.x = -extraSpace / 2;
-        this.y = -extraSpace / 2;
+        const bounds = this.canvasInstance.outputAreaBounds;
+        
+        // Mask canvas should cover output area + extra space around it
+        const maskLeft = bounds.x - extraSpace / 2;
+        const maskTop = bounds.y - extraSpace / 2;
+        const maskWidth = bounds.width + extraSpace;
+        const maskHeight = bounds.height + extraSpace;
+        
+        this.maskCanvas.width = maskWidth;
+        this.maskCanvas.height = maskHeight;
+        this.x = maskLeft;
+        this.y = maskTop;
 
         this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-        log.info(`Initialized mask canvas with extended size: ${this.maskCanvas.width}x${this.maskCanvas.height}, origin at (${this.x}, ${this.y})`);
+        log.info(`Initialized mask canvas with size: ${this.maskCanvas.width}x${this.maskCanvas.height}, positioned at (${this.x}, ${this.y}) to cover output area at (${bounds.x}, ${bounds.y})`);
     }
 
     activate(): void {
@@ -702,14 +708,78 @@ export class MaskTool {
         log.info(`Mask position updated to (${this.x}, ${this.y})`);
     }
 
+    /**
+     * Updates mask canvas to ensure it covers the current output area
+     * This should be called when output area position or size changes
+     */
+    updateMaskCanvasForOutputArea(): void {
+        const extraSpace = 2000;
+        const bounds = this.canvasInstance.outputAreaBounds;
+        
+        // Calculate required mask canvas bounds
+        const requiredLeft = bounds.x - extraSpace / 2;
+        const requiredTop = bounds.y - extraSpace / 2;
+        const requiredWidth = bounds.width + extraSpace;
+        const requiredHeight = bounds.height + extraSpace;
+        
+        // Check if current mask canvas covers the required area
+        const currentRight = this.x + this.maskCanvas.width;
+        const currentBottom = this.y + this.maskCanvas.height;
+        const requiredRight = requiredLeft + requiredWidth;
+        const requiredBottom = requiredTop + requiredHeight;
+        
+        const needsResize = 
+            requiredLeft < this.x || 
+            requiredTop < this.y ||
+            requiredRight > currentRight ||
+            requiredBottom > currentBottom;
+            
+        if (needsResize) {
+            log.info(`Updating mask canvas to cover output area at (${bounds.x}, ${bounds.y})`);
+            
+            // Save current mask content
+            const oldMask = this.maskCanvas;
+            const oldX = this.x;
+            const oldY = this.y;
+            
+            // Create new mask canvas with proper size and position
+            this.maskCanvas = document.createElement('canvas');
+            this.maskCanvas.width = requiredWidth;
+            this.maskCanvas.height = requiredHeight;
+            this.x = requiredLeft;
+            this.y = requiredTop;
+            
+            const newMaskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
+            if (!newMaskCtx) {
+                throw new Error("Failed to get 2D context for new mask canvas");
+            }
+            this.maskCtx = newMaskCtx;
+            
+            // Copy old mask content to new position
+            if (oldMask.width > 0 && oldMask.height > 0) {
+                const offsetX = oldX - this.x;
+                const offsetY = oldY - this.y;
+                this.maskCtx.drawImage(oldMask, offsetX, offsetY);
+                log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
+            }
+            
+            log.info(`Mask canvas updated to ${this.maskCanvas.width}x${this.maskCanvas.height} at (${this.x}, ${this.y})`);
+        }
+    }
+
     toggleOverlayVisibility(): void {
         this.isOverlayVisible = !this.isOverlayVisible;
         log.info(`Mask overlay visibility toggled to: ${this.isOverlayVisible}`);
     }
 
     setMask(image: HTMLImageElement): void {
-        const destX = -this.x;
-        const destY = -this.y;
+        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
+        // MaskTool canvas ma pozycję (this.x, this.y) w świecie
+        // Maska reprezentuje output bounds, więc musimy ją umieścić
+        // w pozycji bounds względem pozycji MaskTool
+        const bounds = this.canvasInstance.outputAreaBounds;
+        const destX = bounds.x - this.x;
+        const destY = bounds.y - this.y;
 
         this.maskCtx.clearRect(destX, destY, this.canvasInstance.width, this.canvasInstance.height);
 
@@ -719,12 +789,17 @@ export class MaskTool {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`MaskTool updated with a new mask image at correct canvas position (${destX}, ${destY}).`);
+        log.info(`MaskTool updated with a new mask image at position (${destX}, ${destY}) relative to bounds (${bounds.x}, ${bounds.y}).`);
     }
 
     addMask(image: HTMLImageElement): void {
-        const destX = -this.x;
-        const destY = -this.y;
+        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
+        // MaskTool canvas ma pozycję (this.x, this.y) w świecie
+        // Maska z SAM reprezentuje output bounds, więc musimy ją umieścić
+        // w pozycji bounds względem pozycji MaskTool
+        const bounds = this.canvasInstance.outputAreaBounds;
+        const destX = bounds.x - this.x;
+        const destY = bounds.y - this.y;
 
         // Don't clear existing mask - just add to it
         this.maskCtx.globalCompositeOperation = 'source-over';
@@ -734,7 +809,7 @@ export class MaskTool {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`MaskTool added mask overlay at correct canvas position (${destX}, ${destY}) without clearing existing mask.`);
+        log.info(`MaskTool added SAM mask overlay at position (${destX}, ${destY}) relative to bounds (${bounds.x}, ${bounds.y}) without clearing existing mask.`);
     }
 
     applyShapeMask(saveState: boolean = true): void {

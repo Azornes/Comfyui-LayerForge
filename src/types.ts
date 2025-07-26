@@ -136,6 +136,13 @@ export interface Shape {
     isClosed: boolean;
 }
 
+export interface OutputAreaBounds {
+    x: number;      // Pozycja w świecie (może być ujemna)
+    y: number;      // Pozycja w świecie (może być ujemna)  
+    width: number;  // Szerokość output area
+    height: number; // Wysokość output area
+}
+
 export interface Viewport {
     x: number;
     y: number;

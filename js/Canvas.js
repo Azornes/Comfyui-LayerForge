@@ -63,15 +63,20 @@ export class Canvas {
         this.pendingDataCheck = null;
         this.imageCache = new Map();
         this.requestSaveState = () => { };
-        this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
-        this.shapeTool = new ShapeTool(this);
-        this.customShapeMenu = new CustomShapeMenu(this);
         this.outputAreaShape = null;
         this.autoApplyShapeMask = false;
         this.shapeMaskExpansion = false;
         this.shapeMaskExpansionValue = 0;
         this.shapeMaskFeather = false;
         this.shapeMaskFeatherValue = 0;
+        this.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        this.outputAreaExtensionEnabled = false;
+        this.outputAreaExtensionPreview = null;
+        this.originalCanvasSize = { width: this.width, height: this.height };
+        this.outputAreaBounds = { x: 0, y: 0, width: this.width, height: this.height };
+        this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
+        this.shapeTool = new ShapeTool(this);
+        this.customShapeMenu = new CustomShapeMenu(this);
         this.canvasMask = new CanvasMask(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
@@ -359,7 +364,10 @@ export class Canvas {
      * @param {boolean} saveHistory - Czy zapisać w historii
      */
     updateOutputAreaSize(width, height, saveHistory = true) {
-        return this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
+        const result = this.canvasLayers.updateOutputAreaSize(width, height, saveHistory);
+        // Update mask canvas to ensure it covers the new output area
+        this.maskTool.updateMaskCanvasForOutputArea();
+        return result;
     }
     /**
      * Eksportuje spłaszczony canvas jako blob

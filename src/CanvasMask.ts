@@ -61,7 +61,7 @@ export class CanvasMask {
             blob = await this.canvas.canvasLayers.getFlattenedCanvasAsBlob();
         } else {
             log.debug('Getting flattened canvas for mask editor (with mask)');
-            blob = await this.canvas.canvasLayers.getFlattenedCanvasForMaskEditor();
+            blob = await this.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
         }
 
         if (!blob) {
@@ -306,9 +306,12 @@ export class CanvasMask {
      * @param {Object} maskColor - Kolor maski {r, g, b}
      * @returns {HTMLCanvasElement} Przetworzona maska
      */async processMaskForEditor(maskData: any, targetWidth: any, targetHeight: any, maskColor: any) {
-            // Współrzędne przesunięcia (pan) widoku edytora
-            const panX = this.maskTool.x;
-            const panY = this.maskTool.y;
+            // Pozycja maski w świecie względem output bounds
+            const bounds = this.canvas.outputAreaBounds;
+            const maskWorldX = this.maskTool.x;
+            const maskWorldY = this.maskTool.y;
+            const panX = maskWorldX - bounds.x;
+            const panY = maskWorldY - bounds.y;
 
             log.info("Processing mask for editor:", {
                 sourceSize: {width: maskData.width, height: maskData.height},
@@ -500,16 +503,17 @@ export class CanvasMask {
         }
 
         log.debug("Creating temporary canvas for mask processing");
+        const bounds = this.canvas.outputAreaBounds;
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.canvas.width;
-        tempCanvas.height = this.canvas.height;
+        tempCanvas.width = bounds.width;
+        tempCanvas.height = bounds.height;
         const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
 
         if (tempCtx) {
-            tempCtx.drawImage(resultImage, 0, 0, this.canvas.width, this.canvas.height);
+            tempCtx.drawImage(resultImage, 0, 0, bounds.width, bounds.height);
 
             log.debug("Processing image data to create mask");
-            const imageData = tempCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+            const imageData = tempCtx.getImageData(0, 0, bounds.width, bounds.height);
             const data = imageData.data;
 
             for (let i = 0; i < data.length; i += 4) {
@@ -529,13 +533,23 @@ export class CanvasMask {
         await new Promise(resolve => maskAsImage.onload = resolve);
 
         const maskCtx = this.maskTool.maskCtx;
-        const destX = -this.maskTool.x;
-        const destY = -this.maskTool.y;
+        
+        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
+        // MaskTool canvas ma pozycję (maskTool.x, maskTool.y) w świecie
+        // Maska z edytora reprezentuje output bounds, więc musimy ją umieścić
+        // w pozycji bounds względem pozycji MaskTool
+        const destX = bounds.x - this.maskTool.x;
+        const destY = bounds.y - this.maskTool.y;
 
-        log.debug("Applying mask to canvas", {destX, destY});
+        log.debug("Applying mask to canvas", {
+            maskToolPos: {x: this.maskTool.x, y: this.maskTool.y},
+            boundsPos: {x: bounds.x, y: bounds.y},
+            destPos: {x: destX, y: destY},
+            maskSize: {width: bounds.width, height: bounds.height}
+        });
 
         maskCtx.globalCompositeOperation = 'source-over';
-        maskCtx.clearRect(destX, destY, this.canvas.width, this.canvas.height);
+        maskCtx.clearRect(destX, destY, bounds.width, bounds.height);
 
         maskCtx.drawImage(maskAsImage, destX, destY);
 

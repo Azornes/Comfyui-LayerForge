@@ -9,6 +9,7 @@ export class CustomShapeMenu {
     private worldX: number;
     private worldY: number;
     private uiInitialized: boolean;
+    private tooltip: HTMLDivElement | null;
 
     constructor(canvas: Canvas) {
         this.canvas = canvas;
@@ -16,6 +17,7 @@ export class CustomShapeMenu {
         this.worldX = 0;
         this.worldY = 0;
         this.uiInitialized = false;
+        this.tooltip = null;
     }
 
     show(): void {
@@ -44,6 +46,7 @@ export class CustomShapeMenu {
             this.element = null;
             this.uiInitialized = false;
         }
+        this.hideTooltip();
     }
 
     updateScreenPosition(): void {
@@ -124,7 +127,8 @@ export class CustomShapeMenu {
                 
                 this._updateUI();
                 this.canvas.render();
-            }
+            },
+            "Automatically applies a mask based on the custom output area shape. When enabled, the mask will be applied to all layers within the shape boundary."
         );
         featureContainer.appendChild(checkboxContainer);
         
@@ -139,7 +143,8 @@ export class CustomShapeMenu {
                     this.canvas.maskTool.applyShapeMask();
                     this.canvas.render();
                 }
-            }
+            },
+            "Dilate (expand) or erode (contract) the shape mask. Positive values expand the mask outward, negative values shrink it inward."
         );
         expansionContainer.id = 'expansion-checkbox';
         featureContainer.appendChild(expansionContainer);
@@ -233,7 +238,8 @@ export class CustomShapeMenu {
                     this.canvas.maskTool.applyShapeMask();
                     this.canvas.render();
                 }
-            }
+            },
+            "Softens the edges of the shape mask by creating a gradual transition from opaque to transparent."
         );
         featherContainer.id = 'feather-checkbox';
         featureContainer.appendChild(featherContainer);
@@ -317,6 +323,157 @@ export class CustomShapeMenu {
         featureContainer.appendChild(featherSliderContainer);
 
         this.element.appendChild(featureContainer);
+
+        // Create output area extension container
+        const extensionContainer = document.createElement('div');
+        extensionContainer.id = 'output-area-extension-container';
+        extensionContainer.style.cssText = `
+            background-color: #282828;
+            border-radius: 6px;
+            margin-top: 6px;
+            padding: 4px 0;
+            border: 1px solid #444;
+        `;
+
+        // Add main extension checkbox
+        const extensionCheckboxContainer = this._createCheckbox(
+            () => `${this.canvas.outputAreaExtensionEnabled ? "☑" : "☐"} Extend output area`,
+            () => {
+                this.canvas.outputAreaExtensionEnabled = !this.canvas.outputAreaExtensionEnabled;
+                
+                if (this.canvas.outputAreaExtensionEnabled) {
+                    // When enabling, capture current canvas size as the baseline
+                    this.canvas.originalCanvasSize = { 
+                        width: this.canvas.width, 
+                        height: this.canvas.height 
+                    };
+                    log.info(`Captured current canvas size as baseline: ${this.canvas.width}x${this.canvas.height}`);
+                } else {
+                    // Reset all extensions when disabled
+                    this.canvas.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+                }
+                
+                this._updateExtensionUI();
+                this._updateCanvasSize(); // Update canvas size when toggling
+                this.canvas.render();
+                log.info(`Output area extension ${this.canvas.outputAreaExtensionEnabled ? 'enabled' : 'disabled'}`);
+            },
+            "Allows extending the output area boundaries in all directions without changing the custom shape."
+        );
+        extensionContainer.appendChild(extensionCheckboxContainer);
+
+        // Create sliders container
+        const slidersContainer = document.createElement('div');
+        slidersContainer.id = 'extension-sliders-container';
+        slidersContainer.style.cssText = `
+            margin: 0 8px 6px 8px;
+            padding: 4px 8px;
+            display: none;
+        `;
+
+        // Helper function to create a slider with preview system
+        const createExtensionSlider = (label: string, direction: 'top' | 'bottom' | 'left' | 'right') => {
+            const sliderContainer = document.createElement('div');
+            sliderContainer.style.cssText = `
+                margin: 6px 0;
+            `;
+
+            const sliderLabel = document.createElement('div');
+            sliderLabel.textContent = label;
+            sliderLabel.style.cssText = `
+                font-size: 11px;
+                margin-bottom: 4px;
+                color: #ccc;
+            `;
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = '0';
+            slider.max = '500';
+            slider.value = String(this.canvas.outputAreaExtensions[direction]);
+            slider.style.cssText = `
+                width: 100%;
+                height: 4px;
+                background: #555;
+                outline: none;
+                border-radius: 2px;
+            `;
+
+            const valueDisplay = document.createElement('div');
+            valueDisplay.style.cssText = `
+                font-size: 10px;
+                text-align: center;
+                margin-top: 2px;
+                color: #aaa;
+            `;
+
+            const updateDisplay = () => {
+                const value = parseInt(slider.value);
+                valueDisplay.textContent = `${value}px`;
+            };
+
+            let isDragging = false;
+
+            slider.onmousedown = () => {
+                isDragging = true;
+            };
+
+            slider.oninput = () => {
+                updateDisplay();
+                
+                if (isDragging) {
+                    // During dragging, show preview
+                    const previewExtensions = { ...this.canvas.outputAreaExtensions };
+                    previewExtensions[direction] = parseInt(slider.value);
+                    this.canvas.outputAreaExtensionPreview = previewExtensions;
+                    this.canvas.render();
+                } else {
+                    // Not dragging, apply immediately (for keyboard navigation)
+                    this.canvas.outputAreaExtensions[direction] = parseInt(slider.value);
+                    this._updateCanvasSize();
+                    this.canvas.render();
+                }
+            };
+
+            slider.onmouseup = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    // Apply the final value and clear preview
+                    this.canvas.outputAreaExtensions[direction] = parseInt(slider.value);
+                    this.canvas.outputAreaExtensionPreview = null;
+                    this._updateCanvasSize();
+                    this.canvas.render();
+                }
+            };
+
+            // Handle mouse leave (in case user drags outside)
+            slider.onmouseleave = () => {
+                if (isDragging) {
+                    isDragging = false;
+                    // Apply the final value and clear preview
+                    this.canvas.outputAreaExtensions[direction] = parseInt(slider.value);
+                    this.canvas.outputAreaExtensionPreview = null;
+                    this._updateCanvasSize();
+                    this.canvas.render();
+                }
+            };
+
+            updateDisplay();
+
+            sliderContainer.appendChild(sliderLabel);
+            sliderContainer.appendChild(slider);
+            sliderContainer.appendChild(valueDisplay);
+            return sliderContainer;
+        };
+
+        // Add all four sliders
+        slidersContainer.appendChild(createExtensionSlider('Top extension:', 'top'));
+        slidersContainer.appendChild(createExtensionSlider('Bottom extension:', 'bottom'));
+        slidersContainer.appendChild(createExtensionSlider('Left extension:', 'left'));
+        slidersContainer.appendChild(createExtensionSlider('Right extension:', 'right'));
+
+        extensionContainer.appendChild(slidersContainer);
+        this.element.appendChild(extensionContainer);
         
         // Add to DOM
         if (this.canvas.canvas.parentElement) {
@@ -332,7 +489,7 @@ export class CustomShapeMenu {
         this._addViewportChangeListener();
     }
 
-    private _createCheckbox(textFn: () => string, clickHandler: () => void): HTMLDivElement {
+    private _createCheckbox(textFn: () => string, clickHandler: () => void, tooltipText?: string): HTMLDivElement {
         const container = document.createElement('div');
         container.style.cssText = `
             margin: 6px 0 2px 0;
@@ -362,6 +519,11 @@ export class CustomShapeMenu {
             clickHandler();
             updateText();
         };
+
+        // Add tooltip if provided
+        if (tooltipText) {
+            this._addTooltip(container, tooltipText);
+        }
 
         return container;
     }
@@ -400,8 +562,38 @@ export class CustomShapeMenu {
                 checkbox.textContent = `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Dilate/Erode mask`;
             } else if (index === 2) { // Feather checkbox
                 checkbox.textContent = `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`;
+            } else if (index === 3) { // Extension checkbox
+                checkbox.textContent = `${this.canvas.outputAreaExtensionEnabled ? "☑" : "☐"} Extend output area`;
             }
         });
+    }
+
+    private _updateExtensionUI(): void {
+        if (!this.element) return;
+
+        // Toggle visibility of extension sliders based on the extension checkbox state
+        const extensionSlidersContainer = this.element.querySelector('#extension-sliders-container') as HTMLElement;
+        if (extensionSlidersContainer) {
+            extensionSlidersContainer.style.display = this.canvas.outputAreaExtensionEnabled ? 'block' : 'none';
+        }
+
+        // Update slider values if they exist
+        if (this.canvas.outputAreaExtensionEnabled) {
+            const sliders = extensionSlidersContainer?.querySelectorAll('input[type="range"]');
+            const directions: ('top' | 'bottom' | 'left' | 'right')[] = ['top', 'bottom', 'left', 'right'];
+            
+            sliders?.forEach((slider, index) => {
+                const direction = directions[index];
+                if (direction) {
+                    (slider as HTMLInputElement).value = String(this.canvas.outputAreaExtensions[direction]);
+                    // Update the corresponding value display
+                    const valueDisplay = slider.parentElement?.querySelector('div:last-child');
+                    if (valueDisplay) {
+                        valueDisplay.textContent = `${this.canvas.outputAreaExtensions[direction]}px`;
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -447,5 +639,127 @@ export class CustomShapeMenu {
 
         // Start the viewport change detection
         requestAnimationFrame(checkViewportChange);
+    }
+
+    private _addTooltip(element: HTMLElement, text: string): void {
+        element.addEventListener('mouseenter', (e) => {
+            this.showTooltip(text, e);
+        });
+
+        element.addEventListener('mouseleave', () => {
+            this.hideTooltip();
+        });
+
+        element.addEventListener('mousemove', (e) => {
+            if (this.tooltip && this.tooltip.style.display === 'block') {
+                this.updateTooltipPosition(e);
+            }
+        });
+    }
+
+    private showTooltip(text: string, event: MouseEvent): void {
+        this.hideTooltip(); // Hide any existing tooltip
+
+        this.tooltip = document.createElement('div');
+        this.tooltip.textContent = text;
+        this.tooltip.style.cssText = `
+            position: fixed;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: sans-serif;
+            line-height: 1.4;
+            max-width: 250px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            border: 1px solid #444;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        `;
+
+        document.body.appendChild(this.tooltip);
+        this.updateTooltipPosition(event);
+
+        // Fade in the tooltip
+        requestAnimationFrame(() => {
+            if (this.tooltip) {
+                this.tooltip.style.opacity = '1';
+            }
+        });
+    }
+
+    private updateTooltipPosition(event: MouseEvent): void {
+        if (!this.tooltip) return;
+
+        const tooltipRect = this.tooltip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+
+        let x = event.clientX + 10;
+        let y = event.clientY - 10;
+
+        // Adjust if tooltip would go off the right edge
+        if (x + tooltipRect.width > viewportWidth) {
+            x = event.clientX - tooltipRect.width - 10;
+        }
+
+        // Adjust if tooltip would go off the bottom edge
+        if (y + tooltipRect.height > viewportHeight) {
+            y = event.clientY - tooltipRect.height - 10;
+        }
+
+        // Ensure tooltip doesn't go off the left or top edges
+        x = Math.max(5, x);
+        y = Math.max(5, y);
+
+        this.tooltip.style.left = `${x}px`;
+        this.tooltip.style.top = `${y}px`;
+    }
+
+    private hideTooltip(): void {
+        if (this.tooltip) {
+            this.tooltip.remove();
+            this.tooltip = null;
+        }
+    }
+
+    private _updateCanvasSize(): void {
+        if (!this.canvas.outputAreaExtensionEnabled) {
+            // Reset to original bounds when disabled
+            this.canvas.outputAreaBounds = { 
+                x: 0, 
+                y: 0, 
+                width: this.canvas.originalCanvasSize.width, 
+                height: this.canvas.originalCanvasSize.height 
+            };
+            this.canvas.updateOutputAreaSize(
+                this.canvas.originalCanvasSize.width, 
+                this.canvas.originalCanvasSize.height, 
+                false
+            );
+            return;
+        }
+
+        const ext = this.canvas.outputAreaExtensions;
+        const newWidth = this.canvas.originalCanvasSize.width + ext.left + ext.right;
+        const newHeight = this.canvas.originalCanvasSize.height + ext.top + ext.bottom;
+
+        // Aktualizuj outputAreaBounds - "okno" w świecie które zostanie wyrenderowane
+        this.canvas.outputAreaBounds = {
+            x: -ext.left,  // Może być ujemne - wycinamy fragment świata
+            y: -ext.top,   // Może być ujemne - wycinamy fragment świata
+            width: newWidth,
+            height: newHeight
+        };
+
+        // Zmień rozmiar canvas (fizyczny rozmiar dla renderowania)
+        this.canvas.updateOutputAreaSize(newWidth, newHeight, false);
+
+        log.info(`Output area bounds updated: x=${this.canvas.outputAreaBounds.x}, y=${this.canvas.outputAreaBounds.y}, w=${newWidth}, h=${newHeight}`);
+        log.info(`Extensions: top=${ext.top}, bottom=${ext.bottom}, left=${ext.left}, right=${ext.right}`);
     }
 }

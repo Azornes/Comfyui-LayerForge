@@ -67,6 +67,7 @@ export class CanvasRenderer {
             }
         });
         this.drawCanvasOutline(ctx);
+        this.drawOutputAreaExtensionPreview(ctx); // Draw extension preview
         this.drawPendingGenerationAreas(ctx); // Draw snapshot outlines
         const maskImage = this.canvas.maskTool.getMask();
         if (maskImage && this.canvas.maskTool.isOverlayVisible) {
@@ -79,12 +80,16 @@ export class CanvasRenderer {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             }
-            ctx.drawImage(maskImage, this.canvas.maskTool.x, this.canvas.maskTool.y);
+            // Renderuj maskę w jej pozycji światowej (bez przesunięcia względem bounds)
+            const maskWorldX = this.canvas.maskTool.x;
+            const maskWorldY = this.canvas.maskTool.y;
+            ctx.drawImage(maskImage, maskWorldX, maskWorldY);
             ctx.globalAlpha = 1.0;
             ctx.restore();
         }
         this.renderInteractionElements(ctx);
         this.canvas.shapeTool.render(ctx);
+        this.drawMaskAreaBounds(ctx); // Draw mask area bounds when mask tool is active
         this.renderLayerInfo(ctx);
         // Update custom shape menu position and visibility
         if (this.canvas.outputAreaShape) {
@@ -256,7 +261,9 @@ export class CanvasRenderer {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.lineWidth = 2 / this.canvas.viewport.zoom;
         ctx.setLineDash([10 / this.canvas.viewport.zoom, 5 / this.canvas.viewport.zoom]);
-        ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+        // Rysuj outline w pozycji outputAreaBounds
+        const bounds = this.canvas.outputAreaBounds;
+        ctx.rect(bounds.x, bounds.y, bounds.width, bounds.height);
         ctx.stroke();
         ctx.setLineDash([]);
         if (this.canvas.outputAreaShape) {
@@ -304,6 +311,29 @@ export class CanvasRenderer {
             ctx.stroke();
         }
     }
+    drawOutputAreaExtensionPreview(ctx) {
+        if (!this.canvas.outputAreaExtensionPreview) {
+            return;
+        }
+        // Calculate preview bounds based on original canvas size + preview extensions
+        const baseWidth = this.canvas.originalCanvasSize ? this.canvas.originalCanvasSize.width : this.canvas.width;
+        const baseHeight = this.canvas.originalCanvasSize ? this.canvas.originalCanvasSize.height : this.canvas.height;
+        const ext = this.canvas.outputAreaExtensionPreview;
+        // Podgląd pokazuje jak będą wyglądać nowe outputAreaBounds
+        const previewBounds = {
+            x: -ext.left, // Może być ujemne - wycinamy fragment świata
+            y: -ext.top, // Może być ujemne - wycinamy fragment świata
+            width: baseWidth + ext.left + ext.right,
+            height: baseHeight + ext.top + ext.bottom
+        };
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // Yellow color for preview
+        ctx.lineWidth = 3 / this.canvas.viewport.zoom;
+        ctx.setLineDash([8 / this.canvas.viewport.zoom, 4 / this.canvas.viewport.zoom]);
+        ctx.strokeRect(previewBounds.x, previewBounds.y, previewBounds.width, previewBounds.height);
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
     drawPendingGenerationAreas(ctx) {
         const areasToDraw = [];
         // 1. Get areas from active managers
@@ -330,5 +360,43 @@ export class CanvasRenderer {
             ctx.strokeRect(area.x, area.y, area.width, area.height);
             ctx.restore();
         });
+    }
+    drawMaskAreaBounds(ctx) {
+        // Only show mask area bounds when mask tool is active
+        if (!this.canvas.maskTool.isActive) {
+            return;
+        }
+        const maskTool = this.canvas.maskTool;
+        // Get mask canvas bounds in world coordinates
+        const maskBounds = {
+            x: maskTool.x,
+            y: maskTool.y,
+            width: maskTool.getMask().width,
+            height: maskTool.getMask().height
+        };
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)'; // Red color for mask area bounds
+        ctx.lineWidth = 2 / this.canvas.viewport.zoom;
+        ctx.setLineDash([6 / this.canvas.viewport.zoom, 6 / this.canvas.viewport.zoom]);
+        ctx.strokeRect(maskBounds.x, maskBounds.y, maskBounds.width, maskBounds.height);
+        ctx.setLineDash([]);
+        // Add text label to show this is the mask drawing area
+        const textWorldX = maskBounds.x + maskBounds.width / 2;
+        const textWorldY = maskBounds.y - (10 / this.canvas.viewport.zoom);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const screenX = (textWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
+        const screenY = (textWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const text = "Mask Drawing Area";
+        const textMetrics = ctx.measureText(text);
+        const bgWidth = textMetrics.width + 8;
+        const bgHeight = 18;
+        ctx.fillStyle = "rgba(255, 100, 100, 0.8)";
+        ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
+        ctx.fillStyle = "white";
+        ctx.fillText(text, screenX, screenY);
+        ctx.restore();
     }
 }

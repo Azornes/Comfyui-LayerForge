@@ -22,8 +22,9 @@ export class CanvasLayers {
             let finalWidth = image.width;
             let finalHeight = image.height;
             let finalX, finalY;
-            // Use the targetArea if provided, otherwise default to the current canvas dimensions
-            const area = targetArea || { width: this.canvas.width, height: this.canvas.height, x: 0, y: 0 };
+            // Use the targetArea if provided, otherwise default to the current output area bounds
+            const bounds = this.canvas.outputAreaBounds;
+            const area = targetArea || { width: bounds.width, height: bounds.height, x: bounds.x, y: bounds.y };
             if (addMode === 'fit') {
                 const scale = Math.min(area.width / image.width, area.height / image.height);
                 finalWidth = image.width * scale;
@@ -778,57 +779,129 @@ export class CanvasLayers {
             modeElement.appendChild(slider);
         }
     }
-    async getFlattenedCanvasWithMaskAsBlob() {
+    /**
+     * Zunifikowana funkcja do generowania blob z canvas
+     * @param options Opcje renderowania
+     */
+    async _generateCanvasBlob(options = {}) {
+        const { layers = this.canvas.layers, useOutputBounds = true, applyMask = false, enableLogging = false, customBounds } = options;
         return new Promise((resolve, reject) => {
+            let bounds;
+            if (customBounds) {
+                bounds = customBounds;
+            }
+            else if (useOutputBounds) {
+                bounds = this.canvas.outputAreaBounds;
+            }
+            else {
+                // Oblicz bounding box dla wybranych warstw
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                layers.forEach((layer) => {
+                    const centerX = layer.x + layer.width / 2;
+                    const centerY = layer.y + layer.height / 2;
+                    const rad = layer.rotation * Math.PI / 180;
+                    const cos = Math.cos(rad);
+                    const sin = Math.sin(rad);
+                    const halfW = layer.width / 2;
+                    const halfH = layer.height / 2;
+                    const corners = [
+                        { x: -halfW, y: -halfH },
+                        { x: halfW, y: -halfH },
+                        { x: halfW, y: halfH },
+                        { x: -halfW, y: halfH }
+                    ];
+                    corners.forEach(p => {
+                        const worldX = centerX + (p.x * cos - p.y * sin);
+                        const worldY = centerY + (p.x * sin + p.y * cos);
+                        minX = Math.min(minX, worldX);
+                        minY = Math.min(minY, worldY);
+                        maxX = Math.max(maxX, worldX);
+                        maxY = Math.max(maxY, worldY);
+                    });
+                });
+                const newWidth = Math.ceil(maxX - minX);
+                const newHeight = Math.ceil(maxY - minY);
+                if (newWidth <= 0 || newHeight <= 0) {
+                    resolve(null);
+                    return;
+                }
+                bounds = { x: minX, y: minY, width: newWidth, height: newHeight };
+            }
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = this.canvas.width;
-            tempCanvas.height = this.canvas.height;
+            tempCanvas.width = bounds.width;
+            tempCanvas.height = bounds.height;
             const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             if (!tempCtx) {
                 reject(new Error("Could not create canvas context"));
                 return;
             }
-            this._drawLayers(tempCtx, this.canvas.layers);
-            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const data = imageData.data;
-            const toolMaskCanvas = this.canvas.maskTool.getMask();
-            if (toolMaskCanvas) {
-                const tempMaskCanvas = document.createElement('canvas');
-                tempMaskCanvas.width = this.canvas.width;
-                tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
-                if (!tempMaskCtx) {
-                    reject(new Error("Could not create mask canvas context"));
-                    return;
+            if (enableLogging) {
+                log.info("=== GENERATING OUTPUT CANVAS ===");
+                log.info(`Bounds: x=${bounds.x}, y=${bounds.y}, w=${bounds.width}, h=${bounds.height}`);
+                log.info(`Canvas Size: ${tempCanvas.width}x${tempCanvas.height}`);
+                log.info(`Context Translation: translate(${-bounds.x}, ${-bounds.y})`);
+                log.info(`Apply Mask: ${applyMask}`);
+                // Log layer positions before rendering
+                layers.forEach((layer, index) => {
+                    if (layer.visible) {
+                        const relativeToOutput = {
+                            x: layer.x - bounds.x,
+                            y: layer.y - bounds.y
+                        };
+                        log.info(`Layer ${index + 1} "${layer.name}": world(${layer.x.toFixed(1)}, ${layer.y.toFixed(1)}) relative_to_bounds(${relativeToOutput.x.toFixed(1)}, ${relativeToOutput.y.toFixed(1)}) size(${layer.width.toFixed(1)}x${layer.height.toFixed(1)})`);
+                    }
+                });
+            }
+            // Renderuj fragment świata zdefiniowany przez bounds
+            tempCtx.translate(-bounds.x, -bounds.y);
+            this._drawLayers(tempCtx, layers);
+            // Aplikuj maskę jeśli wymagana
+            if (applyMask) {
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                const data = imageData.data;
+                const toolMaskCanvas = this.canvas.maskTool.getMask();
+                if (toolMaskCanvas) {
+                    const tempMaskCanvas = document.createElement('canvas');
+                    tempMaskCanvas.width = bounds.width;
+                    tempMaskCanvas.height = bounds.height;
+                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    if (!tempMaskCtx) {
+                        reject(new Error("Could not create mask canvas context"));
+                        return;
+                    }
+                    tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                    // Pozycja maski w świecie (bez przesunięcia względem bounds)
+                    const maskWorldX = this.canvas.maskTool.x;
+                    const maskWorldY = this.canvas.maskTool.y;
+                    // Pozycja maski względem output bounds (gdzie ma być narysowana w output canvas)
+                    const maskX = maskWorldX - bounds.x;
+                    const maskY = maskWorldY - bounds.y;
+                    const sourceX = Math.max(0, -maskX);
+                    const sourceY = Math.max(0, -maskY);
+                    const destX = Math.max(0, maskX);
+                    const destY = Math.max(0, maskY);
+                    const copyWidth = Math.min(toolMaskCanvas.width - sourceX, bounds.width - destX);
+                    const copyHeight = Math.min(toolMaskCanvas.height - sourceY, bounds.height - destY);
+                    if (copyWidth > 0 && copyHeight > 0) {
+                        tempMaskCtx.drawImage(toolMaskCanvas, sourceX, sourceY, copyWidth, copyHeight, destX, destY, copyWidth, copyHeight);
+                    }
+                    const tempMaskData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
+                    for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                        const alpha = tempMaskData.data[i + 3];
+                        tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                        tempMaskData.data[i + 3] = alpha;
+                    }
+                    tempMaskCtx.putImageData(tempMaskData, 0, 0);
+                    const maskImageData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
+                    const maskData = maskImageData.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const originalAlpha = data[i + 3];
+                        const maskAlpha = maskData[i + 3] / 255;
+                        const invertedMaskAlpha = 1 - maskAlpha;
+                        data[i + 3] = originalAlpha * invertedMaskAlpha;
+                    }
+                    tempCtx.putImageData(imageData, 0, 0);
                 }
-                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-                const maskX = this.canvas.maskTool.x;
-                const maskY = this.canvas.maskTool.y;
-                const sourceX = Math.max(0, -maskX);
-                const sourceY = Math.max(0, -maskY);
-                const destX = Math.max(0, maskX);
-                const destY = Math.max(0, maskY);
-                const copyWidth = Math.min(toolMaskCanvas.width - sourceX, this.canvas.width - destX);
-                const copyHeight = Math.min(toolMaskCanvas.height - sourceY, this.canvas.height - destY);
-                if (copyWidth > 0 && copyHeight > 0) {
-                    tempMaskCtx.drawImage(toolMaskCanvas, sourceX, sourceY, copyWidth, copyHeight, destX, destY, copyWidth, copyHeight);
-                }
-                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                for (let i = 0; i < tempMaskData.data.length; i += 4) {
-                    const alpha = tempMaskData.data[i + 3];
-                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
-                    tempMaskData.data[i + 3] = alpha;
-                }
-                tempMaskCtx.putImageData(tempMaskData, 0, 0);
-                const maskImageData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                const maskData = maskImageData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    const originalAlpha = data[i + 3];
-                    const maskAlpha = maskData[i + 3] / 255;
-                    const invertedMaskAlpha = 1 - maskAlpha;
-                    data[i + 3] = originalAlpha * invertedMaskAlpha;
-                }
-                tempCtx.putImageData(imageData, 0, 0);
             }
             tempCanvas.toBlob((blob) => {
                 if (blob) {
@@ -838,79 +911,120 @@ export class CanvasLayers {
                     resolve(null);
                 }
             }, 'image/png');
+        });
+    }
+    // Publiczne metody używające zunifikowanej funkcji
+    async getFlattenedCanvasWithMaskAsBlob() {
+        return this._generateCanvasBlob({
+            layers: this.canvas.layers,
+            useOutputBounds: true,
+            applyMask: true,
+            enableLogging: true
         });
     }
     async getFlattenedCanvasAsBlob() {
-        return new Promise((resolve, reject) => {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = this.canvas.width;
-            tempCanvas.height = this.canvas.height;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-            if (!tempCtx) {
-                reject(new Error("Could not create canvas context"));
-                return;
-            }
-            this._drawLayers(tempCtx, this.canvas.layers);
-            tempCanvas.toBlob((blob) => {
-                if (blob) {
-                    resolve(blob);
-                }
-                else {
-                    resolve(null);
-                }
-            }, 'image/png');
+        return this._generateCanvasBlob({
+            layers: this.canvas.layers,
+            useOutputBounds: true,
+            applyMask: false,
+            enableLogging: true
         });
-    }
-    async getFlattenedCanvasForMaskEditor() {
-        return this.getFlattenedCanvasWithMaskAsBlob();
     }
     async getFlattenedSelectionAsBlob() {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) {
             return null;
         }
+        return this._generateCanvasBlob({
+            layers: this.canvas.canvasSelection.selectedLayers,
+            useOutputBounds: false,
+            applyMask: false,
+            enableLogging: false
+        });
+    }
+    async getFlattenedMaskAsBlob() {
         return new Promise((resolve, reject) => {
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvas.canvasSelection.selectedLayers.forEach((layer) => {
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                const rad = layer.rotation * Math.PI / 180;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                const halfW = layer.width / 2;
-                const halfH = layer.height / 2;
-                const corners = [
-                    { x: -halfW, y: -halfH },
-                    { x: halfW, y: -halfH },
-                    { x: halfW, y: halfH },
-                    { x: -halfW, y: halfH }
-                ];
-                corners.forEach(p => {
-                    const worldX = centerX + (p.x * cos - p.y * sin);
-                    const worldY = centerY + (p.x * sin + p.y * cos);
-                    minX = Math.min(minX, worldX);
-                    minY = Math.min(minY, worldY);
-                    maxX = Math.max(maxX, worldX);
-                    maxY = Math.max(maxY, worldY);
-                });
-            });
-            const newWidth = Math.ceil(maxX - minX);
-            const newHeight = Math.ceil(maxY - minY);
-            if (newWidth <= 0 || newHeight <= 0) {
-                resolve(null);
+            const bounds = this.canvas.outputAreaBounds;
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = bounds.width;
+            maskCanvas.height = bounds.height;
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+            if (!maskCtx) {
+                reject(new Error("Could not create mask context"));
                 return;
             }
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = newWidth;
-            tempCanvas.height = newHeight;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-            if (!tempCtx) {
-                reject(new Error("Could not create canvas context"));
+            log.info("=== GENERATING MASK BLOB ===");
+            log.info(`Mask Canvas Size: ${maskCanvas.width}x${maskCanvas.height}`);
+            // Rozpocznij z białą maską (nic nie zamaskowane)
+            maskCtx.fillStyle = '#ffffff';
+            maskCtx.fillRect(0, 0, bounds.width, bounds.height);
+            // Stwórz canvas do sprawdzenia przezroczystości warstw
+            const visibilityCanvas = document.createElement('canvas');
+            visibilityCanvas.width = bounds.width;
+            visibilityCanvas.height = bounds.height;
+            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            if (!visibilityCtx) {
+                reject(new Error("Could not create visibility context"));
                 return;
             }
-            tempCtx.translate(-minX, -minY);
-            this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
-            tempCanvas.toBlob((blob) => {
-                resolve(blob);
+            // Renderuj warstwy z przesunięciem dla output bounds
+            visibilityCtx.translate(-bounds.x, -bounds.y);
+            this._drawLayers(visibilityCtx, this.canvas.layers);
+            // Konwertuj przezroczystość warstw na maskę
+            const visibilityData = visibilityCtx.getImageData(0, 0, bounds.width, bounds.height);
+            const maskData = maskCtx.getImageData(0, 0, bounds.width, bounds.height);
+            for (let i = 0; i < visibilityData.data.length; i += 4) {
+                const alpha = visibilityData.data[i + 3];
+                const maskValue = 255 - alpha; // Odwróć alpha żeby stworzyć maskę
+                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
+                maskData.data[i + 3] = 255; // Solidna maska
+            }
+            maskCtx.putImageData(maskData, 0, 0);
+            // Aplikuj maskę narzędzia jeśli istnieje
+            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            if (toolMaskCanvas) {
+                const tempMaskCanvas = document.createElement('canvas');
+                tempMaskCanvas.width = bounds.width;
+                tempMaskCanvas.height = bounds.height;
+                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                if (!tempMaskCtx) {
+                    reject(new Error("Could not create temp mask context"));
+                    return;
+                }
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                // Pozycja maski w świecie (bez przesunięcia względem bounds)
+                const maskWorldX = this.canvas.maskTool.x;
+                const maskWorldY = this.canvas.maskTool.y;
+                // Pozycja maski względem output bounds (gdzie ma być narysowana w output canvas)
+                const maskX = maskWorldX - bounds.x;
+                const maskY = maskWorldY - bounds.y;
+                log.debug(`[getFlattenedMaskAsBlob] Mask world position (${maskWorldX}, ${maskWorldY}) relative to bounds (${maskX}, ${maskY})`);
+                const sourceX = Math.max(0, -maskX);
+                const sourceY = Math.max(0, -maskY);
+                const destX = Math.max(0, maskX);
+                const destY = Math.max(0, maskY);
+                const copyWidth = Math.min(toolMaskCanvas.width - sourceX, bounds.width - destX);
+                const copyHeight = Math.min(toolMaskCanvas.height - sourceY, bounds.height - destY);
+                if (copyWidth > 0 && copyHeight > 0) {
+                    tempMaskCtx.drawImage(toolMaskCanvas, sourceX, sourceY, copyWidth, copyHeight, destX, destY, copyWidth, copyHeight);
+                }
+                const tempMaskData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
+                for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                    const alpha = tempMaskData.data[i + 3];
+                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = alpha;
+                    tempMaskData.data[i + 3] = 255; // Solidna alpha
+                }
+                tempMaskCtx.putImageData(tempMaskData, 0, 0);
+                maskCtx.globalCompositeOperation = 'screen';
+                maskCtx.drawImage(tempMaskCanvas, 0, 0);
+            }
+            log.info("=== MASK BLOB GENERATED ===");
+            maskCanvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                }
+                else {
+                    resolve(null);
+                }
             }, 'image/png');
         });
     }
