@@ -902,6 +902,70 @@ export class CanvasInteractions {
         reader.readAsDataURL(file);
     }
 
+    defineOutputAreaWithShape(shape: any): void {
+        const boundingBox = this.canvas.shapeTool.getBoundingBox();
+        if (boundingBox && boundingBox.width > 1 && boundingBox.height > 1) {
+            this.canvas.saveState();
+
+            this.canvas.outputAreaShape = {
+                ...shape,
+                points: shape.points.map((p: any) => ({
+                    x: p.x - boundingBox.x,
+                    y: p.y - boundingBox.y
+                }))
+            };
+
+            const newWidth = Math.round(boundingBox.width);
+            const newHeight = Math.round(boundingBox.height);
+            const newX = Math.round(boundingBox.x);
+            const newY = Math.round(boundingBox.y);
+
+            // Store the original canvas size for extension calculations
+            this.canvas.originalCanvasSize = { width: newWidth, height: newHeight };
+            
+            // Store the original position where custom shape was drawn for extension calculations
+            this.canvas.originalOutputAreaPosition = { x: newX, y: newY };
+
+            // If extensions are enabled, we need to recalculate outputAreaBounds with current extensions
+            if (this.canvas.outputAreaExtensionEnabled) {
+                const ext = this.canvas.outputAreaExtensions;
+                const extendedWidth = newWidth + ext.left + ext.right;
+                const extendedHeight = newHeight + ext.top + ext.bottom;
+                
+                // Update canvas size with extensions
+                this.canvas.updateOutputAreaSize(extendedWidth, extendedHeight, false);
+                
+                // Set outputAreaBounds accounting for extensions
+                this.canvas.outputAreaBounds = {
+                    x: newX - ext.left,  // Adjust position by left extension
+                    y: newY - ext.top,   // Adjust position by top extension
+                    width: extendedWidth,
+                    height: extendedHeight
+                };
+                
+                log.info(`New custom shape with extensions: original(${newX}, ${newY}) extended(${newX - ext.left}, ${newY - ext.top}) size(${extendedWidth}x${extendedHeight})`);
+            } else {
+                // No extensions - use original size and position
+                this.canvas.updateOutputAreaSize(newWidth, newHeight, false);
+                
+                this.canvas.outputAreaBounds = {
+                    x: newX,
+                    y: newY,
+                    width: newWidth,
+                    height: newHeight
+                };
+                
+                log.info(`New custom shape without extensions: position(${newX}, ${newY}) size(${newWidth}x${newHeight})`);
+            }
+
+            // Update mask canvas to ensure it covers the new output area position
+            this.canvas.maskTool.updateMaskCanvasForOutputArea();
+
+            this.canvas.saveState();
+            this.canvas.render();
+        }
+    }
+
     async handlePasteEvent(e: ClipboardEvent): Promise<void> {
 
         const shouldHandle = this.canvas.isMouseOver ||

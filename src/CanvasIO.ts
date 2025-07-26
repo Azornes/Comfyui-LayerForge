@@ -775,12 +775,18 @@ export class CanvasIO {
             // Draw the image first
             ctx.drawImage(image, 0, 0);
 
-            // Create a clipping mask using the shape
+            // Calculate custom shape position accounting for extensions
+            // Custom shape should maintain its relative position within the original canvas area
+            const ext = this.canvas.outputAreaExtensionEnabled ? this.canvas.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+            const shapeOffsetX = ext.left;  // Add left extension to maintain relative position
+            const shapeOffsetY = ext.top;   // Add top extension to maintain relative position
+
+            // Create a clipping mask using the shape with extension offset
             ctx.globalCompositeOperation = 'destination-in';
             ctx.beginPath();
-            ctx.moveTo(shape.points[0].x, shape.points[0].y);
+            ctx.moveTo(shape.points[0].x + shapeOffsetX, shape.points[0].y + shapeOffsetY);
             for (let i = 1; i < shape.points.length; i++) {
-                ctx.lineTo(shape.points[i].x, shape.points[i].y);
+                ctx.lineTo(shape.points[i].x + shapeOffsetX, shape.points[i].y + shapeOffsetY);
             }
             ctx.closePath();
             ctx.fill();

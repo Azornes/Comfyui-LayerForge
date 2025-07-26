@@ -281,11 +281,17 @@ export class CustomShapeMenu {
                     width: this.canvas.width,
                     height: this.canvas.height
                 };
+                // Restore last saved extensions instead of starting from zero
+                this.canvas.outputAreaExtensions = { ...this.canvas.lastOutputAreaExtensions };
                 log.info(`Captured current canvas size as baseline: ${this.canvas.width}x${this.canvas.height}`);
+                log.info(`Restored last extensions:`, this.canvas.outputAreaExtensions);
             }
             else {
-                // Reset all extensions when disabled
+                // Save current extensions before disabling
+                this.canvas.lastOutputAreaExtensions = { ...this.canvas.outputAreaExtensions };
+                // Reset current extensions when disabled (but keep the saved ones)
                 this.canvas.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+                log.info(`Saved extensions for later:`, this.canvas.lastOutputAreaExtensions);
             }
             this._updateExtensionUI();
             this._updateCanvasSize(); // Update canvas size when toggling
@@ -610,12 +616,12 @@ export class CustomShapeMenu {
     }
     _updateCanvasSize() {
         if (!this.canvas.outputAreaExtensionEnabled) {
-            // When extensions are disabled, preserve the current outputAreaBounds position
-            // Only update the size to match originalCanvasSize
-            const currentBounds = this.canvas.outputAreaBounds;
+            // When extensions are disabled, return to original custom shape position
+            // Use originalOutputAreaPosition instead of current bounds position
+            const originalPos = this.canvas.originalOutputAreaPosition;
             this.canvas.outputAreaBounds = {
-                x: currentBounds.x, // ✅ Preserve current position
-                y: currentBounds.y, // ✅ Preserve current position
+                x: originalPos.x, // ✅ Return to original custom shape position
+                y: originalPos.y, // ✅ Return to original custom shape position
                 width: this.canvas.originalCanvasSize.width,
                 height: this.canvas.originalCanvasSize.height
             };
@@ -625,11 +631,11 @@ export class CustomShapeMenu {
         const ext = this.canvas.outputAreaExtensions;
         const newWidth = this.canvas.originalCanvasSize.width + ext.left + ext.right;
         const newHeight = this.canvas.originalCanvasSize.height + ext.top + ext.bottom;
-        // When extensions are enabled, calculate new bounds relative to current position
-        const currentBounds = this.canvas.outputAreaBounds;
+        // When extensions are enabled, calculate new bounds relative to original custom shape position
+        const originalPos = this.canvas.originalOutputAreaPosition;
         this.canvas.outputAreaBounds = {
-            x: currentBounds.x - ext.left, // Adjust position by left extension
-            y: currentBounds.y - ext.top, // Adjust position by top extension
+            x: originalPos.x - ext.left, // Adjust position by left extension from original position
+            y: originalPos.y - ext.top, // Adjust position by top extension from original position
             width: newWidth,
             height: newHeight
         };

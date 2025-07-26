@@ -72,7 +72,9 @@ export class Canvas {
         this.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
         this.outputAreaExtensionEnabled = false;
         this.outputAreaExtensionPreview = null;
+        this.lastOutputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
         this.originalCanvasSize = { width: this.width, height: this.height };
+        this.originalOutputAreaPosition = { x: -(this.width / 4), y: -(this.height / 4) };
         // Initialize outputAreaBounds centered in viewport, similar to how canvas resize/move work
         this.outputAreaBounds = {
             x: -(this.width / 4),
@@ -317,37 +319,7 @@ export class Canvas {
         return this.canvasSelection.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
     }
     defineOutputAreaWithShape(shape) {
-        const boundingBox = this.shapeTool.getBoundingBox();
-        if (boundingBox && boundingBox.width > 1 && boundingBox.height > 1) {
-            this.saveState();
-            this.outputAreaShape = {
-                ...shape,
-                points: shape.points.map(p => ({
-                    x: p.x - boundingBox.x,
-                    y: p.y - boundingBox.y
-                }))
-            };
-            const newWidth = Math.round(boundingBox.width);
-            const newHeight = Math.round(boundingBox.height);
-            const newX = Math.round(boundingBox.x);
-            const newY = Math.round(boundingBox.y);
-            // Store the original canvas size for extension calculations
-            this.originalCanvasSize = { width: newWidth, height: newHeight };
-            // Update canvas size but don't change outputAreaBounds yet
-            this.updateOutputAreaSize(newWidth, newHeight, false);
-            // Set outputAreaBounds to where the custom shape was drawn in the world
-            // Similar to finalizeCanvasMove - just update outputAreaBounds position
-            this.outputAreaBounds = {
-                x: newX,
-                y: newY,
-                width: newWidth,
-                height: newHeight
-            };
-            // Update mask canvas to ensure it covers the new output area position
-            this.maskTool.updateMaskCanvasForOutputArea();
-            this.saveState();
-            this.render();
-        }
+        this.canvasInteractions.defineOutputAreaWithShape(shape);
     }
     /**
      * Zmienia rozmiar obszaru wyjściowego

@@ -591,8 +591,16 @@ export class MaskTool {
 
         const shape = this.canvasInstance.outputAreaShape;
         const viewport = this.canvasInstance.viewport;
+        const bounds = this.canvasInstance.outputAreaBounds;
 
-        const screenPoints = shape.points.map(p => ({
+        // Convert shape points to world coordinates first (relative to output area bounds)
+        const worldShapePoints = shape.points.map(p => ({
+            x: bounds.x + p.x,
+            y: bounds.y + p.y
+        }));
+
+        // Then convert world coordinates to screen coordinates
+        const screenPoints = worldShapePoints.map(p => ({
             x: (p.x - viewport.x) * viewport.zoom,
             y: (p.y - viewport.y) * viewport.zoom
         }));
@@ -638,7 +646,7 @@ export class MaskTool {
             }
         }
 
-        log.debug(`Shape preview shown with expansion: ${expansionValue}px, feather: ${featherValue}px`);
+        log.debug(`Shape preview shown with expansion: ${expansionValue}px, feather: ${featherValue}px at bounds (${bounds.x}, ${bounds.y})`);
     }
 
     /**
@@ -915,10 +923,20 @@ export class MaskTool {
     }
 
     clear(): void {
-        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+        // Clear all mask chunks instead of just the active canvas
+        this.clearAllMaskChunks();
+        
+        // Update active mask canvas to reflect the cleared state
+        this.updateActiveMaskCanvas();
+        
         if (this.isActive) {
             this.canvasInstance.canvasState.saveMaskState();
         }
+        
+        // Trigger render to show the cleared mask
+        this.canvasInstance.render();
+        
+        log.info("Cleared all mask data from all chunks");
     }
 
     getMask(): HTMLCanvasElement {
@@ -1102,6 +1120,24 @@ export class MaskTool {
         log.debug(`Cleared area from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
     }
 
+    /**
+     * Clears all mask chunks - used by the clear() function
+     */
+    private clearAllMaskChunks(): void {
+        // Clear all existing chunks
+        for (const [chunkKey, chunk] of this.maskChunks) {
+            chunk.ctx.clearRect(0, 0, this.chunkSize, this.chunkSize);
+            chunk.isEmpty = true;
+            chunk.isDirty = true;
+        }
+        
+        // Optionally remove all chunks from memory to free up resources
+        this.maskChunks.clear();
+        this.activeChunkBounds = null;
+        
+        log.info(`Cleared all ${this.maskChunks.size} mask chunks`);
+    }
+
     addMask(image: HTMLImageElement): void {
         // Add mask to chunks system instead of directly to active canvas
         const bounds = this.canvasInstance.outputAreaBounds;
@@ -1186,6 +1222,176 @@ export class MaskTool {
         log.debug(`Added mask to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
     }
 
+    /**
+     * Applies a mask canvas to the chunked system at a specific world position
+     */
+    private applyMaskCanvasToChunks(maskCanvas: HTMLCanvasElement, worldX: number, worldY: number): void {
+        // Calculate which chunks this mask will affect
+        const maskLeft = worldX;
+        const maskTop = worldY;
+        const maskRight = worldX + maskCanvas.width;
+        const maskBottom = worldY + maskCanvas.height;
+        
+        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
+        const chunkMinY = Math.floor(maskTop / this.chunkSize);
+        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
+        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        
+        // First, clear the area where the mask will be applied
+        this.clearMaskInArea(maskLeft, maskTop, maskCanvas.width, maskCanvas.height);
+        
+        // Apply mask to all affected chunks
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                this.applyMaskCanvasToChunk(chunk, maskCanvas, worldX, worldY);
+            }
+        }
+        
+        log.info(`Applied mask canvas to chunks covering area (${maskLeft}, ${maskTop}) to (${maskRight}, ${maskBottom})`);
+    }
+
+    /**
+     * Removes a mask canvas from the chunked system at a specific world position
+     */
+    private removeMaskCanvasFromChunks(maskCanvas: HTMLCanvasElement, worldX: number, worldY: number): void {
+        // Calculate which chunks this mask will affect
+        const maskLeft = worldX;
+        const maskTop = worldY;
+        const maskRight = worldX + maskCanvas.width;
+        const maskBottom = worldY + maskCanvas.height;
+        
+        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
+        const chunkMinY = Math.floor(maskTop / this.chunkSize);
+        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
+        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        
+        // Remove mask from all affected chunks
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                this.removeMaskCanvasFromChunk(chunk, maskCanvas, worldX, worldY);
+            }
+        }
+        
+        log.info(`Removed mask canvas from chunks covering area (${maskLeft}, ${maskTop}) to (${maskRight}, ${maskBottom})`);
+    }
+
+    /**
+     * Removes a mask canvas from a specific chunk using destination-out composition
+     */
+    private removeMaskCanvasFromChunk(chunk: MaskChunk, maskCanvas: HTMLCanvasElement, maskWorldX: number, maskWorldY: number): void {
+        // Calculate the intersection of the mask with this chunk
+        const chunkLeft = chunk.x;
+        const chunkTop = chunk.y;
+        const chunkRight = chunk.x + this.chunkSize;
+        const chunkBottom = chunk.y + this.chunkSize;
+        
+        const maskLeft = maskWorldX;
+        const maskTop = maskWorldY;
+        const maskRight = maskWorldX + maskCanvas.width;
+        const maskBottom = maskWorldY + maskCanvas.height;
+        
+        // Find intersection
+        const intersectLeft = Math.max(chunkLeft, maskLeft);
+        const intersectTop = Math.max(chunkTop, maskTop);
+        const intersectRight = Math.min(chunkRight, maskRight);
+        const intersectBottom = Math.min(chunkBottom, maskBottom);
+        
+        // Check if there's actually an intersection
+        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+            return; // No intersection
+        }
+        
+        // Calculate source coordinates on the mask canvas
+        const srcX = intersectLeft - maskLeft;
+        const srcY = intersectTop - maskTop;
+        const srcWidth = intersectRight - intersectLeft;
+        const srcHeight = intersectBottom - intersectTop;
+        
+        // Calculate destination coordinates on the chunk
+        const destX = intersectLeft - chunkLeft;
+        const destY = intersectTop - chunkTop;
+        
+        // Use destination-out to remove the mask portion from this chunk
+        chunk.ctx.globalCompositeOperation = 'destination-out';
+        chunk.ctx.drawImage(
+            maskCanvas,
+            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
+            destX, destY, srcWidth, srcHeight // Destination rectangle
+        );
+        
+        // Restore normal composition mode
+        chunk.ctx.globalCompositeOperation = 'source-over';
+        
+        // Check if the chunk is now empty
+        const imageData = chunk.ctx.getImageData(0, 0, this.chunkSize, this.chunkSize);
+        const data = imageData.data;
+        let hasData = false;
+        for (let i = 3; i < data.length; i += 4) { // Check alpha channel
+            if (data[i] > 0) {
+                hasData = true;
+                break;
+            }
+        }
+        
+        chunk.isEmpty = !hasData;
+        chunk.isDirty = true;
+        
+        log.debug(`Removed mask canvas from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+    }
+
+    /**
+     * Applies a mask canvas to a specific chunk
+     */
+    private applyMaskCanvasToChunk(chunk: MaskChunk, maskCanvas: HTMLCanvasElement, maskWorldX: number, maskWorldY: number): void {
+        // Calculate the intersection of the mask with this chunk
+        const chunkLeft = chunk.x;
+        const chunkTop = chunk.y;
+        const chunkRight = chunk.x + this.chunkSize;
+        const chunkBottom = chunk.y + this.chunkSize;
+        
+        const maskLeft = maskWorldX;
+        const maskTop = maskWorldY;
+        const maskRight = maskWorldX + maskCanvas.width;
+        const maskBottom = maskWorldY + maskCanvas.height;
+        
+        // Find intersection
+        const intersectLeft = Math.max(chunkLeft, maskLeft);
+        const intersectTop = Math.max(chunkTop, maskTop);
+        const intersectRight = Math.min(chunkRight, maskRight);
+        const intersectBottom = Math.min(chunkBottom, maskBottom);
+        
+        // Check if there's actually an intersection
+        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+            return; // No intersection
+        }
+        
+        // Calculate source coordinates on the mask canvas
+        const srcX = intersectLeft - maskLeft;
+        const srcY = intersectTop - maskTop;
+        const srcWidth = intersectRight - intersectLeft;
+        const srcHeight = intersectBottom - intersectTop;
+        
+        // Calculate destination coordinates on the chunk
+        const destX = intersectLeft - chunkLeft;
+        const destY = intersectTop - chunkTop;
+        
+        // Draw the mask portion onto this chunk
+        chunk.ctx.globalCompositeOperation = 'source-over';
+        chunk.ctx.drawImage(
+            maskCanvas,
+            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
+            destX, destY, srcWidth, srcHeight // Destination rectangle
+        );
+        
+        // Mark chunk as dirty and not empty
+        chunk.isDirty = true;
+        chunk.isEmpty = false;
+        
+        log.debug(`Applied mask canvas to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+    }
+
     applyShapeMask(saveState: boolean = true): void {
         if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
             log.warn("Cannot apply shape mask: shape is not defined or has too few points.");
@@ -1196,72 +1402,81 @@ export class MaskTool {
         }
 
         const shape = this.canvasInstance.outputAreaShape;
-        const destX = -this.x;
-        const destY = -this.y;
+        const bounds = this.canvasInstance.outputAreaBounds;
 
-        const maskPoints = shape.points.map(p => ({ x: p.x + destX, y: p.y + destY }));
+        // Calculate shape points in world coordinates
+        // Shape points are relative to the output area bounds
+        const worldShapePoints = shape.points.map(p => ({ 
+            x: bounds.x + p.x, 
+            y: bounds.y + p.y 
+        }));
 
-        // --- Clear Previous State ---
-        // To prevent artifacts from previous slider values, we first clear the maximum
-        // possible area the shape could have occupied.
-        const maxExpansion = 300; // The maximum value of the expansion slider
-        const clearingMaskCanvas = this._createExpandedMaskCanvas(maskPoints, maxExpansion, this.maskCanvas.width, this.maskCanvas.height);
+        // Create the shape mask canvas
+        let shapeMaskCanvas: HTMLCanvasElement;
         
-        this.maskCtx.globalCompositeOperation = 'destination-out';
-        this.maskCtx.drawImage(clearingMaskCanvas, 0, 0);
-        
-        // --- Apply Current State ---
-        // Now, apply the new, correct mask additively.
-        this.maskCtx.globalCompositeOperation = 'source-over';
-
         // Check if we need expansion or feathering
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
         const needsFeather = this.canvasInstance.shapeMaskFeather && this.canvasInstance.shapeMaskFeatherValue > 0;
 
+        // Create a temporary canvas large enough to contain the shape and any expansion
+        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
+        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
+        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
+        const tempOffsetX = maxExpansion;
+        const tempOffsetY = maxExpansion;
+
+        // Adjust shape points for the temporary canvas
+        const tempShapePoints = worldShapePoints.map(p => ({
+            x: p.x - bounds.x + tempOffsetX,
+            y: p.y - bounds.y + tempOffsetY
+        }));
+
         if (!needsExpansion && !needsFeather) {
             // Simple case: just draw the original shape
-            this.maskCtx.fillStyle = 'white';
-            this.maskCtx.beginPath();
-            this.maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-            for (let i = 1; i < maskPoints.length; i++) {
-                this.maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
-            }
-            this.maskCtx.closePath();
-            this.maskCtx.fill('evenodd'); // Use evenodd to handle holes correctly
-        } else if (needsExpansion && !needsFeather) {
-            // Expansion only: use the new distance transform expansion
-            const expandedMaskCanvas = this._createExpandedMaskCanvas(maskPoints, this.canvasInstance.shapeMaskExpansionValue, this.maskCanvas.width, this.maskCanvas.height);
-            this.maskCtx.drawImage(expandedMaskCanvas, 0, 0);
-        } else if (!needsExpansion && needsFeather) {
-            // Feather only: apply feathering to the original shape
-            const featheredMaskCanvas = this._createFeatheredMaskCanvas(maskPoints, this.canvasInstance.shapeMaskFeatherValue, this.maskCanvas.width, this.maskCanvas.height);
-            this.maskCtx.drawImage(featheredMaskCanvas, 0, 0);
-        } else {
-            // Both expansion and feather: first expand, then apply feather to the expanded shape
-            // Step 1: Create expanded shape
-            const expandedMaskCanvas = this._createExpandedMaskCanvas(maskPoints, this.canvasInstance.shapeMaskExpansionValue, this.maskCanvas.width, this.maskCanvas.height);
+            shapeMaskCanvas = document.createElement('canvas');
+            shapeMaskCanvas.width = tempCanvasWidth;
+            shapeMaskCanvas.height = tempCanvasHeight;
+            const ctx = shapeMaskCanvas.getContext('2d', { willReadFrequently: true })!;
             
-            // Step 2: Extract points from the expanded canvas and apply feathering
-            // For now, we'll apply feathering to the expanded canvas directly
-            // This is a simplified approach - we could extract the outline points for more precision
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(tempShapePoints[0].x, tempShapePoints[0].y);
+            for (let i = 1; i < tempShapePoints.length; i++) {
+                ctx.lineTo(tempShapePoints[i].x, tempShapePoints[i].y);
+            }
+            ctx.closePath();
+            ctx.fill('evenodd');
+        } else if (needsExpansion && !needsFeather) {
+            // Expansion only
+            shapeMaskCanvas = this._createExpandedMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, tempCanvasWidth, tempCanvasHeight);
+        } else if (!needsExpansion && needsFeather) {
+            // Feather only
+            shapeMaskCanvas = this._createFeatheredMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskFeatherValue, tempCanvasWidth, tempCanvasHeight);
+        } else {
+            // Both expansion and feather
+            const expandedMaskCanvas = this._createExpandedMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, tempCanvasWidth, tempCanvasHeight);
             const tempCtx = expandedMaskCanvas.getContext('2d', { willReadFrequently: true })!;
             const expandedImageData = tempCtx.getImageData(0, 0, expandedMaskCanvas.width, expandedMaskCanvas.height);
-            
-            // Apply feathering to the expanded shape
-            const featheredMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, this.maskCanvas.width, this.maskCanvas.height);
-            this.maskCtx.drawImage(featheredMaskCanvas, 0, 0);
+            shapeMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, tempCanvasWidth, tempCanvasHeight);
         }
+
+        // Now apply the shape mask to the chunked system
+        this.applyMaskCanvasToChunks(shapeMaskCanvas, bounds.x - tempOffsetX, bounds.y - tempOffsetY);
+
+        // Update the active mask canvas to show the changes
+        this.updateActiveMaskCanvas();
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`Applied shape mask with expansion: ${needsExpansion}, feather: ${needsFeather}.`);
+        log.info(`Applied shape mask to chunks with expansion: ${needsExpansion}, feather: ${needsFeather}.`);
     }
 
     /**
      * Removes mask in the area of the custom output area shape. This must use a hard-edged
      * shape to correctly erase any feathered "glow" that might have been applied.
+     * Now works with the chunked mask system.
      */
     removeShapeMask(): void {
         if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
@@ -1272,45 +1487,69 @@ export class MaskTool {
         this.canvasInstance.canvasState.saveMaskState();
 
         const shape = this.canvasInstance.outputAreaShape;
-        const destX = -this.x;
-        const destY = -this.y;
+        const bounds = this.canvasInstance.outputAreaBounds;
 
-        // Use 'destination-out' to erase the shape area
-        this.maskCtx.globalCompositeOperation = 'destination-out';
+        // Calculate shape points in world coordinates (same as applyShapeMask)
+        const worldShapePoints = shape.points.map(p => ({ 
+            x: bounds.x + p.x, 
+            y: bounds.y + p.y 
+        }));
 
-        const maskPoints = shape.points.map(p => ({ x: p.x + destX, y: p.y + destY }));
+        // Check if we need to account for expansion when removing
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
 
-        // IMPORTANT: Removal should always be hard-edged, even if feather was on.
-        // This ensures the feathered "glow" is completely removed. We only care about expansion.
+        // Create a removal mask canvas - always hard-edged to ensure complete removal
+        let removalMaskCanvas: HTMLCanvasElement;
+        
+        // Create a temporary canvas large enough to contain the shape and any expansion
+        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
+        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
+        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
+        const tempOffsetX = maxExpansion;
+        const tempOffsetY = maxExpansion;
+
+        // Adjust shape points for the temporary canvas
+        const tempShapePoints = worldShapePoints.map(p => ({
+            x: p.x - bounds.x + tempOffsetX,
+            y: p.y - bounds.y + tempOffsetY
+        }));
+
         if (needsExpansion) {
-            // If expansion was active, remove the expanded area with a hard edge.
-            const expandedMaskCanvas = this._createExpandedMaskCanvas(
-                maskPoints, 
+            // If expansion was active, remove the expanded area with a hard edge
+            removalMaskCanvas = this._createExpandedMaskCanvas(
+                tempShapePoints, 
                 this.canvasInstance.shapeMaskExpansionValue, 
-                this.maskCanvas.width, 
-                this.maskCanvas.height
+                tempCanvasWidth, 
+                tempCanvasHeight
             );
-            this.maskCtx.drawImage(expandedMaskCanvas, 0, 0);
         } else {
-            // If no expansion, just remove the base shape with a hard edge.
-            this.maskCtx.beginPath();
-            this.maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-            for (let i = 1; i < maskPoints.length; i++) {
-                this.maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
+            // If no expansion, just remove the base shape with a hard edge
+            removalMaskCanvas = document.createElement('canvas');
+            removalMaskCanvas.width = tempCanvasWidth;
+            removalMaskCanvas.height = tempCanvasHeight;
+            const ctx = removalMaskCanvas.getContext('2d', { willReadFrequently: true })!;
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(tempShapePoints[0].x, tempShapePoints[0].y);
+            for (let i = 1; i < tempShapePoints.length; i++) {
+                ctx.lineTo(tempShapePoints[i].x, tempShapePoints[i].y);
             }
-            this.maskCtx.closePath();
-            this.maskCtx.fill('evenodd');
+            ctx.closePath();
+            ctx.fill('evenodd');
         }
 
-        // Restore default composite operation
-        this.maskCtx.globalCompositeOperation = 'source-over';
+        // Now remove the shape mask from the chunked system
+        this.removeMaskCanvasFromChunks(removalMaskCanvas, bounds.x - tempOffsetX, bounds.y - tempOffsetY);
+
+        // Update the active mask canvas to show the changes
+        this.updateActiveMaskCanvas();
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`Removed shape mask area (hard-edged) with expansion: ${needsExpansion}.`);
+        log.info(`Removed shape mask from chunks with expansion: ${needsExpansion}.`);
     }
 
     private _createFeatheredMaskCanvas(points: Point[], featherRadius: number, width: number, height: number): HTMLCanvasElement {

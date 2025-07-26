@@ -323,11 +323,17 @@ export class CanvasRenderer {
             const shape = this.canvas.outputAreaShape;
             const bounds = this.canvas.outputAreaBounds;
             
+            // Calculate custom shape position accounting for extensions
+            // Custom shape should maintain its relative position within the original canvas area
+            const ext = this.canvas.outputAreaExtensionEnabled ? this.canvas.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+            const shapeOffsetX = bounds.x + ext.left;  // Add left extension to maintain relative position
+            const shapeOffsetY = bounds.y + ext.top;   // Add top extension to maintain relative position
+            
             ctx.beginPath();
-            // Render custom shape relative to outputAreaBounds, not (0,0)
-            ctx.moveTo(bounds.x + shape.points[0].x, bounds.y + shape.points[0].y);
+            // Render custom shape with extension offset to maintain relative position
+            ctx.moveTo(shapeOffsetX + shape.points[0].x, shapeOffsetY + shape.points[0].y);
             for (let i = 1; i < shape.points.length; i++) {
-                ctx.lineTo(bounds.x + shape.points[i].x, bounds.y + shape.points[i].y);
+                ctx.lineTo(shapeOffsetX + shape.points[i].x, shapeOffsetY + shape.points[i].y);
             }
             ctx.closePath();
             ctx.stroke();
@@ -379,10 +385,11 @@ export class CanvasRenderer {
         
         const ext = this.canvas.outputAreaExtensionPreview;
         
-        // Podgląd pokazuje jak będą wyglądać nowe outputAreaBounds
+        // Calculate preview bounds relative to original custom shape position, not (0,0)
+        const originalPos = this.canvas.originalOutputAreaPosition;
         const previewBounds = {
-            x: -ext.left,  // Może być ujemne - wycinamy fragment świata
-            y: -ext.top,   // Może być ujemne - wycinamy fragment świata
+            x: originalPos.x - ext.left,  // ✅ Względem oryginalnej pozycji custom shape
+            y: originalPos.y - ext.top,   // ✅ Względem oryginalnej pozycji custom shape
             width: baseWidth + ext.left + ext.right,
             height: baseHeight + ext.top + ext.bottom
         };
