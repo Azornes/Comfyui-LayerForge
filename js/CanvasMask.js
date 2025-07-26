@@ -442,22 +442,12 @@ export class CanvasMask {
         const maskAsImage = new Image();
         maskAsImage.src = tempCanvas.toDataURL();
         await new Promise(resolve => maskAsImage.onload = resolve);
-        const maskCtx = this.maskTool.maskCtx;
-        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
-        // MaskTool canvas ma pozycję (maskTool.x, maskTool.y) w świecie
-        // Maska z edytora reprezentuje output bounds, więc musimy ją umieścić
-        // w pozycji bounds względem pozycji MaskTool
-        const destX = bounds.x - this.maskTool.x;
-        const destY = bounds.y - this.maskTool.y;
-        log.debug("Applying mask to canvas", {
-            maskToolPos: { x: this.maskTool.x, y: this.maskTool.y },
+        log.debug("Applying mask using chunk system", {
             boundsPos: { x: bounds.x, y: bounds.y },
-            destPos: { x: destX, y: destY },
             maskSize: { width: bounds.width, height: bounds.height }
         });
-        maskCtx.globalCompositeOperation = 'source-over';
-        maskCtx.clearRect(destX, destY, bounds.width, bounds.height);
-        maskCtx.drawImage(maskAsImage, destX, destY);
+        // Use the chunk system instead of direct canvas manipulation
+        this.maskTool.setMask(maskAsImage);
         this.canvas.render();
         this.canvas.saveState();
         log.debug("Creating new preview image");

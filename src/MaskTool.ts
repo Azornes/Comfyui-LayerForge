@@ -8,6 +8,15 @@ interface MaskToolCallbacks {
     onStateChange?: () => void;
 }
 
+interface MaskChunk {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    x: number; // World coordinates of chunk
+    y: number; // World coordinates of chunk
+    isDirty: boolean; // Has been modified
+    isEmpty: boolean; // Contains no mask data
+}
+
 export class MaskTool {
     private brushHardness: number;
     private brushSize: number;
@@ -18,15 +27,21 @@ export class MaskTool {
     public isOverlayVisible: boolean;
     private lastPosition: Point | null;
     private mainCanvas: HTMLCanvasElement;
-    private maskCanvas: HTMLCanvasElement;
-    private maskCtx: CanvasRenderingContext2D;
+    
+    // Chunked mask system
+    private maskChunks: Map<string, MaskChunk>; // Key: "x,y" (chunk coordinates)
+    private chunkSize: number;
+    private activeMaskCanvas: HTMLCanvasElement; // Composite of active chunks
+    private activeMaskCtx: CanvasRenderingContext2D;
+    private activeChunkBounds: { minX: number, minY: number, maxX: number, maxY: number } | null;
+    
     private onStateChange: (() => void) | null;
     private previewCanvas: HTMLCanvasElement;
     private previewCanvasInitialized: boolean;
     private previewCtx: CanvasRenderingContext2D;
     private previewVisible: boolean;
-    public x: number;
-    public y: number;
+    public x: number; // Active mask canvas position
+    public y: number; // Active mask canvas position
     
     // Shape mask preview system
     private shapePreviewCanvas: HTMLCanvasElement;
@@ -38,12 +53,19 @@ export class MaskTool {
         this.canvasInstance = canvasInstance;
         this.mainCanvas = canvasInstance.canvas;
         this.onStateChange = callbacks.onStateChange || null;
-        this.maskCanvas = document.createElement('canvas');
-        const maskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
-        if (!maskCtx) {
-            throw new Error("Failed to get 2D context for mask canvas");
+        
+        // Initialize chunked mask system
+        this.maskChunks = new Map();
+        this.chunkSize = 512;
+        this.activeChunkBounds = null;
+        
+        // Create active mask canvas (composite of chunks)
+        this.activeMaskCanvas = document.createElement('canvas');
+        const activeMaskCtx = this.activeMaskCanvas.getContext('2d', { willReadFrequently: true });
+        if (!activeMaskCtx) {
+            throw new Error("Failed to get 2D context for active mask canvas");
         }
-        this.maskCtx = maskCtx;
+        this.activeMaskCtx = activeMaskCtx;
 
         this.x = 0;
         this.y = 0;
@@ -78,6 +100,15 @@ export class MaskTool {
         this.initMaskCanvas();
     }
 
+    // Temporary compatibility getters - will be replaced with chunked system
+    get maskCanvas(): HTMLCanvasElement {
+        return this.activeMaskCanvas;
+    }
+
+    get maskCtx(): CanvasRenderingContext2D {
+        return this.activeMaskCtx;
+    }
+
     initPreviewCanvas(): void {
         if (this.previewCanvas.parentElement) {
             this.previewCanvas.parentElement.removeChild(this.previewCanvas);
@@ -99,22 +130,140 @@ export class MaskTool {
     }
 
     initMaskCanvas(): void {
-        const extraSpace = 2000; // Allow for a generous drawing area outside the output area
-        const bounds = this.canvasInstance.outputAreaBounds;
+        // Initialize chunked system
+        this.chunkSize = 512;
+        this.maskChunks = new Map();
         
-        // Mask canvas should cover output area + extra space around it
-        const maskLeft = bounds.x - extraSpace / 2;
-        const maskTop = bounds.y - extraSpace / 2;
-        const maskWidth = bounds.width + extraSpace;
-        const maskHeight = bounds.height + extraSpace;
+        // Create initial active mask canvas
+        this.updateActiveMaskCanvas();
         
-        this.maskCanvas.width = maskWidth;
-        this.maskCanvas.height = maskHeight;
-        this.x = maskLeft;
-        this.y = maskTop;
+        log.info(`Initialized chunked mask system with chunk size: ${this.chunkSize}x${this.chunkSize}`);
+    }
 
-        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-        log.info(`Initialized mask canvas with size: ${this.maskCanvas.width}x${this.maskCanvas.height}, positioned at (${this.x}, ${this.y}) to cover output area at (${bounds.x}, ${bounds.y})`);
+    /**
+     * Updates the active mask canvas to show ALL chunks with mask data
+     * No longer limited to output area - shows all drawn masks everywhere
+     */
+    private updateActiveMaskCanvas(): void {
+        // Find bounds of all non-empty chunks
+        const chunkBounds = this.getAllChunkBounds();
+        
+        if (!chunkBounds) {
+            // No chunks with data - create minimal canvas
+            this.activeMaskCanvas.width = 1;
+            this.activeMaskCanvas.height = 1;
+            this.x = 0;
+            this.y = 0;
+            this.activeChunkBounds = null;
+            log.info("No mask chunks found - created minimal active canvas");
+            return;
+        }
+        
+        // Calculate canvas size to cover all chunks
+        const canvasLeft = chunkBounds.minX * this.chunkSize;
+        const canvasTop = chunkBounds.minY * this.chunkSize;
+        const canvasWidth = (chunkBounds.maxX - chunkBounds.minX + 1) * this.chunkSize;
+        const canvasHeight = (chunkBounds.maxY - chunkBounds.minY + 1) * this.chunkSize;
+        
+        // Update active mask canvas size and position
+        this.activeMaskCanvas.width = canvasWidth;
+        this.activeMaskCanvas.height = canvasHeight;
+        this.x = canvasLeft;
+        this.y = canvasTop;
+        
+        // Clear active canvas
+        this.activeMaskCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        this.activeChunkBounds = chunkBounds;
+        
+        // Composite ALL chunks with data onto active canvas
+        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
+                const chunkKey = `${chunkX},${chunkY}`;
+                const chunk = this.maskChunks.get(chunkKey);
+                
+                if (chunk && !chunk.isEmpty) {
+                    // Calculate position on active canvas
+                    const destX = (chunkX - chunkBounds.minX) * this.chunkSize;
+                    const destY = (chunkY - chunkBounds.minY) * this.chunkSize;
+                    
+                    this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                }
+            }
+        }
+        
+        log.info(`Updated active mask canvas to show ALL chunks: ${canvasWidth}x${canvasHeight} at (${canvasLeft}, ${canvasTop}), chunks: ${chunkBounds.minX},${chunkBounds.minY} to ${chunkBounds.maxX},${chunkBounds.maxY}`);
+    }
+
+    /**
+     * Finds the bounds of all chunks that contain mask data
+     * Returns null if no chunks have data
+     */
+    private getAllChunkBounds(): { minX: number, minY: number, maxX: number, maxY: number } | null {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let hasData = false;
+        
+        for (const [chunkKey, chunk] of this.maskChunks) {
+            if (!chunk.isEmpty) {
+                const [chunkXStr, chunkYStr] = chunkKey.split(',');
+                const chunkX = parseInt(chunkXStr);
+                const chunkY = parseInt(chunkYStr);
+                
+                minX = Math.min(minX, chunkX);
+                minY = Math.min(minY, chunkY);
+                maxX = Math.max(maxX, chunkX);
+                maxY = Math.max(maxY, chunkY);
+                hasData = true;
+            }
+        }
+        
+        return hasData ? { minX, minY, maxX, maxY } : null;
+    }
+
+    /**
+     * Gets or creates a chunk for the given world coordinates
+     */
+    private getChunkForPosition(worldX: number, worldY: number): MaskChunk {
+        const chunkX = Math.floor(worldX / this.chunkSize);
+        const chunkY = Math.floor(worldY / this.chunkSize);
+        const chunkKey = `${chunkX},${chunkY}`;
+        
+        let chunk = this.maskChunks.get(chunkKey);
+        if (!chunk) {
+            chunk = this.createChunk(chunkX, chunkY);
+            this.maskChunks.set(chunkKey, chunk);
+        }
+        
+        return chunk;
+    }
+
+    /**
+     * Creates a new chunk at the given chunk coordinates
+     */
+    private createChunk(chunkX: number, chunkY: number): MaskChunk {
+        const canvas = document.createElement('canvas');
+        canvas.width = this.chunkSize;
+        canvas.height = this.chunkSize;
+        
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error("Failed to get 2D context for chunk canvas");
+        }
+        
+        const chunk: MaskChunk = {
+            canvas,
+            ctx,
+            x: chunkX * this.chunkSize,
+            y: chunkY * this.chunkSize,
+            isDirty: false,
+            isEmpty: true
+        };
+        
+        log.debug(`Created chunk at (${chunkX}, ${chunkY}) covering world area (${chunk.x}, ${chunk.y}) to (${chunk.x + this.chunkSize}, ${chunk.y + this.chunkSize})`);
+        return chunk;
     }
 
     activate(): void {
@@ -194,46 +343,183 @@ export class MaskTool {
             this.lastPosition = worldCoords;
         }
 
+        // Draw on chunks instead of single canvas
+        this.drawOnChunks(this.lastPosition, worldCoords);
+        
+        // Only update active canvas if we drew on chunks that are currently visible
+        // This prevents unnecessary recomposition during drawing
+        this.updateActiveCanvasIfNeeded(this.lastPosition, worldCoords);
+    }
 
-        const canvasLastX = this.lastPosition.x - this.x;
-        const canvasLastY = this.lastPosition.y - this.y;
-        const canvasX = worldCoords.x - this.x;
-        const canvasY = worldCoords.y - this.y;
-
-
-        const canvasWidth = this.maskCanvas.width;
-        const canvasHeight = this.maskCanvas.height;
-
-        if (canvasX >= 0 && canvasX < canvasWidth &&
-            canvasY >= 0 && canvasY < canvasHeight &&
-            canvasLastX >= 0 && canvasLastX < canvasWidth &&
-            canvasLastY >= 0 && canvasLastY < canvasHeight) {
-
-            this.maskCtx.beginPath();
-            this.maskCtx.moveTo(canvasLastX, canvasLastY);
-            this.maskCtx.lineTo(canvasX, canvasY);
-            const gradientRadius = this.brushSize / 2;
-
-            if (this.brushHardness === 1) {
-                this.maskCtx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
-            } else {
-                const innerRadius = gradientRadius * this.brushHardness;
-                const gradient = this.maskCtx.createRadialGradient(
-                    canvasX, canvasY, innerRadius,
-                    canvasX, canvasY, gradientRadius
-                );
-                gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
-                gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
-                this.maskCtx.strokeStyle = gradient;
+    /**
+     * Draws a line between two world coordinates on the appropriate chunks
+     */
+    private drawOnChunks(startWorld: Point, endWorld: Point): void {
+        // Calculate all chunks that this line might touch
+        const minX = Math.min(startWorld.x, endWorld.x) - this.brushSize;
+        const maxX = Math.max(startWorld.x, endWorld.x) + this.brushSize;
+        const minY = Math.min(startWorld.y, endWorld.y) - this.brushSize;
+        const maxY = Math.max(startWorld.y, endWorld.y) + this.brushSize;
+        
+        const chunkMinX = Math.floor(minX / this.chunkSize);
+        const chunkMinY = Math.floor(minY / this.chunkSize);
+        const chunkMaxX = Math.floor(maxX / this.chunkSize);
+        const chunkMaxY = Math.floor(maxY / this.chunkSize);
+        
+        // Draw on all affected chunks
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                this.drawLineOnChunk(chunk, startWorld, endWorld);
             }
+        }
+    }
 
-            this.maskCtx.lineWidth = this.brushSize;
-            this.maskCtx.lineCap = 'round';
-            this.maskCtx.lineJoin = 'round';
-            this.maskCtx.globalCompositeOperation = 'source-over';
-            this.maskCtx.stroke();
+    /**
+     * Draws a line on a specific chunk
+     */
+    private drawLineOnChunk(chunk: MaskChunk, startWorld: Point, endWorld: Point): void {
+        // Convert world coordinates to chunk-local coordinates
+        const startLocal = {
+            x: startWorld.x - chunk.x,
+            y: startWorld.y - chunk.y
+        };
+        const endLocal = {
+            x: endWorld.x - chunk.x,
+            y: endWorld.y - chunk.y
+        };
+        
+        // Check if the line intersects this chunk
+        if (!this.lineIntersectsChunk(startLocal, endLocal, this.chunkSize)) {
+            return;
+        }
+        
+        // Draw the line on this chunk
+        chunk.ctx.beginPath();
+        chunk.ctx.moveTo(startLocal.x, startLocal.y);
+        chunk.ctx.lineTo(endLocal.x, endLocal.y);
+        
+        const gradientRadius = this.brushSize / 2;
+        
+        if (this.brushHardness === 1) {
+            chunk.ctx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
         } else {
-            log.debug(`Drawing outside mask canvas bounds: (${canvasX}, ${canvasY})`);
+            const innerRadius = gradientRadius * this.brushHardness;
+            const gradient = chunk.ctx.createRadialGradient(
+                endLocal.x, endLocal.y, innerRadius,
+                endLocal.x, endLocal.y, gradientRadius
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
+            gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+            chunk.ctx.strokeStyle = gradient;
+        }
+        
+        chunk.ctx.lineWidth = this.brushSize;
+        chunk.ctx.lineCap = 'round';
+        chunk.ctx.lineJoin = 'round';
+        chunk.ctx.globalCompositeOperation = 'source-over';
+        chunk.ctx.stroke();
+        
+        // Mark chunk as dirty and not empty
+        chunk.isDirty = true;
+        chunk.isEmpty = false;
+        
+        log.debug(`Drew on chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)})`);
+    }
+
+    /**
+     * Checks if a line intersects with a chunk bounds
+     */
+    private lineIntersectsChunk(startLocal: Point, endLocal: Point, chunkSize: number): boolean {
+        // Expand bounds by brush size to catch partial intersections
+        const margin = this.brushSize / 2;
+        const left = -margin;
+        const top = -margin;
+        const right = chunkSize + margin;
+        const bottom = chunkSize + margin;
+        
+        // Check if either point is inside the expanded bounds
+        if ((startLocal.x >= left && startLocal.x <= right && startLocal.y >= top && startLocal.y <= bottom) ||
+            (endLocal.x >= left && endLocal.x <= right && endLocal.y >= top && endLocal.y <= bottom)) {
+            return true;
+        }
+        
+        // Check if line crosses chunk bounds (simplified check)
+        return true; // For now, always draw - more precise intersection can be added later
+    }
+
+    /**
+     * Updates active canvas when drawing affects chunks
+     * Now always updates when new chunks are created to ensure immediate visibility
+     */
+    private updateActiveCanvasIfNeeded(startWorld: Point, endWorld: Point): void {
+        // Calculate which chunks were affected by this drawing operation
+        const minX = Math.min(startWorld.x, endWorld.x) - this.brushSize;
+        const maxX = Math.max(startWorld.x, endWorld.x) + this.brushSize;
+        const minY = Math.min(startWorld.y, endWorld.y) - this.brushSize;
+        const maxY = Math.max(startWorld.y, endWorld.y) + this.brushSize;
+        
+        const affectedChunkMinX = Math.floor(minX / this.chunkSize);
+        const affectedChunkMinY = Math.floor(minY / this.chunkSize);
+        const affectedChunkMaxX = Math.floor(maxX / this.chunkSize);
+        const affectedChunkMaxY = Math.floor(maxY / this.chunkSize);
+
+        // Check if we drew on any new chunks (outside current active bounds)
+        let drewOnNewChunks = false;
+        if (!this.activeChunkBounds) {
+            drewOnNewChunks = true;
+        } else {
+            drewOnNewChunks = 
+                affectedChunkMinX < this.activeChunkBounds.minX ||
+                affectedChunkMaxX > this.activeChunkBounds.maxX ||
+                affectedChunkMinY < this.activeChunkBounds.minY ||
+                affectedChunkMaxY > this.activeChunkBounds.maxY;
+        }
+
+        if (drewOnNewChunks) {
+            // Drawing extended beyond current active bounds - do full update to include new chunks
+            this.updateActiveMaskCanvas();
+            log.debug("Drew on new chunks - performed full active canvas update");
+        } else {
+            // Drawing within existing bounds - do partial update for performance
+            this.updateActiveCanvasPartial(affectedChunkMinX, affectedChunkMinY, affectedChunkMaxX, affectedChunkMaxY);
+            log.debug("Drew within existing bounds - performed partial update");
+        }
+    }
+
+    /**
+     * Partially updates the active canvas by redrawing only specific chunks
+     * Much faster than full recomposition during drawing
+     * Now works with the new system that shows ALL chunks
+     */
+    private updateActiveCanvasPartial(chunkMinX: number, chunkMinY: number, chunkMaxX: number, chunkMaxY: number): void {
+        if (!this.activeChunkBounds) {
+            // No active bounds - do full update
+            this.updateActiveMaskCanvas();
+            return;
+        }
+
+        // Only redraw the affected chunks that are within the current active canvas bounds
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                // Check if this chunk is within active bounds (all chunks with data)
+                if (chunkX >= this.activeChunkBounds.minX && chunkX <= this.activeChunkBounds.maxX &&
+                    chunkY >= this.activeChunkBounds.minY && chunkY <= this.activeChunkBounds.maxY) {
+                    
+                    const chunkKey = `${chunkX},${chunkY}`;
+                    const chunk = this.maskChunks.get(chunkKey);
+                    
+                    if (chunk && !chunk.isEmpty) {
+                        // Calculate position on active canvas (relative to all chunks bounds)
+                        const destX = (chunkX - this.activeChunkBounds.minX) * this.chunkSize;
+                        const destY = (chunkY - this.activeChunkBounds.minY) * this.chunkSize;
+                        
+                        // Clear the area first, then redraw
+                        this.activeMaskCtx.clearRect(destX, destY, this.chunkSize, this.chunkSize);
+                        this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                    }
+                }
+            }
         }
     }
 
@@ -636,7 +922,10 @@ export class MaskTool {
     }
 
     getMask(): HTMLCanvasElement {
-        return this.maskCanvas;
+        // Always return the current active mask canvas which shows all chunks
+        // Make sure it's up to date before returning
+        this.updateActiveMaskCanvas();
+        return this.activeMaskCanvas;
     }
 
     getMaskImageWithAlpha(): HTMLImageElement {
@@ -674,31 +963,31 @@ export class MaskTool {
         const isIncreasingWidth = width > this.canvasInstance.width;
         const isIncreasingHeight = height > this.canvasInstance.height;
 
-        this.maskCanvas = document.createElement('canvas');
+        this.activeMaskCanvas = document.createElement('canvas');
 
         const extraSpace = 2000;
 
         const newWidth = isIncreasingWidth ? width + extraSpace : Math.max(oldWidth, width + extraSpace);
         const newHeight = isIncreasingHeight ? height + extraSpace : Math.max(oldHeight, height + extraSpace);
 
-        this.maskCanvas.width = newWidth;
-        this.maskCanvas.height = newHeight;
-        const newMaskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
+        this.activeMaskCanvas.width = newWidth;
+        this.activeMaskCanvas.height = newHeight;
+        const newMaskCtx = this.activeMaskCanvas.getContext('2d', { willReadFrequently: true });
         if (!newMaskCtx) {
             throw new Error("Failed to get 2D context for new mask canvas");
         }
-        this.maskCtx = newMaskCtx;
+        this.activeMaskCtx = newMaskCtx;
 
         if (oldMask.width > 0 && oldMask.height > 0) {
             const offsetX = this.x - oldX;
             const offsetY = this.y - oldY;
 
-            this.maskCtx.drawImage(oldMask, offsetX, offsetY);
+            this.activeMaskCtx.drawImage(oldMask, offsetX, offsetY);
 
             log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
         }
 
-        log.info(`Mask canvas resized to ${this.maskCanvas.width}x${this.maskCanvas.height}, position (${this.x}, ${this.y})`);
+        log.info(`Mask canvas resized to ${this.activeMaskCanvas.width}x${this.activeMaskCanvas.height}, position (${this.x}, ${this.y})`);
         log.info(`Canvas size change: width ${isIncreasingWidth ? 'increased' : 'decreased'}, height ${isIncreasingHeight ? 'increased' : 'decreased'}`);
     }
 
@@ -711,60 +1000,16 @@ export class MaskTool {
     /**
      * Updates mask canvas to ensure it covers the current output area
      * This should be called when output area position or size changes
+     * Now uses chunked system - just updates the active mask canvas
      */
     updateMaskCanvasForOutputArea(): void {
-        const extraSpace = 2000;
-        const bounds = this.canvasInstance.outputAreaBounds;
+        log.info(`Updating chunked mask system for output area at (${this.canvasInstance.outputAreaBounds.x}, ${this.canvasInstance.outputAreaBounds.y})`);
         
-        // Calculate required mask canvas bounds
-        const requiredLeft = bounds.x - extraSpace / 2;
-        const requiredTop = bounds.y - extraSpace / 2;
-        const requiredWidth = bounds.width + extraSpace;
-        const requiredHeight = bounds.height + extraSpace;
+        // Simply update the active mask canvas to cover the new output area
+        // All existing chunks are preserved in the maskChunks Map
+        this.updateActiveMaskCanvas();
         
-        // Check if current mask canvas covers the required area
-        const currentRight = this.x + this.maskCanvas.width;
-        const currentBottom = this.y + this.maskCanvas.height;
-        const requiredRight = requiredLeft + requiredWidth;
-        const requiredBottom = requiredTop + requiredHeight;
-        
-        const needsResize = 
-            requiredLeft < this.x || 
-            requiredTop < this.y ||
-            requiredRight > currentRight ||
-            requiredBottom > currentBottom;
-            
-        if (needsResize) {
-            log.info(`Updating mask canvas to cover output area at (${bounds.x}, ${bounds.y})`);
-            
-            // Save current mask content
-            const oldMask = this.maskCanvas;
-            const oldX = this.x;
-            const oldY = this.y;
-            
-            // Create new mask canvas with proper size and position
-            this.maskCanvas = document.createElement('canvas');
-            this.maskCanvas.width = requiredWidth;
-            this.maskCanvas.height = requiredHeight;
-            this.x = requiredLeft;
-            this.y = requiredTop;
-            
-            const newMaskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
-            if (!newMaskCtx) {
-                throw new Error("Failed to get 2D context for new mask canvas");
-            }
-            this.maskCtx = newMaskCtx;
-            
-            // Copy old mask content to new position
-            if (oldMask.width > 0 && oldMask.height > 0) {
-                const offsetX = oldX - this.x;
-                const offsetY = oldY - this.y;
-                this.maskCtx.drawImage(oldMask, offsetX, offsetY);
-                log.debug(`Preserved mask content with offset (${offsetX}, ${offsetY})`);
-            }
-            
-            log.info(`Mask canvas updated to ${this.maskCanvas.width}x${this.maskCanvas.height} at (${this.x}, ${this.y})`);
-        }
+        log.info(`Chunked mask system updated - ${this.maskChunks.size} chunks preserved`);
     }
 
     toggleOverlayVisibility(): void {
@@ -773,43 +1018,172 @@ export class MaskTool {
     }
 
     setMask(image: HTMLImageElement): void {
-        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
-        // MaskTool canvas ma pozycję (this.x, this.y) w świecie
-        // Maska reprezentuje output bounds, więc musimy ją umieścić
-        // w pozycji bounds względem pozycji MaskTool
+        // Clear existing mask chunks in the output area first
         const bounds = this.canvasInstance.outputAreaBounds;
-        const destX = bounds.x - this.x;
-        const destY = bounds.y - this.y;
+        this.clearMaskInArea(bounds.x, bounds.y, image.width, image.height);
+        
+        // Add the new mask using the chunk system
+        this.addMask(image);
+        
+        log.info(`MaskTool set new mask using chunk system at bounds (${bounds.x}, ${bounds.y})`);
+    }
 
-        this.maskCtx.clearRect(destX, destY, this.canvasInstance.width, this.canvasInstance.height);
-
-        this.maskCtx.drawImage(image, destX, destY);
-
-        if (this.onStateChange) {
-            this.onStateChange();
+    /**
+     * Clears mask data in a specific area by clearing affected chunks
+     */
+    private clearMaskInArea(x: number, y: number, width: number, height: number): void {
+        const chunkMinX = Math.floor(x / this.chunkSize);
+        const chunkMinY = Math.floor(y / this.chunkSize);
+        const chunkMaxX = Math.floor((x + width) / this.chunkSize);
+        const chunkMaxY = Math.floor((y + height) / this.chunkSize);
+        
+        // Clear all affected chunks
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                const chunkKey = `${chunkX},${chunkY}`;
+                const chunk = this.maskChunks.get(chunkKey);
+                
+                if (chunk && !chunk.isEmpty) {
+                    this.clearMaskFromChunk(chunk, x, y, width, height);
+                }
+            }
         }
-        this.canvasInstance.render();
-        log.info(`MaskTool updated with a new mask image at position (${destX}, ${destY}) relative to bounds (${bounds.x}, ${bounds.y}).`);
+    }
+
+    /**
+     * Clears mask data from a specific chunk in a given area
+     */
+    private clearMaskFromChunk(chunk: MaskChunk, clearX: number, clearY: number, clearWidth: number, clearHeight: number): void {
+        // Calculate the intersection of the clear area with this chunk
+        const chunkLeft = chunk.x;
+        const chunkTop = chunk.y;
+        const chunkRight = chunk.x + this.chunkSize;
+        const chunkBottom = chunk.y + this.chunkSize;
+        
+        const clearLeft = clearX;
+        const clearTop = clearY;
+        const clearRight = clearX + clearWidth;
+        const clearBottom = clearY + clearHeight;
+        
+        // Find intersection
+        const intersectLeft = Math.max(chunkLeft, clearLeft);
+        const intersectTop = Math.max(chunkTop, clearTop);
+        const intersectRight = Math.min(chunkRight, clearRight);
+        const intersectBottom = Math.min(chunkBottom, clearBottom);
+        
+        // Check if there's actually an intersection
+        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+            return; // No intersection
+        }
+        
+        // Calculate destination coordinates on the chunk
+        const destX = intersectLeft - chunkLeft;
+        const destY = intersectTop - chunkTop;
+        const destWidth = intersectRight - intersectLeft;
+        const destHeight = intersectBottom - intersectTop;
+        
+        // Clear the area on this chunk
+        chunk.ctx.clearRect(destX, destY, destWidth, destHeight);
+        
+        // Check if the entire chunk is now empty
+        const imageData = chunk.ctx.getImageData(0, 0, this.chunkSize, this.chunkSize);
+        const data = imageData.data;
+        let hasData = false;
+        for (let i = 3; i < data.length; i += 4) { // Check alpha channel
+            if (data[i] > 0) {
+                hasData = true;
+                break;
+            }
+        }
+        
+        chunk.isEmpty = !hasData;
+        chunk.isDirty = true;
+        
+        log.debug(`Cleared area from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
     }
 
     addMask(image: HTMLImageElement): void {
-        // Pozycja gdzie ma być aplikowana maska na canvas MaskTool
-        // MaskTool canvas ma pozycję (this.x, this.y) w świecie
-        // Maska z SAM reprezentuje output bounds, więc musimy ją umieścić
-        // w pozycji bounds względem pozycji MaskTool
+        // Add mask to chunks system instead of directly to active canvas
         const bounds = this.canvasInstance.outputAreaBounds;
-        const destX = bounds.x - this.x;
-        const destY = bounds.y - this.y;
-
-        // Don't clear existing mask - just add to it
-        this.maskCtx.globalCompositeOperation = 'source-over';
-        this.maskCtx.drawImage(image, destX, destY);
+        
+        // Calculate which chunks this mask will affect
+        const maskLeft = bounds.x;
+        const maskTop = bounds.y;
+        const maskRight = bounds.x + image.width;
+        const maskBottom = bounds.y + image.height;
+        
+        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
+        const chunkMinY = Math.floor(maskTop / this.chunkSize);
+        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
+        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        
+        // Add mask to all affected chunks
+        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
+            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                this.addMaskToChunk(chunk, image, bounds);
+            }
+        }
+        
+        // Update active canvas to show the new mask
+        this.updateActiveMaskCanvas();
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`MaskTool added SAM mask overlay at position (${destX}, ${destY}) relative to bounds (${bounds.x}, ${bounds.y}) without clearing existing mask.`);
+        log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom})`);
+    }
+
+    /**
+     * Adds a mask image to a specific chunk
+     */
+    private addMaskToChunk(chunk: MaskChunk, maskImage: HTMLImageElement, bounds: { x: number, y: number, width: number, height: number }): void {
+        // Calculate the intersection of the mask with this chunk
+        const chunkLeft = chunk.x;
+        const chunkTop = chunk.y;
+        const chunkRight = chunk.x + this.chunkSize;
+        const chunkBottom = chunk.y + this.chunkSize;
+        
+        const maskLeft = bounds.x;
+        const maskTop = bounds.y;
+        const maskRight = bounds.x + maskImage.width;
+        const maskBottom = bounds.y + maskImage.height;
+        
+        // Find intersection
+        const intersectLeft = Math.max(chunkLeft, maskLeft);
+        const intersectTop = Math.max(chunkTop, maskTop);
+        const intersectRight = Math.min(chunkRight, maskRight);
+        const intersectBottom = Math.min(chunkBottom, maskBottom);
+        
+        // Check if there's actually an intersection
+        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+            return; // No intersection
+        }
+        
+        // Calculate source coordinates on the mask image
+        const srcX = intersectLeft - maskLeft;
+        const srcY = intersectTop - maskTop;
+        const srcWidth = intersectRight - intersectLeft;
+        const srcHeight = intersectBottom - intersectTop;
+        
+        // Calculate destination coordinates on the chunk
+        const destX = intersectLeft - chunkLeft;
+        const destY = intersectTop - chunkTop;
+        
+        // Draw the mask portion onto this chunk
+        chunk.ctx.globalCompositeOperation = 'source-over';
+        chunk.ctx.drawImage(
+            maskImage,
+            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
+            destX, destY, srcWidth, srcHeight // Destination rectangle
+        );
+        
+        // Mark chunk as dirty and not empty
+        chunk.isDirty = true;
+        chunk.isEmpty = false;
+        
+        log.debug(`Added mask to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
     }
 
     applyShapeMask(saveState: boolean = true): void {
