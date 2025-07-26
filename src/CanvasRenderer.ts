@@ -275,7 +275,6 @@ export class CanvasRenderer {
         }
     }
 
-
     drawGrid(ctx: any) {
         const gridSize = 64;
         const lineWidth = 0.5 / this.canvas.viewport.zoom;

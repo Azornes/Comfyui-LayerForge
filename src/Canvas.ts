@@ -174,7 +174,6 @@ export class Canvas {
         this.previewVisible = false;
     }
 
-
     async waitForWidget(name: any, node: any, interval = 100, timeout = 20000) {
         const startTime = Date.now();
 
@@ -193,7 +192,6 @@ export class Canvas {
             check();
         });
     }
-
 
     /**
      * Kontroluje widoczność podglądu canvas
@@ -271,7 +269,6 @@ export class Canvas {
         }));
     }
 
-
     /**
      * Ładuje stan canvas z bazy danych
      */
@@ -322,7 +319,6 @@ export class Canvas {
 
         log.debug('Undo completed, layers count:', this.layers.length);
     }
-
 
     /**
      * Ponów cofniętą operację
@@ -394,13 +390,6 @@ export class Canvas {
 
     removeSelectedLayers() {
         return this.canvasSelection.removeSelectedLayers();
-    }
-
-    /**
-     * Duplikuje zaznaczone warstwy (w pamięci, bez zapisu stanu)
-     */
-    duplicateSelectedLayers() {
-        return this.canvasSelection.duplicateSelectedLayers();
     }
 
     /**
@@ -535,7 +524,6 @@ export class Canvas {
         log.debug('Auto-refresh handlers setup complete, reading from node widget: auto_refresh_after_generation');
     }
 
-
     /**
      * Uruchamia edytor masek
      * @param {Image|HTMLCanvasElement|null} predefinedMask - Opcjonalna maska do nałożenia po otwarciu editora
@@ -544,7 +532,6 @@ export class Canvas {
     async startMaskEditor(predefinedMask: HTMLImageElement | HTMLCanvasElement | null = null, sendCleanImage: boolean = true) {
         return this.canvasMask.startMaskEditor(predefinedMask as any, sendCleanImage);
     }
-
 
     /**
      * Inicjalizuje podstawowe właściwości canvas

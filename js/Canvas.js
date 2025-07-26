@@ -299,12 +299,6 @@ export class Canvas {
         return this.canvasSelection.removeSelectedLayers();
     }
     /**
-     * Duplikuje zaznaczone warstwy (w pamięci, bez zapisu stanu)
-     */
-    duplicateSelectedLayers() {
-        return this.canvasSelection.duplicateSelectedLayers();
-    }
-    /**
      * Aktualizuje zaznaczenie warstw i powiadamia wszystkie komponenty.
      * To jest "jedyne źródło prawdy" o zmianie zaznaczenia.
      * @param {Array} newSelection - Nowa lista zaznaczonych warstw

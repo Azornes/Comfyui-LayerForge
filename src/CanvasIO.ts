@@ -574,21 +574,6 @@ export class CanvasIO {
         });
     }
 
-    async retryDataLoad(maxRetries = 3, delay = 1000): Promise<void> {
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                await this.initNodeData();
-                return;
-            } catch (error) {
-                log.warn(`Retry ${i + 1}/${maxRetries} failed:`, error);
-                if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-        }
-        log.error("Failed to load data after", maxRetries, "retries");
-    }
-
     async processMaskData(maskData: any): Promise<void> {
         try {
             if (!maskData) return;
@@ -611,84 +596,6 @@ export class CanvasIO {
             }
         } catch (error) {
             log.error("Error processing mask data:", error);
-        }
-    }
-
-    async loadImageFromCache(base64Data: string): Promise<HTMLImageElement> {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = base64Data;
-        });
-    }
-
-    async importImage(cacheData: { image: string, mask?: string }): Promise<void> {
-        try {
-            log.info("Starting image import with cache data");
-            const img = await this.loadImageFromCache(cacheData.image);
-            const mask = cacheData.mask ? await this.loadImageFromCache(cacheData.mask) : null;
-
-            const scale = Math.min(
-                this.canvas.width / img.width * 0.8,
-                this.canvas.height / img.height * 0.8
-            );
-
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = img.width;
-            tempCanvas.height = img.height;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-            if (!tempCtx) throw new Error("Could not create temp context");
-
-            tempCtx.drawImage(img, 0, 0);
-
-            if (mask) {
-                const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
-                const maskCanvas = document.createElement('canvas');
-                maskCanvas.width = img.width;
-                maskCanvas.height = img.height;
-                const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
-                if (!maskCtx) throw new Error("Could not create mask context");
-                maskCtx.drawImage(mask, 0, 0);
-                const maskData = maskCtx.getImageData(0, 0, img.width, img.height);
-
-                for (let i = 0; i < imageData.data.length; i += 4) {
-                    imageData.data[i + 3] = maskData.data[i];
-                }
-
-                tempCtx.putImageData(imageData, 0, 0);
-            }
-
-            const finalImage = new Image();
-            await new Promise((resolve) => {
-                finalImage.onload = resolve;
-                finalImage.src = tempCanvas.toDataURL();
-            });
-
-            const layer: Layer = {
-                id: '', // This will be set in addLayerWithImage
-                imageId: '', // This will be set in addLayerWithImage
-                name: 'Layer',
-                image: finalImage,
-                x: (this.canvas.width - img.width * scale) / 2,
-                y: (this.canvas.height - img.height * scale) / 2,
-                width: img.width * scale,
-                height: img.height * scale,
-                originalWidth: img.width,
-                originalHeight: img.height,
-                rotation: 0,
-                zIndex: this.canvas.layers.length,
-                blendMode: 'normal',
-                opacity: 1,
-                visible: true,
-            };
-
-            this.canvas.layers.push(layer);
-            this.canvas.updateSelection([layer]);
-            this.canvas.render();
-            this.canvas.saveState();
-        } catch (error) {
-            log.error('Error importing image:', error);
         }
     }
 
@@ -797,31 +704,5 @@ export class CanvasIO {
             clippedImage.onerror = () => reject(new Error("Failed to create clipped image"));
             clippedImage.src = canvas.toDataURL();
         });
-    }
-
-    createMaskFromShape(shape: Shape, width: number, height: number): Float32Array {
-        const { canvas, ctx } = createCanvas(width, height);
-        if (!ctx) {
-            throw new Error("Could not create canvas context for mask");
-        }
-        
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.moveTo(shape.points[0].x, shape.points[0].y);
-        for (let i = 1; i < shape.points.length; i++) {
-            ctx.lineTo(shape.points[i].x, shape.points[i].y);
-        }
-        ctx.closePath();
-        ctx.fill();
-
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const maskData = new Float32Array(width * height);
-        for (let i = 0; i < imageData.data.length; i += 4) {
-            maskData[i / 4] = imageData.data[i] / 255;
-        }
-        return maskData;
     }
 }

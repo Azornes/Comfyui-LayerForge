@@ -764,21 +764,6 @@ export class CanvasLayers {
             menu.parentNode.removeChild(menu);
         }
     }
-    showOpacitySlider(mode) {
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.min = '0';
-        slider.max = '100';
-        slider.value = String(this.blendOpacity);
-        slider.className = 'blend-opacity-slider';
-        slider.addEventListener('input', (e) => {
-            this.blendOpacity = parseInt(e.target.value, 10);
-        });
-        const modeElement = document.querySelector(`[data-blend-mode="${mode}"]`);
-        if (modeElement) {
-            modeElement.appendChild(slider);
-        }
-    }
     /**
      * Zunifikowana funkcja do generowania blob z canvas
      * @param options Opcje renderowania

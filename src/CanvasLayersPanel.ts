@@ -534,7 +534,6 @@ export class CanvasLayersPanel {
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
 
-
     startEditingLayerName(nameElement: HTMLElement, layer: Layer): void {
         const currentName = layer.name;
         nameElement.classList.add('editing');
@@ -571,7 +570,6 @@ export class CanvasLayersPanel {
             }
         });
     }
-
 
     ensureUniqueName(proposedName: string, currentLayer: Layer): string {
         const existingNames = this.canvas.layers
@@ -730,7 +728,6 @@ export class CanvasLayersPanel {
 
         this.draggedElements = [];
     }
-
 
     onLayersChanged(): void {
         this.renderLayers();

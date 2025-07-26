@@ -946,30 +946,6 @@ export class MaskTool {
         return this.activeMaskCanvas;
     }
 
-    getMaskImageWithAlpha(): HTMLImageElement {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.maskCanvas.width;
-        tempCanvas.height = this.maskCanvas.height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-        if (!tempCtx) {
-            throw new Error("Failed to get 2D context for temporary canvas");
-        }
-        tempCtx.drawImage(this.maskCanvas, 0, 0);
-        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const alpha = data[i];
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-            data[i + 3] = alpha;
-        }
-        tempCtx.putImageData(imageData, 0, 0);
-        const maskImage = new Image();
-        maskImage.src = tempCanvas.toDataURL();
-        return maskImage;
-    }
-
     resize(width: number, height: number): void {
         this.initPreviewCanvas();
         const oldMask = this.maskCanvas;
@@ -1007,12 +983,6 @@ export class MaskTool {
 
         log.info(`Mask canvas resized to ${this.activeMaskCanvas.width}x${this.activeMaskCanvas.height}, position (${this.x}, ${this.y})`);
         log.info(`Canvas size change: width ${isIncreasingWidth ? 'increased' : 'decreased'}, height ${isIncreasingHeight ? 'increased' : 'decreased'}`);
-    }
-
-    updatePosition(dx: number, dy: number): void {
-        this.x += dx;
-        this.y += dy;
-        log.info(`Mask position updated to (${this.x}, ${this.y})`);
     }
 
     /**
@@ -1704,23 +1674,6 @@ export class MaskTool {
         }
 
         return distances;
-    }
-
-    /**
-     * Creates an expanded mask using distance transform - much better for complex shapes
-     * than the centroid-based approach. This version only does expansion without transparency calculations.
-     */
-    private _calculateExpandedPoints(points: Point[], expansionValue: number): Point[] {
-        if (points.length < 3 || expansionValue === 0) return points;
-
-        // For expansion, we need to create a temporary canvas to use the distance transform approach
-        // This will give us much better results for complex shapes than the centroid method
-        const tempCanvas = this._createExpandedMaskCanvas(points, expansionValue, this.maskCanvas.width, this.maskCanvas.height);
-        
-        // Extract the expanded shape outline from the canvas
-        // For now, return the original points as a fallback - the real expansion happens in the canvas
-        // The calling code will use the canvas directly instead of these points
-        return points;
     }
 
     /**
