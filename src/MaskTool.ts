@@ -15,6 +15,8 @@ interface MaskChunk {
     y: number; // World coordinates of chunk
     isDirty: boolean; // Has been modified
     isEmpty: boolean; // Contains no mask data
+    isActive: boolean; // Is currently active for drawing operations
+    lastAccessTime: number; // For LRU cache management
 }
 
 export class MaskTool {
@@ -31,9 +33,14 @@ export class MaskTool {
     // Chunked mask system
     private maskChunks: Map<string, MaskChunk>; // Key: "x,y" (chunk coordinates)
     private chunkSize: number;
-    private activeMaskCanvas: HTMLCanvasElement; // Composite of active chunks
+    private activeMaskCanvas: HTMLCanvasElement; // Composite of active chunks only
     private activeMaskCtx: CanvasRenderingContext2D;
     private activeChunkBounds: { minX: number, minY: number, maxX: number, maxY: number } | null;
+    
+    // Active chunk management for performance
+    private activeChunkRadius: number; // Radius of active chunks around drawing position (in chunks)
+    private currentDrawingChunk: { x: number, y: number } | null; // Current chunk being drawn on
+    private maxActiveChunks: number; // Maximum number of active chunks to prevent memory issues
     
     private onStateChange: (() => void) | null;
     private previewCanvas: HTMLCanvasElement;
@@ -63,6 +70,11 @@ export class MaskTool {
         this.maskChunks = new Map();
         this.chunkSize = 512;
         this.activeChunkBounds = null;
+        
+        // Initialize active chunk management
+        this.activeChunkRadius = 1; // 3x3 grid of active chunks (radius 1 = 9 chunks total)
+        this.currentDrawingChunk = null;
+        this.maxActiveChunks = 25; // Safety limit to prevent memory issues (5x5 grid max)
         
         // Create active mask canvas (composite of chunks)
         this.activeMaskCanvas = document.createElement('canvas');
@@ -150,11 +162,11 @@ export class MaskTool {
     }
 
     /**
-     * Updates the active mask canvas to show ALL chunks with mask data
-     * No longer limited to output area - shows all drawn masks everywhere
+     * Updates the active mask canvas to show ALL chunks but optimize updates during drawing
+     * Always shows all chunks, but during drawing only updates the active chunks for performance
      */
-    private updateActiveMaskCanvas(): void {
-        // Find bounds of all non-empty chunks
+    private updateActiveMaskCanvas(forceFullUpdate: boolean = false): void {
+        // Always show all chunks - find bounds of all non-empty chunks
         const chunkBounds = this.getAllChunkBounds();
         
         if (!chunkBounds) {
@@ -164,42 +176,51 @@ export class MaskTool {
             this.x = 0;
             this.y = 0;
             this.activeChunkBounds = null;
-            log.info("No mask chunks found - created minimal active canvas");
+            log.debug("No mask chunks found - created minimal active canvas");
             return;
         }
         
-        // Calculate canvas size to cover all chunks
+        // Calculate canvas size to cover ALL chunks
         const canvasLeft = chunkBounds.minX * this.chunkSize;
         const canvasTop = chunkBounds.minY * this.chunkSize;
         const canvasWidth = (chunkBounds.maxX - chunkBounds.minX + 1) * this.chunkSize;
         const canvasHeight = (chunkBounds.maxY - chunkBounds.minY + 1) * this.chunkSize;
         
-        // Update active mask canvas size and position
-        this.activeMaskCanvas.width = canvasWidth;
-        this.activeMaskCanvas.height = canvasHeight;
-        this.x = canvasLeft;
-        this.y = canvasTop;
-        
-        // Clear active canvas
-        this.activeMaskCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-        
-        this.activeChunkBounds = chunkBounds;
-        
-        // Composite ALL chunks with data onto active canvas
-        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
-            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
-                const chunkKey = `${chunkX},${chunkY}`;
-                const chunk = this.maskChunks.get(chunkKey);
-                
-                if (chunk && !chunk.isEmpty) {
-                    // Calculate position on active canvas
-                    const destX = (chunkX - chunkBounds.minX) * this.chunkSize;
-                    const destY = (chunkY - chunkBounds.minY) * this.chunkSize;
+        // Update active mask canvas size and position if needed
+        if (this.activeMaskCanvas.width !== canvasWidth || 
+            this.activeMaskCanvas.height !== canvasHeight ||
+            this.x !== canvasLeft || 
+            this.y !== canvasTop ||
+            forceFullUpdate) {
+            
+            this.activeMaskCanvas.width = canvasWidth;
+            this.activeMaskCanvas.height = canvasHeight;
+            this.x = canvasLeft;
+            this.y = canvasTop;
+            this.activeChunkBounds = chunkBounds;
+            
+            // Full redraw when canvas size changes
+            this.activeMaskCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+            
+            // Draw ALL chunks
+            for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+                for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
+                    const chunkKey = `${chunkX},${chunkY}`;
+                    const chunk = this.maskChunks.get(chunkKey);
                     
-                    this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                    if (chunk && !chunk.isEmpty) {
+                        const destX = (chunkX - chunkBounds.minX) * this.chunkSize;
+                        const destY = (chunkY - chunkBounds.minY) * this.chunkSize;
+                        this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                    }
                 }
             }
-        } 
+            
+            log.debug(`Full update: rendered ${this.getAllNonEmptyChunkCount()} chunks`);
+        } else {
+            // Canvas size unchanged - this is handled by partial updates during drawing
+            this.activeChunkBounds = chunkBounds;
+        }
     }
 
     /**
@@ -228,6 +249,97 @@ export class MaskTool {
         }
         
         return hasData ? { minX, minY, maxX, maxY } : null;
+    }
+
+    /**
+     * Finds the bounds of only active chunks that contain mask data
+     * Returns null if no active chunks have data
+     */
+    private getActiveChunkBounds(): { minX: number, minY: number, maxX: number, maxY: number } | null {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let hasData = false;
+        
+        for (const [chunkKey, chunk] of this.maskChunks) {
+            if (!chunk.isEmpty && chunk.isActive) {
+                const [chunkXStr, chunkYStr] = chunkKey.split(',');
+                const chunkX = parseInt(chunkXStr);
+                const chunkY = parseInt(chunkYStr);
+                
+                minX = Math.min(minX, chunkX);
+                minY = Math.min(minY, chunkY);
+                maxX = Math.max(maxX, chunkX);
+                maxY = Math.max(maxY, chunkY);
+                hasData = true;
+            }
+        }
+        
+        return hasData ? { minX, minY, maxX, maxY } : null;
+    }
+
+    /**
+     * Counts all non-empty chunks
+     */
+    private getAllNonEmptyChunkCount(): number {
+        let count = 0;
+        for (const chunk of this.maskChunks.values()) {
+            if (!chunk.isEmpty) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Counts active non-empty chunks
+     */
+    private getActiveChunkCount(): number {
+        let count = 0;
+        for (const chunk of this.maskChunks.values()) {
+            if (!chunk.isEmpty && chunk.isActive) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Updates which chunks are active for drawing operations based on current drawing position
+     * Only activates chunks in a radius around the drawing position for performance
+     */
+    private updateActiveChunksForDrawing(worldCoords: Point): void {
+        const currentChunkX = Math.floor(worldCoords.x / this.chunkSize);
+        const currentChunkY = Math.floor(worldCoords.y / this.chunkSize);
+        
+        // Update current drawing chunk
+        this.currentDrawingChunk = { x: currentChunkX, y: currentChunkY };
+        
+        // Deactivate all chunks first
+        for (const chunk of this.maskChunks.values()) {
+            chunk.isActive = false;
+        }
+        
+        // Activate chunks in radius around current drawing position
+        let activatedCount = 0;
+        for (let dy = -this.activeChunkRadius; dy <= this.activeChunkRadius; dy++) {
+            for (let dx = -this.activeChunkRadius; dx <= this.activeChunkRadius; dx++) {
+                const chunkX = currentChunkX + dx;
+                const chunkY = currentChunkY + dy;
+                const chunkKey = `${chunkX},${chunkY}`;
+                
+                // Get or create chunk if it doesn't exist
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                chunk.isActive = true;
+                chunk.lastAccessTime = Date.now();
+                activatedCount++;
+                
+                // Safety check to prevent too many active chunks
+                if (activatedCount >= this.maxActiveChunks) {
+                    log.warn(`Reached maximum active chunks limit (${this.maxActiveChunks})`);
+                    return;
+                }
+            }
+        }
+        
+        log.debug(`Activated ${activatedCount} chunks around drawing position (${currentChunkX}, ${currentChunkY})`);
     }
 
     /**
@@ -266,7 +378,9 @@ export class MaskTool {
             x: chunkX * this.chunkSize,
             y: chunkY * this.chunkSize,
             isDirty: false,
-            isEmpty: true
+            isEmpty: true,
+            isActive: false,
+            lastAccessTime: Date.now()
         };
         
         log.debug(`Created chunk at (${chunkX}, ${chunkY}) covering world area (${chunk.x}, ${chunk.y}) to (${chunk.x + this.chunkSize}, ${chunk.y + this.chunkSize})`);
@@ -310,6 +424,10 @@ export class MaskTool {
         if (!this.isActive) return;
         this.isDrawing = true;
         this.lastPosition = worldCoords;
+        
+        // Activate chunks around the drawing position for performance
+        this.updateActiveChunksForDrawing(worldCoords);
+        
         this.draw(worldCoords);
         this.clearPreview();
     }
@@ -319,6 +437,10 @@ export class MaskTool {
             this.drawBrushPreview(viewCoords);
         }
         if (!this.isActive || !this.isDrawing) return;
+        
+        // Dynamically update active chunks as user moves while drawing
+        this.updateActiveChunksForDrawing(worldCoords);
+        
         this.draw(worldCoords);
         this.lastPosition = worldCoords;
     }
@@ -337,6 +459,11 @@ export class MaskTool {
         if (this.isDrawing) {
             this.isDrawing = false;
             this.lastPosition = null;
+            this.currentDrawingChunk = null;
+            
+            // After drawing is complete, update active canvas to show all chunks
+            this.updateActiveMaskCanvas(true); // forceShowAll = true
+            
             this.canvasInstance.canvasState.saveMaskState();
             if (this.onStateChange) {
                 this.onStateChange();
@@ -457,7 +584,7 @@ export class MaskTool {
 
     /**
      * Updates active canvas when drawing affects chunks with throttling to prevent lag
-     * Uses throttling to limit updates to ~60fps during drawing operations
+     * During drawing, only updates the affected active chunks for performance
      */
     private updateActiveCanvasIfNeeded(startWorld: Point, endWorld: Point): void {
         // Calculate which chunks were affected by this drawing operation
@@ -471,25 +598,13 @@ export class MaskTool {
         const affectedChunkMaxX = Math.floor(maxX / this.chunkSize);
         const affectedChunkMaxY = Math.floor(maxY / this.chunkSize);
 
-        // Check if we drew on any new chunks (outside current active bounds)
-        let drewOnNewChunks = false;
-        if (!this.activeChunkBounds) {
-            drewOnNewChunks = true;
-        } else {
-            drewOnNewChunks = 
-                affectedChunkMinX < this.activeChunkBounds.minX ||
-                affectedChunkMaxX > this.activeChunkBounds.maxX ||
-                affectedChunkMinY < this.activeChunkBounds.minY ||
-                affectedChunkMaxY > this.activeChunkBounds.maxY;
-        }
-
-        if (drewOnNewChunks) {
-            // Drawing extended beyond current active bounds - immediate update required
-            this.updateActiveMaskCanvas();
-            log.debug("Drew on new chunks - performed immediate full active canvas update");
-        } else {
-            // Drawing within existing bounds - use throttled update for performance
+        // During drawing, only update affected chunks that are active for performance
+        if (this.isDrawing) {
+            // Use throttled partial update for active chunks only
             this.scheduleThrottledActiveMaskUpdate(affectedChunkMinX, affectedChunkMinY, affectedChunkMaxX, affectedChunkMaxY);
+        } else {
+            // Not drawing - do full update to show all chunks
+            this.updateActiveMaskCanvas(true);
         }
     }
 
@@ -519,35 +634,60 @@ export class MaskTool {
     }
 
     /**
-     * Partially updates the active canvas by redrawing only specific chunks
-     * Much faster than full recomposition during drawing
-     * Now works with the new system that shows ALL chunks
+     * Partially updates the active canvas by redrawing only specific chunks that are active
+     * During drawing, only updates active chunks for performance
+     * Now handles dynamic chunk activation by expanding canvas if needed
      */
     private updateActiveCanvasPartial(chunkMinX: number, chunkMinY: number, chunkMaxX: number, chunkMaxY: number): void {
+        // Check if any active chunks are outside current canvas bounds
+        const activeChunkBounds = this.getActiveChunkBounds();
+        const allChunkBounds = this.getAllChunkBounds();
+        
+        if (!allChunkBounds) {
+            return; // No chunks at all
+        }
+        
+        // If active chunks extend beyond current canvas, do full update to resize canvas
+        if (activeChunkBounds && this.activeChunkBounds && 
+            (activeChunkBounds.minX < this.activeChunkBounds.minX ||
+             activeChunkBounds.maxX > this.activeChunkBounds.maxX ||
+             activeChunkBounds.minY < this.activeChunkBounds.minY ||
+             activeChunkBounds.maxY > this.activeChunkBounds.maxY)) {
+            
+            log.debug("Active chunks extended beyond canvas bounds - performing full update");
+            this.updateActiveMaskCanvas(true);
+            return;
+        }
+        
         if (!this.activeChunkBounds) {
             // No active bounds - do full update
             this.updateActiveMaskCanvas();
             return;
         }
 
-        // Only redraw the affected chunks that are within the current active canvas bounds
+        // Only redraw the affected chunks that are active and within the current active canvas bounds
         for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
             for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
-                // Check if this chunk is within active bounds (all chunks with data)
+                // Check if this chunk is within canvas bounds (all chunks with data)
                 if (chunkX >= this.activeChunkBounds.minX && chunkX <= this.activeChunkBounds.maxX &&
                     chunkY >= this.activeChunkBounds.minY && chunkY <= this.activeChunkBounds.maxY) {
                     
                     const chunkKey = `${chunkX},${chunkY}`;
                     const chunk = this.maskChunks.get(chunkKey);
                     
-                    if (chunk && !chunk.isEmpty) {
+                    // Update if chunk exists and is currently active (regardless of isEmpty for new chunks)
+                    if (chunk && chunk.isActive) {
                         // Calculate position on active canvas (relative to all chunks bounds)
                         const destX = (chunkX - this.activeChunkBounds.minX) * this.chunkSize;
                         const destY = (chunkY - this.activeChunkBounds.minY) * this.chunkSize;
                         
                         // Clear the area first, then redraw
                         this.activeMaskCtx.clearRect(destX, destY, this.chunkSize, this.chunkSize);
-                        this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                        if (!chunk.isEmpty) {
+                            this.activeMaskCtx.drawImage(chunk.canvas, destX, destY);
+                        }
+                        
+                        log.debug(`Partial update: refreshed active chunk (${chunkX}, ${chunkY}) - isEmpty: ${chunk.isEmpty}`);
                     }
                 }
             }
@@ -1157,22 +1297,47 @@ export class MaskTool {
         const chunkMaxX = Math.floor(maskRight / this.chunkSize);
         const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
         
-        // Add mask to all affected chunks
+        // First, deactivate all chunks
+        for (const chunk of this.maskChunks.values()) {
+            chunk.isActive = false;
+        }
+        
+        // Add mask to all affected chunks and activate them so user can see the mask being applied
         for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
             for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
                 const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
                 this.addMaskToChunk(chunk, image, bounds);
+                
+                // Activate this chunk so user can see the mask being applied
+                chunk.isActive = true;
+                chunk.lastAccessTime = Date.now();
             }
         }
         
-        // Update active canvas to show the new mask
-        this.updateActiveMaskCanvas();
+        // Also activate surrounding chunks for better visibility (3x3 grid around mask area)
+        const centerChunkX = Math.floor((maskLeft + maskRight) / 2 / this.chunkSize);
+        const centerChunkY = Math.floor((maskTop + maskBottom) / 2 / this.chunkSize);
+        
+        for (let dy = -this.activeChunkRadius; dy <= this.activeChunkRadius; dy++) {
+            for (let dx = -this.activeChunkRadius; dx <= this.activeChunkRadius; dx++) {
+                const chunkX = centerChunkX + dx;
+                const chunkY = centerChunkY + dy;
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                chunk.isActive = true;
+                chunk.lastAccessTime = Date.now();
+            }
+        }
+        
+        // Update active canvas to show the new mask with activated chunks
+        this.updateActiveMaskCanvas(true); // Force full update to show all chunks including newly activated ones
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom})`);
+        
+        const activatedChunks = Array.from(this.maskChunks.values()).filter(chunk => chunk.isActive).length;
+        log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom}) and activated ${activatedChunks} chunks for visibility`);
     }
 
     /**
