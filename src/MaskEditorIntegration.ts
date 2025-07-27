@@ -5,6 +5,9 @@ import {ComfyApp} from "../../scripts/app.js";
 // @ts-ignore
 import {api} from "../../scripts/api.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
+import { processImageToMask, processMaskForViewport, convertToImage } from "./utils/MaskProcessingUtils.js";
+import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 
 const log = createModuleLogger('MaskEditorIntegration');
@@ -72,34 +75,12 @@ export class MaskEditorIntegration {
         log.debug('Canvas blob created successfully, size:', blob.size);
 
         try {
-            const formData = new FormData();
-            const filename = `layerforge-mask-edit-${+new Date()}.png`;
-            formData.append("image", blob, filename);
-            formData.append("overwrite", "true");
-            formData.append("type", "temp");
-
-            log.debug('Uploading image to server:', filename);
-
-            const response = await api.fetchApi("/upload/image", {
-                method: "POST",
-                body: formData,
+            // Use ImageUploadUtils to upload the blob
+            const uploadResult = await uploadImageBlob(blob, {
+                filenamePrefix: 'layerforge-mask-edit'
             });
 
-            if (!response.ok) {
-                throw new Error(`Failed to upload image: ${response.statusText}`);
-            }
-            const data = await response.json();
-
-            log.debug('Image uploaded successfully:', data);
-
-            const img = new Image();
-            img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-            await new Promise((res, rej) => {
-                img.onload = res;
-                img.onerror = rej;
-            });
-
-            this.node.imgs = [img];
+            this.node.imgs = [uploadResult.imageElement];
 
             log.info('Opening ComfyUI mask editor');
             ComfyApp.copyToClipspace(this.node);
@@ -305,65 +286,24 @@ export class MaskEditorIntegration {
      * @param {number} targetHeight - Docelowa wysokość
      * @param {Object} maskColor - Kolor maski {r, g, b}
      * @returns {HTMLCanvasElement} Przetworzona maska
-     */async processMaskForEditor(maskData: any, targetWidth: any, targetHeight: any, maskColor: any) {
-            // Pozycja maski w świecie względem output bounds
-            const bounds = this.canvas.outputAreaBounds;
-            const maskWorldX = this.maskTool.x;
-            const maskWorldY = this.maskTool.y;
-            const panX = maskWorldX - bounds.x;
-            const panY = maskWorldY - bounds.y;
+     */
+    async processMaskForEditor(maskData: any, targetWidth: any, targetHeight: any, maskColor: any) {
+        // Pozycja maski w świecie względem output bounds
+        const bounds = this.canvas.outputAreaBounds;
+        const maskWorldX = this.maskTool.x;
+        const maskWorldY = this.maskTool.y;
+        const panX = maskWorldX - bounds.x;
+        const panY = maskWorldY - bounds.y;
 
-            log.info("Processing mask for editor:", {
-                sourceSize: {width: maskData.width, height: maskData.height},
-                targetSize: {width: targetWidth, height: targetHeight},
-                viewportPan: {x: panX, y: panY}
-            });
-
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = targetWidth;
-            tempCanvas.height = targetHeight;
-            const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
-
-            const sourceX = -panX;
-            const sourceY = -panY;
-
-            if (tempCtx) {
-                tempCtx.drawImage(
-                    maskData,       // Źródło: pełna maska z "output area"
-                    sourceX,        // sx: Prawdziwa współrzędna X na dużej masce (np. 1000)
-                sourceY,        // sy: Prawdziwa współrzędna Y na dużej masce (np. 1000)
-                targetWidth,    // sWidth: Szerokość wycinanego fragmentu
-                targetHeight,   // sHeight: Wysokość wycinanego fragmentu
-                0,              // dx: Gdzie wkleić w płótnie docelowym (zawsze 0)
-                0,              // dy: Gdzie wkleić w płótnie docelowym (zawsze 0)
-                targetWidth,    // dWidth: Szerokość wklejanego obrazu
-                targetHeight    // dHeight: Wysokość wklejanego obrazu
-                );
-            }
-
-            log.info("Mask viewport cropped correctly.", {
-                source: "maskData",
-                cropArea: {x: sourceX, y: sourceY, width: targetWidth, height: targetHeight}
-            });
-
-            // Reszta kodu (zmiana koloru) pozostaje bez zmian
-            if (tempCtx) {
-                const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-                const data = imageData.data;
-
-                for (let i = 0; i < data.length; i += 4) {
-                    const alpha = data[i + 3];
-                    if (alpha > 0) {
-                        data[i] = maskColor.r;
-                        data[i + 1] = maskColor.g;
-                        data[i + 2] = maskColor.b;
-                    }
-                }
-                tempCtx.putImageData(imageData, 0, 0);
-            }
-            log.info("Mask processing completed - color applied.");
-            return tempCanvas;
-        }
+        // Use MaskProcessingUtils for viewport processing
+        return await processMaskForViewport(
+            maskData,
+            targetWidth,
+            targetHeight,
+            { x: panX, y: panY },
+            maskColor
+        );
+    }
 
     /**
      * Tworzy obiekt Image z obecnej maski canvas
@@ -502,35 +442,17 @@ export class MaskEditorIntegration {
             return;
         }
 
-        log.debug("Creating temporary canvas for mask processing");
+        // Process image to mask using MaskProcessingUtils
+        log.debug("Processing image to mask using utils");
         const bounds = this.canvas.outputAreaBounds;
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = bounds.width;
-        tempCanvas.height = bounds.height;
-        const tempCtx = tempCanvas.getContext('2d', {willReadFrequently: true});
+        const processedMask = await processImageToMask(resultImage, {
+            targetWidth: bounds.width,
+            targetHeight: bounds.height,
+            invertAlpha: true
+        });
 
-        if (tempCtx) {
-            tempCtx.drawImage(resultImage, 0, 0, bounds.width, bounds.height);
-
-            log.debug("Processing image data to create mask");
-            const imageData = tempCtx.getImageData(0, 0, bounds.width, bounds.height);
-            const data = imageData.data;
-
-            for (let i = 0; i < data.length; i += 4) {
-                const originalAlpha = data[i + 3];
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                data[i + 3] = 255 - originalAlpha;
-            }
-
-            tempCtx.putImageData(imageData, 0, 0);
-        }
-
-        log.debug("Converting processed mask to image");
-        const maskAsImage = new Image();
-        maskAsImage.src = tempCanvas.toDataURL();
-        await new Promise(resolve => maskAsImage.onload = resolve);
+        // Convert processed mask to image
+        const maskAsImage = await convertToImage(processedMask);
 
         log.debug("Applying mask using chunk system", {
             boundsPos: {x: bounds.x, y: bounds.y},
@@ -540,24 +462,8 @@ export class MaskEditorIntegration {
         // Use the chunk system instead of direct canvas manipulation
         this.maskTool.setMask(maskAsImage);
 
-        this.canvas.render();
-        this.canvas.saveState();
-
-        log.debug("Creating new preview image");
-        const new_preview = new Image();
-
-        const blob = await this.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-        if (blob) {
-            new_preview.src = URL.createObjectURL(blob);
-            await new Promise(r => new_preview.onload = r);
-            this.node.imgs = [new_preview];
-            log.debug("New preview image created successfully");
-        } else {
-            this.node.imgs = [];
-            log.warn("Failed to create preview blob");
-        }
-
-        this.canvas.render();
+        // Update node preview using PreviewUtils
+        await updateNodePreview(this.canvas, this.node, true);
 
         this.savedMaskState = null;
         log.info("Mask editor result processed successfully");

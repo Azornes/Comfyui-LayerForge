@@ -2,6 +2,10 @@ import { api } from "../../scripts/api.js";
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { showInfoNotification, showSuccessNotification, showErrorNotification } from "./utils/NotificationUtils.js";
+import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
+import { processImageToMask, convertToImage } from "./utils/MaskProcessingUtils.js";
+import { updateNodePreview } from "./utils/PreviewUtils.js";
 import type { ComfyNode } from './types';
 
 const log = createModuleLogger('SAMDetectorIntegration');
@@ -14,38 +18,18 @@ const log = createModuleLogger('SAMDetectorIntegration');
 // Function to register image in clipspace for Impact Pack compatibility
 export const registerImageInClipspace = async (node: ComfyNode, blob: Blob): Promise<HTMLImageElement | null> => {
     try {
-        // Upload the image to ComfyUI's temp storage for clipspace access
-        const formData = new FormData();
-        const filename = `layerforge-sam-${node.id}-${Date.now()}.png`; // Use timestamp for SAM Detector
-        formData.append("image", blob, filename);
-        formData.append("overwrite", "true");
-        formData.append("type", "temp");
-
-        const response = await api.fetchApi("/upload/image", {
-            method: "POST",
-            body: formData,
+        // Use ImageUploadUtils to upload the blob
+        const uploadResult = await uploadImageBlob(blob, {
+            filenamePrefix: 'layerforge-sam',
+            nodeId: node.id
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            
-            // Create a proper image element with the server URL
-            const clipspaceImg = new Image();
-            clipspaceImg.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-            
-            // Wait for image to load
-            await new Promise((resolve, reject) => {
-                clipspaceImg.onload = resolve;
-                clipspaceImg.onerror = reject;
-            });
-
-            log.debug(`Image registered in clipspace for node ${node.id}: ${filename}`);
-            return clipspaceImg;
-        }
+        log.debug(`Image registered in clipspace for node ${node.id}: ${uploadResult.filename}`);
+        return uploadResult.imageElement;
     } catch (error) {
         log.debug("Failed to register image in clipspace:", error);
+        return null;
     }
-    return null;
 };
 
 // Function to monitor for SAM Detector modal closure and apply masks to LayerForge
@@ -218,7 +202,7 @@ function handleSAMDetectorModalClosed(node: ComfyNode) {
             log.info("No new image detected after SAM Detector modal closure");
             
             // Show info notification
-            showNotification("SAM Detector closed. No mask was applied.", "#4a6cd4", 3000);
+            showInfoNotification("SAM Detector closed. No mask was applied.");
         }
     } else {
         log.info("No image available after SAM Detector modal closure");
@@ -329,54 +313,20 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
             }
         } catch (error) {
             log.error("Failed to load image from SAM Detector.", error);
-            showNotification("Failed to load SAM Detector result. The mask file may not be available.", "#c54747", 5000);
+            showErrorNotification("Failed to load SAM Detector result. The mask file may not be available.");
             return;
         }
 
-        // Create temporary canvas for mask processing with correct positioning
-        log.debug("Creating temporary canvas for mask processing");
-        
-        // Get the output area bounds to position the mask correctly
-        const bounds = canvas.outputAreaBounds;
-        log.debug("Output area bounds for SAM mask positioning:", bounds);
-        
-        // Create canvas sized to match the result image dimensions
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = resultImage.width;
-        tempCanvas.height = resultImage.height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        // Process image to mask using MaskProcessingUtils
+        log.debug("Processing image to mask using utils");
+        const processedMask = await processImageToMask(resultImage, {
+            targetWidth: resultImage.width,
+            targetHeight: resultImage.height,
+            invertAlpha: true
+        });
 
-        if (tempCtx) {
-            // Draw the result image at its natural size (no scaling)
-            tempCtx.drawImage(resultImage, 0, 0);
-
-            log.debug("Processing image data to create mask", {
-                imageWidth: resultImage.width,
-                imageHeight: resultImage.height,
-                boundsX: bounds.x,
-                boundsY: bounds.y
-            });
-            
-            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const data = imageData.data;
-
-            // Convert to mask format (same as MaskEditorIntegration)
-            for (let i = 0; i < data.length; i += 4) {
-                const originalAlpha = data[i + 3];
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                data[i + 3] = 255 - originalAlpha;
-            }
-
-            tempCtx.putImageData(imageData, 0, 0);
-        }
-
-        // Convert processed mask to image (same as MaskEditorIntegration)
-        log.debug("Converting processed mask to image");
-        const maskAsImage = new Image();
-        maskAsImage.src = tempCanvas.toDataURL();
-        await new Promise(resolve => maskAsImage.onload = resolve);
+        // Convert processed mask to image
+        const maskAsImage = await convertToImage(processedMask);
 
         // Apply mask to LayerForge canvas using MaskTool.setMask method
         log.debug("Checking canvas and maskTool availability", {
@@ -405,61 +355,25 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
         canvas.render();
         canvas.saveState();
 
-        // Create new preview image (same as MaskEditorIntegration)
-        log.debug("Creating new preview image");
-        const new_preview = new Image();
-        const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-        if (blob) {
-            new_preview.src = URL.createObjectURL(blob);
-            await new Promise(r => new_preview.onload = r);
-            node.imgs = [new_preview];
-            log.debug("New preview image created successfully");
-        } else {
-            log.warn("Failed to create preview blob");
-        }
-
-        canvas.render();
+        // Update node preview using PreviewUtils
+        await updateNodePreview(canvas, node, true);
 
         log.info("SAM Detector mask applied successfully to LayerForge canvas");
 
         // Show success notification
-        showNotification("SAM Detector mask applied to LayerForge!", "#4a7c59", 3000);
+        showSuccessNotification("SAM Detector mask applied to LayerForge!");
 
     } catch (error: any) {
         log.error("Error processing SAM Detector result:", error);
         
         // Show error notification
-        showNotification(`Failed to apply SAM mask: ${error.message}`, "#c54747", 5000);
+        showErrorNotification(`Failed to apply SAM mask: ${error.message}`);
     } finally {
         (node as any).samMonitoringActive = false;
         (node as any).samOriginalImgSrc = null;
     }
 }
 
-// Helper function to show notifications
-function showNotification(message: string, backgroundColor: string, duration: number) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${backgroundColor};
-        color: white;
-        padding: 12px 16px;
-        border-radius: 4px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        z-index: 10001;
-        font-size: 14px;
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-        }
-    }, duration);
-}
 
 // Function to setup SAM Detector hook in menu options
 export function setupSAMDetectorHook(node: ComfyNode, options: any[]) {
@@ -483,60 +397,15 @@ export function setupSAMDetectorHook(node: ComfyNode, options: any[]) {
                     if ((node as any).canvasWidget && (node as any).canvasWidget.canvas) {
                         const canvas = (node as any).canvasWidget; // canvasWidget IS the Canvas object
                         
-                        // Get the flattened canvas as blob
-                        const blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
-                        if (!blob) {
-                            throw new Error("Failed to generate canvas blob");
-                        }
-
-                        // Upload the image to ComfyUI's temp storage
-                        const formData = new FormData();
-                        const filename = `layerforge-sam-${node.id}-${Date.now()}.png`; // Unique filename with timestamp
-                        formData.append("image", blob, filename);
-                        formData.append("overwrite", "true");
-                        formData.append("type", "temp");
-
-                        const response = await api.fetchApi("/upload/image", {
-                            method: "POST",
-                            body: formData,
+                        // Use ImageUploadUtils to upload canvas
+                        const uploadResult = await uploadCanvasAsImage(canvas, {
+                            filenamePrefix: 'layerforge-sam',
+                            nodeId: node.id
                         });
-
-                        if (!response.ok) {
-                            throw new Error(`Failed to upload image: ${response.statusText}`);
-                        }
-
-                        const data = await response.json();
-                        log.debug('Image uploaded for SAM Detector:', data);
-
-                        // Create image element with proper URL
-                        const img = new Image();
-                        img.crossOrigin = "anonymous"; // Add CORS support
-                        
-                        // Wait for image to load before setting src
-                        const imageLoadPromise = new Promise((resolve, reject) => {
-                            img.onload = () => {
-                                log.debug("SAM Detector image loaded successfully", {
-                                    width: img.width,
-                                    height: img.height,
-                                    src: img.src.substring(0, 100) + '...'
-                                });
-                                resolve(img);
-                            };
-                            img.onerror = (error) => {
-                                log.error("Failed to load SAM Detector image", error);
-                                reject(new Error("Failed to load uploaded image"));
-                            };
-                        });
-                        
-                        // Set src after setting up event handlers
-                        img.src = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-                        
-                        // Wait for image to load
-                        await imageLoadPromise;
 
                         // Set the image to the node for clipspace
-                        node.imgs = [img];
-                        (node as any).clipspaceImg = img;
+                        node.imgs = [uploadResult.imageElement];
+                        (node as any).clipspaceImg = uploadResult.imageElement;
 
                         // Copy to ComfyUI clipspace
                         ComfyApp.copyToClipspace(node);
