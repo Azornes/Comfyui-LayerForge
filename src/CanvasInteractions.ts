@@ -170,6 +170,11 @@ export class CanvasInteractions {
         if (e.shiftKey) {
             // Clear custom shape when starting canvas resize
             if (this.canvas.outputAreaShape) {
+                // If auto-apply shape mask is enabled, remove the mask before clearing the shape
+                if (this.canvas.autoApplyShapeMask) {
+                    log.info("Removing shape mask before clearing custom shape for canvas resize");
+                    this.canvas.maskTool.removeShapeMask();
+                }
                 this.canvas.outputAreaShape = null;
                 this.canvas.render();
             }
@@ -945,6 +950,12 @@ export class CanvasInteractions {
         if (boundingBox && boundingBox.width > 1 && boundingBox.height > 1) {
             this.canvas.saveState();
 
+            // If there's an existing custom shape and auto-apply shape mask is enabled, remove the previous mask
+            if (this.canvas.outputAreaShape && this.canvas.autoApplyShapeMask) {
+                log.info("Removing previous shape mask before defining new custom shape");
+                this.canvas.maskTool.removeShapeMask();
+            }
+
             this.canvas.outputAreaShape = {
                 ...shape,
                 points: shape.points.map((p: any) => ({
@@ -998,6 +1009,12 @@ export class CanvasInteractions {
 
             // Update mask canvas to ensure it covers the new output area position
             this.canvas.maskTool.updateMaskCanvasForOutputArea();
+
+            // If auto-apply shape mask is enabled, automatically apply the mask with current settings
+            if (this.canvas.autoApplyShapeMask) {
+                log.info("Auto-applying shape mask to new custom shape with current settings");
+                this.canvas.maskTool.applyShapeMask();
+            }
 
             this.canvas.saveState();
             this.canvas.render();

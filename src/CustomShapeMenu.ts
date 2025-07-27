@@ -187,6 +187,8 @@ export class CustomShapeMenu {
             color: #aaa;
         `;
 
+        let expansionValueBeforeDrag = this.canvas.shapeMaskExpansionValue;
+
         const updateExpansionSliderDisplay = () => {
             const value = parseInt(expansionSlider.value);
             this.canvas.shapeMaskExpansionValue = value;
@@ -195,7 +197,10 @@ export class CustomShapeMenu {
 
         let isExpansionDragging = false;
         
-        expansionSlider.onmousedown = () => { isExpansionDragging = true; };
+        expansionSlider.onmousedown = () => { 
+            isExpansionDragging = true;
+            expansionValueBeforeDrag = this.canvas.shapeMaskExpansionValue; // Store value before dragging
+        };
         
         expansionSlider.oninput = () => {
             updateExpansionSliderDisplay();
@@ -214,6 +219,18 @@ export class CustomShapeMenu {
         expansionSlider.onmouseup = () => {
             isExpansionDragging = false;
             if (this.canvas.autoApplyShapeMask) {
+                const finalValue = parseInt(expansionSlider.value);
+                
+                // If value changed during drag, remove old mask with previous expansion value
+                if (expansionValueBeforeDrag !== finalValue) {
+                    // Temporarily set the previous value to remove the old mask properly
+                    const tempValue = this.canvas.shapeMaskExpansionValue;
+                    this.canvas.shapeMaskExpansionValue = expansionValueBeforeDrag;
+                    this.canvas.maskTool.removeShapeMask();
+                    this.canvas.shapeMaskExpansionValue = tempValue; // Restore current value
+                    log.info(`Removed old shape mask with expansion: ${expansionValueBeforeDrag}px before applying new value: ${finalValue}px`);
+                }
+                
                 this.canvas.maskTool.hideShapePreview();
                 this.canvas.maskTool.applyShapeMask(true);
                 this.canvas.render();

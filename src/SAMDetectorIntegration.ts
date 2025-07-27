@@ -333,18 +333,31 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
             return;
         }
 
-        // Create temporary canvas for mask processing (same as CanvasMask)
+        // Create temporary canvas for mask processing with correct positioning
         log.debug("Creating temporary canvas for mask processing");
+        
+        // Get the output area bounds to position the mask correctly
+        const bounds = canvas.outputAreaBounds;
+        log.debug("Output area bounds for SAM mask positioning:", bounds);
+        
+        // Create canvas sized to match the result image dimensions
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
+        tempCanvas.width = resultImage.width;
+        tempCanvas.height = resultImage.height;
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
         if (tempCtx) {
-            tempCtx.drawImage(resultImage, 0, 0, canvas.width, canvas.height);
+            // Draw the result image at its natural size (no scaling)
+            tempCtx.drawImage(resultImage, 0, 0);
 
-            log.debug("Processing image data to create mask");
-            const imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
+            log.debug("Processing image data to create mask", {
+                imageWidth: resultImage.width,
+                imageHeight: resultImage.height,
+                boundsX: bounds.x,
+                boundsY: bounds.y
+            });
+            
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             const data = imageData.data;
 
             // Convert to mask format (same as CanvasMask)

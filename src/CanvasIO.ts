@@ -92,57 +92,46 @@ export class CanvasIO {
 
             this.canvas.outputAreaShape = originalShape;
 
-            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            // Use optimized getMaskForOutputArea() instead of getMask() for better performance
+            // This only processes chunks that overlap with the output area
+            const toolMaskCanvas = this.canvas.maskTool.getMaskForOutputArea();
             if (toolMaskCanvas) {
+                log.debug(`Using optimized output area mask (${toolMaskCanvas.width}x${toolMaskCanvas.height}) instead of full mask`);
 
-                const tempMaskCanvas = document.createElement('canvas');
-                tempMaskCanvas.width = this.canvas.width;
-                tempMaskCanvas.height = this.canvas.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
-                if (!tempMaskCtx) throw new Error("Could not create temp mask context");
-
-                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-
-
-                const maskX = this.canvas.maskTool.x;
-                const maskY = this.canvas.maskTool.y;
-
-                log.debug(`Extracting mask from world position (${maskX}, ${maskY}) for output area (0,0) to (${this.canvas.width}, ${this.canvas.height})`);
-
-                const sourceX = Math.max(0, -maskX);  // Where in the mask canvas to start reading
-                const sourceY = Math.max(0, -maskY);
-                const destX = Math.max(0, maskX);     // Where in the output canvas to start writing
-                const destY = Math.max(0, maskY);
-
-                const copyWidth = Math.min(
-                    toolMaskCanvas.width - sourceX,   // Available width in source
-                    this.canvas.width - destX         // Available width in destination
-                );
-                const copyHeight = Math.min(
-                    toolMaskCanvas.height - sourceY,  // Available height in source
-                    this.canvas.height - destY        // Available height in destination
-                );
-
-                if (copyWidth > 0 && copyHeight > 0) {
-                    log.debug(`Copying mask region: source(${sourceX}, ${sourceY}) to dest(${destX}, ${destY}) size(${copyWidth}, ${copyHeight})`);
-
-                    tempMaskCtx.drawImage(
-                        toolMaskCanvas,
-                        sourceX, sourceY, copyWidth, copyHeight,  // Source rectangle
-                        destX, destY, copyWidth, copyHeight       // Destination rectangle
-                    );
+                // The optimized mask is already sized and positioned for the output area
+                // So we can draw it directly without complex positioning calculations
+                const tempMaskData = toolMaskCanvas.getContext('2d', { willReadFrequently: true })?.getImageData(0, 0, toolMaskCanvas.width, toolMaskCanvas.height);
+                if (tempMaskData) {
+                    // Ensure the mask data is in the correct format (white with alpha)
+                    for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                        const alpha = tempMaskData.data[i + 3];
+                        tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
+                        tempMaskData.data[i + 3] = alpha;
+                    }
+                    
+                    // Create a temporary canvas to hold the processed mask
+                    const tempMaskCanvas = document.createElement('canvas');
+                    tempMaskCanvas.width = this.canvas.width;
+                    tempMaskCanvas.height = this.canvas.height;
+                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    if (!tempMaskCtx) throw new Error("Could not create temp mask context");
+                    
+                    // Put the processed mask data into a canvas that matches the output area size
+                    const outputMaskCanvas = document.createElement('canvas');
+                    outputMaskCanvas.width = toolMaskCanvas.width;
+                    outputMaskCanvas.height = toolMaskCanvas.height;
+                    const outputMaskCtx = outputMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    if (!outputMaskCtx) throw new Error("Could not create output mask context");
+                    
+                    outputMaskCtx.putImageData(tempMaskData, 0, 0);
+                    
+                    // Draw the optimized mask at the correct position (output area bounds)
+                    const bounds = this.canvas.outputAreaBounds;
+                    tempMaskCtx.drawImage(outputMaskCanvas, bounds.x, bounds.y);
+                    
+                    maskCtx.globalCompositeOperation = 'source-over';
+                    maskCtx.drawImage(tempMaskCanvas, 0, 0);
                 }
-
-                const tempMaskData = tempMaskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-                for (let i = 0; i < tempMaskData.data.length; i += 4) {
-                    const alpha = tempMaskData.data[i + 3];
-                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
-                    tempMaskData.data[i + 3] = alpha;
-                }
-                tempMaskCtx.putImageData(tempMaskData, 0, 0);
-
-                maskCtx.globalCompositeOperation = 'source-over';
-                maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
             if (outputMode === 'ram') {
                 const imageData = tempCanvas.toDataURL('image/png');

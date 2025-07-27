@@ -982,60 +982,26 @@ export class CanvasLayers {
                 const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
                 const data = imageData.data;
 
-                const toolMaskCanvas = this.canvas.maskTool.getMask();
+                // Use optimized getMaskForOutputArea() for better performance
+                // This only processes chunks that overlap with the output area
+                const toolMaskCanvas = this.canvas.maskTool.getMaskForOutputArea();
                 if (toolMaskCanvas) {
-                    const tempMaskCanvas = document.createElement('canvas');
-                    tempMaskCanvas.width = bounds.width;
-                    tempMaskCanvas.height = bounds.height;
-                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
-                    if (!tempMaskCtx) {
-                        reject(new Error("Could not create mask canvas context"));
-                        return;
+                    log.debug(`Using optimized output area mask (${toolMaskCanvas.width}x${toolMaskCanvas.height}) for _generateCanvasBlob`);
+
+                    // The optimized mask is already sized and positioned for the output area
+                    // So we can apply it directly without complex positioning calculations
+                    const maskImageData = toolMaskCanvas.getContext('2d', { willReadFrequently: true })?.getImageData(0, 0, toolMaskCanvas.width, toolMaskCanvas.height);
+                    if (maskImageData) {
+                        const maskData = maskImageData.data;
+
+                        for (let i = 0; i < data.length; i += 4) {
+                            const originalAlpha = data[i + 3];
+                            const maskAlpha = maskData[i + 3] / 255;
+                            const invertedMaskAlpha = 1 - maskAlpha;
+                            data[i + 3] = originalAlpha * invertedMaskAlpha;
+                        }
+                        tempCtx.putImageData(imageData, 0, 0);
                     }
-
-                    tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-
-                    // Pozycja maski w świecie (bez przesunięcia względem bounds)
-                    const maskWorldX = this.canvas.maskTool.x;
-                    const maskWorldY = this.canvas.maskTool.y;
-                    
-                    // Pozycja maski względem output bounds (gdzie ma być narysowana w output canvas)
-                    const maskX = maskWorldX - bounds.x;
-                    const maskY = maskWorldY - bounds.y;
-
-                    const sourceX = Math.max(0, -maskX);
-                    const sourceY = Math.max(0, -maskY);
-                    const destX = Math.max(0, maskX);
-                    const destY = Math.max(0, maskY);
-                    const copyWidth = Math.min(toolMaskCanvas.width - sourceX, bounds.width - destX);
-                    const copyHeight = Math.min(toolMaskCanvas.height - sourceY, bounds.height - destY);
-
-                    if (copyWidth > 0 && copyHeight > 0) {
-                        tempMaskCtx.drawImage(
-                            toolMaskCanvas,
-                            sourceX, sourceY, copyWidth, copyHeight,
-                            destX, destY, copyWidth, copyHeight
-                        );
-                    }
-
-                    const tempMaskData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
-                    for (let i = 0; i < tempMaskData.data.length; i += 4) {
-                        const alpha = tempMaskData.data[i + 3];
-                        tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = 255;
-                        tempMaskData.data[i + 3] = alpha;
-                    }
-                    tempMaskCtx.putImageData(tempMaskData, 0, 0);
-
-                    const maskImageData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
-                    const maskData = maskImageData.data;
-
-                    for (let i = 0; i < data.length; i += 4) {
-                        const originalAlpha = data[i + 3];
-                        const maskAlpha = maskData[i + 3] / 255;
-                        const invertedMaskAlpha = 1 - maskAlpha;
-                        data[i + 3] = originalAlpha * invertedMaskAlpha;
-                    }
-                    tempCtx.putImageData(imageData, 0, 0);
                 }
             }
 
@@ -1126,56 +1092,34 @@ export class CanvasLayers {
             }
             maskCtx.putImageData(maskData, 0, 0);
 
-            // Aplikuj maskę narzędzia jeśli istnieje
-            const toolMaskCanvas = this.canvas.maskTool.getMask();
+            // Aplikuj maskę narzędzia jeśli istnieje - używaj zoptymalizowanej metody
+            const toolMaskCanvas = this.canvas.maskTool.getMaskForOutputArea();
             if (toolMaskCanvas) {
-                const tempMaskCanvas = document.createElement('canvas');
-                tempMaskCanvas.width = bounds.width;
-                tempMaskCanvas.height = bounds.height;
-                const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
-                if (!tempMaskCtx) {
-                    reject(new Error("Could not create temp mask context"));
-                    return;
+                log.debug(`[getFlattenedMaskAsBlob] Using optimized output area mask (${toolMaskCanvas.width}x${toolMaskCanvas.height})`);
+
+                // Zoptymalizowana maska jest już odpowiednio pozycjonowana dla output area
+                // Możemy ją zastosować bezpośrednio
+                const tempMaskData = toolMaskCanvas.getContext('2d', { willReadFrequently: true })?.getImageData(0, 0, toolMaskCanvas.width, toolMaskCanvas.height);
+                if (tempMaskData) {
+                    // Konwertuj dane maski do odpowiedniego formatu
+                    for (let i = 0; i < tempMaskData.data.length; i += 4) {
+                        const alpha = tempMaskData.data[i + 3];
+                        tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = alpha;
+                        tempMaskData.data[i + 3] = 255; // Solidna alpha
+                    }
+                    
+                    // Stwórz tymczasowy canvas dla przetworzonej maski
+                    const tempMaskCanvas = document.createElement('canvas');
+                    tempMaskCanvas.width = toolMaskCanvas.width;
+                    tempMaskCanvas.height = toolMaskCanvas.height;
+                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    if (tempMaskCtx) {
+                        tempMaskCtx.putImageData(tempMaskData, 0, 0);
+                        
+                        maskCtx.globalCompositeOperation = 'screen';
+                        maskCtx.drawImage(tempMaskCanvas, 0, 0);
+                    }
                 }
-
-                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
-
-                // Pozycja maski w świecie (bez przesunięcia względem bounds)
-                const maskWorldX = this.canvas.maskTool.x;
-                const maskWorldY = this.canvas.maskTool.y;
-                
-                // Pozycja maski względem output bounds (gdzie ma być narysowana w output canvas)
-                const maskX = maskWorldX - bounds.x;
-                const maskY = maskWorldY - bounds.y;
-
-                log.debug(`[getFlattenedMaskAsBlob] Mask world position (${maskWorldX}, ${maskWorldY}) relative to bounds (${maskX}, ${maskY})`);
-
-                const sourceX = Math.max(0, -maskX);
-                const sourceY = Math.max(0, -maskY);
-                const destX = Math.max(0, maskX);
-                const destY = Math.max(0, maskY);
-
-                const copyWidth = Math.min(toolMaskCanvas.width - sourceX, bounds.width - destX);
-                const copyHeight = Math.min(toolMaskCanvas.height - sourceY, bounds.height - destY);
-
-                if (copyWidth > 0 && copyHeight > 0) {
-                    tempMaskCtx.drawImage(
-                        toolMaskCanvas,
-                        sourceX, sourceY, copyWidth, copyHeight,
-                        destX, destY, copyWidth, copyHeight
-                    );
-                }
-
-                const tempMaskData = tempMaskCtx.getImageData(0, 0, bounds.width, bounds.height);
-                for (let i = 0; i < tempMaskData.data.length; i += 4) {
-                    const alpha = tempMaskData.data[i + 3];
-                    tempMaskData.data[i] = tempMaskData.data[i + 1] = tempMaskData.data[i + 2] = alpha;
-                    tempMaskData.data[i + 3] = 255; // Solidna alpha
-                }
-                tempMaskCtx.putImageData(tempMaskData, 0, 0);
-
-                maskCtx.globalCompositeOperation = 'screen';
-                maskCtx.drawImage(tempMaskCanvas, 0, 0);
             }
 
             log.info("=== MASK BLOB GENERATED ===");

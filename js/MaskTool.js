@@ -3,6 +3,7 @@ const log = createModuleLogger('Mask_tool');
 export class MaskTool {
     constructor(canvasInstance, callbacks = {}) {
         this.ACTIVE_MASK_UPDATE_DELAY = 16; // ~60fps throttling
+        this.SHAPE_PREVIEW_THROTTLE_DELAY = 16; // ~60fps throttling for preview
         this.canvasInstance = canvasInstance;
         this.mainCanvas = canvasInstance.canvas;
         this.onStateChange = callbacks.onStateChange || null;
@@ -50,6 +51,9 @@ export class MaskTool {
         // Initialize performance optimization flags
         this.activeMaskNeedsUpdate = false;
         this.activeMaskUpdateTimeout = null;
+        // Initialize shape preview throttling
+        this.shapePreviewThrottleTimeout = null;
+        this.pendingPreviewParams = null;
         this.initMaskCanvas();
     }
     // Temporary compatibility getters - will be replaced with chunked system
@@ -537,6 +541,7 @@ export class MaskTool {
     /**
      * Prepares shape mask configuration data - eliminates duplication between applyShapeMask and removeShapeMask
      * Returns all necessary data for shape mask operations including world coordinates and temporary canvas setup
+     * Now uses precise expansion calculation based on actual user values
      */
     prepareShapeMaskConfiguration() {
         // Validate shape
@@ -551,12 +556,14 @@ export class MaskTool {
             x: bounds.x + extensionOffset.x + p.x,
             y: bounds.y + extensionOffset.y + p.y
         }));
-        // Create a temporary canvas large enough to contain the shape and any expansion
-        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
-        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
-        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
-        const tempOffsetX = maxExpansion;
-        const tempOffsetY = maxExpansion;
+        // Use precise expansion calculation - only actual user value + small safety margin
+        const userExpansionValue = Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0);
+        const safetyMargin = 10; // Small safety margin for precise operations
+        const preciseExpansion = userExpansionValue + safetyMargin;
+        const tempCanvasWidth = bounds.width + (preciseExpansion * 2);
+        const tempCanvasHeight = bounds.height + (preciseExpansion * 2);
+        const tempOffsetX = preciseExpansion;
+        const tempOffsetY = preciseExpansion;
         // Adjust shape points for the temporary canvas
         const tempShapePoints = worldShapePoints.map(p => ({
             x: p.x - bounds.x + tempOffsetX,
@@ -567,7 +574,7 @@ export class MaskTool {
             bounds,
             extensionOffset,
             worldShapePoints,
-            maxExpansion,
+            maxExpansion: preciseExpansion,
             tempCanvasWidth,
             tempCanvasHeight,
             tempOffsetX,
@@ -943,6 +950,25 @@ export class MaskTool {
      * Show blue outline preview of expansion/contraction during slider adjustment
      */
     showShapePreview(expansionValue, featherValue = 0) {
+        // Store the parameters for throttled execution
+        this.pendingPreviewParams = { expansionValue, featherValue };
+        // If there's already a pending preview update, don't schedule another one
+        if (this.shapePreviewThrottleTimeout !== null) {
+            return;
+        }
+        // Schedule the preview update with throttling
+        this.shapePreviewThrottleTimeout = window.setTimeout(() => {
+            if (this.pendingPreviewParams) {
+                this.executeShapePreview(this.pendingPreviewParams.expansionValue, this.pendingPreviewParams.featherValue);
+                this.pendingPreviewParams = null;
+            }
+            this.shapePreviewThrottleTimeout = null;
+        }, this.SHAPE_PREVIEW_THROTTLE_DELAY);
+    }
+    /**
+     * Executes the actual shape preview rendering - separated from showShapePreview for throttling
+     */
+    executeShapePreview(expansionValue, featherValue = 0) {
         if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
             return;
         }
@@ -975,7 +1001,7 @@ export class MaskTool {
             const allFeatherContours = this._calculatePreviewPointsScreen(allContours, -featherValue, viewport.zoom);
             this.drawContoursForPreview(this.shapePreviewCtx, allFeatherContours, '#4A9EFF', 1, [3, 5], 0.6);
         }
-        log.debug(`Shape preview shown with expansion: ${expansionValue}px, feather: ${featherValue}px at bounds (${bounds.x}, ${bounds.y})`);
+        log.debug(`Shape preview executed with expansion: ${expansionValue}px, feather: ${featherValue}px at bounds (${bounds.x}, ${bounds.y})`);
     }
     /**
      * Hide shape preview and switch back to normal mode
@@ -1229,6 +1255,47 @@ export class MaskTool {
             this.activeMaskNeedsUpdate = false;
         }
         return this.activeMaskCanvas;
+    }
+    /**
+     * Gets mask only for the output area - optimized for performance
+     * Returns only the portion of the mask that overlaps with the output area
+     * This is much more efficient than returning the entire mask when there are many chunks
+     */
+    getMaskForOutputArea() {
+        const bounds = this.canvasInstance.outputAreaBounds;
+        // Create canvas sized to output area
+        const outputMaskCanvas = document.createElement('canvas');
+        outputMaskCanvas.width = bounds.width;
+        outputMaskCanvas.height = bounds.height;
+        const outputMaskCtx = outputMaskCanvas.getContext('2d', { willReadFrequently: true });
+        if (!outputMaskCtx) {
+            throw new Error("Failed to get 2D context for output area mask canvas");
+        }
+        // Calculate which chunks overlap with the output area
+        const outputLeft = bounds.x;
+        const outputTop = bounds.y;
+        const outputRight = bounds.x + bounds.width;
+        const outputBottom = bounds.y + bounds.height;
+        const chunkBounds = this.calculateChunkBounds(outputLeft, outputTop, outputRight, outputBottom);
+        // Only process chunks that overlap with output area
+        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
+                const chunkKey = `${chunkX},${chunkY}`;
+                const chunk = this.maskChunks.get(chunkKey);
+                if (chunk && !chunk.isEmpty) {
+                    // Calculate intersection between chunk and output area
+                    const intersection = this.calculateChunkIntersection(chunk, outputLeft, outputTop, outputRight, outputBottom);
+                    if (intersection) {
+                        // Draw only the intersecting portion
+                        outputMaskCtx.drawImage(chunk.canvas, intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight, // Source from chunk
+                        intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight // Destination on output canvas
+                        );
+                    }
+                }
+            }
+        }
+        log.debug(`Generated output area mask (${bounds.width}x${bounds.height}) from ${chunkBounds.maxX - chunkBounds.minX + 1}x${chunkBounds.maxY - chunkBounds.minY + 1} chunks`);
+        return outputMaskCanvas;
     }
     resize(width, height) {
         this.initPreviewCanvas();
@@ -1512,20 +1579,22 @@ export class MaskTool {
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
         // Create a removal mask canvas - always hard-edged to ensure complete removal
         let removalMaskCanvas;
+        // Add safety margin to ensure complete removal of antialiasing artifacts
+        const safetyMargin = 2; // 2px margin to remove any antialiasing remnants
         if (needsExpansion) {
-            // If expansion was active, remove the expanded area with a hard edge
-            removalMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, config.tempCanvasWidth, config.tempCanvasHeight);
+            // If expansion was active, remove exactly the user's expansion value + safety margin
+            const userExpansionValue = this.canvasInstance.shapeMaskExpansionValue;
+            const expandedValue = Math.abs(userExpansionValue) + safetyMargin;
+            removalMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, expandedValue, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         else {
-            // If no expansion, just remove the base shape with a hard edge
-            const { canvas, ctx } = this.createCanvas(config.tempCanvasWidth, config.tempCanvasHeight);
-            removalMaskCanvas = canvas;
-            this.drawShapeOnCanvas(ctx, config.tempShapePoints, 'evenodd');
+            // If no expansion, remove the base shape with safety margin only
+            removalMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, safetyMargin, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         // Now remove the shape mask from the chunked system
         this.removeMaskCanvasFromChunks(removalMaskCanvas, config.bounds.x - config.tempOffsetX, config.bounds.y - config.tempOffsetY);
         // Update the active mask canvas to show the changes
-        this.updateActiveMaskCanvas();
+        this.updateActiveMaskCanvas(true); // Force full update to ensure all chunks are properly updated
         if (this.onStateChange) {
             this.onStateChange();
         }
