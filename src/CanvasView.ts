@@ -789,7 +789,42 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     let originalParent: HTMLElement | null = null;
     let isEditorOpen = false;
 
+    /**
+     * Adjusts the viewport to keep the content centered when the container size changes.
+     * @param rectA The original rectangle.
+     * @param rectB The new rectangle.
+     * @param direction Determines whether to apply the adjustment for opening (-1) or closing (1).
+     */
+    const adjustViewportForCentering = (rectA: DOMRect, rectB: DOMRect, direction: 1 | -1) => {
+        if (!rectA || !rectB) return;
+
+        const widthDiff = rectB.width - rectA.width;
+        const heightDiff = rectB.height - rectA.height;
+        
+        const adjustX = (widthDiff / 2) / canvas.viewport.zoom;
+        const adjustY = (heightDiff / 2) / canvas.viewport.zoom;
+        
+        canvas.viewport.x -= adjustX * direction;
+        canvas.viewport.y -= adjustY * direction;
+
+        const action = direction === 1 ? 'OPENING' : 'CLOSING';
+        log.info(`FULLSCREEN ${action} - Viewport adjusted for centering:`, {
+            widthDiff, heightDiff, adjustX, adjustY,
+            viewport_after: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
+        });
+    }
+
     const closeEditor = () => {
+        // Get fullscreen rect BEFORE removing from DOM
+        const fullscreenRect = backdrop?.querySelector('.painter-modal-content')?.getBoundingClientRect();
+        const currentRect = originalParent?.getBoundingClientRect();
+        
+        log.info(`FULLSCREEN CLOSING - Window sizes:`, {
+            current: { width: currentRect?.width, height: currentRect?.height },
+            fullscreen: { width: fullscreenRect?.width, height: fullscreenRect?.height },
+            viewport_before: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
+        });
+
         if (originalParent && backdrop) {
             originalParent.appendChild(mainContainer);
             document.body.removeChild(backdrop);
@@ -803,6 +838,12 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         document.removeEventListener('keydown', handleEscKey);
 
         setTimeout(() => {
+            // Use the actual canvas container for centering calculation
+            const currentCanvasContainer = originalParent!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
+            const fullscreenCanvasContainer = backdrop!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
+            const currentRect = currentCanvasContainer.getBoundingClientRect();
+            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
+            adjustViewportForCentering(currentRect, fullscreenRect, -1);
             canvas.render();
             if (node.onResize) {
                 node.onResize();
@@ -832,6 +873,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             return;
         }
 
+
         backdrop = $el("div.painter-modal-backdrop") as HTMLDivElement;
         const modalContent = $el("div.painter-modal-content") as HTMLDivElement;
 
@@ -847,6 +889,12 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         document.addEventListener('keydown', handleEscKey);
 
         setTimeout(() => {
+            // Use the actual canvas container for centering calculation
+            const originalCanvasContainer = originalParent!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
+            const fullscreenCanvasContainer = modalContent.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
+            const originalRect = originalCanvasContainer.getBoundingClientRect();
+            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
+            adjustViewportForCentering(originalRect, fullscreenRect, 1);
             canvas.render();
             if (node.onResize) {
                 node.onResize();

@@ -734,7 +734,36 @@ async function createCanvasWidget(node, widget, app) {
     let backdrop = null;
     let originalParent = null;
     let isEditorOpen = false;
+    /**
+     * Adjusts the viewport to keep the content centered when the container size changes.
+     * @param rectA The original rectangle.
+     * @param rectB The new rectangle.
+     * @param direction Determines whether to apply the adjustment for opening (-1) or closing (1).
+     */
+    const adjustViewportForCentering = (rectA, rectB, direction) => {
+        if (!rectA || !rectB)
+            return;
+        const widthDiff = rectB.width - rectA.width;
+        const heightDiff = rectB.height - rectA.height;
+        const adjustX = (widthDiff / 2) / canvas.viewport.zoom;
+        const adjustY = (heightDiff / 2) / canvas.viewport.zoom;
+        canvas.viewport.x -= adjustX * direction;
+        canvas.viewport.y -= adjustY * direction;
+        const action = direction === 1 ? 'OPENING' : 'CLOSING';
+        log.info(`FULLSCREEN ${action} - Viewport adjusted for centering:`, {
+            widthDiff, heightDiff, adjustX, adjustY,
+            viewport_after: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
+        });
+    };
     const closeEditor = () => {
+        // Get fullscreen rect BEFORE removing from DOM
+        const fullscreenRect = backdrop?.querySelector('.painter-modal-content')?.getBoundingClientRect();
+        const currentRect = originalParent?.getBoundingClientRect();
+        log.info(`FULLSCREEN CLOSING - Window sizes:`, {
+            current: { width: currentRect?.width, height: currentRect?.height },
+            fullscreen: { width: fullscreenRect?.width, height: fullscreenRect?.height },
+            viewport_before: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
+        });
         if (originalParent && backdrop) {
             originalParent.appendChild(mainContainer);
             document.body.removeChild(backdrop);
@@ -745,6 +774,7 @@ async function createCanvasWidget(node, widget, app) {
         // Remove ESC key listener when editor closes
         document.removeEventListener('keydown', handleEscKey);
         setTimeout(() => {
+            adjustViewportForCentering(currentRect, fullscreenRect, -1);
             canvas.render();
             if (node.onResize) {
                 node.onResize();
@@ -781,6 +811,9 @@ async function createCanvasWidget(node, widget, app) {
         // Add ESC key listener when editor opens
         document.addEventListener('keydown', handleEscKey);
         setTimeout(() => {
+            const originalRect = originalParent.getBoundingClientRect();
+            const fullscreenRect = modalContent.getBoundingClientRect();
+            adjustViewportForCentering(originalRect, fullscreenRect, 1);
             canvas.render();
             if (node.onResize) {
                 node.onResize();
