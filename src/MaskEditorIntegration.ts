@@ -5,6 +5,7 @@ import {ComfyApp} from "../../scripts/app.js";
 // @ts-ignore
 import {api} from "../../scripts/api.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
 import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
 import { convertToImage } from "./utils/ImageUtils.js";
@@ -100,7 +101,7 @@ export class MaskEditorIntegration {
 
         } catch (error) {
             log.error("Error preparing image for mask editor:", error);
-            alert(`Error: ${(error as Error).message}`);
+            showErrorNotification(`Error: ${(error as Error).message}`);
         }
     }
 

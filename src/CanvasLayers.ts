@@ -1,7 +1,8 @@
 import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import {generateUUID, generateUniqueFileName} from "./utils/CommonUtils.js";
+import {generateUUID, generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
+import {showErrorNotification, showSuccessNotification} from "./utils/NotificationUtils.js";
 // @ts-ignore
 import {app} from "../../scripts/app.js";
 // @ts-ignore
@@ -223,18 +224,12 @@ export class CanvasLayers {
         };
 
         if (layer.mask) {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
             if(tempCtx) {
-                tempCanvas.width = layer.width;
-                tempCanvas.height = layer.height;
                 tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
     
-                const maskCanvas = document.createElement('canvas');
-                const maskCtx = maskCanvas.getContext('2d');
+                const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(layer.width, layer.height);
                 if(maskCtx) {
-                    maskCanvas.width = layer.width;
-                    maskCanvas.height = layer.height;
                     const maskImageData = maskCtx.createImageData(layer.width, layer.height);
                     for (let i = 0; i < layer.mask.length; i++) {
                         maskImageData.data[i * 4] = 255;
@@ -432,10 +427,7 @@ export class CanvasLayers {
             
             if (maskCanvas) {
                 // Create a temporary canvas for the masked layer
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = layer.width;
-                tempCanvas.height = layer.height;
-                const tempCtx = tempCanvas.getContext('2d');
+                const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 
                 if (tempCtx) {
                     // Draw the original image
@@ -1136,7 +1128,7 @@ export class CanvasLayers {
 
     async fuseLayers(): Promise<void> {
         if (this.canvas.canvasSelection.selectedLayers.length < 2) {
-            alert("Please select at least 2 layers to fuse.");
+            showErrorNotification("Please select at least 2 layers to fuse.");
             return;
         }
 
@@ -1178,7 +1170,7 @@ export class CanvasLayers {
 
             if (fusedWidth <= 0 || fusedHeight <= 0) {
                 log.warn("Calculated fused layer dimensions are invalid");
-                alert("Cannot fuse layers: invalid dimensions calculated.");
+                showErrorNotification("Cannot fuse layers: invalid dimensions calculated.");
                 return;
             }
 
@@ -1245,7 +1237,7 @@ export class CanvasLayers {
 
         } catch (error: any) {
             log.error("Error during layer fusion:", error);
-            alert(`Error fusing layers: ${error.message}`);
+            showErrorNotification(`Error fusing layers: ${error.message}`);
         }
     }
 }

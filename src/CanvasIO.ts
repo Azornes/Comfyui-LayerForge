@@ -1,5 +1,6 @@
 import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape } from './types';
@@ -611,7 +612,7 @@ export class CanvasIO {
             }
         } catch (error: any) {
             log.error("Error importing latest image:", error);
-            alert(`Failed to import latest image: ${error.message}`);
+            showErrorNotification(`Failed to import latest image: ${error.message}`);
             return false;
         }
     }
@@ -655,7 +656,7 @@ export class CanvasIO {
             }
         } catch (error: any) {
             log.error("Error importing latest images:", error);
-            alert(`Failed to import latest images: ${error.message}`);
+            showErrorNotification(`Failed to import latest images: ${error.message}`);
             return [];
         }
     }

@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { generateUUID } from "./utils/CommonUtils.js";
 const log = createModuleLogger('CanvasSelection');
 export class CanvasSelection {
     constructor(canvas) {
@@ -18,7 +19,7 @@ export class CanvasSelection {
         sortedLayers.forEach(layer => {
             const newLayer = {
                 ...layer,
-                id: `layer_${+new Date()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: generateUUID(),
                 zIndex: this.canvas.layers.length, // Nowa warstwa zawsze na wierzchu
             };
             this.canvas.layers.push(newLayer);

@@ -3,6 +3,7 @@ import { app } from "../../scripts/app.js";
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadImageBlob } from "./utils/ImageUploadUtils.js";
 import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
 import { convertToImage } from "./utils/ImageUtils.js";
@@ -77,7 +78,7 @@ export class MaskEditorIntegration {
         }
         catch (error) {
             log.error("Error preparing image for mask editor:", error);
-            alert(`Error: ${error.message}`);
+            showErrorNotification(`Error: ${error.message}`);
         }
     }
     /**

@@ -1,7 +1,8 @@
 import { saveImage } from "./db.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
-import { generateUUID, generateUniqueFileName } from "./utils/CommonUtils.js";
+import { generateUUID, generateUniqueFileName, createCanvas } from "./utils/CommonUtils.js";
 import { withErrorHandling, createValidationError } from "./ErrorHandler.js";
+import { showErrorNotification } from "./utils/NotificationUtils.js";
 // @ts-ignore
 import { app } from "../../scripts/app.js";
 // @ts-ignore
@@ -63,17 +64,11 @@ export class CanvasLayers {
                 ...layerProps
             };
             if (layer.mask) {
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
+                const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 if (tempCtx) {
-                    tempCanvas.width = layer.width;
-                    tempCanvas.height = layer.height;
                     tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-                    const maskCanvas = document.createElement('canvas');
-                    const maskCtx = maskCanvas.getContext('2d');
+                    const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(layer.width, layer.height);
                     if (maskCtx) {
-                        maskCanvas.width = layer.width;
-                        maskCanvas.height = layer.height;
                         const maskImageData = maskCtx.createImageData(layer.width, layer.height);
                         for (let i = 0; i < layer.mask.length; i++) {
                             maskImageData.data[i * 4] = 255;
@@ -371,10 +366,7 @@ export class CanvasLayers {
             let maskCanvas = this.getDistanceFieldMask(layer.image, blendArea);
             if (maskCanvas) {
                 // Create a temporary canvas for the masked layer
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = layer.width;
-                tempCanvas.height = layer.height;
-                const tempCtx = tempCanvas.getContext('2d');
+                const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 if (tempCtx) {
                     // Draw the original image
                     tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
@@ -978,7 +970,7 @@ export class CanvasLayers {
     }
     async fuseLayers() {
         if (this.canvas.canvasSelection.selectedLayers.length < 2) {
-            alert("Please select at least 2 layers to fuse.");
+            showErrorNotification("Please select at least 2 layers to fuse.");
             return;
         }
         log.info(`Fusing ${this.canvas.canvasSelection.selectedLayers.length} selected layers`);
@@ -1012,7 +1004,7 @@ export class CanvasLayers {
             const fusedHeight = Math.ceil(maxY - minY);
             if (fusedWidth <= 0 || fusedHeight <= 0) {
                 log.warn("Calculated fused layer dimensions are invalid");
-                alert("Cannot fuse layers: invalid dimensions calculated.");
+                showErrorNotification("Cannot fuse layers: invalid dimensions calculated.");
                 return;
             }
             const tempCanvas = document.createElement('canvas');
@@ -1070,7 +1062,7 @@ export class CanvasLayers {
         }
         catch (error) {
             log.error("Error during layer fusion:", error);
-            alert(`Error fusing layers: ${error.message}`);
+            showErrorNotification(`Error fusing layers: ${error.message}`);
         }
     }
 }

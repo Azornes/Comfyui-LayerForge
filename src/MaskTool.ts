@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+import { createCanvas } from "./utils/CommonUtils.js";
 import type { Canvas } from './Canvas';
 import type { Point, CanvasState } from './types';
 
@@ -540,10 +541,7 @@ export class MaskTool {
      * Creates a canvas with specified dimensions and returns both canvas and context
      */
     private createCanvas(width: number, height: number): { canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D } {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
         if (!ctx) {
             throw new Error("Failed to get 2D context for canvas");
         }

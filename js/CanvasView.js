@@ -7,6 +7,7 @@ import { Canvas } from "./Canvas.js";
 import { clearAllCanvasStates } from "./db.js";
 import { ImageCache } from "./ImageCache.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { showErrorNotification, showSuccessNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
@@ -488,11 +489,11 @@ async function createCanvasWidget(node, widget, app) {
                             await canvas.imageReferenceManager.manualGarbageCollection();
                             const newStats = canvas.imageReferenceManager.getStats();
                             log.info("GC Stats after cleanup:", newStats);
-                            alert(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${canvas.imageReferenceManager.operationCount}/${canvas.imageReferenceManager.operationThreshold}`);
+                            showSuccessNotification(`Garbage collection completed!\nTracked images: ${newStats.trackedImages}\nTotal references: ${newStats.totalReferences}\nOperations: ${canvas.imageReferenceManager.operationCount}/${canvas.imageReferenceManager.operationThreshold}`);
                         }
                         catch (e) {
                             log.error("Failed to run garbage collection:", e);
-                            alert("Error running garbage collection. Check the console for details.");
+                            showErrorNotification("Error running garbage collection. Check the console for details.");
                         }
                     }
                 }),
@@ -504,11 +505,11 @@ async function createCanvasWidget(node, widget, app) {
                         if (confirm("Are you sure you want to clear all saved canvas states? This action cannot be undone.")) {
                             try {
                                 await clearAllCanvasStates();
-                                alert("Canvas cache cleared successfully!");
+                                showSuccessNotification("Canvas cache cleared successfully!");
                             }
                             catch (e) {
                                 log.error("Failed to clear canvas cache:", e);
-                                alert("Error clearing canvas cache. Check the console for details.");
+                                showErrorNotification("Error clearing canvas cache. Check the console for details.");
                             }
                         }
                     }
@@ -845,8 +846,8 @@ function showErrorDialog(message, details) {
                 textContent: "Copy Details",
                 onclick: () => {
                     navigator.clipboard.writeText(details)
-                        .then(() => alert("Error details copied to clipboard!"))
-                        .catch(err => alert("Failed to copy details: " + err));
+                        .then(() => showSuccessNotification("Error details copied to clipboard!"))
+                        .catch(err => showErrorNotification("Failed to copy details: " + err));
                 }
             }),
             $el("button", {
@@ -885,7 +886,7 @@ app.registerExtension({
                 }
                 catch (error) {
                     log.error("Failed to send canvas data for one or more nodes. Aborting prompt.", error);
-                    alert(`CanvasNode Error: ${error.message}`);
+                    showErrorNotification(`CanvasNode Error: ${error.message}`);
                     return;
                 }
             }
@@ -1043,12 +1044,12 @@ app.registerExtension({
                                 }
                                 else {
                                     log.error("Canvas widget not available");
-                                    alert("Canvas not ready. Please try again.");
+                                    showErrorNotification("Canvas not ready. Please try again.");
                                 }
                             }
                             catch (e) {
                                 log.error("Error opening MaskEditor:", e);
-                                alert(`Failed to open MaskEditor: ${e.message}`);
+                                showErrorNotification(`Failed to open MaskEditor: ${e.message}`);
                             }
                         },
                     },
@@ -1103,7 +1104,7 @@ app.registerExtension({
                             }
                             catch (e) {
                                 log.error("Error copying image:", e);
-                                alert("Failed to copy image to clipboard.");
+                                showErrorNotification("Failed to copy image to clipboard.");
                             }
                         },
                     },
@@ -1122,7 +1123,7 @@ app.registerExtension({
                             }
                             catch (e) {
                                 log.error("Error copying image with mask:", e);
-                                alert("Failed to copy image with mask to clipboard.");
+                                showErrorNotification("Failed to copy image with mask to clipboard.");
                             }
                         },
                     },
