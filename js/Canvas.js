@@ -13,7 +13,7 @@ import { ImageReferenceManager } from "./ImageReferenceManager.js";
 import { BatchPreviewManager } from "./BatchPreviewManager.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { debounce } from "./utils/CommonUtils.js";
-import { MaskEditorIntegration } from "./MaskEditorIntegration";
+import { MaskEditorIntegration } from "./MaskEditorIntegration.js";
 import { CanvasSelection } from "./CanvasSelection.js";
 const useChainCallback = (original, next) => {
     if (original === undefined || original === null) {
@@ -85,7 +85,7 @@ export class Canvas {
         this.maskTool = new MaskTool(this, { onStateChange: this.onStateChange });
         this.shapeTool = new ShapeTool(this);
         this.customShapeMenu = new CustomShapeMenu(this);
-        this.canvasMask = new MaskEditorIntegration(this);
+        this.maskEditorIntegration = new MaskEditorIntegration(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
         this.canvasInteractions = new CanvasInteractions(this);
@@ -409,7 +409,7 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask = null, sendCleanImage = true) {
-        return this.canvasMask.startMaskEditor(predefinedMask, sendCleanImage);
+        return this.maskEditorIntegration.startMaskEditor(predefinedMask, sendCleanImage);
     }
     /**
      * Inicjalizuje podstawowe właściwości canvas

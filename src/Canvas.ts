@@ -19,7 +19,7 @@ import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {BatchPreviewManager} from "./BatchPreviewManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
 import { debounce } from "./utils/CommonUtils.js";
-import {MaskEditorIntegration} from "./MaskEditorIntegration";
+import {MaskEditorIntegration} from "./MaskEditorIntegration.js";
 import {CanvasSelection} from "./CanvasSelection.js";
 import type { ComfyNode, Layer, Viewport, Point, AddMode, Shape, OutputAreaBounds } from './types';
 
@@ -51,7 +51,7 @@ export class Canvas {
     canvasInteractions: CanvasInteractions;
     canvasLayers: CanvasLayers;
     canvasLayersPanel: CanvasLayersPanel;
-    canvasMask: MaskEditorIntegration;
+    maskEditorIntegration: MaskEditorIntegration;
     canvasRenderer: CanvasRenderer;
     canvasSelection: CanvasSelection;
     canvasState: CanvasState;
@@ -146,7 +146,7 @@ export class Canvas {
         this.maskTool = new MaskTool(this, {onStateChange: this.onStateChange});
         this.shapeTool = new ShapeTool(this);
         this.customShapeMenu = new CustomShapeMenu(this);
-        this.canvasMask = new MaskEditorIntegration(this);
+        this.maskEditorIntegration = new MaskEditorIntegration(this);
         this.canvasState = new CanvasState(this);
         this.canvasSelection = new CanvasSelection(this);
         this.canvasInteractions = new CanvasInteractions(this);
@@ -530,7 +530,7 @@ export class Canvas {
      * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez maski) do editora
      */
     async startMaskEditor(predefinedMask: HTMLImageElement | HTMLCanvasElement | null = null, sendCleanImage: boolean = true) {
-        return this.canvasMask.startMaskEditor(predefinedMask as any, sendCleanImage);
+        return this.maskEditorIntegration.startMaskEditor(predefinedMask as any, sendCleanImage);
     }
 
     /**
