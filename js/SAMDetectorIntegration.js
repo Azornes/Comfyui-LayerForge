@@ -229,7 +229,7 @@ function monitorSAMDetectorChanges(node) {
     // Start monitoring after a short delay
     setTimeout(checkForChanges, 500);
 }
-// Function to handle SAM Detector result (using same logic as CanvasMask.handleMaskEditorClose)
+// Function to handle SAM Detector result (using same logic as MaskEditorIntegration.handleMaskEditorClose)
 async function handleSAMDetectorResult(node, resultImage) {
     try {
         log.info("Handling SAM Detector result for node", node.id);
@@ -240,7 +240,7 @@ async function handleSAMDetectorResult(node, resultImage) {
             return;
         }
         const canvas = canvasWidget; // canvasWidget is the Canvas object, not canvasWidget.canvas
-        // Wait for the result image to load (same as CanvasMask)
+        // Wait for the result image to load (same as MaskEditorIntegration)
         try {
             // First check if the image is already loaded
             if (resultImage.complete && resultImage.naturalWidth > 0) {
@@ -310,7 +310,7 @@ async function handleSAMDetectorResult(node, resultImage) {
             });
             const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
             const data = imageData.data;
-            // Convert to mask format (same as CanvasMask)
+            // Convert to mask format (same as MaskEditorIntegration)
             for (let i = 0; i < data.length; i += 4) {
                 const originalAlpha = data[i + 3];
                 data[i] = 255;
@@ -320,7 +320,7 @@ async function handleSAMDetectorResult(node, resultImage) {
             }
             tempCtx.putImageData(imageData, 0, 0);
         }
-        // Convert processed mask to image (same as CanvasMask)
+        // Convert processed mask to image (same as MaskEditorIntegration)
         log.debug("Converting processed mask to image");
         const maskAsImage = new Image();
         maskAsImage.src = tempCanvas.toDataURL();
@@ -344,10 +344,10 @@ async function handleSAMDetectorResult(node, resultImage) {
         log.debug("Applying SAM mask to canvas using addMask method");
         // Use the addMask method which overlays on existing mask without clearing it
         canvas.maskTool.addMask(maskAsImage);
-        // Update canvas and save state (same as CanvasMask)
+        // Update canvas and save state (same as MaskEditorIntegration)
         canvas.render();
         canvas.saveState();
-        // Create new preview image (same as CanvasMask)
+        // Create new preview image (same as MaskEditorIntegration)
         log.debug("Creating new preview image");
         const new_preview = new Image();
         const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();

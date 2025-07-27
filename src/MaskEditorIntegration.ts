@@ -7,9 +7,9 @@ import {api} from "../../scripts/api.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 
-const log = createModuleLogger('CanvasMask');
+const log = createModuleLogger('MaskEditorIntegration');
 
-export class CanvasMask {
+export class MaskEditorIntegration {
     canvas: any;
     editorWasShowing: any;
     maskEditorCancelled: any;
