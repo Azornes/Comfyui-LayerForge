@@ -302,6 +302,132 @@ export class MaskTool {
     }
 
     /**
+     * Gets extension offset for shape positioning
+     */
+    private getExtensionOffset(): { x: number, y: number } {
+        const ext = this.canvasInstance.outputAreaExtensionEnabled ? 
+            this.canvasInstance.outputAreaExtensions : 
+            { top: 0, bottom: 0, left: 0, right: 0 };
+        return { x: ext.left, y: ext.top };
+    }
+
+    /**
+     * Calculates chunk bounds for a given area
+     */
+    private calculateChunkBounds(left: number, top: number, right: number, bottom: number): {
+        minX: number, minY: number, maxX: number, maxY: number
+    } {
+        return {
+            minX: Math.floor(left / this.chunkSize),
+            minY: Math.floor(top / this.chunkSize),
+            maxX: Math.floor(right / this.chunkSize),
+            maxY: Math.floor(bottom / this.chunkSize)
+        };
+    }
+
+    /**
+     * Activates chunks in a specific area and surrounding chunks for visibility
+     */
+    private activateChunksInArea(left: number, top: number, right: number, bottom: number): number {
+        // First, deactivate all chunks
+        for (const chunk of this.maskChunks.values()) {
+            chunk.isActive = false;
+        }
+
+        const chunkBounds = this.calculateChunkBounds(left, top, right, bottom);
+        
+        // Activate chunks in the area
+        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                chunk.isActive = true;
+                chunk.lastAccessTime = Date.now();
+            }
+        }
+        
+        // Also activate surrounding chunks for better visibility (3x3 grid around area)
+        const centerChunkX = Math.floor((left + right) / 2 / this.chunkSize);
+        const centerChunkY = Math.floor((top + bottom) / 2 / this.chunkSize);
+        
+        for (let dy = -this.activeChunkRadius; dy <= this.activeChunkRadius; dy++) {
+            for (let dx = -this.activeChunkRadius; dx <= this.activeChunkRadius; dx++) {
+                const chunkX = centerChunkX + dx;
+                const chunkY = centerChunkY + dy;
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                chunk.isActive = true;
+                chunk.lastAccessTime = Date.now();
+            }
+        }
+
+        return Array.from(this.maskChunks.values()).filter(chunk => chunk.isActive).length;
+    }
+
+    /**
+     * Calculates intersection between a chunk and a rectangular area
+     * Returns null if no intersection exists
+     */
+    private calculateChunkIntersection(chunk: MaskChunk, areaLeft: number, areaTop: number, areaRight: number, areaBottom: number): {
+        intersectLeft: number, intersectTop: number, intersectRight: number, intersectBottom: number,
+        srcX: number, srcY: number, srcWidth: number, srcHeight: number,
+        destX: number, destY: number, destWidth: number, destHeight: number
+    } | null {
+        const chunkLeft = chunk.x;
+        const chunkTop = chunk.y;
+        const chunkRight = chunk.x + this.chunkSize;
+        const chunkBottom = chunk.y + this.chunkSize;
+        
+        // Find intersection
+        const intersectLeft = Math.max(chunkLeft, areaLeft);
+        const intersectTop = Math.max(chunkTop, areaTop);
+        const intersectRight = Math.min(chunkRight, areaRight);
+        const intersectBottom = Math.min(chunkBottom, areaBottom);
+        
+        // Check if there's actually an intersection
+        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+            return null; // No intersection
+        }
+        
+        // Calculate source coordinates (relative to area)
+        const srcX = intersectLeft - areaLeft;
+        const srcY = intersectTop - areaTop;
+        const srcWidth = intersectRight - intersectLeft;
+        const srcHeight = intersectBottom - intersectTop;
+        
+        // Calculate destination coordinates (relative to chunk)
+        const destX = intersectLeft - chunkLeft;
+        const destY = intersectTop - chunkTop;
+        const destWidth = srcWidth;
+        const destHeight = srcHeight;
+        
+        return {
+            intersectLeft, intersectTop, intersectRight, intersectBottom,
+            srcX, srcY, srcWidth, srcHeight,
+            destX, destY, destWidth, destHeight
+        };
+    }
+
+    /**
+     * Checks if a chunk is empty by examining its pixel data
+     * Updates the chunk's isEmpty flag
+     */
+    private updateChunkEmptyStatus(chunk: MaskChunk): void {
+        const imageData = chunk.ctx.getImageData(0, 0, this.chunkSize, this.chunkSize);
+        const data = imageData.data;
+        let hasData = false;
+        
+        // Check alpha channel for any non-zero values
+        for (let i = 3; i < data.length; i += 4) {
+            if (data[i] > 0) {
+                hasData = true;
+                break;
+            }
+        }
+        
+        chunk.isEmpty = !hasData;
+        chunk.isDirty = true;
+    }
+
+    /**
      * Updates which chunks are active for drawing operations based on current drawing position
      * Only activates chunks in a radius around the drawing position for performance
      */
@@ -764,10 +890,14 @@ export class MaskTool {
         const viewport = this.canvasInstance.viewport;
         const bounds = this.canvasInstance.outputAreaBounds;
 
-        // Convert shape points to world coordinates first (relative to output area bounds)
+        // Convert shape points to world coordinates first accounting for extensions
+        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+        const shapeOffsetX = ext.left;  // Add left extension to maintain relative position
+        const shapeOffsetY = ext.top;   // Add top extension to maintain relative position
+        
         const worldShapePoints = shape.points.map(p => ({
-            x: bounds.x + p.x,
-            y: bounds.y + p.y
+            x: bounds.x + shapeOffsetX + p.x,
+            y: bounds.y + shapeOffsetY + p.y
         }));
 
         // Then convert world coordinates to screen coordinates
@@ -1216,52 +1346,23 @@ export class MaskTool {
      * Clears mask data from a specific chunk in a given area
      */
     private clearMaskFromChunk(chunk: MaskChunk, clearX: number, clearY: number, clearWidth: number, clearHeight: number): void {
-        // Calculate the intersection of the clear area with this chunk
-        const chunkLeft = chunk.x;
-        const chunkTop = chunk.y;
-        const chunkRight = chunk.x + this.chunkSize;
-        const chunkBottom = chunk.y + this.chunkSize;
-        
         const clearLeft = clearX;
         const clearTop = clearY;
         const clearRight = clearX + clearWidth;
         const clearBottom = clearY + clearHeight;
         
-        // Find intersection
-        const intersectLeft = Math.max(chunkLeft, clearLeft);
-        const intersectTop = Math.max(chunkTop, clearTop);
-        const intersectRight = Math.min(chunkRight, clearRight);
-        const intersectBottom = Math.min(chunkBottom, clearBottom);
-        
-        // Check if there's actually an intersection
-        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+        const intersection = this.calculateChunkIntersection(chunk, clearLeft, clearTop, clearRight, clearBottom);
+        if (!intersection) {
             return; // No intersection
         }
         
-        // Calculate destination coordinates on the chunk
-        const destX = intersectLeft - chunkLeft;
-        const destY = intersectTop - chunkTop;
-        const destWidth = intersectRight - intersectLeft;
-        const destHeight = intersectBottom - intersectTop;
-        
         // Clear the area on this chunk
-        chunk.ctx.clearRect(destX, destY, destWidth, destHeight);
+        chunk.ctx.clearRect(intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight);
         
-        // Check if the entire chunk is now empty
-        const imageData = chunk.ctx.getImageData(0, 0, this.chunkSize, this.chunkSize);
-        const data = imageData.data;
-        let hasData = false;
-        for (let i = 3; i < data.length; i += 4) { // Check alpha channel
-            if (data[i] > 0) {
-                hasData = true;
-                break;
-            }
-        }
+        // Update chunk empty status
+        this.updateChunkEmptyStatus(chunk);
         
-        chunk.isEmpty = !hasData;
-        chunk.isDirty = true;
-        
-        log.debug(`Cleared area from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+        log.debug(`Cleared area from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
     }
 
     /**
@@ -1292,41 +1393,18 @@ export class MaskTool {
         const maskRight = bounds.x + image.width;
         const maskBottom = bounds.y + image.height;
         
-        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
-        const chunkMinY = Math.floor(maskTop / this.chunkSize);
-        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
-        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        const chunkBounds = this.calculateChunkBounds(maskLeft, maskTop, maskRight, maskBottom);
         
-        // First, deactivate all chunks
-        for (const chunk of this.maskChunks.values()) {
-            chunk.isActive = false;
-        }
-        
-        // Add mask to all affected chunks and activate them so user can see the mask being applied
-        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
-            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
+        // Add mask to all affected chunks
+        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
                 const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
                 this.addMaskToChunk(chunk, image, bounds);
-                
-                // Activate this chunk so user can see the mask being applied
-                chunk.isActive = true;
-                chunk.lastAccessTime = Date.now();
             }
         }
         
-        // Also activate surrounding chunks for better visibility (3x3 grid around mask area)
-        const centerChunkX = Math.floor((maskLeft + maskRight) / 2 / this.chunkSize);
-        const centerChunkY = Math.floor((maskTop + maskBottom) / 2 / this.chunkSize);
-        
-        for (let dy = -this.activeChunkRadius; dy <= this.activeChunkRadius; dy++) {
-            for (let dx = -this.activeChunkRadius; dx <= this.activeChunkRadius; dx++) {
-                const chunkX = centerChunkX + dx;
-                const chunkY = centerChunkY + dy;
-                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
-                chunk.isActive = true;
-                chunk.lastAccessTime = Date.now();
-            }
-        }
+        // Activate chunks in the area for visibility
+        const activatedChunks = this.activateChunksInArea(maskLeft, maskTop, maskRight, maskBottom);
         
         // Update active canvas to show the new mask with activated chunks
         this.updateActiveMaskCanvas(true); // Force full update to show all chunks including newly activated ones
@@ -1336,7 +1414,6 @@ export class MaskTool {
         }
         this.canvasInstance.render();
         
-        const activatedChunks = Array.from(this.maskChunks.values()).filter(chunk => chunk.isActive).length;
         log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom}) and activated ${activatedChunks} chunks for visibility`);
     }
 
@@ -1344,51 +1421,29 @@ export class MaskTool {
      * Adds a mask image to a specific chunk
      */
     private addMaskToChunk(chunk: MaskChunk, maskImage: HTMLImageElement, bounds: { x: number, y: number, width: number, height: number }): void {
-        // Calculate the intersection of the mask with this chunk
-        const chunkLeft = chunk.x;
-        const chunkTop = chunk.y;
-        const chunkRight = chunk.x + this.chunkSize;
-        const chunkBottom = chunk.y + this.chunkSize;
-        
         const maskLeft = bounds.x;
         const maskTop = bounds.y;
         const maskRight = bounds.x + maskImage.width;
         const maskBottom = bounds.y + maskImage.height;
         
-        // Find intersection
-        const intersectLeft = Math.max(chunkLeft, maskLeft);
-        const intersectTop = Math.max(chunkTop, maskTop);
-        const intersectRight = Math.min(chunkRight, maskRight);
-        const intersectBottom = Math.min(chunkBottom, maskBottom);
-        
-        // Check if there's actually an intersection
-        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
+        if (!intersection) {
             return; // No intersection
         }
-        
-        // Calculate source coordinates on the mask image
-        const srcX = intersectLeft - maskLeft;
-        const srcY = intersectTop - maskTop;
-        const srcWidth = intersectRight - intersectLeft;
-        const srcHeight = intersectBottom - intersectTop;
-        
-        // Calculate destination coordinates on the chunk
-        const destX = intersectLeft - chunkLeft;
-        const destY = intersectTop - chunkTop;
         
         // Draw the mask portion onto this chunk
         chunk.ctx.globalCompositeOperation = 'source-over';
         chunk.ctx.drawImage(
             maskImage,
-            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
-            destX, destY, srcWidth, srcHeight // Destination rectangle
+            intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight,  // Source rectangle
+            intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
         );
         
         // Mark chunk as dirty and not empty
         chunk.isDirty = true;
         chunk.isEmpty = false;
         
-        log.debug(`Added mask to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+        log.debug(`Added mask to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
     }
 
     /**
@@ -1450,115 +1505,60 @@ export class MaskTool {
      * Removes a mask canvas from a specific chunk using destination-out composition
      */
     private removeMaskCanvasFromChunk(chunk: MaskChunk, maskCanvas: HTMLCanvasElement, maskWorldX: number, maskWorldY: number): void {
-        // Calculate the intersection of the mask with this chunk
-        const chunkLeft = chunk.x;
-        const chunkTop = chunk.y;
-        const chunkRight = chunk.x + this.chunkSize;
-        const chunkBottom = chunk.y + this.chunkSize;
-        
         const maskLeft = maskWorldX;
         const maskTop = maskWorldY;
         const maskRight = maskWorldX + maskCanvas.width;
         const maskBottom = maskWorldY + maskCanvas.height;
         
-        // Find intersection
-        const intersectLeft = Math.max(chunkLeft, maskLeft);
-        const intersectTop = Math.max(chunkTop, maskTop);
-        const intersectRight = Math.min(chunkRight, maskRight);
-        const intersectBottom = Math.min(chunkBottom, maskBottom);
-        
-        // Check if there's actually an intersection
-        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
+        if (!intersection) {
             return; // No intersection
         }
-        
-        // Calculate source coordinates on the mask canvas
-        const srcX = intersectLeft - maskLeft;
-        const srcY = intersectTop - maskTop;
-        const srcWidth = intersectRight - intersectLeft;
-        const srcHeight = intersectBottom - intersectTop;
-        
-        // Calculate destination coordinates on the chunk
-        const destX = intersectLeft - chunkLeft;
-        const destY = intersectTop - chunkTop;
         
         // Use destination-out to remove the mask portion from this chunk
         chunk.ctx.globalCompositeOperation = 'destination-out';
         chunk.ctx.drawImage(
             maskCanvas,
-            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
-            destX, destY, srcWidth, srcHeight // Destination rectangle
+            intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight,  // Source rectangle
+            intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
         );
         
         // Restore normal composition mode
         chunk.ctx.globalCompositeOperation = 'source-over';
         
-        // Check if the chunk is now empty
-        const imageData = chunk.ctx.getImageData(0, 0, this.chunkSize, this.chunkSize);
-        const data = imageData.data;
-        let hasData = false;
-        for (let i = 3; i < data.length; i += 4) { // Check alpha channel
-            if (data[i] > 0) {
-                hasData = true;
-                break;
-            }
-        }
+        // Update chunk empty status
+        this.updateChunkEmptyStatus(chunk);
         
-        chunk.isEmpty = !hasData;
-        chunk.isDirty = true;
-        
-        log.debug(`Removed mask canvas from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+        log.debug(`Removed mask canvas from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
     }
 
     /**
      * Applies a mask canvas to a specific chunk
      */
     private applyMaskCanvasToChunk(chunk: MaskChunk, maskCanvas: HTMLCanvasElement, maskWorldX: number, maskWorldY: number): void {
-        // Calculate the intersection of the mask with this chunk
-        const chunkLeft = chunk.x;
-        const chunkTop = chunk.y;
-        const chunkRight = chunk.x + this.chunkSize;
-        const chunkBottom = chunk.y + this.chunkSize;
-        
         const maskLeft = maskWorldX;
         const maskTop = maskWorldY;
         const maskRight = maskWorldX + maskCanvas.width;
         const maskBottom = maskWorldY + maskCanvas.height;
         
-        // Find intersection
-        const intersectLeft = Math.max(chunkLeft, maskLeft);
-        const intersectTop = Math.max(chunkTop, maskTop);
-        const intersectRight = Math.min(chunkRight, maskRight);
-        const intersectBottom = Math.min(chunkBottom, maskBottom);
-        
-        // Check if there's actually an intersection
-        if (intersectLeft >= intersectRight || intersectTop >= intersectBottom) {
+        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
+        if (!intersection) {
             return; // No intersection
         }
-        
-        // Calculate source coordinates on the mask canvas
-        const srcX = intersectLeft - maskLeft;
-        const srcY = intersectTop - maskTop;
-        const srcWidth = intersectRight - intersectLeft;
-        const srcHeight = intersectBottom - intersectTop;
-        
-        // Calculate destination coordinates on the chunk
-        const destX = intersectLeft - chunkLeft;
-        const destY = intersectTop - chunkTop;
         
         // Draw the mask portion onto this chunk
         chunk.ctx.globalCompositeOperation = 'source-over';
         chunk.ctx.drawImage(
             maskCanvas,
-            srcX, srcY, srcWidth, srcHeight,  // Source rectangle
-            destX, destY, srcWidth, srcHeight // Destination rectangle
+            intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight,  // Source rectangle
+            intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
         );
         
         // Mark chunk as dirty and not empty
         chunk.isDirty = true;
         chunk.isEmpty = false;
         
-        log.debug(`Applied mask canvas to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${destX}, ${destY})`);
+        log.debug(`Applied mask canvas to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
     }
 
     applyShapeMask(saveState: boolean = true): void {
@@ -1573,11 +1573,15 @@ export class MaskTool {
         const shape = this.canvasInstance.outputAreaShape;
         const bounds = this.canvasInstance.outputAreaBounds;
 
-        // Calculate shape points in world coordinates
-        // Shape points are relative to the output area bounds
+        // Calculate shape points in world coordinates accounting for extensions
+        // Shape points are relative to the output area bounds, but need extension offset
+        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+        const shapeOffsetX = ext.left;  // Add left extension to maintain relative position
+        const shapeOffsetY = ext.top;   // Add top extension to maintain relative position
+        
         const worldShapePoints = shape.points.map(p => ({ 
-            x: bounds.x + p.x, 
-            y: bounds.y + p.y 
+            x: bounds.x + shapeOffsetX + p.x, 
+            y: bounds.y + shapeOffsetY + p.y 
         }));
 
         // Create the shape mask canvas
@@ -1629,17 +1633,29 @@ export class MaskTool {
             shapeMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, tempCanvasWidth, tempCanvasHeight);
         }
 
-        // Now apply the shape mask to the chunked system
-        this.applyMaskCanvasToChunks(shapeMaskCanvas, bounds.x - tempOffsetX, bounds.y - tempOffsetY);
+        // Calculate which chunks will be affected by the shape mask
+        const maskWorldX = bounds.x - tempOffsetX;
+        const maskWorldY = bounds.y - tempOffsetY;
+        const maskLeft = maskWorldX;
+        const maskTop = maskWorldY;
+        const maskRight = maskWorldX + shapeMaskCanvas.width;
+        const maskBottom = maskWorldY + shapeMaskCanvas.height;
 
-        // Update the active mask canvas to show the changes
-        this.updateActiveMaskCanvas();
+        // Apply the shape mask to the chunked system
+        this.applyMaskCanvasToChunks(shapeMaskCanvas, maskWorldX, maskWorldY);
+
+        // Activate chunks in the area for visibility
+        const activatedChunks = this.activateChunksInArea(maskLeft, maskTop, maskRight, maskBottom);
+
+        // Update the active mask canvas to show the changes with activated chunks
+        this.updateActiveMaskCanvas(true); // Force full update to show all chunks including newly activated ones
 
         if (this.onStateChange) {
             this.onStateChange();
         }
         this.canvasInstance.render();
-        log.info(`Applied shape mask to chunks with expansion: ${needsExpansion}, feather: ${needsFeather}.`);
+        
+        log.info(`Applied shape mask to chunks with expansion: ${needsExpansion}, feather: ${needsFeather} and activated ${activatedChunks} chunks for visibility`);
     }
 
     /**
@@ -1658,10 +1674,14 @@ export class MaskTool {
         const shape = this.canvasInstance.outputAreaShape;
         const bounds = this.canvasInstance.outputAreaBounds;
 
-        // Calculate shape points in world coordinates (same as applyShapeMask)
+        // Calculate shape points in world coordinates accounting for extensions (same as applyShapeMask)
+        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+        const shapeOffsetX = ext.left;  // Add left extension to maintain relative position
+        const shapeOffsetY = ext.top;   // Add top extension to maintain relative position
+        
         const worldShapePoints = shape.points.map(p => ({ 
-            x: bounds.x + p.x, 
-            y: bounds.y + p.y 
+            x: bounds.x + shapeOffsetX + p.x, 
+            y: bounds.y + shapeOffsetY + p.y 
         }));
 
         // Check if we need to account for expansion when removing
