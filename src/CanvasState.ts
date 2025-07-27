@@ -1,5 +1,6 @@
 import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {showAlertNotification} from "./utils/NotificationUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas} from "./utils/CommonUtils.js";
 import {withErrorHandling} from "./ErrorHandler.js";
 import type { Canvas } from './Canvas';
@@ -270,6 +271,23 @@ export class CanvasState {
         if (!this.canvas.node.id) {
             log.error("Node ID is not available for saving state to DB.");
             return;
+        }
+
+        // Auto-correct node_id widget if needed before saving state
+        if (this.canvas.node && this.canvas.node.widgets) {
+            const nodeIdWidget = this.canvas.node.widgets.find((w: any) => w.name === "node_id");
+            if (nodeIdWidget) {
+                const correctId = String(this.canvas.node.id);
+                if (nodeIdWidget.value !== correctId) {
+                    const prevValue = nodeIdWidget.value;
+                    nodeIdWidget.value = correctId;
+                    log.warn(`[CanvasState] node_id widget value (${prevValue}) did not match node.id (${correctId}) - auto-corrected (saveStateToDB).`);
+                    showAlertNotification(
+                        `The value of node_id (${prevValue}) did not match the node number (${correctId}) and was automatically corrected. 
+If you see dark images or masks in the output, make sure node_id is set to ${correctId}.`
+                    );
+                }
+            }
         }
 
         log.info("Preparing state to be sent to worker...");

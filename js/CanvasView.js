@@ -774,6 +774,11 @@ async function createCanvasWidget(node, widget, app) {
         // Remove ESC key listener when editor closes
         document.removeEventListener('keydown', handleEscKey);
         setTimeout(() => {
+            // Use the actual canvas container for centering calculation
+            const currentCanvasContainer = originalParent.querySelector('.painterCanvasContainer.painter-container');
+            const fullscreenCanvasContainer = backdrop.querySelector('.painterCanvasContainer.painter-container');
+            const currentRect = currentCanvasContainer.getBoundingClientRect();
+            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
             adjustViewportForCentering(currentRect, fullscreenRect, -1);
             canvas.render();
             if (node.onResize) {
@@ -811,8 +816,11 @@ async function createCanvasWidget(node, widget, app) {
         // Add ESC key listener when editor opens
         document.addEventListener('keydown', handleEscKey);
         setTimeout(() => {
-            const originalRect = originalParent.getBoundingClientRect();
-            const fullscreenRect = modalContent.getBoundingClientRect();
+            // Use the actual canvas container for centering calculation
+            const originalCanvasContainer = originalParent.querySelector('.painterCanvasContainer.painter-container');
+            const fullscreenCanvasContainer = modalContent.querySelector('.painterCanvasContainer.painter-container');
+            const originalRect = originalCanvasContainer.getBoundingClientRect();
+            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
             adjustViewportForCentering(originalRect, fullscreenRect, 1);
             canvas.render();
             if (node.onResize) {
