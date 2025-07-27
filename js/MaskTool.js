@@ -140,74 +140,75 @@ export class MaskTool {
         }
     }
     /**
+     * Universal chunk data processing method - eliminates duplication between chunk bounds and counting operations
+     * Processes chunks based on filter criteria and accumulates results using provided processor function
+     */
+    _processChunks(processor, initialValue, filter = () => true) {
+        let result = initialValue;
+        for (const [chunkKey, chunk] of this.maskChunks) {
+            if (filter(chunk)) {
+                result = processor(chunk, chunkKey, result);
+            }
+        }
+        return result;
+    }
+    /**
      * Finds the bounds of all chunks that contain mask data
      * Returns null if no chunks have data
      */
     getAllChunkBounds() {
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        let hasData = false;
-        for (const [chunkKey, chunk] of this.maskChunks) {
-            if (!chunk.isEmpty) {
-                const [chunkXStr, chunkYStr] = chunkKey.split(',');
-                const chunkX = parseInt(chunkXStr);
-                const chunkY = parseInt(chunkYStr);
-                minX = Math.min(minX, chunkX);
-                minY = Math.min(minY, chunkY);
-                maxX = Math.max(maxX, chunkX);
-                maxY = Math.max(maxY, chunkY);
-                hasData = true;
-            }
-        }
-        return hasData ? { minX, minY, maxX, maxY } : null;
+        const filter = (chunk) => !chunk.isEmpty;
+        const processor = (chunk, chunkKey, bounds) => {
+            const [chunkXStr, chunkYStr] = chunkKey.split(',');
+            const chunkX = parseInt(chunkXStr);
+            const chunkY = parseInt(chunkYStr);
+            return {
+                minX: Math.min(bounds.minX, chunkX),
+                minY: Math.min(bounds.minY, chunkY),
+                maxX: Math.max(bounds.maxX, chunkX),
+                maxY: Math.max(bounds.maxY, chunkY),
+                hasData: true
+            };
+        };
+        const result = this._processChunks(processor, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, hasData: false }, filter);
+        return result.hasData ? { minX: result.minX, minY: result.minY, maxX: result.maxX, maxY: result.maxY } : null;
     }
     /**
      * Finds the bounds of only active chunks that contain mask data
      * Returns null if no active chunks have data
      */
     getActiveChunkBounds() {
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        let hasData = false;
-        for (const [chunkKey, chunk] of this.maskChunks) {
-            if (!chunk.isEmpty && chunk.isActive) {
-                const [chunkXStr, chunkYStr] = chunkKey.split(',');
-                const chunkX = parseInt(chunkXStr);
-                const chunkY = parseInt(chunkYStr);
-                minX = Math.min(minX, chunkX);
-                minY = Math.min(minY, chunkY);
-                maxX = Math.max(maxX, chunkX);
-                maxY = Math.max(maxY, chunkY);
-                hasData = true;
-            }
-        }
-        return hasData ? { minX, minY, maxX, maxY } : null;
+        const filter = (chunk) => !chunk.isEmpty && chunk.isActive;
+        const processor = (chunk, chunkKey, bounds) => {
+            const [chunkXStr, chunkYStr] = chunkKey.split(',');
+            const chunkX = parseInt(chunkXStr);
+            const chunkY = parseInt(chunkYStr);
+            return {
+                minX: Math.min(bounds.minX, chunkX),
+                minY: Math.min(bounds.minY, chunkY),
+                maxX: Math.max(bounds.maxX, chunkX),
+                maxY: Math.max(bounds.maxY, chunkY),
+                hasData: true
+            };
+        };
+        const result = this._processChunks(processor, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, hasData: false }, filter);
+        return result.hasData ? { minX: result.minX, minY: result.minY, maxX: result.maxX, maxY: result.maxY } : null;
     }
     /**
      * Counts all non-empty chunks
      */
     getAllNonEmptyChunkCount() {
-        let count = 0;
-        for (const chunk of this.maskChunks.values()) {
-            if (!chunk.isEmpty)
-                count++;
-        }
-        return count;
+        const filter = (chunk) => !chunk.isEmpty;
+        const processor = (chunk, chunkKey, count) => count + 1;
+        return this._processChunks(processor, 0, filter);
     }
     /**
      * Counts active non-empty chunks
      */
     getActiveChunkCount() {
-        let count = 0;
-        for (const chunk of this.maskChunks.values()) {
-            if (!chunk.isEmpty && chunk.isActive)
-                count++;
-        }
-        return count;
+        const filter = (chunk) => !chunk.isEmpty && chunk.isActive;
+        const processor = (chunk, chunkKey, count) => count + 1;
+        return this._processChunks(processor, 0, filter);
     }
     /**
      * Gets extension offset for shape positioning
@@ -313,6 +314,268 @@ export class MaskTool {
         chunk.isDirty = true;
     }
     /**
+     * Marks chunk as dirty and not empty after drawing operations
+     */
+    markChunkAsModified(chunk) {
+        chunk.isDirty = true;
+        chunk.isEmpty = false;
+    }
+    /**
+     * Logs chunk operation with standardized format
+     */
+    logChunkOperation(operation, chunk, intersection) {
+        const chunkCoordX = Math.floor(chunk.x / this.chunkSize);
+        const chunkCoordY = Math.floor(chunk.y / this.chunkSize);
+        log.debug(`${operation} chunk (${chunkCoordX}, ${chunkCoordY}) at local position (${intersection.destX}, ${intersection.destY})`);
+    }
+    /**
+     * Universal chunk operation method - eliminates duplication between chunk operations
+     * Handles intersection calculation, drawing, and post-processing for all chunk operations
+     */
+    performChunkOperation(chunk, source, sourceArea, operation, operationName) {
+        const intersection = this.calculateChunkIntersection(chunk, sourceArea.left, sourceArea.top, sourceArea.right, sourceArea.bottom);
+        if (!intersection) {
+            return; // No intersection
+        }
+        // Set composition mode based on operation
+        if (operation === 'remove') {
+            chunk.ctx.globalCompositeOperation = 'destination-out';
+        }
+        else {
+            chunk.ctx.globalCompositeOperation = 'source-over';
+        }
+        // Draw the source portion onto this chunk
+        chunk.ctx.drawImage(source, intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight, // Source rectangle
+        intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
+        );
+        // Restore normal composition mode if it was changed
+        if (operation === 'remove') {
+            chunk.ctx.globalCompositeOperation = 'source-over';
+        }
+        // Update chunk status based on operation
+        if (operation === 'remove') {
+            this.updateChunkEmptyStatus(chunk);
+        }
+        else {
+            this.markChunkAsModified(chunk);
+        }
+        // Log the operation
+        this.logChunkOperation(operationName, chunk, intersection);
+    }
+    /**
+     * Triggers state change callback and renders canvas
+     */
+    triggerStateChangeAndRender() {
+        if (this.onStateChange) {
+            this.onStateChange();
+        }
+        this.canvasInstance.render();
+    }
+    /**
+     * Saves mask state if tool is active
+     */
+    saveMaskStateIfActive() {
+        if (this.isActive) {
+            this.canvasInstance.canvasState.saveMaskState();
+        }
+    }
+    /**
+     * Saves mask state, triggers state change and renders
+     */
+    completeMaskOperation(saveState = true) {
+        if (saveState) {
+            this.canvasInstance.canvasState.saveMaskState();
+        }
+        this.triggerStateChangeAndRender();
+    }
+    /**
+     * Creates a canvas with specified dimensions and returns both canvas and context
+     */
+    createCanvas(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error("Failed to get 2D context for canvas");
+        }
+        return { canvas, ctx };
+    }
+    /**
+     * Draws shape points on a canvas context
+     */
+    drawShapeOnCanvas(ctx, points, fillRule = 'evenodd') {
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath();
+        ctx.fill(fillRule);
+    }
+    /**
+     * Creates binary mask data from shape points
+     */
+    createBinaryMaskFromShape(points, width, height) {
+        const { canvas, ctx } = this.createCanvas(width, height);
+        this.drawShapeOnCanvas(ctx, points);
+        const maskImage = ctx.getImageData(0, 0, width, height);
+        const binaryData = new Uint8Array(width * height);
+        for (let i = 0; i < binaryData.length; i++) {
+            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0;
+        }
+        return binaryData;
+    }
+    /**
+     * Creates output canvas with image data
+     */
+    createOutputCanvasFromImageData(imageData, width, height) {
+        const { canvas, ctx } = this.createCanvas(width, height);
+        ctx.putImageData(imageData, 0, 0);
+        return canvas;
+    }
+    /**
+     * Creates output canvas from processed pixel data
+     */
+    createOutputCanvasFromPixelData(pixelProcessor, width, height) {
+        const { canvas, ctx } = this.createCanvas(width, height);
+        const outputData = ctx.createImageData(width, height);
+        pixelProcessor(outputData);
+        ctx.putImageData(outputData, 0, 0);
+        return canvas;
+    }
+    /**
+     * Draws contour points on a canvas context with stroke
+     */
+    drawContourOnCanvas(ctx, points) {
+        if (points.length < 2)
+            return;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+    }
+    /**
+     * Draws multiple contours on a canvas context for preview
+     */
+    drawContoursForPreview(ctx, contours, strokeStyle, lineWidth, lineDash, globalAlpha) {
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.setLineDash(lineDash);
+        ctx.globalAlpha = globalAlpha;
+        for (const contour of contours) {
+            this.drawContourOnCanvas(ctx, contour);
+        }
+    }
+    /**
+     * Applies feather effect to distance map and creates ImageData
+     */
+    applyFeatherToDistanceMap(distanceMap, binaryData, featherRadius, width, height) {
+        // Find the maximum distance to normalize
+        let maxDistance = 0;
+        for (let i = 0; i < distanceMap.length; i++) {
+            if (distanceMap[i] > maxDistance) {
+                maxDistance = distanceMap[i];
+            }
+        }
+        // Create ImageData with feather effect
+        const { canvas: tempCanvas, ctx: tempCtx } = this.createCanvas(width, height);
+        const outputData = tempCtx.createImageData(width, height);
+        // Use featherRadius as the threshold for the gradient
+        const threshold = Math.min(featherRadius, maxDistance);
+        for (let i = 0; i < distanceMap.length; i++) {
+            const distance = distanceMap[i];
+            const isInside = binaryData[i] === 1;
+            if (!isInside) {
+                // Transparent pixels remain transparent
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 0;
+            }
+            else if (distance <= threshold) {
+                // Edge area - apply gradient alpha (from edge inward)
+                const gradientValue = distance / threshold;
+                const alphaValue = Math.floor(gradientValue * 255);
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = alphaValue;
+            }
+            else {
+                // Inner area - full alpha (no blending effect)
+                outputData.data[i * 4] = 255;
+                outputData.data[i * 4 + 1] = 255;
+                outputData.data[i * 4 + 2] = 255;
+                outputData.data[i * 4 + 3] = 255;
+            }
+        }
+        return outputData;
+    }
+    /**
+     * Creates feathered mask canvas from binary data - unified logic for feathering
+     * This eliminates duplication between _createFeatheredMaskCanvas and _createFeatheredMaskFromImageData
+     */
+    createFeatheredMaskFromBinaryData(binaryData, featherRadius, width, height) {
+        // Calculate the fast distance transform
+        const distanceMap = this._fastDistanceTransform(binaryData, width, height);
+        // Find the maximum distance to normalize
+        let maxDistance = 0;
+        for (let i = 0; i < distanceMap.length; i++) {
+            if (distanceMap[i] > maxDistance) {
+                maxDistance = distanceMap[i];
+            }
+        }
+        // Create the final output canvas with feather effect
+        const featherImageData = this.applyFeatherToDistanceMap(distanceMap, binaryData, featherRadius, width, height);
+        return this.createOutputCanvasFromImageData(featherImageData, width, height);
+    }
+    /**
+     * Prepares shape mask configuration data - eliminates duplication between applyShapeMask and removeShapeMask
+     * Returns all necessary data for shape mask operations including world coordinates and temporary canvas setup
+     */
+    prepareShapeMaskConfiguration() {
+        // Validate shape
+        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+            return null;
+        }
+        const shape = this.canvasInstance.outputAreaShape;
+        const bounds = this.canvasInstance.outputAreaBounds;
+        // Calculate shape points in world coordinates accounting for extensions
+        const extensionOffset = this.getExtensionOffset();
+        const worldShapePoints = shape.points.map(p => ({
+            x: bounds.x + extensionOffset.x + p.x,
+            y: bounds.y + extensionOffset.y + p.y
+        }));
+        // Create a temporary canvas large enough to contain the shape and any expansion
+        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
+        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
+        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
+        const tempOffsetX = maxExpansion;
+        const tempOffsetY = maxExpansion;
+        // Adjust shape points for the temporary canvas
+        const tempShapePoints = worldShapePoints.map(p => ({
+            x: p.x - bounds.x + tempOffsetX,
+            y: p.y - bounds.y + tempOffsetY
+        }));
+        return {
+            shape,
+            bounds,
+            extensionOffset,
+            worldShapePoints,
+            maxExpansion,
+            tempCanvasWidth,
+            tempCanvasHeight,
+            tempOffsetX,
+            tempOffsetY,
+            tempShapePoints
+        };
+    }
+    /**
      * Updates which chunks are active for drawing operations based on current drawing position
      * Only activates chunks in a radius around the drawing position for performance
      */
@@ -364,13 +627,7 @@ export class MaskTool {
      * Creates a new chunk at the given chunk coordinates
      */
     createChunk(chunkX, chunkY) {
-        const canvas = document.createElement('canvas');
-        canvas.width = this.chunkSize;
-        canvas.height = this.chunkSize;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) {
-            throw new Error("Failed to get 2D context for chunk canvas");
-        }
+        const { canvas, ctx } = this.createCanvas(this.chunkSize, this.chunkSize);
         const chunk = {
             canvas,
             ctx,
@@ -448,10 +705,7 @@ export class MaskTool {
             this.currentDrawingChunk = null;
             // After drawing is complete, update active canvas to show all chunks
             this.updateActiveMaskCanvas(true); // forceShowAll = true
-            this.canvasInstance.canvasState.saveMaskState();
-            if (this.onStateChange) {
-                this.onStateChange();
-            }
+            this.completeMaskOperation();
             this.drawBrushPreview(viewCoords);
         }
     }
@@ -524,8 +778,7 @@ export class MaskTool {
         chunk.ctx.globalCompositeOperation = 'source-over';
         chunk.ctx.stroke();
         // Mark chunk as dirty and not empty
-        chunk.isDirty = true;
-        chunk.isEmpty = false;
+        this.markChunkAsModified(chunk);
         log.debug(`Drew on chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)})`);
     }
     /**
@@ -703,12 +956,10 @@ export class MaskTool {
         const viewport = this.canvasInstance.viewport;
         const bounds = this.canvasInstance.outputAreaBounds;
         // Convert shape points to world coordinates first accounting for extensions
-        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
-        const shapeOffsetX = ext.left; // Add left extension to maintain relative position
-        const shapeOffsetY = ext.top; // Add top extension to maintain relative position
+        const extensionOffset = this.getExtensionOffset();
         const worldShapePoints = shape.points.map(p => ({
-            x: bounds.x + shapeOffsetX + p.x,
-            y: bounds.y + shapeOffsetY + p.y
+            x: bounds.x + extensionOffset.x + p.x,
+            y: bounds.y + extensionOffset.y + p.y
         }));
         // Then convert world coordinates to screen coordinates
         const screenPoints = worldShapePoints.map(p => ({
@@ -718,39 +969,11 @@ export class MaskTool {
         // This function now returns Point[][] to handle islands.
         const allContours = this._calculatePreviewPointsScreen([screenPoints], expansionValue, viewport.zoom);
         // Draw main expansion/contraction preview
-        this.shapePreviewCtx.strokeStyle = '#4A9EFF';
-        this.shapePreviewCtx.lineWidth = 2;
-        this.shapePreviewCtx.setLineDash([4, 4]);
-        this.shapePreviewCtx.globalAlpha = 0.8;
-        for (const contour of allContours) {
-            if (contour.length < 2)
-                continue;
-            this.shapePreviewCtx.beginPath();
-            this.shapePreviewCtx.moveTo(contour[0].x, contour[0].y);
-            for (let i = 1; i < contour.length; i++) {
-                this.shapePreviewCtx.lineTo(contour[i].x, contour[i].y);
-            }
-            this.shapePreviewCtx.closePath();
-            this.shapePreviewCtx.stroke();
-        }
+        this.drawContoursForPreview(this.shapePreviewCtx, allContours, '#4A9EFF', 2, [4, 4], 0.8);
         // Draw feather preview
         if (featherValue > 0) {
             const allFeatherContours = this._calculatePreviewPointsScreen(allContours, -featherValue, viewport.zoom);
-            this.shapePreviewCtx.strokeStyle = '#4A9EFF';
-            this.shapePreviewCtx.lineWidth = 1;
-            this.shapePreviewCtx.setLineDash([3, 5]);
-            this.shapePreviewCtx.globalAlpha = 0.6;
-            for (const contour of allFeatherContours) {
-                if (contour.length < 2)
-                    continue;
-                this.shapePreviewCtx.beginPath();
-                this.shapePreviewCtx.moveTo(contour[0].x, contour[0].y);
-                for (let i = 1; i < contour.length; i++) {
-                    this.shapePreviewCtx.lineTo(contour[i].x, contour[i].y);
-                }
-                this.shapePreviewCtx.closePath();
-                this.shapePreviewCtx.stroke();
-            }
+            this.drawContoursForPreview(this.shapePreviewCtx, allFeatherContours, '#4A9EFF', 1, [3, 5], 0.6);
         }
         log.debug(`Shape preview shown with expansion: ${expansionValue}px, feather: ${featherValue}px at bounds (${bounds.x}, ${bounds.y})`);
     }
@@ -797,20 +1020,29 @@ export class MaskTool {
         this.shapePreviewCanvas.style.height = `${previewHeight * viewport.zoom}px`;
     }
     /**
-     * Ultra-fast dilation using Distance Transform + thresholding (Manhattan distance for speed)
+     * Universal morphological operation using Distance Transform + thresholding
+     * Combines dilation and erosion into one optimized function
      */
-    _fastDilateDT(mask, width, height, radius) {
+    _fastMorphologyDT(mask, width, height, radius, isDilation) {
         const INF = 1e9;
         const dist = new Float32Array(width * height);
-        // 1. Initialize: 0 for foreground, INF for background
+        // 1. Initialize based on operation type
         for (let i = 0; i < width * height; ++i) {
-            dist[i] = mask[i] ? 0 : INF;
+            if (isDilation) {
+                // Dilation: 0 for foreground, INF for background
+                dist[i] = mask[i] ? 0 : INF;
+            }
+            else {
+                // Erosion: 0 for background, INF for foreground
+                dist[i] = mask[i] ? INF : 0;
+            }
         }
         // 2. Forward pass: top-left -> bottom-right
         for (let y = 0; y < height; ++y) {
             for (let x = 0; x < width; ++x) {
                 const i = y * width + x;
-                if (mask[i])
+                // Skip condition based on operation type
+                if (isDilation ? mask[i] : !mask[i])
                     continue;
                 if (x > 0)
                     dist[i] = Math.min(dist[i], dist[y * width + (x - 1)] + 1);
@@ -822,7 +1054,8 @@ export class MaskTool {
         for (let y = height - 1; y >= 0; --y) {
             for (let x = width - 1; x >= 0; --x) {
                 const i = y * width + x;
-                if (mask[i])
+                // Skip condition based on operation type
+                if (isDilation ? mask[i] : !mask[i])
                     continue;
                 if (x < width - 1)
                     dist[i] = Math.min(dist[i], dist[y * width + (x + 1)] + 1);
@@ -830,53 +1063,31 @@ export class MaskTool {
                     dist[i] = Math.min(dist[i], dist[(y + 1) * width + x] + 1);
             }
         }
-        // 4. Thresholding: if distance <= radius, it's part of the expanded mask
-        const expanded = new Uint8Array(width * height);
+        // 4. Thresholding based on operation type
+        const result = new Uint8Array(width * height);
         for (let i = 0; i < width * height; ++i) {
-            expanded[i] = dist[i] <= radius ? 1 : 0;
+            if (isDilation) {
+                // Dilation: if distance <= radius, it's part of the expanded mask
+                result[i] = dist[i] <= radius ? 1 : 0;
+            }
+            else {
+                // Erosion: if distance > radius, it's part of the eroded mask
+                result[i] = dist[i] > radius ? 1 : 0;
+            }
         }
-        return expanded;
+        return result;
     }
     /**
-     * Ultra-fast erosion using Distance Transform + thresholding
+     * Fast dilation using unified morphology function
+     */
+    _fastDilateDT(mask, width, height, radius) {
+        return this._fastMorphologyDT(mask, width, height, radius, true);
+    }
+    /**
+     * Fast erosion using unified morphology function
      */
     _fastErodeDT(mask, width, height, radius) {
-        const INF = 1e9;
-        const dist = new Float32Array(width * height);
-        // 1. Initialize: 0 for background, INF for foreground (inverse of dilation)
-        for (let i = 0; i < width * height; ++i) {
-            dist[i] = mask[i] ? INF : 0;
-        }
-        // 2. Forward pass: top-left -> bottom-right
-        for (let y = 0; y < height; ++y) {
-            for (let x = 0; x < width; ++x) {
-                const i = y * width + x;
-                if (!mask[i])
-                    continue;
-                if (x > 0)
-                    dist[i] = Math.min(dist[i], dist[y * width + (x - 1)] + 1);
-                if (y > 0)
-                    dist[i] = Math.min(dist[i], dist[(y - 1) * width + x] + 1);
-            }
-        }
-        // 3. Backward pass: bottom-right -> top-left
-        for (let y = height - 1; y >= 0; --y) {
-            for (let x = width - 1; x >= 0; --x) {
-                const i = y * width + x;
-                if (!mask[i])
-                    continue;
-                if (x < width - 1)
-                    dist[i] = Math.min(dist[i], dist[y * width + (x + 1)] + 1);
-                if (y < height - 1)
-                    dist[i] = Math.min(dist[i], dist[(y + 1) * width + x] + 1);
-            }
-        }
-        // 4. Thresholding: if distance > radius, it's part of the eroded mask
-        const eroded = new Uint8Array(width * height);
-        for (let i = 0; i < width * height; ++i) {
-            eroded[i] = dist[i] > radius ? 1 : 0;
-        }
-        return eroded;
+        return this._fastMorphologyDT(mask, width, height, radius, false);
     }
     /**
      * Calculate preview points using screen coordinates for pinned canvas.
@@ -887,10 +1098,7 @@ export class MaskTool {
             return contours;
         const width = this.canvasInstance.canvas.width;
         const height = this.canvasInstance.canvas.height;
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: tempCanvas, ctx: tempCtx } = this.createCanvas(width, height);
         // Draw all contours to create the initial mask
         tempCtx.fillStyle = 'white';
         for (const points of contours) {
@@ -1147,33 +1355,20 @@ export class MaskTool {
         const activatedChunks = this.activateChunksInArea(maskLeft, maskTop, maskRight, maskBottom);
         // Update active canvas to show the new mask with activated chunks
         this.updateActiveMaskCanvas(true); // Force full update to show all chunks including newly activated ones
-        if (this.onStateChange) {
-            this.onStateChange();
-        }
-        this.canvasInstance.render();
+        this.triggerStateChangeAndRender();
         log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom}) and activated ${activatedChunks} chunks for visibility`);
     }
     /**
      * Adds a mask image to a specific chunk
      */
     addMaskToChunk(chunk, maskImage, bounds) {
-        const maskLeft = bounds.x;
-        const maskTop = bounds.y;
-        const maskRight = bounds.x + maskImage.width;
-        const maskBottom = bounds.y + maskImage.height;
-        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
-        if (!intersection) {
-            return; // No intersection
-        }
-        // Draw the mask portion onto this chunk
-        chunk.ctx.globalCompositeOperation = 'source-over';
-        chunk.ctx.drawImage(maskImage, intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight, // Source rectangle
-        intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
-        );
-        // Mark chunk as dirty and not empty
-        chunk.isDirty = true;
-        chunk.isEmpty = false;
-        log.debug(`Added mask to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
+        const sourceArea = {
+            left: bounds.x,
+            top: bounds.y,
+            right: bounds.x + maskImage.width,
+            bottom: bounds.y + maskImage.height
+        };
+        this.performChunkOperation(chunk, maskImage, sourceArea, 'add', "Added mask to");
     }
     /**
      * Applies a mask canvas to the chunked system at a specific world position
@@ -1225,115 +1420,65 @@ export class MaskTool {
      * Removes a mask canvas from a specific chunk using destination-out composition
      */
     removeMaskCanvasFromChunk(chunk, maskCanvas, maskWorldX, maskWorldY) {
-        const maskLeft = maskWorldX;
-        const maskTop = maskWorldY;
-        const maskRight = maskWorldX + maskCanvas.width;
-        const maskBottom = maskWorldY + maskCanvas.height;
-        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
-        if (!intersection) {
-            return; // No intersection
-        }
-        // Use destination-out to remove the mask portion from this chunk
-        chunk.ctx.globalCompositeOperation = 'destination-out';
-        chunk.ctx.drawImage(maskCanvas, intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight, // Source rectangle
-        intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
-        );
-        // Restore normal composition mode
-        chunk.ctx.globalCompositeOperation = 'source-over';
-        // Update chunk empty status
-        this.updateChunkEmptyStatus(chunk);
-        log.debug(`Removed mask canvas from chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
+        const sourceArea = {
+            left: maskWorldX,
+            top: maskWorldY,
+            right: maskWorldX + maskCanvas.width,
+            bottom: maskWorldY + maskCanvas.height
+        };
+        this.performChunkOperation(chunk, maskCanvas, sourceArea, 'remove', "Removed mask canvas from");
     }
     /**
      * Applies a mask canvas to a specific chunk
      */
     applyMaskCanvasToChunk(chunk, maskCanvas, maskWorldX, maskWorldY) {
-        const maskLeft = maskWorldX;
-        const maskTop = maskWorldY;
-        const maskRight = maskWorldX + maskCanvas.width;
-        const maskBottom = maskWorldY + maskCanvas.height;
-        const intersection = this.calculateChunkIntersection(chunk, maskLeft, maskTop, maskRight, maskBottom);
-        if (!intersection) {
-            return; // No intersection
-        }
-        // Draw the mask portion onto this chunk
-        chunk.ctx.globalCompositeOperation = 'source-over';
-        chunk.ctx.drawImage(maskCanvas, intersection.srcX, intersection.srcY, intersection.srcWidth, intersection.srcHeight, // Source rectangle
-        intersection.destX, intersection.destY, intersection.destWidth, intersection.destHeight // Destination rectangle
-        );
-        // Mark chunk as dirty and not empty
-        chunk.isDirty = true;
-        chunk.isEmpty = false;
-        log.debug(`Applied mask canvas to chunk (${Math.floor(chunk.x / this.chunkSize)}, ${Math.floor(chunk.y / this.chunkSize)}) at local position (${intersection.destX}, ${intersection.destY})`);
+        const sourceArea = {
+            left: maskWorldX,
+            top: maskWorldY,
+            right: maskWorldX + maskCanvas.width,
+            bottom: maskWorldY + maskCanvas.height
+        };
+        this.performChunkOperation(chunk, maskCanvas, sourceArea, 'apply', "Applied mask canvas to");
     }
     applyShapeMask(saveState = true) {
-        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+        // Use unified configuration preparation
+        const config = this.prepareShapeMaskConfiguration();
+        if (!config) {
             log.warn("Cannot apply shape mask: shape is not defined or has too few points.");
             return;
         }
         if (saveState) {
             this.canvasInstance.canvasState.saveMaskState();
         }
-        const shape = this.canvasInstance.outputAreaShape;
-        const bounds = this.canvasInstance.outputAreaBounds;
-        // Calculate shape points in world coordinates accounting for extensions
-        // Shape points are relative to the output area bounds, but need extension offset
-        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
-        const shapeOffsetX = ext.left; // Add left extension to maintain relative position
-        const shapeOffsetY = ext.top; // Add top extension to maintain relative position
-        const worldShapePoints = shape.points.map(p => ({
-            x: bounds.x + shapeOffsetX + p.x,
-            y: bounds.y + shapeOffsetY + p.y
-        }));
         // Create the shape mask canvas
         let shapeMaskCanvas;
         // Check if we need expansion or feathering
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
         const needsFeather = this.canvasInstance.shapeMaskFeather && this.canvasInstance.shapeMaskFeatherValue > 0;
-        // Create a temporary canvas large enough to contain the shape and any expansion
-        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
-        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
-        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
-        const tempOffsetX = maxExpansion;
-        const tempOffsetY = maxExpansion;
-        // Adjust shape points for the temporary canvas
-        const tempShapePoints = worldShapePoints.map(p => ({
-            x: p.x - bounds.x + tempOffsetX,
-            y: p.y - bounds.y + tempOffsetY
-        }));
         if (!needsExpansion && !needsFeather) {
             // Simple case: just draw the original shape
-            shapeMaskCanvas = document.createElement('canvas');
-            shapeMaskCanvas.width = tempCanvasWidth;
-            shapeMaskCanvas.height = tempCanvasHeight;
-            const ctx = shapeMaskCanvas.getContext('2d', { willReadFrequently: true });
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.moveTo(tempShapePoints[0].x, tempShapePoints[0].y);
-            for (let i = 1; i < tempShapePoints.length; i++) {
-                ctx.lineTo(tempShapePoints[i].x, tempShapePoints[i].y);
-            }
-            ctx.closePath();
-            ctx.fill('evenodd');
+            const { canvas, ctx } = this.createCanvas(config.tempCanvasWidth, config.tempCanvasHeight);
+            shapeMaskCanvas = canvas;
+            this.drawShapeOnCanvas(ctx, config.tempShapePoints, 'evenodd');
         }
         else if (needsExpansion && !needsFeather) {
             // Expansion only
-            shapeMaskCanvas = this._createExpandedMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, tempCanvasWidth, tempCanvasHeight);
+            shapeMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         else if (!needsExpansion && needsFeather) {
             // Feather only
-            shapeMaskCanvas = this._createFeatheredMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskFeatherValue, tempCanvasWidth, tempCanvasHeight);
+            shapeMaskCanvas = this._createFeatheredMaskCanvas(config.tempShapePoints, this.canvasInstance.shapeMaskFeatherValue, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         else {
             // Both expansion and feather
-            const expandedMaskCanvas = this._createExpandedMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, tempCanvasWidth, tempCanvasHeight);
+            const expandedMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, config.tempCanvasWidth, config.tempCanvasHeight);
             const tempCtx = expandedMaskCanvas.getContext('2d', { willReadFrequently: true });
             const expandedImageData = tempCtx.getImageData(0, 0, expandedMaskCanvas.width, expandedMaskCanvas.height);
-            shapeMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, tempCanvasWidth, tempCanvasHeight);
+            shapeMaskCanvas = this._createFeatheredMaskFromImageData(expandedImageData, this.canvasInstance.shapeMaskFeatherValue, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         // Calculate which chunks will be affected by the shape mask
-        const maskWorldX = bounds.x - tempOffsetX;
-        const maskWorldY = bounds.y - tempOffsetY;
+        const maskWorldX = config.bounds.x - config.tempOffsetX;
+        const maskWorldY = config.bounds.y - config.tempOffsetY;
         const maskLeft = maskWorldX;
         const maskTop = maskWorldY;
         const maskRight = maskWorldX + shapeMaskCanvas.width;
@@ -1356,57 +1501,29 @@ export class MaskTool {
      * Now works with the chunked mask system.
      */
     removeShapeMask() {
-        if (!this.canvasInstance.outputAreaShape?.points || this.canvasInstance.outputAreaShape.points.length < 3) {
+        // Use unified configuration preparation
+        const config = this.prepareShapeMaskConfiguration();
+        if (!config) {
             log.warn("Shape has insufficient points for mask removal");
             return;
         }
         this.canvasInstance.canvasState.saveMaskState();
-        const shape = this.canvasInstance.outputAreaShape;
-        const bounds = this.canvasInstance.outputAreaBounds;
-        // Calculate shape points in world coordinates accounting for extensions (same as applyShapeMask)
-        const ext = this.canvasInstance.outputAreaExtensionEnabled ? this.canvasInstance.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
-        const shapeOffsetX = ext.left; // Add left extension to maintain relative position
-        const shapeOffsetY = ext.top; // Add top extension to maintain relative position
-        const worldShapePoints = shape.points.map(p => ({
-            x: bounds.x + shapeOffsetX + p.x,
-            y: bounds.y + shapeOffsetY + p.y
-        }));
         // Check if we need to account for expansion when removing
         const needsExpansion = this.canvasInstance.shapeMaskExpansion && this.canvasInstance.shapeMaskExpansionValue !== 0;
         // Create a removal mask canvas - always hard-edged to ensure complete removal
         let removalMaskCanvas;
-        // Create a temporary canvas large enough to contain the shape and any expansion
-        const maxExpansion = Math.max(300, Math.abs(this.canvasInstance.shapeMaskExpansionValue || 0));
-        const tempCanvasWidth = bounds.width + (maxExpansion * 2);
-        const tempCanvasHeight = bounds.height + (maxExpansion * 2);
-        const tempOffsetX = maxExpansion;
-        const tempOffsetY = maxExpansion;
-        // Adjust shape points for the temporary canvas
-        const tempShapePoints = worldShapePoints.map(p => ({
-            x: p.x - bounds.x + tempOffsetX,
-            y: p.y - bounds.y + tempOffsetY
-        }));
         if (needsExpansion) {
             // If expansion was active, remove the expanded area with a hard edge
-            removalMaskCanvas = this._createExpandedMaskCanvas(tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, tempCanvasWidth, tempCanvasHeight);
+            removalMaskCanvas = this._createExpandedMaskCanvas(config.tempShapePoints, this.canvasInstance.shapeMaskExpansionValue, config.tempCanvasWidth, config.tempCanvasHeight);
         }
         else {
             // If no expansion, just remove the base shape with a hard edge
-            removalMaskCanvas = document.createElement('canvas');
-            removalMaskCanvas.width = tempCanvasWidth;
-            removalMaskCanvas.height = tempCanvasHeight;
-            const ctx = removalMaskCanvas.getContext('2d', { willReadFrequently: true });
-            ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.moveTo(tempShapePoints[0].x, tempShapePoints[0].y);
-            for (let i = 1; i < tempShapePoints.length; i++) {
-                ctx.lineTo(tempShapePoints[i].x, tempShapePoints[i].y);
-            }
-            ctx.closePath();
-            ctx.fill('evenodd');
+            const { canvas, ctx } = this.createCanvas(config.tempCanvasWidth, config.tempCanvasHeight);
+            removalMaskCanvas = canvas;
+            this.drawShapeOnCanvas(ctx, config.tempShapePoints, 'evenodd');
         }
         // Now remove the shape mask from the chunked system
-        this.removeMaskCanvasFromChunks(removalMaskCanvas, bounds.x - tempOffsetX, bounds.y - tempOffsetY);
+        this.removeMaskCanvasFromChunks(removalMaskCanvas, config.bounds.x - config.tempOffsetX, config.bounds.y - config.tempOffsetY);
         // Update the active mask canvas to show the changes
         this.updateActiveMaskCanvas();
         if (this.onStateChange) {
@@ -1416,70 +1533,10 @@ export class MaskTool {
         log.info(`Removed shape mask from chunks with expansion: ${needsExpansion}.`);
     }
     _createFeatheredMaskCanvas(points, featherRadius, width, height) {
-        // 1. Create a binary mask on a temporary canvas.
-        const binaryCanvas = document.createElement('canvas');
-        binaryCanvas.width = width;
-        binaryCanvas.height = height;
-        const binaryCtx = binaryCanvas.getContext('2d', { willReadFrequently: true });
-        binaryCtx.fillStyle = 'white';
-        binaryCtx.beginPath();
-        binaryCtx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            binaryCtx.lineTo(points[i].x, points[i].y);
-        }
-        binaryCtx.closePath();
-        binaryCtx.fill();
-        const maskImage = binaryCtx.getImageData(0, 0, width, height);
-        const binaryData = new Uint8Array(width * height);
-        for (let i = 0; i < binaryData.length; i++) {
-            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0; // 1 = inside, 0 = outside
-        }
-        // 2. Calculate the fast distance transform (from ImageAnalysis.ts approach).
-        const distanceMap = this._fastDistanceTransform(binaryData, width, height);
-        // Find the maximum distance to normalize
-        let maxDistance = 0;
-        for (let i = 0; i < distanceMap.length; i++) {
-            if (distanceMap[i] > maxDistance) {
-                maxDistance = distanceMap[i];
-            }
-        }
-        // 3. Create the final output canvas with the complete mask (solid + feather).
-        const outputCanvas = document.createElement('canvas');
-        outputCanvas.width = width;
-        outputCanvas.height = height;
-        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
-        const outputData = outputCtx.createImageData(width, height);
-        // Use featherRadius as the threshold for the gradient
-        const threshold = Math.min(featherRadius, maxDistance);
-        for (let i = 0; i < distanceMap.length; i++) {
-            const distance = distanceMap[i];
-            const originalAlpha = maskImage.data[i * 4 + 3];
-            if (originalAlpha === 0) {
-                // Transparent pixels remain transparent
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 0;
-            }
-            else if (distance <= threshold) {
-                // Edge area - apply gradient alpha (from edge inward)
-                const gradientValue = distance / threshold;
-                const alphaValue = Math.floor(gradientValue * 255);
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = alphaValue;
-            }
-            else {
-                // Inner area - full alpha (no blending effect)
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 255;
-            }
-        }
-        outputCtx.putImageData(outputData, 0, 0);
-        return outputCanvas;
+        // 1. Create binary mask data from shape points
+        const binaryData = this.createBinaryMaskFromShape(points, width, height);
+        // 2. Use unified feathering logic
+        return this.createFeatheredMaskFromBinaryData(binaryData, featherRadius, width, height);
     }
     /**
      * Fast distance transform using the simple two-pass algorithm from ImageAnalysis.ts
@@ -1551,24 +1608,8 @@ export class MaskTool {
      * This gives SHARP edges without smoothing, unlike distance transform
      */
     _createExpandedMaskCanvas(points, expansionValue, width, height) {
-        // 1. Create a binary mask on a temporary canvas.
-        const binaryCanvas = document.createElement('canvas');
-        binaryCanvas.width = width;
-        binaryCanvas.height = height;
-        const binaryCtx = binaryCanvas.getContext('2d', { willReadFrequently: true });
-        binaryCtx.fillStyle = 'white';
-        binaryCtx.beginPath();
-        binaryCtx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-            binaryCtx.lineTo(points[i].x, points[i].y);
-        }
-        binaryCtx.closePath();
-        binaryCtx.fill('evenodd'); // Use evenodd to handle holes correctly
-        const maskImage = binaryCtx.getImageData(0, 0, width, height);
-        const binaryData = new Uint8Array(width * height);
-        for (let i = 0; i < binaryData.length; i++) {
-            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0; // 1 = inside, 0 = outside
-        }
+        // 1. Create binary mask data from shape points
+        const binaryData = this.createBinaryMaskFromShape(points, width, height);
         // 2. Apply fast morphological operations for sharp edges
         let resultMask;
         const absExpansionValue = Math.abs(expansionValue);
@@ -1581,20 +1622,15 @@ export class MaskTool {
             resultMask = this._fastErodeDT(binaryData, width, height, absExpansionValue);
         }
         // 3. Create the final output canvas with sharp edges
-        const outputCanvas = document.createElement('canvas');
-        outputCanvas.width = width;
-        outputCanvas.height = height;
-        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
-        const outputData = outputCtx.createImageData(width, height);
-        for (let i = 0; i < resultMask.length; i++) {
-            const alpha = resultMask[i] === 1 ? 255 : 0; // Sharp binary mask - no smoothing
-            outputData.data[i * 4] = 255; // R
-            outputData.data[i * 4 + 1] = 255; // G  
-            outputData.data[i * 4 + 2] = 255; // B
-            outputData.data[i * 4 + 3] = alpha; // A - sharp edges
-        }
-        outputCtx.putImageData(outputData, 0, 0);
-        return outputCanvas;
+        return this.createOutputCanvasFromPixelData((outputData) => {
+            for (let i = 0; i < resultMask.length; i++) {
+                const alpha = resultMask[i] === 1 ? 255 : 0; // Sharp binary mask - no smoothing
+                outputData.data[i * 4] = 255; // R
+                outputData.data[i * 4 + 1] = 255; // G  
+                outputData.data[i * 4 + 2] = 255; // B
+                outputData.data[i * 4 + 3] = alpha; // A - sharp edges
+            }
+        }, width, height);
     }
     /**
      * Creates a feathered mask from existing ImageData (used when combining expansion + feather)
@@ -1606,51 +1642,7 @@ export class MaskTool {
         for (let i = 0; i < width * height; i++) {
             binaryData[i] = data[i * 4 + 3] > 0 ? 1 : 0; // 1 = inside, 0 = outside
         }
-        // Calculate the fast distance transform
-        const distanceMap = this._fastDistanceTransform(binaryData, width, height);
-        // Find the maximum distance to normalize
-        let maxDistance = 0;
-        for (let i = 0; i < distanceMap.length; i++) {
-            if (distanceMap[i] > maxDistance) {
-                maxDistance = distanceMap[i];
-            }
-        }
-        // Create the final output canvas with feathering applied
-        const outputCanvas = document.createElement('canvas');
-        outputCanvas.width = width;
-        outputCanvas.height = height;
-        const outputCtx = outputCanvas.getContext('2d', { willReadFrequently: true });
-        const outputData = outputCtx.createImageData(width, height);
-        // Use featherRadius as the threshold for the gradient
-        const threshold = Math.min(featherRadius, maxDistance);
-        for (let i = 0; i < distanceMap.length; i++) {
-            const distance = distanceMap[i];
-            const originalAlpha = data[i * 4 + 3];
-            if (originalAlpha === 0) {
-                // Transparent pixels remain transparent
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 0;
-            }
-            else if (distance <= threshold) {
-                // Edge area - apply gradient alpha (from edge inward)
-                const gradientValue = distance / threshold;
-                const alphaValue = Math.floor(gradientValue * 255);
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = alphaValue;
-            }
-            else {
-                // Inner area - full alpha (no blending effect)
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 255;
-            }
-        }
-        outputCtx.putImageData(outputData, 0, 0);
-        return outputCanvas;
+        // Use unified feathering logic
+        return this.createFeatheredMaskFromBinaryData(binaryData, featherRadius, width, height);
     }
 }
