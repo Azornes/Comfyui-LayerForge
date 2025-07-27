@@ -799,12 +799,25 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         openEditorBtn.textContent = "⛶";
         openEditorBtn.title = "Open in Editor";
 
+        // Remove ESC key listener when editor closes
+        document.removeEventListener('keydown', handleEscKey);
+
         setTimeout(() => {
             canvas.render();
             if (node.onResize) {
                 node.onResize();
             }
         }, 0);
+    };
+
+    // ESC key handler for closing fullscreen editor
+    const handleEscKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && isEditorOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeEditor();
+            log.info("Fullscreen editor closed via ESC key");
+        }
     };
 
     openEditorBtn.onclick = () => {
@@ -828,7 +841,10 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
         isEditorOpen = true;
         openEditorBtn.textContent = "X";
-        openEditorBtn.title = "Close Editor";
+        openEditorBtn.title = "Close Editor (ESC)";
+
+        // Add ESC key listener when editor opens
+        document.addEventListener('keydown', handleEscKey);
 
         setTimeout(() => {
             canvas.render();
