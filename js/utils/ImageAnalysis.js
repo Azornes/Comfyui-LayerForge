@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { createCanvas } from "./CommonUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 const log = createModuleLogger('ImageAnalysis');
 /**
  * Creates a distance field mask based on the alpha channel of an image.
@@ -8,7 +9,18 @@ const log = createModuleLogger('ImageAnalysis');
  * @param blendArea - The percentage (0-100) of the area to apply blending
  * @returns HTMLCanvasElement containing the distance field mask
  */
-export function createDistanceFieldMask(image, blendArea) {
+/**
+ * Synchronous version of createDistanceFieldMask for use in synchronous rendering
+ */
+export function createDistanceFieldMaskSync(image, blendArea) {
+    if (!image) {
+        log.error("Image is required for distance field mask");
+        return createCanvas(1, 1).canvas;
+    }
+    if (typeof blendArea !== 'number' || blendArea < 0 || blendArea > 100) {
+        log.error("Blend area must be a number between 0 and 100");
+        return createCanvas(1, 1).canvas;
+    }
     const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
     if (!ctx) {
         log.error('Failed to create canvas context for distance field mask');
@@ -84,6 +96,12 @@ export function createDistanceFieldMask(image, blendArea) {
     ctx.putImageData(maskData, 0, 0);
     return canvas;
 }
+/**
+ * Async version with error handling for use in async contexts
+ */
+export const createDistanceFieldMask = withErrorHandling(function (image, blendArea) {
+    return createDistanceFieldMaskSync(image, blendArea);
+}, 'createDistanceFieldMask');
 /**
  * Calculates the Euclidean distance transform of a binary mask.
  * Uses a two-pass algorithm for efficiency.
@@ -183,7 +201,16 @@ function calculateDistanceFromEdges(width, height) {
  * @param blendArea - The percentage (0-100) of the area to apply blending
  * @returns HTMLCanvasElement containing the radial gradient mask
  */
-export function createRadialGradientMask(width, height, blendArea) {
+export const createRadialGradientMask = withErrorHandling(function (width, height, blendArea) {
+    if (typeof width !== 'number' || width <= 0) {
+        throw createValidationError("Width must be a positive number", { width });
+    }
+    if (typeof height !== 'number' || height <= 0) {
+        throw createValidationError("Height must be a positive number", { height });
+    }
+    if (typeof blendArea !== 'number' || blendArea < 0 || blendArea > 100) {
+        throw createValidationError("Blend area must be a number between 0 and 100", { blendArea });
+    }
     const { canvas, ctx } = createCanvas(width, height);
     if (!ctx) {
         log.error('Failed to create canvas context for radial gradient mask');
@@ -200,4 +227,4 @@ export function createRadialGradientMask(width, height, blendArea) {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
     return canvas;
-}
+}, 'createRadialGradientMask');

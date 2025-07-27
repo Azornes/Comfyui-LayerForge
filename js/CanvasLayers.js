@@ -8,7 +8,7 @@ import { app } from "../../scripts/app.js";
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
 import { ClipboardManager } from "./utils/ClipboardManager.js";
-import { createDistanceFieldMask } from "./utils/ImageAnalysis.js";
+import { createDistanceFieldMaskSync } from "./utils/ImageAnalysis.js";
 const log = createModuleLogger('CanvasLayers');
 export class CanvasLayers {
     constructor(canvas) {
@@ -361,9 +361,9 @@ export class CanvasLayers {
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
         if (needsBlendAreaEffect) {
-            log.info(`Applying blend area effect for layer ${layer.id}`);
+            log.debug(`Applying blend area effect for layer ${layer.id}, blendArea: ${blendArea}%`);
             // Get or create distance field mask
-            let maskCanvas = this.getDistanceFieldMask(layer.image, blendArea);
+            const maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
             if (maskCanvas) {
                 // Create a temporary canvas for the masked layer
                 const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
@@ -400,7 +400,7 @@ export class CanvasLayers {
         }
         ctx.restore();
     }
-    getDistanceFieldMask(image, blendArea) {
+    getDistanceFieldMaskSync(image, blendArea) {
         // Check cache first
         let imageCache = this.distanceFieldCache.get(image);
         if (!imageCache) {
@@ -411,7 +411,7 @@ export class CanvasLayers {
         if (!maskCanvas) {
             try {
                 log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
-                maskCanvas = createDistanceFieldMask(image, blendArea);
+                maskCanvas = createDistanceFieldMaskSync(image, blendArea);
                 log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
                 imageCache.set(blendArea, maskCanvas);
             }

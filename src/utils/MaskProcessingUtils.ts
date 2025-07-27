@@ -1,6 +1,7 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { createCanvas } from "./CommonUtils.js";
 import { convertToImage } from "./ImageUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('MaskProcessingUtils');
 
@@ -25,10 +26,14 @@ export interface MaskProcessingOptions {
  * @param options - Processing options
  * @returns Promise with processed mask as HTMLCanvasElement
  */
-export async function processImageToMask(
+export const processImageToMask = withErrorHandling(async function(
     sourceImage: HTMLImageElement | HTMLCanvasElement, 
     options: MaskProcessingOptions = {}
 ): Promise<HTMLCanvasElement> {
+    if (!sourceImage) {
+        throw createValidationError("Source image is required", { sourceImage });
+    }
+
     const {
         targetWidth = sourceImage.width,
         targetHeight = sourceImage.height,
@@ -47,7 +52,7 @@ export async function processImageToMask(
     const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
-        throw new Error("Failed to get 2D context for mask processing");
+        throw createValidationError("Failed to get 2D context for mask processing");
     }
 
     // Draw the source image
@@ -79,7 +84,7 @@ export async function processImageToMask(
 
     log.debug('Mask processing completed');
     return tempCanvas;
-}
+}, 'processImageToMask');
 
 /**
  * Processes image data with custom pixel transformation
@@ -88,11 +93,18 @@ export async function processImageToMask(
  * @param options - Processing options
  * @returns Promise with processed image as HTMLCanvasElement
  */
-export async function processImageWithTransform(
+export const processImageWithTransform = withErrorHandling(async function(
     sourceImage: HTMLImageElement | HTMLCanvasElement,
     pixelTransform: (r: number, g: number, b: number, a: number, index: number) => [number, number, number, number],
     options: MaskProcessingOptions = {}
 ): Promise<HTMLCanvasElement> {
+    if (!sourceImage) {
+        throw createValidationError("Source image is required", { sourceImage });
+    }
+    if (!pixelTransform || typeof pixelTransform !== 'function') {
+        throw createValidationError("Pixel transform function is required", { pixelTransform });
+    }
+
     const {
         targetWidth = sourceImage.width,
         targetHeight = sourceImage.height
@@ -101,7 +113,7 @@ export async function processImageWithTransform(
     const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
-        throw new Error("Failed to get 2D context for image processing");
+        throw createValidationError("Failed to get 2D context for image processing");
     }
 
     tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
@@ -118,7 +130,7 @@ export async function processImageWithTransform(
 
     tempCtx.putImageData(imageData, 0, 0);
     return tempCanvas;
-}
+}, 'processImageWithTransform');
 
 /**
  * Crops an image to a specific region
@@ -126,11 +138,22 @@ export async function processImageWithTransform(
  * @param cropArea - Crop area {x, y, width, height}
  * @returns Promise with cropped image as HTMLCanvasElement
  */
-export async function cropImage(
+export const cropImage = withErrorHandling(async function(
     sourceImage: HTMLImageElement | HTMLCanvasElement,
     cropArea: { x: number; y: number; width: number; height: number }
 ): Promise<HTMLCanvasElement> {
+    if (!sourceImage) {
+        throw createValidationError("Source image is required", { sourceImage });
+    }
+    if (!cropArea || typeof cropArea !== 'object') {
+        throw createValidationError("Crop area is required", { cropArea });
+    }
+
     const { x, y, width, height } = cropArea;
+
+    if (width <= 0 || height <= 0) {
+        throw createValidationError("Crop area must have positive width and height", { cropArea });
+    }
 
     log.debug('Cropping image:', {
         sourceSize: { width: sourceImage.width, height: sourceImage.height },
@@ -140,7 +163,7 @@ export async function cropImage(
     const { canvas, ctx } = createCanvas(width, height);
 
     if (!ctx) {
-        throw new Error("Failed to get 2D context for image cropping");
+        throw createValidationError("Failed to get 2D context for image cropping");
     }
 
     ctx.drawImage(
@@ -150,7 +173,7 @@ export async function cropImage(
     );
 
     return canvas;
-}
+}, 'cropImage');
 
 /**
  * Applies a mask to an image using viewport positioning
@@ -161,13 +184,23 @@ export async function cropImage(
  * @param maskColor - Mask color (default: white)
  * @returns Promise with processed mask for viewport
  */
-export async function processMaskForViewport(
+export const processMaskForViewport = withErrorHandling(async function(
     maskImage: HTMLImageElement | HTMLCanvasElement,
     targetWidth: number,
     targetHeight: number,
     viewportOffset: { x: number; y: number },
     maskColor: { r: number; g: number; b: number } = { r: 255, g: 255, b: 255 }
 ): Promise<HTMLCanvasElement> {
+    if (!maskImage) {
+        throw createValidationError("Mask image is required", { maskImage });
+    }
+    if (!viewportOffset || typeof viewportOffset !== 'object') {
+        throw createValidationError("Viewport offset is required", { viewportOffset });
+    }
+    if (targetWidth <= 0 || targetHeight <= 0) {
+        throw createValidationError("Target dimensions must be positive", { targetWidth, targetHeight });
+    }
+
     log.debug("Processing mask for viewport:", {
         sourceSize: { width: maskImage.width, height: maskImage.height },
         targetSize: { width: targetWidth, height: targetHeight },
@@ -177,7 +210,7 @@ export async function processMaskForViewport(
     const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
-        throw new Error("Failed to get 2D context for viewport mask processing");
+        throw createValidationError("Failed to get 2D context for viewport mask processing");
     }
 
     // Calculate source coordinates based on viewport offset
@@ -214,4 +247,4 @@ export async function processMaskForViewport(
     log.debug("Viewport mask processing completed");
     
     return tempCanvas;
-}
+}, 'processMaskForViewport');

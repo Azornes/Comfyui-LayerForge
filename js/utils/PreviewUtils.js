@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 const log = createModuleLogger('PreviewUtils');
 /**
  * Creates a preview image from canvas and updates node
@@ -7,7 +8,13 @@ const log = createModuleLogger('PreviewUtils');
  * @param options - Preview options
  * @returns Promise with created Image element
  */
-export async function createPreviewFromCanvas(canvas, node, options = {}) {
+export const createPreviewFromCanvas = withErrorHandling(async function (canvas, node, options = {}) {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
     const { includeMask = true, updateNodeImages = true, customBlob } = options;
     log.debug('Creating preview from canvas:', {
         includeMask,
@@ -19,7 +26,7 @@ export async function createPreviewFromCanvas(canvas, node, options = {}) {
     // Get blob from canvas if not provided
     if (!blob) {
         if (!canvas.canvasLayers) {
-            throw new Error("Canvas does not have canvasLayers");
+            throw createValidationError("Canvas does not have canvasLayers", { canvas });
         }
         if (includeMask && typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob === 'function') {
             blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
@@ -28,11 +35,14 @@ export async function createPreviewFromCanvas(canvas, node, options = {}) {
             blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
         }
         else {
-            throw new Error("Canvas does not support required blob generation methods");
+            throw createValidationError("Canvas does not support required blob generation methods", {
+                canvas,
+                availableMethods: Object.getOwnPropertyNames(canvas.canvasLayers)
+            });
         }
     }
     if (!blob) {
-        throw new Error("Failed to generate canvas blob for preview");
+        throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
     }
     // Create preview image
     const previewImage = new Image();
@@ -49,7 +59,7 @@ export async function createPreviewFromCanvas(canvas, node, options = {}) {
         };
         previewImage.onerror = (error) => {
             log.error("Failed to load preview image", error);
-            reject(new Error("Failed to load preview image"));
+            reject(createValidationError("Failed to load preview image", { error, blob: blob?.size }));
         };
     });
     // Update node images if requested
@@ -58,7 +68,7 @@ export async function createPreviewFromCanvas(canvas, node, options = {}) {
         log.debug("Node images updated with new preview");
     }
     return previewImage;
-}
+}, 'createPreviewFromCanvas');
 /**
  * Creates a preview image from a blob
  * @param blob - Image blob
@@ -66,7 +76,13 @@ export async function createPreviewFromCanvas(canvas, node, options = {}) {
  * @param updateNodeImages - Whether to update node.imgs (default: false)
  * @returns Promise with created Image element
  */
-export async function createPreviewFromBlob(blob, node, updateNodeImages = false) {
+export const createPreviewFromBlob = withErrorHandling(async function (blob, node, updateNodeImages = false) {
+    if (!blob) {
+        throw createValidationError("Blob is required", { blob });
+    }
+    if (blob.size === 0) {
+        throw createValidationError("Blob cannot be empty", { blobSize: blob.size });
+    }
     log.debug('Creating preview from blob:', {
         blobSize: blob.size,
         updateNodeImages,
@@ -84,7 +100,7 @@ export async function createPreviewFromBlob(blob, node, updateNodeImages = false
         };
         previewImage.onerror = (error) => {
             log.error("Failed to load preview image from blob", error);
-            reject(new Error("Failed to load preview image from blob"));
+            reject(createValidationError("Failed to load preview image from blob", { error, blobSize: blob.size }));
         };
     });
     if (updateNodeImages && node) {
@@ -92,7 +108,7 @@ export async function createPreviewFromBlob(blob, node, updateNodeImages = false
         log.debug("Node images updated with blob preview");
     }
     return previewImage;
-}
+}, 'createPreviewFromBlob');
 /**
  * Updates node preview after canvas changes
  * @param canvas - Canvas object
@@ -100,7 +116,13 @@ export async function createPreviewFromBlob(blob, node, updateNodeImages = false
  * @param includeMask - Whether to include mask in preview
  * @returns Promise with updated preview image
  */
-export async function updateNodePreview(canvas, node, includeMask = true) {
+export const updateNodePreview = withErrorHandling(async function (canvas, node, includeMask = true) {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
     log.info('Updating node preview:', {
         nodeId: node.id,
         includeMask
@@ -119,7 +141,7 @@ export async function updateNodePreview(canvas, node, includeMask = true) {
     });
     log.info('Node preview updated successfully');
     return previewImage;
-}
+}, 'updateNodePreview');
 /**
  * Clears node preview images
  * @param node - ComfyUI node
@@ -154,8 +176,17 @@ export function getCurrentPreview(node) {
  * @param processor - Custom processing function that takes canvas and returns blob
  * @returns Promise with processed preview image
  */
-export async function createCustomPreview(canvas, node, processor) {
+export const createCustomPreview = withErrorHandling(async function (canvas, node, processor) {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
+    if (!processor || typeof processor !== 'function') {
+        throw createValidationError("Processor function is required", { processor });
+    }
     log.debug('Creating custom preview:', { nodeId: node.id });
     const blob = await processor(canvas);
     return createPreviewFromBlob(blob, node, true);
-}
+}, 'createCustomPreview');

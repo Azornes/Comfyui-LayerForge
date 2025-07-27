@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { createCanvas } from "./CommonUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('IconLoader');
 
@@ -81,24 +82,25 @@ export class IconLoader {
     /**
      * Preload all LayerForge tool icons
      */
-    preloadToolIcons(): Promise<void> {
+    preloadToolIcons = withErrorHandling(async (): Promise<void> => {
         log.info('Starting to preload LayerForge tool icons');
         
         const loadPromises = Object.keys(LAYERFORGE_TOOL_ICONS).map(tool => {
             return this.loadIcon(tool);
         });
 
-        return Promise.all(loadPromises).then(() => {
-            log.info(`Successfully preloaded ${loadPromises.length} tool icons`);
-        }).catch(error => {
-            log.error('Error preloading tool icons:', error);
-        });
-    }
+        await Promise.all(loadPromises);
+        log.info(`Successfully preloaded ${loadPromises.length} tool icons`);
+    }, 'IconLoader.preloadToolIcons');
 
     /**
      * Load a specific icon by tool name
      */
-    async loadIcon(tool: string): Promise<HTMLImageElement> {
+    loadIcon = withErrorHandling(async (tool: string): Promise<HTMLImageElement> => {
+        if (!tool) {
+            throw createValidationError("Tool name is required", { tool });
+        }
+
         // Check if already cached
         if (this._iconCache[tool] && this._iconCache[tool] instanceof HTMLImageElement) {
             return this._iconCache[tool] as HTMLImageElement;
@@ -136,13 +138,13 @@ export class IconLoader {
                 img.src = iconData;
             } else {
                 log.warn(`No icon data found for tool: ${tool}`);
-                reject(new Error(`No icon data for tool: ${tool}`));
+                reject(createValidationError(`No icon data for tool: ${tool}`, { tool, availableTools: Object.keys(LAYERFORGE_TOOL_ICONS) }));
             }
         });
 
         this._loadingPromises.set(tool, loadPromise);
         return loadPromise;
-    }
+    }, 'IconLoader.loadIcon');
 
     /**
      * Create a fallback canvas icon with colored background and text

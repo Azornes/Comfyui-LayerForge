@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { showNotification, showInfoNotification } from "./NotificationUtils.js";
+import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
 // @ts-ignore
 import { api } from "../../../scripts/api.js";
 // @ts-ignore
@@ -7,17 +8,13 @@ import { ComfyApp } from "../../../scripts/app.js";
 const log = createModuleLogger('ClipboardManager');
 export class ClipboardManager {
     constructor(canvas) {
-        this.canvas = canvas;
-        this.clipboardPreference = 'system'; // 'system', 'clipspace'
-    }
-    /**
-     * Main paste handler that delegates to appropriate methods
-     * @param {AddMode} addMode - The mode for adding the layer
-     * @param {ClipboardPreference} preference - Clipboard preference ('system' or 'clipspace')
-     * @returns {Promise<boolean>} - True if successful, false otherwise
-     */
-    async handlePaste(addMode = 'mouse', preference = 'system') {
-        try {
+        /**
+         * Main paste handler that delegates to appropriate methods
+         * @param {AddMode} addMode - The mode for adding the layer
+         * @param {ClipboardPreference} preference - Clipboard preference ('system' or 'clipspace')
+         * @returns {Promise<boolean>} - True if successful, false otherwise
+         */
+        this.handlePaste = withErrorHandling(async (addMode = 'mouse', preference = 'system') => {
             log.info(`ClipboardManager handling paste with preference: ${preference}`);
             if (this.canvas.canvasLayers.internalClipboard.length > 0) {
                 log.info("Found layers in internal clipboard, pasting layers");
@@ -34,19 +31,13 @@ export class ClipboardManager {
             }
             log.info("Attempting paste from system clipboard");
             return await this.trySystemClipboardPaste(addMode);
-        }
-        catch (err) {
-            log.error("ClipboardManager paste operation failed:", err);
-            return false;
-        }
-    }
-    /**
-     * Attempts to paste from ComfyUI Clipspace
-     * @param {AddMode} addMode - The mode for adding the layer
-     * @returns {Promise<boolean>} - True if successful, false otherwise
-     */
-    async tryClipspacePaste(addMode) {
-        try {
+        }, 'ClipboardManager.handlePaste');
+        /**
+         * Attempts to paste from ComfyUI Clipspace
+         * @param {AddMode} addMode - The mode for adding the layer
+         * @returns {Promise<boolean>} - True if successful, false otherwise
+         */
+        this.tryClipspacePaste = withErrorHandling(async (addMode) => {
             log.info("Attempting to paste from ComfyUI Clipspace");
             ComfyApp.pasteFromClipspace(this.canvas.node);
             if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
@@ -62,11 +53,57 @@ export class ClipboardManager {
                 }
             }
             return false;
-        }
-        catch (clipspaceError) {
-            log.warn("ComfyUI Clipspace paste failed:", clipspaceError);
-            return false;
-        }
+        }, 'ClipboardManager.tryClipspacePaste');
+        /**
+         * Loads a local file via the ComfyUI backend endpoint
+         * @param {string} filePath - The file path to load
+         * @param {AddMode} addMode - The mode for adding the layer
+         * @returns {Promise<boolean>} - True if successful, false otherwise
+         */
+        this.loadFileViaBackend = withErrorHandling(async (filePath, addMode) => {
+            if (!filePath) {
+                throw createValidationError("File path is required", { filePath });
+            }
+            log.info("Loading file via ComfyUI backend:", filePath);
+            const response = await api.fetchApi("/ycnode/load_image_from_path", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    file_path: filePath
+                })
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw createNetworkError(`Backend failed to load image: ${errorData.error}`, {
+                    filePath,
+                    status: response.status,
+                    statusText: response.statusText
+                });
+            }
+            const data = await response.json();
+            if (!data.success) {
+                throw createFileError(`Backend returned error: ${data.error}`, { filePath, backendError: data.error });
+            }
+            log.info("Successfully loaded image via ComfyUI backend:", filePath);
+            const img = new Image();
+            const success = await new Promise((resolve) => {
+                img.onload = async () => {
+                    log.info("Successfully loaded image from backend response");
+                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                    resolve(true);
+                };
+                img.onerror = () => {
+                    log.warn("Failed to load image from backend response");
+                    resolve(false);
+                };
+                img.src = data.image_data;
+            });
+            return success;
+        }, 'ClipboardManager.loadFileViaBackend');
+        this.canvas = canvas;
+        this.clipboardPreference = 'system'; // 'system', 'clipspace'
     }
     /**
      * System clipboard paste - handles both image data and text paths
@@ -247,55 +284,6 @@ export class ClipboardManager {
         }
         this.showFilePathMessage(filePath);
         return false;
-    }
-    /**
-     * Loads a local file via the ComfyUI backend endpoint
-     * @param {string} filePath - The file path to load
-     * @param {AddMode} addMode - The mode for adding the layer
-     * @returns {Promise<boolean>} - True if successful, false otherwise
-     */
-    async loadFileViaBackend(filePath, addMode) {
-        try {
-            log.info("Loading file via ComfyUI backend:", filePath);
-            const response = await api.fetchApi("/ycnode/load_image_from_path", {
-                method: "POST",
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    file_path: filePath
-                })
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                log.debug("Backend failed to load image:", errorData.error);
-                return false;
-            }
-            const data = await response.json();
-            if (!data.success) {
-                log.debug("Backend returned error:", data.error);
-                return false;
-            }
-            log.info("Successfully loaded image via ComfyUI backend:", filePath);
-            const img = new Image();
-            const success = await new Promise((resolve) => {
-                img.onload = async () => {
-                    log.info("Successfully loaded image from backend response");
-                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                    resolve(true);
-                };
-                img.onerror = () => {
-                    log.warn("Failed to load image from backend response");
-                    resolve(false);
-                };
-                img.src = data.image_data;
-            });
-            return success;
-        }
-        catch (error) {
-            log.debug("Error loading file via ComfyUI backend:", error);
-            return false;
-        }
     }
     /**
      * Prompts the user to select a file when a local path is detected

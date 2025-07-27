@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import type { ComfyNode } from '../types';
 
 const log = createModuleLogger('PreviewUtils');
@@ -23,11 +24,18 @@ export interface PreviewOptions {
  * @param options - Preview options
  * @returns Promise with created Image element
  */
-export async function createPreviewFromCanvas(
+export const createPreviewFromCanvas = withErrorHandling(async function(
     canvas: any, 
     node: ComfyNode, 
     options: PreviewOptions = {}
 ): Promise<HTMLImageElement> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
+
     const {
         includeMask = true,
         updateNodeImages = true,
@@ -46,7 +54,7 @@ export async function createPreviewFromCanvas(
     // Get blob from canvas if not provided
     if (!blob) {
         if (!canvas.canvasLayers) {
-            throw new Error("Canvas does not have canvasLayers");
+            throw createValidationError("Canvas does not have canvasLayers", { canvas });
         }
 
         if (includeMask && typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob === 'function') {
@@ -54,12 +62,15 @@ export async function createPreviewFromCanvas(
         } else if (typeof canvas.canvasLayers.getFlattenedCanvasAsBlob === 'function') {
             blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
         } else {
-            throw new Error("Canvas does not support required blob generation methods");
+            throw createValidationError("Canvas does not support required blob generation methods", { 
+                canvas,
+                availableMethods: Object.getOwnPropertyNames(canvas.canvasLayers)
+            });
         }
     }
 
     if (!blob) {
-        throw new Error("Failed to generate canvas blob for preview");
+        throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
     }
 
     // Create preview image
@@ -78,7 +89,7 @@ export async function createPreviewFromCanvas(
         };
         previewImage.onerror = (error) => {
             log.error("Failed to load preview image", error);
-            reject(new Error("Failed to load preview image"));
+            reject(createValidationError("Failed to load preview image", { error, blob: blob?.size }));
         };
     });
 
@@ -89,7 +100,7 @@ export async function createPreviewFromCanvas(
     }
 
     return previewImage;
-}
+}, 'createPreviewFromCanvas');
 
 /**
  * Creates a preview image from a blob
@@ -98,11 +109,18 @@ export async function createPreviewFromCanvas(
  * @param updateNodeImages - Whether to update node.imgs (default: false)
  * @returns Promise with created Image element
  */
-export async function createPreviewFromBlob(
+export const createPreviewFromBlob = withErrorHandling(async function(
     blob: Blob, 
     node?: ComfyNode, 
     updateNodeImages: boolean = false
 ): Promise<HTMLImageElement> {
+    if (!blob) {
+        throw createValidationError("Blob is required", { blob });
+    }
+    if (blob.size === 0) {
+        throw createValidationError("Blob cannot be empty", { blobSize: blob.size });
+    }
+
     log.debug('Creating preview from blob:', {
         blobSize: blob.size,
         updateNodeImages,
@@ -122,7 +140,7 @@ export async function createPreviewFromBlob(
         };
         previewImage.onerror = (error) => {
             log.error("Failed to load preview image from blob", error);
-            reject(new Error("Failed to load preview image from blob"));
+            reject(createValidationError("Failed to load preview image from blob", { error, blobSize: blob.size }));
         };
     });
 
@@ -132,7 +150,7 @@ export async function createPreviewFromBlob(
     }
 
     return previewImage;
-}
+}, 'createPreviewFromBlob');
 
 /**
  * Updates node preview after canvas changes
@@ -141,11 +159,18 @@ export async function createPreviewFromBlob(
  * @param includeMask - Whether to include mask in preview
  * @returns Promise with updated preview image
  */
-export async function updateNodePreview(
+export const updateNodePreview = withErrorHandling(async function(
     canvas: any, 
     node: ComfyNode, 
     includeMask: boolean = true
 ): Promise<HTMLImageElement> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
+
     log.info('Updating node preview:', {
         nodeId: node.id,
         includeMask
@@ -168,7 +193,7 @@ export async function updateNodePreview(
 
     log.info('Node preview updated successfully');
     return previewImage;
-}
+}, 'updateNodePreview');
 
 /**
  * Clears node preview images
@@ -207,13 +232,23 @@ export function getCurrentPreview(node: ComfyNode): HTMLImageElement | null {
  * @param processor - Custom processing function that takes canvas and returns blob
  * @returns Promise with processed preview image
  */
-export async function createCustomPreview(
+export const createCustomPreview = withErrorHandling(async function(
     canvas: any,
     node: ComfyNode,
     processor: (canvas: any) => Promise<Blob>
 ): Promise<HTMLImageElement> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+    if (!node) {
+        throw createValidationError("Node is required", { node });
+    }
+    if (!processor || typeof processor !== 'function') {
+        throw createValidationError("Processor function is required", { processor });
+    }
+
     log.debug('Creating custom preview:', { nodeId: node.id });
 
     const blob = await processor(canvas);
     return createPreviewFromBlob(blob, node, true);
-}
+}, 'createCustomPreview');

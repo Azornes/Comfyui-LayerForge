@@ -1,5 +1,6 @@
 import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "./LoggerUtils.js";
+import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('ImageUploadUtils');
 
@@ -35,7 +36,14 @@ export interface UploadImageResult {
  * @param options - Upload options
  * @returns Promise with upload result
  */
-export async function uploadImageBlob(blob: Blob, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+export const uploadImageBlob = withErrorHandling(async function(blob: Blob, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+    if (!blob) {
+        throw createValidationError("Blob is required", { blob });
+    }
+    if (blob.size === 0) {
+        throw createValidationError("Blob cannot be empty", { blobSize: blob.size });
+    }
+
     const {
         filenamePrefix = 'layerforge',
         overwrite = true,
@@ -68,9 +76,12 @@ export async function uploadImageBlob(blob: Blob, options: UploadImageOptions = 
     });
 
     if (!response.ok) {
-        const error = new Error(`Failed to upload image: ${response.statusText}`);
-        log.error('Image upload failed:', error);
-        throw error;
+        throw createNetworkError(`Failed to upload image: ${response.statusText}`, {
+            status: response.status,
+            statusText: response.statusText,
+            filename,
+            blobSize: blob.size
+        });
     }
 
     const data = await response.json();
@@ -93,7 +104,7 @@ export async function uploadImageBlob(blob: Blob, options: UploadImageOptions = 
         };
         imageElement.onerror = (error) => {
             log.error("Failed to load uploaded image", error);
-            reject(new Error("Failed to load uploaded image"));
+            reject(createNetworkError("Failed to load uploaded image", { error, imageUrl, filename }));
         };
         imageElement.src = imageUrl;
     });
@@ -104,7 +115,7 @@ export async function uploadImageBlob(blob: Blob, options: UploadImageOptions = 
         imageUrl,
         imageElement
     };
-}
+}, 'uploadImageBlob');
 
 /**
  * Uploads canvas content as image blob
@@ -112,7 +123,11 @@ export async function uploadImageBlob(blob: Blob, options: UploadImageOptions = 
  * @param options - Upload options
  * @returns Promise with upload result
  */
-export async function uploadCanvasAsImage(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+export const uploadCanvasAsImage = withErrorHandling(async function(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+
     let blob: Blob | null = null;
 
     // Handle different canvas types
@@ -123,15 +138,19 @@ export async function uploadCanvasAsImage(canvas: any, options: UploadImageOptio
         // Standard HTML Canvas
         blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
     } else {
-        throw new Error("Unsupported canvas type");
+        throw createValidationError("Unsupported canvas type", { 
+            canvas,
+            hasCanvasLayers: !!canvas.canvasLayers,
+            isHTMLCanvas: canvas instanceof HTMLCanvasElement
+        });
     }
 
     if (!blob) {
-        throw new Error("Failed to generate canvas blob");
+        throw createValidationError("Failed to generate canvas blob", { canvas, options });
     }
 
     return uploadImageBlob(blob, options);
-}
+}, 'uploadCanvasAsImage');
 
 /**
  * Uploads canvas with mask as image blob
@@ -139,15 +158,22 @@ export async function uploadCanvasAsImage(canvas: any, options: UploadImageOptio
  * @param options - Upload options
  * @returns Promise with upload result
  */
-export async function uploadCanvasWithMaskAsImage(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+export const uploadCanvasWithMaskAsImage = withErrorHandling(async function(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
     if (!canvas.canvasLayers || typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob !== 'function') {
-        throw new Error("Canvas does not support mask operations");
+        throw createValidationError("Canvas does not support mask operations", { 
+            canvas,
+            hasCanvasLayers: !!canvas.canvasLayers,
+            hasMaskMethod: !!(canvas.canvasLayers && typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob === 'function')
+        });
     }
 
     const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
     if (!blob) {
-        throw new Error("Failed to generate canvas with mask blob");
+        throw createValidationError("Failed to generate canvas with mask blob", { canvas, options });
     }
 
     return uploadImageBlob(blob, options);
-}
+}, 'uploadCanvasWithMaskAsImage');

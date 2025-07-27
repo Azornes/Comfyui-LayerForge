@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { createCanvas } from "./CommonUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 const log = createModuleLogger('IconLoader');
 // Define tool constants for LayerForge
 export const LAYERFORGE_TOOLS = {
@@ -53,63 +54,63 @@ export class IconLoader {
     constructor() {
         this._iconCache = {};
         this._loadingPromises = new Map();
-        log.info('IconLoader initialized');
-    }
-    /**
-     * Preload all LayerForge tool icons
-     */
-    preloadToolIcons() {
-        log.info('Starting to preload LayerForge tool icons');
-        const loadPromises = Object.keys(LAYERFORGE_TOOL_ICONS).map(tool => {
-            return this.loadIcon(tool);
-        });
-        return Promise.all(loadPromises).then(() => {
+        /**
+         * Preload all LayerForge tool icons
+         */
+        this.preloadToolIcons = withErrorHandling(async () => {
+            log.info('Starting to preload LayerForge tool icons');
+            const loadPromises = Object.keys(LAYERFORGE_TOOL_ICONS).map(tool => {
+                return this.loadIcon(tool);
+            });
+            await Promise.all(loadPromises);
             log.info(`Successfully preloaded ${loadPromises.length} tool icons`);
-        }).catch(error => {
-            log.error('Error preloading tool icons:', error);
-        });
-    }
-    /**
-     * Load a specific icon by tool name
-     */
-    async loadIcon(tool) {
-        // Check if already cached
-        if (this._iconCache[tool] && this._iconCache[tool] instanceof HTMLImageElement) {
-            return this._iconCache[tool];
-        }
-        // Check if already loading
-        if (this._loadingPromises.has(tool)) {
-            return this._loadingPromises.get(tool);
-        }
-        // Create fallback canvas first
-        const fallbackCanvas = this.createFallbackIcon(tool);
-        this._iconCache[tool] = fallbackCanvas;
-        // Start loading the SVG icon
-        const loadPromise = new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => {
-                this._iconCache[tool] = img;
-                this._loadingPromises.delete(tool);
-                log.debug(`Successfully loaded icon for tool: ${tool}`);
-                resolve(img);
-            };
-            img.onerror = (error) => {
-                log.warn(`Failed to load SVG icon for tool: ${tool}, using fallback`);
-                this._loadingPromises.delete(tool);
-                // Keep the fallback canvas in cache
-                reject(error);
-            };
-            const iconData = LAYERFORGE_TOOL_ICONS[tool];
-            if (iconData) {
-                img.src = iconData;
+        }, 'IconLoader.preloadToolIcons');
+        /**
+         * Load a specific icon by tool name
+         */
+        this.loadIcon = withErrorHandling(async (tool) => {
+            if (!tool) {
+                throw createValidationError("Tool name is required", { tool });
             }
-            else {
-                log.warn(`No icon data found for tool: ${tool}`);
-                reject(new Error(`No icon data for tool: ${tool}`));
+            // Check if already cached
+            if (this._iconCache[tool] && this._iconCache[tool] instanceof HTMLImageElement) {
+                return this._iconCache[tool];
             }
-        });
-        this._loadingPromises.set(tool, loadPromise);
-        return loadPromise;
+            // Check if already loading
+            if (this._loadingPromises.has(tool)) {
+                return this._loadingPromises.get(tool);
+            }
+            // Create fallback canvas first
+            const fallbackCanvas = this.createFallbackIcon(tool);
+            this._iconCache[tool] = fallbackCanvas;
+            // Start loading the SVG icon
+            const loadPromise = new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    this._iconCache[tool] = img;
+                    this._loadingPromises.delete(tool);
+                    log.debug(`Successfully loaded icon for tool: ${tool}`);
+                    resolve(img);
+                };
+                img.onerror = (error) => {
+                    log.warn(`Failed to load SVG icon for tool: ${tool}, using fallback`);
+                    this._loadingPromises.delete(tool);
+                    // Keep the fallback canvas in cache
+                    reject(error);
+                };
+                const iconData = LAYERFORGE_TOOL_ICONS[tool];
+                if (iconData) {
+                    img.src = iconData;
+                }
+                else {
+                    log.warn(`No icon data found for tool: ${tool}`);
+                    reject(createValidationError(`No icon data for tool: ${tool}`, { tool, availableTools: Object.keys(LAYERFORGE_TOOL_ICONS) }));
+                }
+            });
+            this._loadingPromises.set(tool, loadPromise);
+            return loadPromise;
+        }, 'IconLoader.loadIcon');
+        log.info('IconLoader initialized');
     }
     /**
      * Create a fallback canvas icon with colored background and text

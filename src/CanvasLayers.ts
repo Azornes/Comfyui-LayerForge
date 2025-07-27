@@ -8,7 +8,7 @@ import {app} from "../../scripts/app.js";
 // @ts-ignore
 import {ComfyApp} from "../../scripts/app.js";
 import { ClipboardManager } from "./utils/ClipboardManager.js";
-import { createDistanceFieldMask } from "./utils/ImageAnalysis.js";
+import { createDistanceFieldMaskSync } from "./utils/ImageAnalysis.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Point, AddMode, ClipboardPreference } from './types';
 
@@ -421,9 +421,9 @@ export class CanvasLayers {
         const needsBlendAreaEffect = blendArea > 0;
 
         if (needsBlendAreaEffect) {
-            log.info(`Applying blend area effect for layer ${layer.id}`);
+            log.debug(`Applying blend area effect for layer ${layer.id}, blendArea: ${blendArea}%`);
             // Get or create distance field mask
-            let maskCanvas = this.getDistanceFieldMask(layer.image, blendArea);
+            const maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
             
             if (maskCanvas) {
                 // Create a temporary canvas for the masked layer
@@ -463,7 +463,7 @@ export class CanvasLayers {
         ctx.restore();
     }
 
-    private getDistanceFieldMask(image: HTMLImageElement, blendArea: number): HTMLCanvasElement | null {
+    private getDistanceFieldMaskSync(image: HTMLImageElement, blendArea: number): HTMLCanvasElement | null {
         // Check cache first
         let imageCache = this.distanceFieldCache.get(image);
         if (!imageCache) {
@@ -475,7 +475,7 @@ export class CanvasLayers {
         if (!maskCanvas) {
             try {
                 log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
-                maskCanvas = createDistanceFieldMask(image, blendArea);
+                maskCanvas = createDistanceFieldMaskSync(image, blendArea);
                 log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
                 imageCache.set(blendArea, maskCanvas);
             } catch (error) {

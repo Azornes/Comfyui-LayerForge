@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./LoggerUtils.js";
+import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import type { Canvas } from '../Canvas.js';
 // @ts-ignore
 import {ComfyApp} from "../../../scripts/app.js";
@@ -146,26 +147,27 @@ export function press_maskeditor_cancel(app: ComfyApp): void {
  * @param {HTMLImageElement | HTMLCanvasElement} maskImage - Obraz maski do nałożenia
  * @param {boolean} sendCleanImage - Czy wysłać czysty obraz (bez istniejącej maski)
  */
-export function start_mask_editor_with_predefined_mask(canvasInstance: Canvas, maskImage: HTMLImageElement | HTMLCanvasElement, sendCleanImage = true): void {
-    if (!canvasInstance || !maskImage) {
-        log.error('Canvas instance and mask image are required');
-        return;
+export const start_mask_editor_with_predefined_mask = withErrorHandling(function(canvasInstance: Canvas, maskImage: HTMLImageElement | HTMLCanvasElement, sendCleanImage = true): void {
+    if (!canvasInstance) {
+        throw createValidationError('Canvas instance is required', { canvasInstance });
+    }
+    if (!maskImage) {
+        throw createValidationError('Mask image is required', { maskImage });
     }
 
     canvasInstance.startMaskEditor(maskImage, sendCleanImage);
-}
+}, 'start_mask_editor_with_predefined_mask');
 
 /**
  * Uruchamia mask editor z automatycznym zachowaniem (czysty obraz + istniejąca maska)
  * @param {Canvas} canvasInstance - Instancja Canvas
  */
-export function start_mask_editor_auto(canvasInstance: Canvas): void {
+export const start_mask_editor_auto = withErrorHandling(function(canvasInstance: Canvas): void {
     if (!canvasInstance) {
-        log.error('Canvas instance is required');
-        return;
+        throw createValidationError('Canvas instance is required', { canvasInstance });
     }
     canvasInstance.startMaskEditor(null, true);
-}
+}, 'start_mask_editor_auto');
 
 // Duplikowane funkcje zostały przeniesione do ImageUtils.ts:
 // - create_mask_from_image_src -> createMaskFromImageSrc
