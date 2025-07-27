@@ -522,12 +522,8 @@ export class CanvasLayers {
 
     async getLayerImageData(layer: Layer): Promise<string> {
         try {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height, '2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
-
-            tempCanvas.width = layer.width;
-            tempCanvas.height = layer.height;
 
             // We need to draw the layer relative to the new canvas, so we "move" it to 0,0
             // by creating a temporary layer object for drawing.
@@ -937,10 +933,7 @@ export class CanvasLayers {
                 bounds = { x: minX, y: minY, width: newWidth, height: newHeight };
             }
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = bounds.width;
-            tempCanvas.height = bounds.height;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
             if (!tempCtx) {
                 reject(new Error("Could not create canvas context"));
                 return;
@@ -1042,10 +1035,7 @@ export class CanvasLayers {
     async getFlattenedMaskAsBlob(): Promise<Blob | null> {
         return new Promise((resolve, reject) => {
             const bounds = this.canvas.outputAreaBounds;
-            const maskCanvas = document.createElement('canvas');
-            maskCanvas.width = bounds.width;
-            maskCanvas.height = bounds.height;
-            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
             
             if (!maskCtx) {
                 reject(new Error("Could not create mask context"));
@@ -1060,10 +1050,7 @@ export class CanvasLayers {
             maskCtx.fillRect(0, 0, bounds.width, bounds.height);
 
             // Stwórz canvas do sprawdzenia przezroczystości warstw
-            const visibilityCanvas = document.createElement('canvas');
-            visibilityCanvas.width = bounds.width;
-            visibilityCanvas.height = bounds.height;
-            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            const { canvas: visibilityCanvas, ctx: visibilityCtx } = createCanvas(bounds.width, bounds.height, '2d', { alpha: true });
             if (!visibilityCtx) {
                 reject(new Error("Could not create visibility context"));
                 return;
@@ -1101,10 +1088,7 @@ export class CanvasLayers {
                     }
                     
                     // Stwórz tymczasowy canvas dla przetworzonej maski
-                    const tempMaskCanvas = document.createElement('canvas');
-                    tempMaskCanvas.width = toolMaskCanvas.width;
-                    tempMaskCanvas.height = toolMaskCanvas.height;
-                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    const { canvas: tempMaskCanvas, ctx: tempMaskCtx } = createCanvas(toolMaskCanvas.width, toolMaskCanvas.height, '2d', { willReadFrequently: true });
                     if (tempMaskCtx) {
                         tempMaskCtx.putImageData(tempMaskData, 0, 0);
                         
@@ -1174,10 +1158,7 @@ export class CanvasLayers {
                 return;
             }
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = fusedWidth;
-            tempCanvas.height = fusedHeight;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(fusedWidth, fusedHeight, '2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
 
             tempCtx.translate(-minX, -minY);

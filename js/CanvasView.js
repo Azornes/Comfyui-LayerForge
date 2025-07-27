@@ -6,6 +6,7 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 import { Canvas } from "./Canvas.js";
 import { clearAllCanvasStates } from "./db.js";
 import { ImageCache } from "./ImageCache.js";
+import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { showErrorNotification, showSuccessNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
@@ -541,10 +542,7 @@ async function createCanvasWidget(node, widget, app) {
                 iconContainer.appendChild(img);
             }
             else if (icon instanceof HTMLCanvasElement) {
-                const canvas = document.createElement('canvas');
-                canvas.width = 16;
-                canvas.height = 16;
-                const ctx = canvas.getContext('2d');
+                const { canvas, ctx } = createCanvas(16, 16);
                 if (ctx) {
                     ctx.drawImage(icon, 0, 0, 16, 16);
                 }

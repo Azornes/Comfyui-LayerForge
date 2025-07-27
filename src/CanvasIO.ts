@@ -65,10 +65,7 @@ export class CanvasIO {
             const originalShape = this.canvas.outputAreaShape;
             this.canvas.outputAreaShape = null;
 
-            const visibilityCanvas = document.createElement('canvas');
-            visibilityCanvas.width = this.canvas.width;
-            visibilityCanvas.height = this.canvas.height;
-            const visibilityCtx = visibilityCanvas.getContext('2d', { alpha: true });
+            const { canvas: visibilityCanvas, ctx: visibilityCtx } = createCanvas(this.canvas.width, this.canvas.height, '2d', { alpha: true });
             if (!visibilityCtx) throw new Error("Could not create visibility context");
             if (!maskCtx) throw new Error("Could not create mask context");
             if (!tempCtx) throw new Error("Could not create temp context");
@@ -111,17 +108,11 @@ export class CanvasIO {
                     }
                     
                     // Create a temporary canvas to hold the processed mask
-                    const tempMaskCanvas = document.createElement('canvas');
-                    tempMaskCanvas.width = this.canvas.width;
-                    tempMaskCanvas.height = this.canvas.height;
-                    const tempMaskCtx = tempMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    const { canvas: tempMaskCanvas, ctx: tempMaskCtx } = createCanvas(this.canvas.width, this.canvas.height, '2d', { willReadFrequently: true });
                     if (!tempMaskCtx) throw new Error("Could not create temp mask context");
                     
                     // Put the processed mask data into a canvas that matches the output area size
-                    const outputMaskCanvas = document.createElement('canvas');
-                    outputMaskCanvas.width = toolMaskCanvas.width;
-                    outputMaskCanvas.height = toolMaskCanvas.height;
-                    const outputMaskCtx = outputMaskCanvas.getContext('2d', { willReadFrequently: true });
+                    const { canvas: outputMaskCanvas, ctx: outputMaskCtx } = createCanvas(toolMaskCanvas.width, toolMaskCanvas.height, '2d', { willReadFrequently: true });
                     if (!outputMaskCtx) throw new Error("Could not create output mask context");
                     
                     outputMaskCtx.putImageData(tempMaskData, 0, 0);
@@ -337,11 +328,8 @@ export class CanvasIO {
                 throw new Error("Invalid tensor data");
             }
 
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const { canvas, ctx } = createCanvas(tensor.width, tensor.height, '2d', { willReadFrequently: true });
             if (!ctx) throw new Error("Could not create canvas context");
-            canvas.width = tensor.width;
-            canvas.height = tensor.height;
 
             const imageData = new ImageData(
                 new Uint8ClampedArray(tensor.data),
@@ -550,10 +538,7 @@ export class CanvasIO {
 
     async createImageFromData(imageData: ImageData): Promise<HTMLImageElement> {
         return new Promise((resolve, reject) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = imageData.width;
-            canvas.height = imageData.height;
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const { canvas, ctx } = createCanvas(imageData.width, imageData.height, '2d', { willReadFrequently: true });
             if (!ctx) throw new Error("Could not create canvas context");
             ctx.putImageData(imageData, 0, 0);
 

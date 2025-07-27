@@ -18,7 +18,7 @@ import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {BatchPreviewManager} from "./BatchPreviewManager.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import { debounce } from "./utils/CommonUtils.js";
+import { debounce, createCanvas } from "./utils/CommonUtils.js";
 import {MaskEditorIntegration} from "./MaskEditorIntegration.js";
 import {CanvasSelection} from "./CanvasSelection.js";
 import type { ComfyNode, Layer, Viewport, Point, AddMode, Shape, OutputAreaBounds } from './types';
@@ -96,9 +96,9 @@ export class Canvas {
     constructor(node: ComfyNode, widget: any, callbacks: { onStateChange?: () => void, onHistoryChange?: (historyInfo: { canUndo: boolean; canRedo: boolean; }) => void } = {}) {
         this.node = node;
         this.widget = widget;
-        this.canvas = document.createElement('canvas');
-        const ctx = this.canvas.getContext('2d', {willReadFrequently: true});
+        const { canvas, ctx } = createCanvas(0, 0, '2d', {willReadFrequently: true});
         if (!ctx) throw new Error("Could not create canvas context");
+        this.canvas = canvas;
         this.ctx = ctx;
         this.width = 512;
         this.height = 512;
@@ -113,11 +113,12 @@ export class Canvas {
             zoom: 0.8,
         };
 
-        this.offscreenCanvas = document.createElement('canvas');
-        this.offscreenCtx = this.offscreenCanvas.getContext('2d', {
+        const { canvas: offscreenCanvas, ctx: offscreenCtx } = createCanvas(0, 0, '2d', {
             alpha: false,
             willReadFrequently: true
         });
+        this.offscreenCanvas = offscreenCanvas;
+        this.offscreenCtx = offscreenCtx;
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;

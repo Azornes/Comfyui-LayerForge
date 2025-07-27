@@ -1,6 +1,6 @@
 import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
-import {generateUUID, cloneLayers, getStateSignature, debounce} from "./utils/CommonUtils.js";
+import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas} from "./utils/CommonUtils.js";
 import {withErrorHandling} from "./ErrorHandler.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from './types';
@@ -230,10 +230,7 @@ export class CanvasState {
             };
             img.src = imageSrc;
         } else {
-            const canvas = document.createElement('canvas');
-            canvas.width = imageSrc.width;
-            canvas.height = imageSrc.height;
-            const ctx = canvas.getContext('2d');
+            const { canvas, ctx } = createCanvas(imageSrc.width, imageSrc.height);
             if (ctx) {
                 ctx.drawImage(imageSrc, 0, 0);
                 const img = new Image();
@@ -358,10 +355,7 @@ export class CanvasState {
             this.maskUndoStack.pop();
         }
         const maskCanvas = this.canvas.maskTool.getMask();
-        const clonedCanvas = document.createElement('canvas');
-        clonedCanvas.width = maskCanvas.width;
-        clonedCanvas.height = maskCanvas.height;
-        const clonedCtx = clonedCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: clonedCanvas, ctx: clonedCtx } = createCanvas(maskCanvas.width, maskCanvas.height, '2d', { willReadFrequently: true });
         if (clonedCtx) {
             clonedCtx.drawImage(maskCanvas, 0, 0);
         }

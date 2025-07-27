@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
+import { createCanvas } from "./utils/CommonUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer } from './types';
 
@@ -65,10 +66,7 @@ export class CanvasLayersPanel {
                 `;
                 iconContainer.appendChild(img);
             } else if (icon instanceof HTMLCanvasElement) {
-                const canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
-                const ctx = canvas.getContext('2d');
+                const { canvas, ctx } = createCanvas(size, size);
                 if (ctx) {
                     ctx.drawImage(icon, 0, 0, size, size);
                 }
@@ -111,10 +109,7 @@ export class CanvasLayersPanel {
                     `;
                     iconContainer.appendChild(img);
                 } else if (icon instanceof HTMLCanvasElement) {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 16;
-                    canvas.height = 16;
-                    const ctx = canvas.getContext('2d');
+                    const { canvas, ctx } = createCanvas(16, 16);
                     if (ctx) {
                         ctx.globalAlpha = 0.3;
                         ctx.drawImage(icon, 0, 0, 16, 16);
@@ -465,11 +460,8 @@ export class CanvasLayersPanel {
             return;
         }
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const { canvas, ctx } = createCanvas(48, 48, '2d', { willReadFrequently: true });
         if (!ctx) return;
-        canvas.width = 48;
-        canvas.height = 48;
 
         const scale = Math.min(48 / layer.image.width, 48 / layer.image.height);
         const scaledWidth = layer.image.width * scale;

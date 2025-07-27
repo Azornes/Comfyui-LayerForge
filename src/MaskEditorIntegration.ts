@@ -11,6 +11,7 @@ import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessi
 import { convertToImage } from "./utils/ImageUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
+import { createCanvas } from "./utils/CommonUtils.js";
 
 const log = createModuleLogger('MaskEditorIntegration');
 
@@ -347,10 +348,7 @@ export class MaskEditorIntegration {
         }
 
         const maskCanvas = this.maskTool.maskCanvas;
-        const savedCanvas = document.createElement('canvas');
-        savedCanvas.width = maskCanvas.width;
-        savedCanvas.height = maskCanvas.height;
-        const savedCtx = savedCanvas.getContext('2d', {willReadFrequently: true});
+        const { canvas: savedCanvas, ctx: savedCtx } = createCanvas(maskCanvas.width, maskCanvas.height, '2d', {willReadFrequently: true});
         if (savedCtx) {
             savedCtx.drawImage(maskCanvas, 0, 0);
         }

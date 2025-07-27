@@ -17,11 +17,11 @@ export class MaskTool {
         this.currentDrawingChunk = null;
         this.maxActiveChunks = 25; // Safety limit to prevent memory issues (5x5 grid max)
         // Create active mask canvas (composite of chunks)
-        this.activeMaskCanvas = document.createElement('canvas');
-        const activeMaskCtx = this.activeMaskCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: activeMaskCanvas, ctx: activeMaskCtx } = createCanvas(1, 1, '2d', { willReadFrequently: true });
         if (!activeMaskCtx) {
             throw new Error("Failed to get 2D context for active mask canvas");
         }
+        this.activeMaskCanvas = activeMaskCanvas;
         this.activeMaskCtx = activeMaskCtx;
         this.x = 0;
         this.y = 0;
@@ -32,20 +32,20 @@ export class MaskTool {
         this.brushHardness = 0.5;
         this.isDrawing = false;
         this.lastPosition = null;
-        this.previewCanvas = document.createElement('canvas');
-        const previewCtx = this.previewCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: previewCanvas, ctx: previewCtx } = createCanvas(1, 1, '2d', { willReadFrequently: true });
         if (!previewCtx) {
             throw new Error("Failed to get 2D context for preview canvas");
         }
+        this.previewCanvas = previewCanvas;
         this.previewCtx = previewCtx;
         this.previewVisible = false;
         this.previewCanvasInitialized = false;
         // Initialize shape preview system
-        this.shapePreviewCanvas = document.createElement('canvas');
-        const shapePreviewCtx = this.shapePreviewCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: shapePreviewCanvas, ctx: shapePreviewCtx } = createCanvas(1, 1, '2d', { willReadFrequently: true });
         if (!shapePreviewCtx) {
             throw new Error("Failed to get 2D context for shape preview canvas");
         }
+        this.shapePreviewCanvas = shapePreviewCanvas;
         this.shapePreviewCtx = shapePreviewCtx;
         this.shapePreviewVisible = false;
         this.isPreviewMode = false;
@@ -1262,10 +1262,7 @@ export class MaskTool {
     getMaskForOutputArea() {
         const bounds = this.canvasInstance.outputAreaBounds;
         // Create canvas sized to output area
-        const outputMaskCanvas = document.createElement('canvas');
-        outputMaskCanvas.width = bounds.width;
-        outputMaskCanvas.height = bounds.height;
-        const outputMaskCtx = outputMaskCanvas.getContext('2d', { willReadFrequently: true });
+        const { canvas: outputMaskCanvas, ctx: outputMaskCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
         if (!outputMaskCtx) {
             throw new Error("Failed to get 2D context for output area mask canvas");
         }
@@ -1304,7 +1301,8 @@ export class MaskTool {
         const oldHeight = oldMask.height;
         const isIncreasingWidth = width > this.canvasInstance.width;
         const isIncreasingHeight = height > this.canvasInstance.height;
-        this.activeMaskCanvas = document.createElement('canvas');
+        const { canvas: activeMaskCanvas } = createCanvas(1, 1, '2d', { willReadFrequently: true });
+        this.activeMaskCanvas = activeMaskCanvas;
         const extraSpace = 2000;
         const newWidth = isIncreasingWidth ? width + extraSpace : Math.max(oldWidth, width + extraSpace);
         const newHeight = isIncreasingHeight ? height + extraSpace : Math.max(oldHeight, height + extraSpace);
