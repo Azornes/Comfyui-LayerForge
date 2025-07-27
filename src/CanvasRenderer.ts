@@ -61,6 +61,28 @@ export class CanvasRenderer {
         // Use CanvasLayers to draw layers with proper blend area support
         this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
         
+        // Draw mask AFTER layers but BEFORE all preview outlines
+        const maskImage = this.canvas.maskTool.getMask();
+        if (maskImage && this.canvas.maskTool.isOverlayVisible) {
+            ctx.save();
+
+            if (this.canvas.maskTool.isActive) {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 0.5;
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1.0;
+            }
+
+            // Renderuj maskę w jej pozycji światowej (bez przesunięcia względem bounds)
+            const maskWorldX = this.canvas.maskTool.x;
+            const maskWorldY = this.canvas.maskTool.y;
+            ctx.drawImage(maskImage, maskWorldX, maskWorldY);
+
+            ctx.globalAlpha = 1.0;
+            ctx.restore();
+        }
+        
         // Draw selection frames for selected layers
         const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
         sortedLayers.forEach(layer => {
@@ -86,27 +108,6 @@ export class CanvasRenderer {
         this.drawCanvasOutline(ctx);
         this.drawOutputAreaExtensionPreview(ctx); // Draw extension preview
         this.drawPendingGenerationAreas(ctx); // Draw snapshot outlines
-        const maskImage = this.canvas.maskTool.getMask();
-        if (maskImage && this.canvas.maskTool.isOverlayVisible) {
-
-            ctx.save();
-
-            if (this.canvas.maskTool.isActive) {
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = 0.5;
-            } else {
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = 1.0;
-            }
-
-            // Renderuj maskę w jej pozycji światowej (bez przesunięcia względem bounds)
-            const maskWorldX = this.canvas.maskTool.x;
-            const maskWorldY = this.canvas.maskTool.y;
-            ctx.drawImage(maskImage, maskWorldX, maskWorldY);
-
-            ctx.globalAlpha = 1.0;
-            ctx.restore();
-        }
 
         this.renderInteractionElements(ctx);
         this.canvas.shapeTool.render(ctx);
