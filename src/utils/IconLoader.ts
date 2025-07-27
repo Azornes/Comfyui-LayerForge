@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { createCanvas } from "./CommonUtils.js";
 
 const log = createModuleLogger('IconLoader');
 
@@ -147,11 +148,8 @@ export class IconLoader {
      * Create a fallback canvas icon with colored background and text
      */
     private createFallbackIcon(tool: string): HTMLCanvasElement {
-        const canvas = document.createElement('canvas');
-        canvas.width = 24;
-        canvas.height = 24;
+        const { canvas, ctx } = createCanvas(24, 24);
         
-        const ctx = canvas.getContext('2d');
         if (!ctx) {
             log.error('Failed to get canvas context for fallback icon');
             return canvas;

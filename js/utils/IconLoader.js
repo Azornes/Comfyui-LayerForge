@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { createCanvas } from "./CommonUtils.js";
 const log = createModuleLogger('IconLoader');
 // Define tool constants for LayerForge
 export const LAYERFORGE_TOOLS = {
@@ -114,10 +115,7 @@ export class IconLoader {
      * Create a fallback canvas icon with colored background and text
      */
     createFallbackIcon(tool) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 24;
-        canvas.height = 24;
-        const ctx = canvas.getContext('2d');
+        const { canvas, ctx } = createCanvas(24, 24);
         if (!ctx) {
             log.error('Failed to get canvas context for fallback icon');
             return canvas;

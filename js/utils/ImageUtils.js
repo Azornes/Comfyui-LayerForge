@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
+import { createCanvas } from "./CommonUtils.js";
 const log = createModuleLogger('ImageUtils');
 export function validateImageData(data) {
     log.debug("Validating data structure:", {
@@ -126,10 +127,7 @@ export const imageToTensor = withErrorHandling(async function (image) {
     if (!image) {
         throw createValidationError("Image is required");
     }
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = image.width;
-    canvas.height = image.height;
+    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
     if (ctx) {
         ctx.drawImage(image, 0, 0);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -154,10 +152,7 @@ export const tensorToImage = withErrorHandling(async function (tensor) {
         throw createValidationError("Invalid tensor format", { tensor });
     }
     const [, height, width, channels] = tensor.shape;
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = width;
-    canvas.height = height;
+    const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
     if (ctx) {
         const imageData = ctx.createImageData(width, height);
         const data = tensor.data;
@@ -183,15 +178,12 @@ export const resizeImage = withErrorHandling(async function (image, maxWidth, ma
     if (!image) {
         throw createValidationError("Image is required");
     }
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const originalWidth = image.width;
     const originalHeight = image.height;
     const scale = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
     const newWidth = Math.round(originalWidth * scale);
     const newHeight = Math.round(originalHeight * scale);
-    canvas.width = newWidth;
-    canvas.height = newHeight;
+    const { canvas, ctx } = createCanvas(newWidth, newHeight, '2d', { willReadFrequently: true });
     if (ctx) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -212,10 +204,9 @@ export const imageToBase64 = withErrorHandling(function (image, format = 'png', 
     if (!image) {
         throw createValidationError("Image is required");
     }
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = image instanceof HTMLImageElement ? image.naturalWidth : image.width;
-    canvas.height = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
+    const width = image instanceof HTMLImageElement ? image.naturalWidth : image.width;
+    const height = image instanceof HTMLImageElement ? image.naturalHeight : image.height;
+    const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
     if (ctx) {
         ctx.drawImage(image, 0, 0);
         const mimeType = `image/${format}`;
@@ -262,10 +253,7 @@ export function createImageFromSource(source) {
     });
 }
 export const createEmptyImage = withErrorHandling(function (width, height, color = 'transparent') {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = width;
-    canvas.height = height;
+    const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
     if (ctx) {
         if (color !== 'transparent') {
             ctx.fillStyle = color;

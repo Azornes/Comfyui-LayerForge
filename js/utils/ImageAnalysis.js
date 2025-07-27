@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { createCanvas } from "./CommonUtils.js";
 const log = createModuleLogger('ImageAnalysis');
 /**
  * Creates a distance field mask based on the alpha channel of an image.
@@ -8,10 +9,7 @@ const log = createModuleLogger('ImageAnalysis');
  * @returns HTMLCanvasElement containing the distance field mask
  */
 export function createDistanceFieldMask(image, blendArea) {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
     if (!ctx) {
         log.error('Failed to create canvas context for distance field mask');
         return canvas;
@@ -186,10 +184,7 @@ function calculateDistanceFromEdges(width, height) {
  * @returns HTMLCanvasElement containing the radial gradient mask
  */
 export function createRadialGradientMask(width, height, blendArea) {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    const { canvas, ctx } = createCanvas(width, height);
     if (!ctx) {
         log.error('Failed to create canvas context for radial gradient mask');
         return canvas;

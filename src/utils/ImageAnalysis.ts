@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { createCanvas } from "./CommonUtils.js";
 
 const log = createModuleLogger('ImageAnalysis');
 
@@ -10,10 +11,7 @@ const log = createModuleLogger('ImageAnalysis');
  * @returns HTMLCanvasElement containing the distance field mask
  */
 export function createDistanceFieldMask(image: HTMLImageElement, blendArea: number): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
     
     if (!ctx) {
         log.error('Failed to create canvas context for distance field mask');
@@ -217,10 +215,7 @@ function calculateDistanceFromEdges(width: number, height: number): Float32Array
  * @returns HTMLCanvasElement containing the radial gradient mask
  */
 export function createRadialGradientMask(width: number, height: number, blendArea: number): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    const { canvas, ctx } = createCanvas(width, height);
     
     if (!ctx) {
         log.error('Failed to create canvas context for radial gradient mask');

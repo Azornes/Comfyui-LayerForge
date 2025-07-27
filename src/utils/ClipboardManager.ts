@@ -1,4 +1,5 @@
 import {createModuleLogger} from "./LoggerUtils.js";
+import { showNotification, showInfoNotification } from "./NotificationUtils.js";
 
 // @ts-ignore
 import {api} from "../../../scripts/api.js";
@@ -401,7 +402,7 @@ export class ClipboardManager {
                 resolve(false);
             };
 
-            this.showNotification(`Detected image path: ${fileName}. Please select the file to load it.`, 3000);
+            showInfoNotification(`Detected image path: ${fileName}. Please select the file to load it.`, 3000);
 
             document.body.appendChild(fileInput);
             fileInput.click();
@@ -415,7 +416,7 @@ export class ClipboardManager {
     showFilePathMessage(filePath: string): void {
         const fileName = filePath.split(/[\\\/]/).pop();
         const message = `Cannot load local file directly due to browser security restrictions. File detected: ${fileName}`;
-        this.showNotification(message, 5000);
+        showNotification(message, "#c54747", 5000);
         log.info("Showed file path limitation message to user");
     }
 
@@ -489,36 +490,4 @@ export class ClipboardManager {
         log.info("Showed enhanced empty clipboard message with file picker option");
     }
 
-    /**
-     * Shows a temporary notification to the user
-     * @param {string} message - The message to show
-     * @param {number} duration - Duration in milliseconds
-     */
-    showNotification(message: string, duration = 3000): void {
-
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #333;
-            color: white;
-            padding: 12px 16px;
-            border-radius: 4px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            z-index: 10001;
-            max-width: 300px;
-            font-size: 14px;
-            line-height: 1.4;
-        `;
-        notification.textContent = message;
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, duration);
-    }
 }

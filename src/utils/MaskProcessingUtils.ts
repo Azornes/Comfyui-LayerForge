@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./LoggerUtils.js";
+import { createCanvas } from "./CommonUtils.js";
 
 const log = createModuleLogger('MaskProcessingUtils');
 
@@ -42,10 +43,7 @@ export async function processImageToMask(
     });
 
     // Create temporary canvas for processing
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = targetWidth;
-    tempCanvas.height = targetHeight;
-    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
         throw new Error("Failed to get 2D context for mask processing");
@@ -99,10 +97,7 @@ export async function processImageWithTransform(
         targetHeight = sourceImage.height
     } = options;
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = targetWidth;
-    tempCanvas.height = targetHeight;
-    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
         throw new Error("Failed to get 2D context for image processing");
@@ -162,10 +157,7 @@ export async function cropImage(
         cropArea
     });
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
+    const { canvas, ctx } = createCanvas(width, height);
 
     if (!ctx) {
         throw new Error("Failed to get 2D context for image cropping");
@@ -202,10 +194,7 @@ export async function processMaskForViewport(
         viewportOffset
     });
 
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = targetWidth;
-    tempCanvas.height = targetHeight;
-    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
 
     if (!tempCtx) {
         throw new Error("Failed to get 2D context for viewport mask processing");
