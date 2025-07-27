@@ -98,6 +98,21 @@ export class CanvasState {
                 zoom: 0.8
             };
 
+            // Restore outputAreaBounds if saved, otherwise use default
+            if (savedState.outputAreaBounds) {
+                this.canvas.outputAreaBounds = savedState.outputAreaBounds;
+                log.debug(`Output Area bounds restored: x=${this.canvas.outputAreaBounds.x}, y=${this.canvas.outputAreaBounds.y}, w=${this.canvas.outputAreaBounds.width}, h=${this.canvas.outputAreaBounds.height}`);
+            } else {
+                // Fallback to default positioning for legacy saves
+                this.canvas.outputAreaBounds = {
+                    x: -(this.canvas.width / 4),
+                    y: -(this.canvas.height / 4),
+                    width: this.canvas.width,
+                    height: this.canvas.height
+                };
+                log.debug(`Output Area bounds set to default: x=${this.canvas.outputAreaBounds.x}, y=${this.canvas.outputAreaBounds.y}, w=${this.canvas.outputAreaBounds.width}, h=${this.canvas.outputAreaBounds.height}`);
+            }
+
             this.canvas.canvasLayers.updateOutputAreaSize(this.canvas.width, this.canvas.height, false);
             log.debug(`Output Area resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
             const loadedLayers = await this._loadLayers(savedState.layers);
@@ -264,6 +279,7 @@ export class CanvasState {
             viewport: this.canvas.viewport,
             width: this.canvas.width,
             height: this.canvas.height,
+            outputAreaBounds: this.canvas.outputAreaBounds,
         };
 
         if (state.layers.length === 0) {
