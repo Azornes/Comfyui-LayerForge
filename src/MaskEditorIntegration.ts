@@ -108,6 +108,53 @@ export class MaskEditorIntegration {
 
 
     /**
+     * Oblicza dynamiczny czas oczekiwania na podstawie rozmiaru obrazu
+     * @returns {number} Czas oczekiwania w milisekundach
+     */
+    calculateDynamicWaitTime(): number {
+        try {
+            // Get canvas dimensions from output area bounds
+            const bounds = this.canvas.outputAreaBounds;
+            const width = bounds.width;
+            const height = bounds.height;
+            
+            // Calculate total pixels
+            const totalPixels = width * height;
+            
+            // Define wait time based on image size
+            let waitTime = 500; // Base wait time for small images
+            
+            if (totalPixels <= 1000 * 1000) {
+                // Below 1MP (1000x1000) - 500ms
+                waitTime = 500;
+            } else if (totalPixels <= 2000 * 2000) {
+                // 1MP to 4MP (2000x2000) - 1000ms
+                waitTime = 1000;
+            } else if (totalPixels <= 4000 * 4000) {
+                // 4MP to 16MP (4000x4000) - 2000ms
+                waitTime = 2000;
+            } else if (totalPixels <= 6000 * 6000) {
+                // 16MP to 36MP (6000x6000) - 4000ms
+                waitTime = 4000;
+            } else {
+                // Above 36MP - 6000ms
+                waitTime = 6000;
+            }
+            
+            log.debug("Calculated dynamic wait time", {
+                imageSize: `${width}x${height}`,
+                totalPixels: totalPixels,
+                waitTime: waitTime
+            });
+            
+            return waitTime;
+        } catch (error) {
+            log.warn("Error calculating dynamic wait time, using default 1000ms", error);
+            return 1000; // Fallback to 1 second
+        }
+    }
+
+    /**
      * Czeka na otwarcie mask editora i automatycznie nakłada predefiniowaną maskę
      */
     waitForMaskEditorAndApplyMask() {
@@ -162,12 +209,13 @@ export class MaskEditorIntegration {
                 }
 
                 if (editorReady) {
-
-                    log.info("Applying mask to editor after", attempts * 100, "ms wait");
+                    // Calculate dynamic wait time based on image size
+                    const waitTime = this.calculateDynamicWaitTime();
+                    log.info("Applying mask to editor after", waitTime, "ms wait (dynamic based on image size)");
                     setTimeout(() => {
                         this.applyMaskToEditor(this.pendingMask);
                         this.pendingMask = null;
-                    }, 300);
+                    }, waitTime);
                 } else if (attempts < maxAttempts) {
 
                     if (attempts % 10 === 0) {
