@@ -8,7 +8,7 @@ import { clearAllCanvasStates } from "./db.js";
 import { ImageCache } from "./ImageCache.js";
 import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
-import { showErrorNotification, showSuccessNotification } from "./utils/NotificationUtils.js";
+import { showErrorNotification, showSuccessNotification, showInfoNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
@@ -312,9 +312,11 @@ async function createCanvasWidget(node, widget, app) {
                         const spinner = $el("div.matting-spinner");
                         button.appendChild(spinner);
                         button.classList.add('loading');
+                        showInfoNotification("Starting background removal process...", 2000);
                         try {
-                            if (canvas.canvasSelection.selectedLayers.length !== 1)
+                            if (canvas.canvasSelection.selectedLayers.length !== 1) {
                                 throw new Error("Please select exactly one image layer for matting.");
+                            }
                             const selectedLayer = canvas.canvasSelection.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
                             const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
@@ -327,7 +329,7 @@ async function createCanvasWidget(node, widget, app) {
                             if (!response.ok) {
                                 let errorMsg = `Server error: ${response.status} - ${response.statusText}`;
                                 if (result && result.error) {
-                                    errorMsg = `Error: ${result.error}\n\nDetails: ${result.details}`;
+                                    errorMsg = `Error: ${result.error}. Details: ${result.details || 'Check console'}`;
                                 }
                                 throw new Error(errorMsg);
                             }
@@ -340,12 +342,12 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.canvasSelection.updateSelection([newLayer]);
                             canvas.render();
                             canvas.saveState();
+                            showSuccessNotification("Background removed successfully!");
                         }
                         catch (error) {
                             log.error("Matting error:", error);
                             const errorMessage = error.message || "An unknown error occurred.";
-                            const errorDetails = error.stack || (error.details ? JSON.stringify(error.details, null, 2) : "No details available.");
-                            showErrorDialog(errorMessage, errorDetails);
+                            showErrorNotification(`Matting Failed: ${errorMessage}`);
                         }
                         finally {
                             button.classList.remove('loading');
@@ -861,55 +863,6 @@ async function createCanvasWidget(node, widget, app) {
         canvas: canvas,
         panel: controlPanel
     };
-}
-function showErrorDialog(message, details) {
-    const dialog = $el("div.painter-dialog.error-dialog", {
-        style: {
-            position: 'fixed',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex: '9999',
-            padding: '20px',
-            background: '#282828',
-            border: '1px solid #ff4444',
-            borderRadius: '8px',
-            minWidth: '400px',
-            maxWidth: '80vw',
-        }
-    }, [
-        $el("h3", { textContent: "Matting Error", style: { color: "#ff4444", marginTop: "0" } }),
-        $el("p", { textContent: message, style: { color: "white" } }),
-        $el("pre.error-details", {
-            textContent: details,
-            style: {
-                background: "#1e1e1e",
-                border: "1px solid #444",
-                padding: "10px",
-                maxHeight: "300px",
-                overflowY: "auto",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-                color: "#ccc"
-            }
-        }),
-        $el("div.dialog-buttons", { style: { textAlign: "right", marginTop: "20px" } }, [
-            $el("button", {
-                textContent: "Copy Details",
-                onclick: () => {
-                    navigator.clipboard.writeText(details)
-                        .then(() => showSuccessNotification("Error details copied to clipboard!"))
-                        .catch(err => showErrorNotification("Failed to copy details: " + err));
-                }
-            }),
-            $el("button", {
-                textContent: "Close",
-                style: { marginLeft: "10px" },
-                onclick: () => document.body.removeChild(dialog)
-            })
-        ])
-    ]);
-    document.body.appendChild(dialog);
 }
 const canvasNodeInstances = new Map();
 app.registerExtension({

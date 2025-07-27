@@ -14,43 +14,32 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
     message = message.replace(/^\[Layer Forge\]\s*/, "");
     // Type-specific config
     const config = {
-        success: {
-            icon: "✔️",
-            title: "Success",
-            bg: "#1fd18b",
-            color: "#155c3b"
-        },
-        error: {
-            icon: "❌",
-            title: "Error",
-            bg: "#ff6f6f",
-            color: "#7a2323"
-        },
-        info: {
-            icon: "ℹ️",
-            title: "Info",
-            bg: "#4a6cd4",
-            color: "#fff"
-        },
-        warning: {
-            icon: "⚠️",
-            title: "Warning",
-            bg: "#ffd43b",
-            color: "#7a5c00"
-        },
-        alert: {
-            icon: "⚠️",
-            title: "Alert",
-            bg: "#fff7cc",
-            color: "#7a5c00"
-        }
+        success: { icon: "✔️", title: "Success", bg: "#1fd18b" },
+        error: { icon: "❌", title: "Error", bg: "#ff6f6f" },
+        info: { icon: "ℹ️", title: "Info", bg: "#4a6cd4" },
+        warning: { icon: "⚠️", title: "Warning", bg: "#ffd43b" },
+        alert: { icon: "⚠️", title: "Alert", bg: "#fff7cc" }
     }[type];
-    // --- Dark, modern notification style with sticky header ---
+    // --- Get or create the main notification container ---
+    let container = document.getElementById('lf-notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'lf-notification-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 10001;
+            display: flex;
+            flex-direction: row-reverse;
+            gap: 16px;
+            align-items: flex-start;
+        `;
+        document.body.appendChild(container);
+    }
+    // --- Dark, modern notification style ---
     const notification = document.createElement('div');
     notification.style.cssText = `
-        position: fixed;
-        top: 24px;
-        right: 24px;
         min-width: 380px;
         max-width: 440px;
         max-height: 80vh;
@@ -58,43 +47,22 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
         color: #fff;
         border-radius: 12px;
         box-shadow: 0 4px 32px rgba(0,0,0,0.25);
-        z-index: 10001;
-        font-size: 14px;
         display: flex;
         flex-direction: column;
         padding: 0;
-        margin-bottom: 18px;
         font-family: 'Segoe UI', 'Arial', sans-serif;
         overflow: hidden;
         border: 1px solid rgba(80, 80, 80, 0.5);
         backdrop-filter: blur(8px);
-        animation: lf-fadein 0.2s;
+        animation: lf-fadein 0.3s ease-out;
     `;
     // --- Header (non-scrollable) ---
     const header = document.createElement('div');
-    header.style.cssText = `
-        display: flex;
-        align-items: flex-start;
-        padding: 16px 20px;
-        position: relative;
-        flex-shrink: 0;
-    `;
+    header.style.cssText = `display: flex; align-items: flex-start; padding: 16px 20px; position: relative; flex-shrink: 0;`;
     const leftBar = document.createElement('div');
-    leftBar.style.cssText = `
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 6px;
-        background: ${config.bg};
-        box-shadow: 0 0 12px ${config.bg};
-        border-radius: 3px 0 0 3px;
-    `;
+    leftBar.style.cssText = `position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: ${config.bg}; box-shadow: 0 0 12px ${config.bg}; border-radius: 3px 0 0 3px;`;
     const iconContainer = document.createElement('div');
-    iconContainer.style.cssText = `
-        width: 48px; height: 48px;
-        min-width: 48px; min-height: 48px;
-        display: flex; align-items: center; justify-content: center;
-        margin-left: 18px; margin-right: 18px;
-    `;
+    iconContainer.style.cssText = `width: 48px; height: 48px; min-width: 48px; min-height: 48px; display: flex; align-items: center; justify-content: center; margin-left: 18px; margin-right: 18px;`;
     iconContainer.innerHTML = {
         success: `<svg width="48" height="48" viewBox="0 0 48 48"><defs><filter id="f-succ"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="${config.bg}"/></filter></defs><path d="M24 4 L44 14 L44 34 L24 44 L4 34 L4 14 Z" fill="rgba(255,255,255,0.08)" stroke="${config.bg}" stroke-width="2"/><g filter="url(#f-succ)"><path d="M16 24 L22 30 L34 18" stroke="#fff" stroke-width="3" fill="none"/></g></svg>`,
         error: `<svg width="48" height="48" viewBox="0 0 48 48"><defs><filter id="f-err"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="${config.bg}"/></filter></defs><path d="M14 14 L34 34 M34 14 L14 34" fill="none" stroke="#fff" stroke-width="3"/><g filter="url(#f-err)"><path d="M24,4 L42,12 L42,36 L24,44 L6,36 L6,12 Z" fill="rgba(255,255,255,0.08)" stroke="${config.bg}" stroke-width="2"/></g></svg>`,
@@ -122,8 +90,6 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
     closeBtn.innerHTML = '&times;';
     closeBtn.setAttribute("aria-label", "Close notification");
     closeBtn.style.cssText = `background: none; border: none; color: #ccc; font-size: 22px; font-weight: bold; cursor: pointer; padding: 0; opacity: 0.7; transition: opacity 0.15s; line-height: 1;`;
-    closeBtn.onclick = () => { if (notification.parentNode)
-        notification.parentNode.removeChild(notification); };
     topRightContainer.appendChild(tag);
     topRightContainer.appendChild(closeBtn);
     header.appendChild(iconContainer);
@@ -131,52 +97,70 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
     header.appendChild(topRightContainer);
     // --- Scrollable Body ---
     const body = document.createElement('div');
-    body.style.cssText = `
-        padding: 0px 20px 16px 20px; /* Adjusted left padding */
-        overflow-y: auto;
-        flex: 1;
-    `;
+    body.style.cssText = `padding: 0px 20px 16px 20px; overflow-y: auto; flex: 1;`;
     const msgSpan = document.createElement('div');
     msgSpan.style.cssText = `font-size: 14px; color: #ccc; line-height: 1.5; white-space: pre-wrap; word-break: break-word;`;
     msgSpan.textContent = message;
     body.appendChild(msgSpan);
-    // --- Progress Bar (non-scrollable) ---
+    // --- Progress Bar ---
     const progressBar = document.createElement('div');
-    progressBar.style.cssText = `
-        height: 4px;
-        width: 100%;
-        background: ${config.bg};
-        box-shadow: 0 0 12px ${config.bg};
-        transform-origin: left;
-        animation: lf-progress ${duration / 1000}s linear;
-        flex-shrink: 0;
-    `;
-    notification.appendChild(leftBar); // Add bar to main container
+    progressBar.style.cssText = `height: 4px; width: 100%; background: ${config.bg}; box-shadow: 0 0 12px ${config.bg}; transform-origin: left; animation: lf-progress ${duration / 1000}s linear; flex-shrink: 0;`;
+    // --- Assemble Notification ---
+    notification.appendChild(leftBar);
     notification.appendChild(header);
     notification.appendChild(body);
+    if (type === 'error') {
+        const footer = document.createElement('div');
+        footer.style.cssText = `padding: 0 20px 12px 86px; flex-shrink: 0;`;
+        const copyButton = document.createElement('button');
+        copyButton.textContent = 'Copy Error';
+        copyButton.style.cssText = `background: rgba(255, 111, 111, 0.2); border: 1px solid #ff6f6f; color: #ffafaf; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.2s;`;
+        copyButton.onmouseenter = () => copyButton.style.background = 'rgba(255, 111, 111, 0.3)';
+        copyButton.onmouseleave = () => copyButton.style.background = 'rgba(255, 111, 111, 0.2)';
+        copyButton.onclick = () => {
+            navigator.clipboard.writeText(message)
+                .then(() => showSuccessNotification("Error message copied!", 2000))
+                .catch(err => console.error('Failed to copy error message: ', err));
+        };
+        footer.appendChild(copyButton);
+        notification.appendChild(footer);
+    }
     notification.appendChild(progressBar);
-    document.body.appendChild(notification);
+    // Add to DOM
+    container.appendChild(notification);
     // --- Keyframes and Timer Logic ---
-    const styleSheet = document.createElement("style");
-    styleSheet.type = "text/css";
-    styleSheet.innerText = `
-        @keyframes lf-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-        @keyframes lf-progress-rewind { to { transform: scaleX(1); } }
-        @keyframes lf-fadein { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-        .notification-scrollbar::-webkit-scrollbar { width: 8px; }
-        .notification-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
-        .notification-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-        .notification-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
-    `;
+    const styleSheet = document.getElementById('lf-notification-styles');
+    if (!styleSheet) {
+        const newStyleSheet = document.createElement("style");
+        newStyleSheet.id = 'lf-notification-styles';
+        newStyleSheet.innerText = `
+            @keyframes lf-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+            @keyframes lf-progress-rewind { to { transform: scaleX(1); } }
+            @keyframes lf-fadein { from { opacity: 0; transform: scale(0.95) translateX(20px); } to { opacity: 1; transform: scale(1) translateX(0); } }
+            @keyframes lf-fadeout { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+            .notification-scrollbar::-webkit-scrollbar { width: 8px; }
+            .notification-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+            .notification-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
+            .notification-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+        `;
+        document.head.appendChild(newStyleSheet);
+    }
     body.classList.add('notification-scrollbar');
-    document.head.appendChild(styleSheet);
     let dismissTimeout = null;
-    const startDismissTimer = () => {
-        dismissTimeout = window.setTimeout(() => {
+    const closeNotification = () => {
+        notification.style.animation = 'lf-fadeout 0.3s ease-out forwards';
+        notification.addEventListener('animationend', () => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
+                if (container && container.children.length === 0) {
+                    container.remove();
+                }
             }
-        }, duration);
+        });
+    };
+    closeBtn.onclick = closeNotification;
+    const startDismissTimer = () => {
+        dismissTimeout = window.setTimeout(closeNotification, duration);
         progressBar.style.animation = `lf-progress ${duration / 1000}s linear`;
     };
     const pauseAndRewindTimer = () => {
@@ -194,70 +178,43 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
 }
 /**
  * Shows a success notification
- * @param message - The message to show
- * @param duration - Duration in milliseconds (default: 3000)
  */
 export function showSuccessNotification(message, duration = 3000) {
     showNotification(message, undefined, duration, "success");
 }
 /**
  * Shows an error notification
- * @param message - The message to show
- * @param duration - Duration in milliseconds (default: 5000)
  */
 export function showErrorNotification(message, duration = 5000) {
     showNotification(message, undefined, duration, "error");
 }
 /**
  * Shows an info notification
- * @param message - The message to show
- * @param duration - Duration in milliseconds (default: 3000)
  */
 export function showInfoNotification(message, duration = 3000) {
     showNotification(message, undefined, duration, "info");
 }
 /**
  * Shows a warning notification
- * @param message - The message to show
- * @param duration - Duration in milliseconds (default: 3000)
  */
 export function showWarningNotification(message, duration = 3000) {
     showNotification(message, undefined, duration, "warning");
 }
 /**
  * Shows an alert notification
- * @param message - The message to show
- * @param duration - Duration in milliseconds (default: 3000)
  */
 export function showAlertNotification(message, duration = 3000) {
     showNotification(message, undefined, duration, "alert");
 }
 /**
  * Shows a sequence of all notification types for debugging purposes.
- * @param message - An optional message to display in all notification types.
  */
 export function showAllNotificationTypes(message) {
     const types = ["success", "error", "info", "warning", "alert"];
     types.forEach((type, index) => {
         const notificationMessage = message || `This is a '${type}' notification.`;
         setTimeout(() => {
-            switch (type) {
-                case "success":
-                    showSuccessNotification(notificationMessage);
-                    break;
-                case "error":
-                    showErrorNotification(notificationMessage);
-                    break;
-                case "info":
-                    showInfoNotification(notificationMessage);
-                    break;
-                case "warning":
-                    showWarningNotification(notificationMessage);
-                    break;
-                case "alert":
-                    showAlertNotification(notificationMessage);
-                    break;
-            }
+            showNotification(notificationMessage, undefined, 3000, type);
         }, index * 400); // Stagger the notifications
     });
 }
