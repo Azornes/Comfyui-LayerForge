@@ -6,7 +6,8 @@ import {ComfyApp} from "../../scripts/app.js";
 import {api} from "../../scripts/api.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
-import { processImageToMask, processMaskForViewport, convertToImage } from "./utils/MaskProcessingUtils.js";
+import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
+import { convertToImage } from "./utils/ImageUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 

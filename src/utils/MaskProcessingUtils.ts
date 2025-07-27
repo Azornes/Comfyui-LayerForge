@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 import { createCanvas } from "./CommonUtils.js";
+import { convertToImage } from "./ImageUtils.js";
 
 const log = createModuleLogger('MaskProcessingUtils');
 
@@ -117,27 +118,6 @@ export async function processImageWithTransform(
 
     tempCtx.putImageData(imageData, 0, 0);
     return tempCanvas;
-}
-
-/**
- * Converts a canvas or image to an Image element
- * @param source - Source canvas or image
- * @returns Promise with Image element
- */
-export async function convertToImage(source: HTMLCanvasElement | HTMLImageElement): Promise<HTMLImageElement> {
-    if (source instanceof HTMLImageElement) {
-        return source; // Already an image
-    }
-
-    const image = new Image();
-    image.src = source.toDataURL();
-    
-    await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = reject;
-    });
-
-    return image;
 }
 
 /**

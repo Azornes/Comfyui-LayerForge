@@ -4,7 +4,8 @@ import { ComfyApp } from "../../scripts/app.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { showInfoNotification, showSuccessNotification, showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
-import { processImageToMask, convertToImage } from "./utils/MaskProcessingUtils.js";
+import { processImageToMask } from "./utils/MaskProcessingUtils.js";
+import { convertToImage } from "./utils/ImageUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import type { ComfyNode } from './types';
 

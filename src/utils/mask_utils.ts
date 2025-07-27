@@ -167,30 +167,6 @@ export function start_mask_editor_auto(canvasInstance: Canvas): void {
     canvasInstance.startMaskEditor(null, true);
 }
 
-/**
- * Tworzy maskę z obrazu dla użycia w mask editorze
- * @param {string} imageSrc - Źródło obrazu (URL lub data URL)
- * @returns {Promise<HTMLImageElement>} Promise zwracający obiekt Image
- */
-export function create_mask_from_image_src(imageSrc: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = imageSrc;
-    });
-}
-
-/**
- * Konwertuje canvas do Image dla użycia jako maska
- * @param {HTMLCanvasElement} canvas - Canvas do konwersji
- * @returns {Promise<HTMLImageElement>} Promise zwracający obiekt Image
- */
-export function canvas_to_mask_image(canvas: HTMLCanvasElement): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = canvas.toDataURL();
-    });
-}
+// Duplikowane funkcje zostały przeniesione do ImageUtils.ts:
+// - create_mask_from_image_src -> createMaskFromImageSrc
+// - canvas_to_mask_image -> canvasToMaskImage

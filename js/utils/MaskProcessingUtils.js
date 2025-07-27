@@ -72,23 +72,6 @@ export async function processImageWithTransform(sourceImage, pixelTransform, opt
     return tempCanvas;
 }
 /**
- * Converts a canvas or image to an Image element
- * @param source - Source canvas or image
- * @returns Promise with Image element
- */
-export async function convertToImage(source) {
-    if (source instanceof HTMLImageElement) {
-        return source; // Already an image
-    }
-    const image = new Image();
-    image.src = source.toDataURL();
-    await new Promise((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = reject;
-    });
-    return image;
-}
-/**
  * Crops an image to a specific region
  * @param sourceImage - Source image or canvas
  * @param cropArea - Crop area {x, y, width, height}

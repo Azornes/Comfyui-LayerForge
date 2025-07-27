@@ -334,3 +334,55 @@ export const createEmptyImage = withErrorHandling(function (width: number, heigh
     }
     throw new Error("Canvas context not available");
 }, 'createEmptyImage');
+
+/**
+ * Converts a canvas or image to an Image element
+ * Consolidated from MaskProcessingUtils.convertToImage()
+ * @param source - Source canvas or image
+ * @returns Promise with Image element
+ */
+export async function convertToImage(source: HTMLCanvasElement | HTMLImageElement): Promise<HTMLImageElement> {
+    if (source instanceof HTMLImageElement) {
+        return source; // Already an image
+    }
+
+    const image = new Image();
+    image.src = source.toDataURL();
+    
+    await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = reject;
+    });
+
+    return image;
+}
+
+/**
+ * Creates a mask from image source for use in mask editor
+ * Consolidated from mask_utils.create_mask_from_image_src()
+ * @param imageSrc - Image source (URL or data URL)
+ * @returns Promise returning Image object
+ */
+export function createMaskFromImageSrc(imageSrc: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = (err) => reject(err);
+        img.src = imageSrc;
+    });
+}
+
+/**
+ * Converts canvas to Image for use as mask
+ * Consolidated from mask_utils.canvas_to_mask_image()
+ * @param canvas - Canvas to convert
+ * @returns Promise returning Image object
+ */
+export function canvasToMaskImage(canvas: HTMLCanvasElement): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = (err) => reject(err);
+        img.src = canvas.toDataURL();
+    });
+}
