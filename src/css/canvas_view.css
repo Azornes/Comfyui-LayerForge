@@ -386,17 +386,18 @@
 .painter-tooltip {
     position: fixed;
     display: none;
-    background: #3a3a3a;
+    background: #2B2B2B;
     color: #f0f0f0;
-    border: 1px solid #555;
-    border-radius: 8px;
+    border: 1px solid #444;
+    border-top: 2px solid #4a90e2;
+    border-radius: 6px;
     padding: 12px 18px;
     z-index: 9999;
-    font-size: 13px;
-    line-height: 1.7;
+    font-size: 12px;
+    line-height: 1.5;
     width: auto;
-    max-width: min(500px, calc(100vw - 40px));
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-width: min(450px, calc(100vw - 30px));
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     pointer-events: none;
     transform-origin: top left;
     transition: transform 0.2s ease;
@@ -420,8 +421,9 @@
 }
 
 .painter-tooltip table td {
-    padding: 2px 8px;
+    padding: 4px 8px;
     vertical-align: middle;
+    transition: background-color 0.2s;
 }
 
 .painter-tooltip table td:first-child {
@@ -435,7 +437,10 @@
 }
 
 .painter-tooltip table tr:nth-child(odd) td {
-    background-color: rgba(0,0,0,0.1);
+    background-color: rgba(255, 255, 255, 0.02);
+}
+.painter-tooltip table tr:hover td {
+    background-color: rgba(74, 144, 226, 0.15);
 }
 
 @media (max-width: 600px) {
@@ -508,10 +513,15 @@
 
 .painter-tooltip h4 {
     margin-top: 10px;
-    margin-bottom: 5px;
-    color: #4a90e2; /* Jasnoniebieski akcent */
-    border-bottom: 1px solid #555;
+    margin-bottom: 6px;
+    color: #4a90e2;
+    border-bottom: 1px solid #4a90e2;
     padding-bottom: 4px;
+    font-size: 14px;
+    font-weight: 600;
+}
+.painter-tooltip h4:first-child {
+    margin-top: 0;
 }
 
 .painter-tooltip ul {
@@ -521,13 +531,18 @@
 }
 
 .painter-tooltip kbd {
-    background-color: #2a2a2a;
-    border: 1px solid #1a1a1a;
-    border-radius: 3px;
+    background-color: #444;
+    border: 1px solid #555;
+    border-bottom-width: 2px;
+    border-radius: 4px;
     padding: 2px 6px;
     font-family: monospace;
-    font-size: 12px;
-    color: #d0d0d0;
+    font-size: 11px;
+    color: #e0e0e0;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.15);
+    margin: 0 1px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .painter-container.has-focus {
