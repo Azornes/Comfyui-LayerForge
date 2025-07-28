@@ -59,6 +59,37 @@ export class CanvasRenderer {
         ctx.restore();
     }
 
+    /**
+     * Helper function to draw rectangle with stroke style
+     * @param ctx Canvas context
+     * @param rect Rectangle bounds {x, y, width, height}
+     * @param options Styling options
+     */
+    drawStyledRect(ctx: any, rect: any, options: any = {}) {
+        const {
+            strokeStyle = "rgba(255, 255, 255, 0.8)",
+            lineWidth = 2,
+            dashPattern = null
+        } = options;
+
+        ctx.save();
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth / this.canvas.viewport.zoom;
+        
+        if (dashPattern) {
+            const scaledDash = dashPattern.map((d: number) => d / this.canvas.viewport.zoom);
+            ctx.setLineDash(scaledDash);
+        }
+        
+        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+        
+        if (dashPattern) {
+            ctx.setLineDash([]);
+        }
+        
+        ctx.restore();
+    }
+
     render() {
         if (this.renderAnimationFrame) {
             this.isDirty = true;
@@ -187,13 +218,11 @@ export class CanvasRenderer {
 
         if (interaction.mode === 'resizingCanvas' && interaction.canvasResizeRect) {
             const rect = interaction.canvasResizeRect;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
-            ctx.lineWidth = 2 / this.canvas.viewport.zoom;
-            ctx.setLineDash([8 / this.canvas.viewport.zoom, 4 / this.canvas.viewport.zoom]);
-            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-            ctx.setLineDash([]);
-            ctx.restore();
+            this.drawStyledRect(ctx, rect, {
+                strokeStyle: 'rgba(0, 255, 0, 0.8)',
+                lineWidth: 2,
+                dashPattern: [8, 4]
+            });
             if (rect.width > 0 && rect.height > 0) {
                 const text = `${Math.round(rect.width)}x${Math.round(rect.height)}`;
                 const textWorldX = rect.x + rect.width / 2;
@@ -207,13 +236,11 @@ export class CanvasRenderer {
 
         if (interaction.mode === 'movingCanvas' && interaction.canvasMoveRect) {
             const rect = interaction.canvasMoveRect;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
-            ctx.lineWidth = 2 / this.canvas.viewport.zoom;
-            ctx.setLineDash([10 / this.canvas.viewport.zoom, 5 / this.canvas.viewport.zoom]);
-            ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-            ctx.setLineDash([]);
-            ctx.restore();
+            this.drawStyledRect(ctx, rect, {
+                strokeStyle: 'rgba(0, 150, 255, 0.8)',
+                lineWidth: 2,
+                dashPattern: [10, 5]
+            });
 
             const text = `(${Math.round(rect.x)}, ${Math.round(rect.y)})`;
             const textWorldX = rect.x + rect.width / 2;
@@ -397,13 +424,11 @@ export class CanvasRenderer {
             height: baseHeight + ext.top + ext.bottom
         };
 
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)'; // Yellow color for preview
-        ctx.lineWidth = 3 / this.canvas.viewport.zoom;
-        ctx.setLineDash([8 / this.canvas.viewport.zoom, 4 / this.canvas.viewport.zoom]);
-        ctx.strokeRect(previewBounds.x, previewBounds.y, previewBounds.width, previewBounds.height);
-        ctx.setLineDash([]);
-        ctx.restore();
+        this.drawStyledRect(ctx, previewBounds, {
+            strokeStyle: 'rgba(255, 255, 0, 0.8)',
+            lineWidth: 3,
+            dashPattern: [8, 4]
+        });
     }
 
     drawPendingGenerationAreas(ctx: any) {
@@ -429,12 +454,11 @@ export class CanvasRenderer {
 
         // 3. Draw all collected areas
         areasToDraw.forEach(area => {
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 150, 255, 0.9)'; // Blue color
-            ctx.lineWidth = 3 / this.canvas.viewport.zoom;
-            ctx.setLineDash([12 / this.canvas.viewport.zoom, 6 / this.canvas.viewport.zoom]);
-            ctx.strokeRect(area.x, area.y, area.width, area.height);
-            ctx.restore();
+            this.drawStyledRect(ctx, area, {
+                strokeStyle: 'rgba(0, 150, 255, 0.9)',
+                lineWidth: 3,
+                dashPattern: [12, 6]
+            });
         });
     }
 
@@ -454,12 +478,11 @@ export class CanvasRenderer {
             height: maskTool.getMask().height
         };
 
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)'; // Red color for mask area bounds
-        ctx.lineWidth = 2 / this.canvas.viewport.zoom;
-        ctx.setLineDash([6 / this.canvas.viewport.zoom, 6 / this.canvas.viewport.zoom]);
-        ctx.strokeRect(maskBounds.x, maskBounds.y, maskBounds.width, maskBounds.height);
-        ctx.setLineDash([]);
+        this.drawStyledRect(ctx, maskBounds, {
+            strokeStyle: 'rgba(255, 100, 100, 0.7)',
+            lineWidth: 2,
+            dashPattern: [6, 6]
+        });
         
         // Add text label to show this is the mask drawing area
         const textWorldX = maskBounds.x + maskBounds.width / 2;
@@ -470,7 +493,5 @@ export class CanvasRenderer {
             backgroundColor: "rgba(255, 100, 100, 0.8)",
             padding: 8
         });
-        
-        ctx.restore();
     }
 }

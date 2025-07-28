@@ -1,54 +1,96 @@
 .painter-button {
-    background: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
-    border: 1px solid #2a2a2a;
-    border-radius: 4px;
-    color: #ffffff;
-    padding: 6px 12px;
+    background-color: #444;
+    border: 1px solid #555;
+    border-radius: 5px;
+    color: #e0e0e0;
+    padding: 6px 14px;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s ease-in-out;
     min-width: 80px;
     text-align: center;
     margin: 2px;
-    text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .painter-button:hover {
-    background: linear-gradient(to bottom, #5a5a5a, #4a4a4a);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    background-color: #555;
+    border-color: #666;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
 }
 
 .painter-button:active {
-    background: linear-gradient(to bottom, #3a3a3a, #4a4a4a);
-    transform: translateY(1px);
+    background-color: #3a3a3a;
+    transform: translateY(0);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .painter-button:disabled,
 .painter-button:disabled:hover {
-    background: #555;
-    color: #888;
+    background-color: #3a3a3a;
+    color: #777;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
-    border-color: #444;
+    border-color: #4a4a4a;
+    opacity: 0.6;
 }
 
 .painter-button.primary {
-    background: linear-gradient(to bottom, #4a6cd4, #3a5cc4);
-    border-color: #2a4cb4;
+    background-color: #3a76d6;
+    border-color: #2a6ac4;
+    color: #fff;
+    text-shadow: none;
 }
 
 .painter-button.primary:hover {
-    background: linear-gradient(to bottom, #5a7ce4, #4a6cd4);
+    background-color: #4a86e4;
+    border-color: #3a76d6;
+}
+
+.painter-button.success {
+    background-color: #4a7c59;
+    border-color: #3a6c49;
+    color: #fff;
+}
+
+.painter-button.success:hover {
+    background-color: #5a8c69;
+    border-color: #4a7c59;
+}
+
+.painter-button.danger {
+    background-color: #c54747;
+    border-color: #a53737;
+    color: #fff;
+}
+
+.painter-button.danger:hover {
+    background-color: #d55757;
+    border-color: #c54747;
+}
+
+.painter-button.icon-button {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 30px; /* Match height */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .painter-controls {
-    background: linear-gradient(to bottom, #404040, #383838);
-    border-bottom: 1px solid #2a2a2a;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 8px;
+    background-color: #2f2f2f;
+    border-bottom: 1px solid #202020;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    padding: 10px;
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
@@ -56,57 +98,198 @@
 
 .painter-slider-container {
    display: flex;
+   flex-direction: column;
    align-items: center;
-   gap: 8px;
+   gap: 4px;
    color: #fff;
    font-size: 12px;
+   min-width: 100px;
 }
 
 .painter-slider-container input[type="range"] {
+   -webkit-appearance: none;
    width: 80px;
+   height: 4px;
+   background: #555;
+   border-radius: 2px;
+   outline: none;
+   padding: 0;
+   margin: 0;
 }
 
+.painter-slider-container input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: #e0e0e0;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #555;
+  transition: background 0.2s;
+}
+
+.painter-slider-container input[type="range"]::-webkit-slider-thumb:hover {
+  background: #fff;
+}
+
+.painter-slider-container input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #e0e0e0;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid #555;
+}
+
+.slider-value {
+    font-size: 11px;
+    color: #bbb;
+    margin-top: 2px;
+    min-height: 14px;
+    text-align: center;
+}
 
 .painter-button-group {
     display: flex;
     align-items: center;
-    gap: 6px;
-    background-color: rgba(0,0,0,0.2);
-    padding: 4px;
+    gap: 4px;
+    background-color: transparent;
+    padding: 0;
     border-radius: 6px;
 }
 
 .painter-clipboard-group {
     display: flex;
     align-items: center;
-    gap: 2px;
-    background-color: rgba(0,0,0,0.15);
-    padding: 3px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.1);
-    position: relative;
-}
-
-.painter-clipboard-group::before {
-    content: "";
-    position: absolute;
-    top: -2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 20px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(74, 108, 212, 0.6), transparent);
-    border-radius: 1px;
+    gap: 4px;
 }
 
 .painter-clipboard-group .painter-button {
     margin: 1px;
+    height: 30px; /* Match switch height */
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+
+/* --- Clipboard Switch Modern --- */
+.clipboard-switch {
+    position: relative;
+    width: 90px;
+    height: 30px;
+    box-sizing: border-box;
+    background-color: #444;
+    border-radius: 5px;
+    border: 1px solid #555;
+    cursor: pointer;
+    transition: background-color 0.3s ease-in-out;
+    user-select: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.clipboard-switch:hover {
+    background-color: #555;
+    border-color: #666;
+}
+.clipboard-switch:active {
+    background-color: #3a3a3a;
+}
+
+.clipboard-switch input[type="checkbox"] {
+    display: none;
+}
+
+.clipboard-switch .switch-track {
+    display: none;
+}
+
+.clipboard-switch .switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background-color: #5a5a5a;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    z-index: 2;
+}
+
+.clipboard-switch .switch-labels {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    color: #e0e0e0;
+    pointer-events: none;
+    z-index: 1;
+    transition: opacity 0.3s ease-in-out;
+}
+.clipboard-switch .switch-labels .text-clipspace,
+.clipboard-switch .switch-labels .text-system {
+    position: absolute;
+    transition: opacity 0.2s ease-in-out;
+}
+.clipboard-switch .switch-labels .text-clipspace { opacity: 0; }
+.clipboard-switch .switch-labels .text-system { opacity: 1; padding-left: 20px; }
+
+.clipboard-switch .switch-knob .switch-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.clipboard-switch .switch-knob .switch-icon img {
+    width: 100%;
+    height: 100%;
+}
+
+/* Checked state */
+.clipboard-switch:has(input:checked) {
+    background-color: #3a76d6;
+    border-color: #2a6ac4;
+}
+.clipboard-switch:has(input:checked):hover {
+    background-color: #4a86e4;
+    border-color: #3a76d6;
+}
+
+.clipboard-switch input:checked ~ .switch-knob {
+    left: calc(100% - 26px);
+    background-color: #fff;
+}
+.clipboard-switch input:checked ~ .switch-knob .switch-icon img {
+    filter: invert(35%) sepia(100%) saturate(1500%) hue-rotate(200deg) brightness(90%) contrast(100%);
+}
+.clipboard-switch input:checked ~ .switch-labels .text-clipspace {
+    opacity: 1;
+    color: #fff;
+    padding-right: 20px;
+}
+.clipboard-switch input:checked ~ .switch-labels .text-system {
+    opacity: 0;
+}
+
 
 .painter-separator {
     width: 1px;
-    height: 28px;
-    background-color: #2a2a2a;
+    height: 24px;
+    background-color: #444;
     margin: 0 8px;
 }
 

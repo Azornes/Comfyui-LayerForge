@@ -90,20 +90,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             },
         }, [
             $el("div.painter-button-group", {}, [
-                $el("button.painter-button", {
+                $el("button.painter-button.icon-button", {
                     id: `open-editor-btn-${node.id}`,
                     textContent: "⛶",
                     title: "Open in Editor",
-                    style: {minWidth: "40px", maxWidth: "40px", fontWeight: "bold"},
                 }),
-                $el("button.painter-button", {
+                $el("button.painter-button.icon-button", {
                     textContent: "?",
                     title: "Show shortcuts",
-                    style: {
-                        minWidth: "30px",
-                        maxWidth: "30px",
-                        fontWeight: "bold",
-                    },
                     onmouseenter: (e: MouseEvent) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
                         showTooltip(e.target as HTMLElement, content);
@@ -155,37 +149,68 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         canvas.canvasLayers.handlePaste(addMode);
                     }
                 }),
-                $el("button.painter-button", {
-                    id: `clipboard-toggle-${node.id}`,
-                    textContent: "📋 System",
-                    title: "Toggle clipboard source: System Clipboard",
-                    style: {
-                        minWidth: "100px",
-                        fontSize: "11px",
-                        backgroundColor: "#4a4a4a"
-                    },
-                    onclick: (e: MouseEvent) => {
-                        const button = e.target as HTMLButtonElement;
-                        if (canvas.canvasLayers.clipboardPreference === 'system') {
-                            canvas.canvasLayers.clipboardPreference = 'clipspace';
-                            button.textContent = "📋 Clipspace";
-                            button.title = "Toggle clipboard source: ComfyUI Clipspace";
-                            button.style.backgroundColor = "#4a6cd4";
-                        } else {
-                            canvas.canvasLayers.clipboardPreference = 'system';
-                            button.textContent = "📋 System";
-                            button.title = "Toggle clipboard source: System Clipboard";
-                            button.style.backgroundColor = "#4a4a4a";
-                        }
-                        log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
-                    },
-                    onmouseenter: (e: MouseEvent) => {
-                        const currentPreference = canvas.canvasLayers.clipboardPreference;
-                        const tooltipContent = currentPreference === 'system' ? systemClipboardTooltip : clipspaceClipboardTooltip;
-                        showTooltip(e.target as HTMLElement, tooltipContent);
-                    },
-                    onmouseleave: hideTooltip
-                })
+(() => {
+    // Modern clipboard switch
+    // Initial state: checked = clipspace, unchecked = system
+    const isClipspace = canvas.canvasLayers.clipboardPreference === 'clipspace';
+    const switchId = `clipboard-switch-${node.id}`;
+    const switchEl = $el("label.clipboard-switch", { id: switchId }, [
+        $el("input", {
+            type: "checkbox",
+            checked: isClipspace,
+            onchange: (e: Event) => {
+                const checked = (e.target as HTMLInputElement).checked;
+                canvas.canvasLayers.clipboardPreference = checked ? 'clipspace' : 'system';
+                // For accessibility, update ARIA label
+                switchEl.setAttribute('aria-label', checked ? "Clipboard: Clipspace" : "Clipboard: System");
+                log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
+            }
+        }),
+        $el("span.switch-track"),
+        $el("span.switch-labels", {}, [
+            $el("span.text-clipspace", {}, ["Clipspace"]),
+            $el("span.text-system", {}, ["System"])
+        ]),
+        $el("span.switch-knob", {}, [
+            $el("span.switch-icon")
+        ])
+    ]);
+
+    // Tooltip logic
+    switchEl.addEventListener("mouseenter", (e: MouseEvent) => {
+        const checked = (switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement).checked;
+        const tooltipContent = checked ? clipspaceClipboardTooltip : systemClipboardTooltip;
+        showTooltip(switchEl, tooltipContent);
+    });
+    switchEl.addEventListener("mouseleave", hideTooltip);
+
+    // Dynamic icon and text update on toggle
+    const input = switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const knobIcon = switchEl.querySelector('.switch-knob .switch-icon') as HTMLElement;
+    
+    const updateSwitchView = (isClipspace: boolean) => {
+        const iconTool = isClipspace ? LAYERFORGE_TOOLS.CLIPSPACE : LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD;
+        const icon = iconLoader.getIcon(iconTool);
+        if (icon instanceof HTMLImageElement) {
+            knobIcon.innerHTML = '';
+            const clonedIcon = icon.cloneNode() as HTMLImageElement;
+            clonedIcon.style.width = '20px';
+            clonedIcon.style.height = '20px';
+            knobIcon.appendChild(clonedIcon);
+        } else {
+             knobIcon.textContent = isClipspace ? "🗂️" : "📋";
+        }
+    };
+    
+    input.addEventListener('change', () => updateSwitchView(input.checked));
+    
+    // Initial state
+    iconLoader.preloadToolIcons().then(() => {
+        updateSwitchView(isClipspace);
+    });
+
+    return switchEl;
+})()
             ]),
             ]),
 
@@ -477,8 +502,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         min: "1",
                         max: "200",
                         value: "20",
-                        oninput: (e: Event) => canvas.maskTool.setBrushSize(parseInt((e.target as HTMLInputElement).value))
-                    })
+                        oninput: (e: Event) => {
+                            const value = (e.target as HTMLInputElement).value;
+                            canvas.maskTool.setBrushSize(parseInt(value));
+                            const valueEl = document.getElementById('brush-size-value');
+                            if (valueEl) valueEl.textContent = `${value}px`;
+                        }
+                    }),
+                    $el("div.slider-value", {id: "brush-size-value"}, ["20px"])
                 ]),
                 $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
                     $el("label", {for: "brush-strength-slider", textContent: "Strength:"}),
@@ -489,8 +520,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         max: "1",
                         step: "0.05",
                         value: "0.5",
-                        oninput: (e: Event) => canvas.maskTool.setBrushStrength(parseFloat((e.target as HTMLInputElement).value))
-                    })
+                        oninput: (e: Event) => {
+                            const value = (e.target as HTMLInputElement).value;
+                            canvas.maskTool.setBrushStrength(parseFloat(value));
+                            const valueEl = document.getElementById('brush-strength-value');
+                            if (valueEl) valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
+                        }
+                    }),
+                    $el("div.slider-value", {id: "brush-strength-value"}, ["50%"])
                 ]),
                 $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
                     $el("label", {for: "brush-hardness-slider", textContent: "Hardness:"}),
@@ -501,8 +538,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         max: "1",
                         step: "0.05",
                         value: "0.5",
-                        oninput: (e: Event) => canvas.maskTool.setBrushHardness(parseFloat((e.target as HTMLInputElement).value))
-                    })
+                        oninput: (e: Event) => {
+                            const value = (e.target as HTMLInputElement).value;
+                            canvas.maskTool.setBrushHardness(parseFloat(value));
+                            const valueEl = document.getElementById('brush-hardness-value');
+                            if (valueEl) valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
+                        }
+                    }),
+                    $el("div.slider-value", {id: "brush-hardness-value"}, ["50%"])
                 ]),
                 $el("button.painter-button.mask-control", {
                     textContent: "Clear Mask",
@@ -519,10 +562,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
-                $el("button.painter-button", {
+                $el("button.painter-button.success", {
                     textContent: "Run GC",
                     title: "Run Garbage Collection to clean unused images",
-                    style: {backgroundColor: "#4a7c59", borderColor: "#3a6c49"},
                     onclick: async () => {
                         try {
                             const stats = canvas.imageReferenceManager.getStats();
@@ -540,10 +582,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         }
                     }
                 }),
-                $el("button.painter-button", {
+                $el("button.painter-button.danger", {
                     textContent: "Clear Cache",
                     title: "Clear all saved canvas states from browser storage",
-                    style: {backgroundColor: "#c54747", borderColor: "#a53737"},
                     onclick: async () => {
                         if (confirm("Are you sure you want to clear all saved canvas states? This action cannot be undone.")) {
                             try {
@@ -796,43 +837,41 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     let backdrop: HTMLDivElement | null = null;
     let originalParent: HTMLElement | null = null;
     let isEditorOpen = false;
+    let viewportAdjustment = { x: 0, y: 0 };
 
     /**
-     * Adjusts the viewport to keep the content centered when the container size changes.
-     * @param rectA The original rectangle.
-     * @param rectB The new rectangle.
-     * @param direction Determines whether to apply the adjustment for opening (-1) or closing (1).
+     * Adjusts the viewport when entering fullscreen mode.
      */
-    const adjustViewportForCentering = (rectA: DOMRect, rectB: DOMRect, direction: 1 | -1) => {
-        if (!rectA || !rectB) return;
+    const adjustViewportOnOpen = (originalRect: DOMRect) => {
+        const fullscreenRect = canvasContainer.getBoundingClientRect();
 
-        const widthDiff = rectB.width - rectA.width;
-        const heightDiff = rectB.height - rectA.height;
-        
+        const widthDiff = fullscreenRect.width - originalRect.width;
+        const heightDiff = fullscreenRect.height - originalRect.height;
+
         const adjustX = (widthDiff / 2) / canvas.viewport.zoom;
         const adjustY = (heightDiff / 2) / canvas.viewport.zoom;
-        
-        canvas.viewport.x -= adjustX * direction;
-        canvas.viewport.y -= adjustY * direction;
 
-        const action = direction === 1 ? 'OPENING' : 'CLOSING';
-        log.info(`FULLSCREEN ${action} - Viewport adjusted for centering:`, {
-            widthDiff, heightDiff, adjustX, adjustY,
-            viewport_after: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
-        });
-    }
+        // Store the adjustment
+        viewportAdjustment = { x: adjustX, y: adjustY };
+
+        // Apply the adjustment
+        canvas.viewport.x -= viewportAdjustment.x;
+        canvas.viewport.y -= viewportAdjustment.y;
+    };
+
+    /**
+     * Restores the viewport when exiting fullscreen mode.
+     */
+    const adjustViewportOnClose = () => {
+        // Apply the stored adjustment in reverse
+        canvas.viewport.x += viewportAdjustment.x;
+        canvas.viewport.y += viewportAdjustment.y;
+        
+        // Reset adjustment
+        viewportAdjustment = { x: 0, y: 0 };
+    };
 
     const closeEditor = () => {
-        // Get fullscreen rect BEFORE removing from DOM
-        const fullscreenRect = backdrop?.querySelector('.painter-modal-content')?.getBoundingClientRect();
-        const currentRect = originalParent?.getBoundingClientRect();
-        
-        log.info(`FULLSCREEN CLOSING - Window sizes:`, {
-            current: { width: currentRect?.width, height: currentRect?.height },
-            fullscreen: { width: fullscreenRect?.width, height: fullscreenRect?.height },
-            viewport_before: { x: canvas.viewport.x, y: canvas.viewport.y, zoom: canvas.viewport.zoom }
-        });
-
         if (originalParent && backdrop) {
             originalParent.appendChild(mainContainer);
             document.body.removeChild(backdrop);
@@ -846,12 +885,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         document.removeEventListener('keydown', handleEscKey);
 
         setTimeout(() => {
-            // Use the actual canvas container for centering calculation
-            const currentCanvasContainer = originalParent!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
-            const fullscreenCanvasContainer = backdrop!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
-            const currentRect = currentCanvasContainer.getBoundingClientRect();
-            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
-            adjustViewportForCentering(currentRect, fullscreenRect, -1);
+            adjustViewportOnClose();
             canvas.render();
             if (node.onResize) {
                 node.onResize();
@@ -865,7 +899,6 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             e.preventDefault();
             e.stopPropagation();
             closeEditor();
-            log.info("Fullscreen editor closed via ESC key");
         }
     };
 
@@ -875,12 +908,13 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             return;
         }
 
+        const originalRect = canvasContainer.getBoundingClientRect();
+
         originalParent = mainContainer.parentElement;
         if (!originalParent) {
             log.error("Could not find original parent of the canvas container!");
             return;
         }
-
 
         backdrop = $el("div.painter-modal-backdrop") as HTMLDivElement;
         const modalContent = $el("div.painter-modal-content") as HTMLDivElement;
@@ -897,12 +931,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         document.addEventListener('keydown', handleEscKey);
 
         setTimeout(() => {
-            // Use the actual canvas container for centering calculation
-            const originalCanvasContainer = originalParent!.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
-            const fullscreenCanvasContainer = modalContent.querySelector('.painterCanvasContainer.painter-container') as HTMLElement;
-            const originalRect = originalCanvasContainer.getBoundingClientRect();
-            const fullscreenRect = fullscreenCanvasContainer.getBoundingClientRect();
-            adjustViewportForCentering(originalRect, fullscreenRect, 1);
+            adjustViewportOnOpen(originalRect);
+
             canvas.render();
             if (node.onResize) {
                 node.onResize();
