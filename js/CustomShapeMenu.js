@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
 const log = createModuleLogger('CustomShapeMenu');
 export class CustomShapeMenu {
     constructor(canvas) {
@@ -42,27 +43,9 @@ export class CustomShapeMenu {
     _createUI() {
         if (this.uiInitialized)
             return;
+        addStylesheet(getUrl('./css/custom_shape_menu.css'));
         this.element = document.createElement('div');
         this.element.id = 'layerforge-custom-shape-menu';
-        this.element.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            background-color: #333;
-            color: white;
-            padding: 8px 15px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            display: none;
-            flex-direction: column;
-            gap: 4px;
-            font-family: sans-serif;
-            font-size: 12px;
-            z-index: 1001;
-            border: 1px solid #555;
-            user-select: none;
-            min-width: 200px;
-        `;
         // Create menu content
         const lines = [
             "🎯 Custom Output Area Active"
@@ -70,22 +53,13 @@ export class CustomShapeMenu {
         lines.forEach(line => {
             const lineElement = document.createElement('div');
             lineElement.textContent = line;
-            lineElement.style.cssText = `
-                margin: 2px 0;
-                line-height: 18px;
-            `;
+            lineElement.className = 'menu-line';
             this.element.appendChild(lineElement);
         });
         // Create a container for the entire shape mask feature set
         const featureContainer = document.createElement('div');
         featureContainer.id = 'shape-mask-feature-container';
-        featureContainer.style.cssText = `
-            background-color: #282828;
-            border-radius: 6px;
-            margin-top: 6px;
-            padding: 4px 0;
-            border: 1px solid #444;
-        `;
+        featureContainer.className = 'feature-container';
         // Add main auto-apply checkbox to the new container
         const checkboxContainer = this._createCheckbox(() => `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`, () => {
             // Always hide any active shape preview lines first to prevent them from getting stuck
@@ -120,37 +94,17 @@ export class CustomShapeMenu {
         // Add expansion slider container
         const expansionSliderContainer = document.createElement('div');
         expansionSliderContainer.id = 'expansion-slider-container';
-        expansionSliderContainer.style.cssText = `
-            margin: 0 8px 6px 8px;
-            padding: 4px 8px;
-            display: none;
-        `;
+        expansionSliderContainer.className = 'slider-container';
         const expansionSliderLabel = document.createElement('div');
         expansionSliderLabel.textContent = 'Expansion amount:';
-        expansionSliderLabel.style.cssText = `
-            font-size: 11px;
-            margin-bottom: 4px;
-            color: #ccc;
-        `;
+        expansionSliderLabel.className = 'slider-label';
         const expansionSlider = document.createElement('input');
         expansionSlider.type = 'range';
         expansionSlider.min = '-300';
         expansionSlider.max = '300';
         expansionSlider.value = String(this.canvas.shapeMaskExpansionValue);
-        expansionSlider.style.cssText = `
-            width: 100%;
-            height: 4px;
-            background: #555;
-            outline: none;
-            border-radius: 2px;
-        `;
         const expansionValueDisplay = document.createElement('div');
-        expansionValueDisplay.style.cssText = `
-            font-size: 10px;
-            text-align: center;
-            margin-top: 2px;
-            color: #aaa;
-        `;
+        expansionValueDisplay.className = 'slider-value-display';
         let expansionValueBeforeDrag = this.canvas.shapeMaskExpansionValue;
         const updateExpansionSliderDisplay = () => {
             const value = parseInt(expansionSlider.value);
@@ -214,37 +168,17 @@ export class CustomShapeMenu {
         // Add feather slider container
         const featherSliderContainer = document.createElement('div');
         featherSliderContainer.id = 'feather-slider-container';
-        featherSliderContainer.style.cssText = `
-            margin: 0 8px 6px 8px;
-            padding: 4px 8px;
-            display: none;
-        `;
+        featherSliderContainer.className = 'slider-container';
         const featherSliderLabel = document.createElement('div');
         featherSliderLabel.textContent = 'Feather amount:';
-        featherSliderLabel.style.cssText = `
-            font-size: 11px;
-            margin-bottom: 4px;
-            color: #ccc;
-        `;
+        featherSliderLabel.className = 'slider-label';
         const featherSlider = document.createElement('input');
         featherSlider.type = 'range';
         featherSlider.min = '0';
         featherSlider.max = '300';
         featherSlider.value = String(this.canvas.shapeMaskFeatherValue);
-        featherSlider.style.cssText = `
-            width: 100%;
-            height: 4px;
-            background: #555;
-            outline: none;
-            border-radius: 2px;
-        `;
         const featherValueDisplay = document.createElement('div');
-        featherValueDisplay.style.cssText = `
-            font-size: 10px;
-            text-align: center;
-            margin-top: 2px;
-            color: #aaa;
-        `;
+        featherValueDisplay.className = 'slider-value-display';
         const updateFeatherSliderDisplay = () => {
             const value = parseInt(featherSlider.value);
             this.canvas.shapeMaskFeatherValue = value;
@@ -283,13 +217,7 @@ export class CustomShapeMenu {
         // Create output area extension container
         const extensionContainer = document.createElement('div');
         extensionContainer.id = 'output-area-extension-container';
-        extensionContainer.style.cssText = `
-            background-color: #282828;
-            border-radius: 6px;
-            margin-top: 6px;
-            padding: 4px 0;
-            border: 1px solid #444;
-        `;
+        extensionContainer.className = 'feature-container';
         // Add main extension checkbox
         const extensionCheckboxContainer = this._createCheckbox(() => `${this.canvas.outputAreaExtensionEnabled ? "☑" : "☐"} Extend output area`, () => {
             this.canvas.outputAreaExtensionEnabled = !this.canvas.outputAreaExtensionEnabled;
@@ -320,43 +248,21 @@ export class CustomShapeMenu {
         // Create sliders container
         const slidersContainer = document.createElement('div');
         slidersContainer.id = 'extension-sliders-container';
-        slidersContainer.style.cssText = `
-            margin: 0 8px 6px 8px;
-            padding: 4px 8px;
-            display: none;
-        `;
+        slidersContainer.className = 'slider-container';
         // Helper function to create a slider with preview system
         const createExtensionSlider = (label, direction) => {
             const sliderContainer = document.createElement('div');
-            sliderContainer.style.cssText = `
-                margin: 6px 0;
-            `;
+            sliderContainer.className = 'extension-slider-container';
             const sliderLabel = document.createElement('div');
             sliderLabel.textContent = label;
-            sliderLabel.style.cssText = `
-                font-size: 11px;
-                margin-bottom: 4px;
-                color: #ccc;
-            `;
+            sliderLabel.className = 'slider-label';
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = '0';
             slider.max = '500';
             slider.value = String(this.canvas.outputAreaExtensions[direction]);
-            slider.style.cssText = `
-                width: 100%;
-                height: 4px;
-                background: #555;
-                outline: none;
-                border-radius: 2px;
-            `;
             const valueDisplay = document.createElement('div');
-            valueDisplay.style.cssText = `
-                font-size: 10px;
-                text-align: center;
-                margin-top: 2px;
-                color: #aaa;
-            `;
+            valueDisplay.className = 'slider-value-display';
             const updateDisplay = () => {
                 const value = parseInt(slider.value);
                 valueDisplay.textContent = `${value}px`;
@@ -429,14 +335,7 @@ export class CustomShapeMenu {
     }
     _createCheckbox(textFn, clickHandler, tooltipText) {
         const container = document.createElement('div');
-        container.style.cssText = `
-            margin: 6px 0 2px 0;
-            padding: 4px 8px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            line-height: 18px;
-        `;
+        container.className = 'checkbox-container';
         container.onmouseover = () => {
             container.style.backgroundColor = '#555';
         };
@@ -577,24 +476,7 @@ export class CustomShapeMenu {
         this.hideTooltip(); // Hide any existing tooltip
         this.tooltip = document.createElement('div');
         this.tooltip.textContent = text;
-        this.tooltip.style.cssText = `
-            position: fixed;
-            background-color: #1a1a1a;
-            color: #ffffff;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-family: sans-serif;
-            line-height: 1.4;
-            max-width: 250px;
-            word-wrap: break-word;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
-            border: 1px solid #444;
-            z-index: 10000;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out;
-        `;
+        this.tooltip.className = 'layerforge-tooltip';
         document.body.appendChild(this.tooltip);
         this.updateTooltipPosition(event);
         // Fade in the tooltip
