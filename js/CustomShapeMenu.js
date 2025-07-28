@@ -61,10 +61,8 @@ export class CustomShapeMenu {
         featureContainer.id = 'shape-mask-feature-container';
         featureContainer.className = 'feature-container';
         // Add main auto-apply checkbox to the new container
-        const checkboxContainer = this._createCheckbox(() => `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`, () => {
-            // Always hide any active shape preview lines first to prevent them from getting stuck
-            this.canvas.maskTool.hideShapePreview();
-            this.canvas.autoApplyShapeMask = !this.canvas.autoApplyShapeMask;
+        const checkboxContainer = this._createCheckbox('auto-apply-checkbox', () => this.canvas.autoApplyShapeMask, 'Auto-apply shape mask', (e) => {
+            this.canvas.autoApplyShapeMask = e.target.checked;
             if (this.canvas.autoApplyShapeMask) {
                 this.canvas.maskTool.applyShapeMask();
                 log.info("Auto-apply shape mask enabled - mask applied automatically");
@@ -80,8 +78,8 @@ export class CustomShapeMenu {
         }, "Automatically applies a mask based on the custom output area shape. When enabled, the mask will be applied to all layers within the shape boundary.");
         featureContainer.appendChild(checkboxContainer);
         // Add expansion checkbox
-        const expansionContainer = this._createCheckbox(() => `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Expand/Contract mask`, () => {
-            this.canvas.shapeMaskExpansion = !this.canvas.shapeMaskExpansion;
+        const expansionContainer = this._createCheckbox('expansion-checkbox', () => this.canvas.shapeMaskExpansion, 'Expand/Contract mask', (e) => {
+            this.canvas.shapeMaskExpansion = e.target.checked;
             this._updateUI();
             if (this.canvas.autoApplyShapeMask) {
                 this.canvas.maskTool.hideShapePreview();
@@ -89,7 +87,6 @@ export class CustomShapeMenu {
                 this.canvas.render();
             }
         }, "Dilate (expand) or erode (contract) the shape mask. Positive values expand the mask outward, negative values shrink it inward.");
-        expansionContainer.id = 'expansion-checkbox';
         featureContainer.appendChild(expansionContainer);
         // Add expansion slider container
         const expansionSliderContainer = document.createElement('div');
@@ -154,8 +151,8 @@ export class CustomShapeMenu {
         expansionSliderContainer.appendChild(expansionValueDisplay);
         featureContainer.appendChild(expansionSliderContainer);
         // Add feather checkbox
-        const featherContainer = this._createCheckbox(() => `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`, () => {
-            this.canvas.shapeMaskFeather = !this.canvas.shapeMaskFeather;
+        const featherContainer = this._createCheckbox('feather-checkbox', () => this.canvas.shapeMaskFeather, 'Feather edges', (e) => {
+            this.canvas.shapeMaskFeather = e.target.checked;
             this._updateUI();
             if (this.canvas.autoApplyShapeMask) {
                 this.canvas.maskTool.hideShapePreview();
@@ -163,7 +160,6 @@ export class CustomShapeMenu {
                 this.canvas.render();
             }
         }, "Softens the edges of the shape mask by creating a gradual transition from opaque to transparent.");
-        featherContainer.id = 'feather-checkbox';
         featureContainer.appendChild(featherContainer);
         // Add feather slider container
         const featherSliderContainer = document.createElement('div');
@@ -219,30 +215,19 @@ export class CustomShapeMenu {
         extensionContainer.id = 'output-area-extension-container';
         extensionContainer.className = 'feature-container';
         // Add main extension checkbox
-        const extensionCheckboxContainer = this._createCheckbox(() => `${this.canvas.outputAreaExtensionEnabled ? "☑" : "☐"} Extend output area`, () => {
-            this.canvas.outputAreaExtensionEnabled = !this.canvas.outputAreaExtensionEnabled;
+        const extensionCheckboxContainer = this._createCheckbox('extension-checkbox', () => this.canvas.outputAreaExtensionEnabled, 'Extend output area', (e) => {
+            this.canvas.outputAreaExtensionEnabled = e.target.checked;
             if (this.canvas.outputAreaExtensionEnabled) {
-                // When enabling, capture current canvas size as the baseline
-                this.canvas.originalCanvasSize = {
-                    width: this.canvas.width,
-                    height: this.canvas.height
-                };
-                // Restore last saved extensions instead of starting from zero
+                this.canvas.originalCanvasSize = { width: this.canvas.width, height: this.canvas.height };
                 this.canvas.outputAreaExtensions = { ...this.canvas.lastOutputAreaExtensions };
-                log.info(`Captured current canvas size as baseline: ${this.canvas.width}x${this.canvas.height}`);
-                log.info(`Restored last extensions:`, this.canvas.outputAreaExtensions);
             }
             else {
-                // Save current extensions before disabling
                 this.canvas.lastOutputAreaExtensions = { ...this.canvas.outputAreaExtensions };
-                // Reset current extensions when disabled (but keep the saved ones)
                 this.canvas.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
-                log.info(`Saved extensions for later:`, this.canvas.lastOutputAreaExtensions);
             }
             this._updateExtensionUI();
-            this._updateCanvasSize(); // Update canvas size when toggling
+            this._updateCanvasSize();
             this.canvas.render();
-            log.info(`Output area extension ${this.canvas.outputAreaExtensionEnabled ? 'enabled' : 'disabled'}`);
         }, "Allows extending the output area boundaries in all directions without changing the custom shape.");
         extensionContainer.appendChild(extensionCheckboxContainer);
         // Create sliders container
@@ -333,26 +318,28 @@ export class CustomShapeMenu {
         // Add viewport change listener to update shape preview when zooming/panning
         this._addViewportChangeListener();
     }
-    _createCheckbox(textFn, clickHandler, tooltipText) {
-        const container = document.createElement('div');
+    _createCheckbox(id, getChecked, text, clickHandler, tooltipText) {
+        const container = document.createElement('label');
         container.className = 'checkbox-container';
-        container.onmouseover = () => {
-            container.style.backgroundColor = '#555';
-        };
-        container.onmouseout = () => {
-            container.style.backgroundColor = 'transparent';
-        };
-        const updateText = () => {
-            container.textContent = textFn();
-        };
-        updateText();
+        container.htmlFor = id;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.id = id;
+        input.checked = getChecked();
+        const customCheckbox = document.createElement('div');
+        customCheckbox.className = 'custom-checkbox';
+        const labelText = document.createElement('span');
+        labelText.textContent = text;
+        container.appendChild(input);
+        container.appendChild(customCheckbox);
+        container.appendChild(labelText);
+        // Stop propagation to prevent menu from closing, but allow default checkbox behavior
         container.onclick = (e) => {
-            e.preventDefault();
             e.stopPropagation();
-            clickHandler();
-            updateText();
         };
-        // Add tooltip if provided
+        input.onchange = (e) => {
+            clickHandler(e);
+        };
         if (tooltipText) {
             this._addTooltip(container, tooltipText);
         }
@@ -361,16 +348,23 @@ export class CustomShapeMenu {
     _updateUI() {
         if (!this.element)
             return;
-        // Toggle visibility of sub-options based on the main checkbox state
-        const expansionCheckbox = this.element.querySelector('#expansion-checkbox');
+        const setChecked = (id, checked) => {
+            const input = this.element.querySelector(`#${id}`);
+            if (input)
+                input.checked = checked;
+        };
+        setChecked('auto-apply-checkbox', this.canvas.autoApplyShapeMask);
+        setChecked('expansion-checkbox', this.canvas.shapeMaskExpansion);
+        setChecked('feather-checkbox', this.canvas.shapeMaskFeather);
+        setChecked('extension-checkbox', this.canvas.outputAreaExtensionEnabled);
+        const expansionCheckbox = this.element.querySelector('#expansion-checkbox')?.parentElement;
         if (expansionCheckbox) {
-            expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
+            expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
-        const featherCheckbox = this.element.querySelector('#feather-checkbox');
+        const featherCheckbox = this.element.querySelector('#feather-checkbox')?.parentElement;
         if (featherCheckbox) {
-            featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'block' : 'none';
+            featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
-        // Update sliders visibility based on their respective checkboxes
         const expansionSliderContainer = this.element.querySelector('#expansion-slider-container');
         if (expansionSliderContainer) {
             expansionSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
@@ -379,22 +373,6 @@ export class CustomShapeMenu {
         if (featherSliderContainer) {
             featherSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
         }
-        // Update checkbox texts
-        const checkboxes = this.element.querySelectorAll('div[style*="cursor: pointer"]');
-        checkboxes.forEach((checkbox, index) => {
-            if (index === 0) { // Main checkbox
-                checkbox.textContent = `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`;
-            }
-            else if (index === 1) { // Expansion checkbox
-                checkbox.textContent = `${this.canvas.shapeMaskExpansion ? "☑" : "☐"} Dilate/Erode mask`;
-            }
-            else if (index === 2) { // Feather checkbox
-                checkbox.textContent = `${this.canvas.shapeMaskFeather ? "☑" : "☐"} Feather edges`;
-            }
-            else if (index === 3) { // Extension checkbox
-                checkbox.textContent = `${this.canvas.outputAreaExtensionEnabled ? "☑" : "☐"} Extend output area`;
-            }
-        });
     }
     _updateExtensionUI() {
         if (!this.element)
