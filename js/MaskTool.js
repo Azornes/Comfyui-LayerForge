@@ -1005,11 +1005,18 @@ export class MaskTool {
      * Hide shape preview and switch back to normal mode
      */
     hideShapePreview() {
+        // Cancel any pending throttled preview updates to prevent race conditions
+        if (this.shapePreviewThrottleTimeout !== null) {
+            clearTimeout(this.shapePreviewThrottleTimeout);
+            this.shapePreviewThrottleTimeout = null;
+        }
+        // Clear any pending preview parameters
+        this.pendingPreviewParams = null;
         this.isPreviewMode = false;
         this.shapePreviewVisible = false;
         this.clearShapePreview();
         this.shapePreviewCanvas.style.display = 'none';
-        log.debug("Shape preview hidden");
+        log.debug("Shape preview hidden and all pending operations cancelled");
     }
     /**
      * Clear shape preview canvas

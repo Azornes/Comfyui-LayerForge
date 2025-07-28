@@ -113,6 +113,9 @@ export class CustomShapeMenu {
         const checkboxContainer = this._createCheckbox(
             () => `${this.canvas.autoApplyShapeMask ? "☑" : "☐"} Auto-apply shape mask`,
             () => {
+                // Always hide any active shape preview lines first to prevent them from getting stuck
+                this.canvas.maskTool.hideShapePreview();
+                
                 this.canvas.autoApplyShapeMask = !this.canvas.autoApplyShapeMask;
                 
                 if (this.canvas.autoApplyShapeMask) {
@@ -140,6 +143,7 @@ export class CustomShapeMenu {
                 this._updateUI();
                 
                 if (this.canvas.autoApplyShapeMask) {
+                    this.canvas.maskTool.hideShapePreview();
                     this.canvas.maskTool.applyShapeMask();
                     this.canvas.render();
                 }
@@ -252,6 +256,7 @@ export class CustomShapeMenu {
                 this._updateUI();
                 
                 if (this.canvas.autoApplyShapeMask) {
+                    this.canvas.maskTool.hideShapePreview();
                     this.canvas.maskTool.applyShapeMask();
                     this.canvas.render();
                 }
