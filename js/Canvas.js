@@ -50,8 +50,8 @@ export class Canvas {
         this.onHistoryChange = callbacks.onHistoryChange;
         this.lastMousePosition = { x: 0, y: 0 };
         this.viewport = {
-            x: -(this.width / 4),
-            y: -(this.height / 4),
+            x: -(this.width / 1.5),
+            y: -(this.height / 2),
             zoom: 0.8,
         };
         const { canvas: offscreenCanvas, ctx: offscreenCtx } = createCanvas(0, 0, '2d', {

@@ -16,6 +16,49 @@ export class CanvasRenderer {
         this.isDirty = false;
     }
 
+    /**
+     * Helper function to draw text with background at world coordinates
+     * @param ctx Canvas context
+     * @param text Text to display
+     * @param worldX World X coordinate
+     * @param worldY World Y coordinate
+     * @param options Optional styling options
+     */
+    drawTextWithBackground(ctx: any, text: string, worldX: number, worldY: number, options: any = {}) {
+        const {
+            font = "14px sans-serif",
+            textColor = "white",
+            backgroundColor = "rgba(0, 0, 0, 0.7)",
+            padding = 10,
+            lineHeight = 18
+        } = options;
+
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const screenX = (worldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
+        const screenY = (worldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
+        
+        ctx.font = font;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        const lines = text.split('\n');
+        const textMetrics = lines.map(line => ctx.measureText(line));
+        const bgWidth = Math.max(...textMetrics.map(m => m.width)) + padding;
+        const bgHeight = lines.length * lineHeight + 4;
+        
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
+        
+        ctx.fillStyle = textColor;
+        lines.forEach((line, index) => {
+            const yPos = screenY - (bgHeight / 2) + (lineHeight / 2) + (index * lineHeight) + 2;
+            ctx.fillText(line, screenX, yPos);
+        });
+        
+        ctx.restore();
+    }
+
     render() {
         if (this.renderAnimationFrame) {
             this.isDirty = true;
@@ -156,21 +199,9 @@ export class CanvasRenderer {
                 const textWorldX = rect.x + rect.width / 2;
                 const textWorldY = rect.y + rect.height + (20 / this.canvas.viewport.zoom);
 
-                ctx.save();
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
-                const screenX = (textWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
-                const screenY = (textWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
-                ctx.font = "14px sans-serif";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                const textMetrics = ctx.measureText(text);
-                const bgWidth = textMetrics.width + 10;
-                const bgHeight = 22;
-                ctx.fillStyle = "rgba(0, 128, 0, 0.7)";
-                ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
-                ctx.fillStyle = "white";
-                ctx.fillText(text, screenX, screenY);
-                ctx.restore();
+                this.drawTextWithBackground(ctx, text, textWorldX, textWorldY, {
+                    backgroundColor: "rgba(0, 128, 0, 0.7)"
+                });
             }
         }
 
@@ -188,21 +219,9 @@ export class CanvasRenderer {
             const textWorldX = rect.x + rect.width / 2;
             const textWorldY = rect.y - (20 / this.canvas.viewport.zoom);
 
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            const screenX = (textWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
-            const screenY = (textWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
-            ctx.font = "14px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            const textMetrics = ctx.measureText(text);
-            const bgWidth = textMetrics.width + 10;
-            const bgHeight = 22;
-            ctx.fillStyle = "rgba(0, 100, 170, 0.7)";
-            ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
-            ctx.fillStyle = "white";
-            ctx.fillText(text, screenX, screenY);
-            ctx.restore();
+            this.drawTextWithBackground(ctx, text, textWorldX, textWorldY, {
+                backgroundColor: "rgba(0, 100, 170, 0.7)"
+            });
         }
     }
 
@@ -247,31 +266,8 @@ export class CanvasRenderer {
                 const padding = 20 / this.canvas.viewport.zoom;
                 const textWorldX = (minX + maxX) / 2;
                 const textWorldY = maxY + padding;
-                ctx.save();
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-                const screenX = (textWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
-                const screenY = (textWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
-
-                ctx.font = "14px sans-serif";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                const lines = text.split('\n');
-                const textMetrics = lines.map(line => ctx.measureText(line));
-                const textBgWidth = Math.max(...textMetrics.map(m => m.width)) + 10;
-                const lineHeight = 18;
-                const textBgHeight = lines.length * lineHeight + 4;
-
-                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-                ctx.fillRect(screenX - textBgWidth / 2, screenY - textBgHeight / 2, textBgWidth, textBgHeight);
-
-                ctx.fillStyle = "white";
-                lines.forEach((line, index) => {
-                    const yPos = screenY - (textBgHeight / 2) + (lineHeight / 2) + (index * lineHeight) + 2;
-                    ctx.fillText(line, screenX, yPos);
-                });
-
-                ctx.restore();
+                
+                this.drawTextWithBackground(ctx, text, textWorldX, textWorldY);
             });
         }
     }
@@ -314,6 +310,13 @@ export class CanvasRenderer {
 
         ctx.stroke();
         ctx.setLineDash([]);
+
+        // Display dimensions under outputAreaBounds
+        const dimensionsText = `${Math.round(bounds.width)}x${Math.round(bounds.height)}`;
+        const textWorldX = bounds.x + bounds.width / 2;
+        const textWorldY = bounds.y + bounds.height + (20 / this.canvas.viewport.zoom);
+        
+        this.drawTextWithBackground(ctx, dimensionsText, textWorldX, textWorldY);
 
         if (this.canvas.outputAreaShape) {
             ctx.save();
@@ -462,22 +465,11 @@ export class CanvasRenderer {
         const textWorldX = maskBounds.x + maskBounds.width / 2;
         const textWorldY = maskBounds.y - (10 / this.canvas.viewport.zoom);
         
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        const screenX = (textWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
-        const screenY = (textWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
-        
-        ctx.font = "12px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const text = "Mask Drawing Area";
-        const textMetrics = ctx.measureText(text);
-        const bgWidth = textMetrics.width + 8;
-        const bgHeight = 18;
-        
-        ctx.fillStyle = "rgba(255, 100, 100, 0.8)";
-        ctx.fillRect(screenX - bgWidth / 2, screenY - bgHeight / 2, bgWidth, bgHeight);
-        ctx.fillStyle = "white";
-        ctx.fillText(text, screenX, screenY);
+        this.drawTextWithBackground(ctx, "Mask Drawing Area", textWorldX, textWorldY, {
+            font: "12px sans-serif",
+            backgroundColor: "rgba(255, 100, 100, 0.8)",
+            padding: 8
+        });
         
         ctx.restore();
     }
