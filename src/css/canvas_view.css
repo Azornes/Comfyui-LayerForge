@@ -2,16 +2,17 @@
     background-color: #444;
     border: 1px solid #555;
     border-radius: 5px;
-    color: #e0e0e0;
+    color: #fff;
     padding: 6px 14px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 550;
     cursor: pointer;
     transition: all 0.2s ease-in-out;
     min-width: 80px;
     text-align: center;
     margin: 2px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .painter-button:hover {
@@ -42,7 +43,7 @@
     background-color: #3a76d6;
     border-color: #2a6ac4;
     color: #fff;
-    text-shadow: none;
+    text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .painter-button.primary:hover {
@@ -54,6 +55,7 @@
     background-color: #4a7c59;
     border-color: #3a6c49;
     color: #fff;
+    text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .painter-button.success:hover {
@@ -65,6 +67,7 @@
     background-color: #c54747;
     border-color: #a53737;
     color: #fff;
+    text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .painter-button.danger:hover {
@@ -180,11 +183,11 @@
     width: 90px;
     height: 30px;
     box-sizing: border-box;
-    background-color: #444;
+    background: linear-gradient(to right, #5a5a5a 30%, #3a76d6);
     border-radius: 5px;
     border: 1px solid #555;
     cursor: pointer;
-    transition: background-color 0.3s ease-in-out;
+    transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out;
     user-select: none;
     padding: 0;
     font-family: inherit;
@@ -192,11 +195,21 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 .clipboard-switch:hover {
-    background-color: #555;
+    background: linear-gradient(to right, #6a6a6a 30%, #4a86e4);
     border-color: #666;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    transform: translateY(-1px);
+}
+
+/* Mask switch: szaro-czarny gradient tylko dla maski */
+.clipboard-switch.mask-switch {
+    background: linear-gradient(to right, #5a5a5a 30%, #e53935);
+}
+.clipboard-switch.mask-switch:hover {
+    background: linear-gradient(to right, #6a6a6a 30%, #ff5252);
 }
 .clipboard-switch:active {
-    background-color: #3a3a3a;
+    background: linear-gradient(135deg, #3a76d6, #3a3a3a);
 }
 
 .clipboard-switch input[type="checkbox"] {
@@ -223,6 +236,14 @@
     z-index: 2;
 }
 
+.clipboard-switch:hover .switch-knob {
+    background-color: #6a6a6a;
+}
+
+.clipboard-switch:hover .switch-knob {
+    background-color: #6a6a6a;
+}
+
 .clipboard-switch .switch-labels {
     position: absolute;
     top: 0;
@@ -232,11 +253,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 500;
-    color: #e0e0e0;
+    font-weight: 550;
+    color: #ffffff;
     pointer-events: none;
     z-index: 1;
     transition: opacity 0.3s ease-in-out;
+    text-shadow: 0 1px 2px rgb(0, 0, 0);
 }
 .clipboard-switch .switch-labels .text-clipspace,
 .clipboard-switch .switch-labels .text-system {
@@ -261,20 +283,19 @@
 
 /* Checked state */
 .clipboard-switch:has(input:checked) {
-    background-color: #3a76d6;
+    background: linear-gradient(to right, #3a76d6, #5a5a5a 70%);
     border-color: #2a6ac4;
 }
 .clipboard-switch:has(input:checked):hover {
-    background-color: #4a86e4;
+    background: linear-gradient(to right, #4a86e4, #6a6a6a 70%);
     border-color: #3a76d6;
 }
 
 .clipboard-switch input:checked ~ .switch-knob {
     left: calc(100% - 26px);
-    background-color: #fff;
 }
 .clipboard-switch input:checked ~ .switch-knob .switch-icon img {
-    filter: invert(35%) sepia(100%) saturate(1500%) hue-rotate(200deg) brightness(90%) contrast(100%);
+    filter: none;
 }
 .clipboard-switch input:checked ~ .switch-labels .text-clipspace {
     opacity: 1;

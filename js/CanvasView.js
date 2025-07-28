@@ -393,37 +393,66 @@ async function createCanvasWidget(node, widget, app) {
             ]),
             $el("div.painter-separator"),
             $el("div.painter-button-group", { id: "mask-controls" }, [
-                $el("button.painter-button.primary", {
-                    id: `toggle-mask-btn-${node.id}`,
-                    textContent: "M", // Fallback text until icon loads
-                    title: "Toggle mask overlay visibility",
-                    style: {
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: '32px',
-                        maxWidth: '32px',
-                        padding: '4px',
-                        fontSize: '12px',
-                        fontWeight: 'bold'
-                    },
-                    onclick: (e) => {
-                        const button = e.currentTarget;
-                        canvas.maskTool.toggleOverlayVisibility();
-                        canvas.render();
-                        const iconContainer = button.querySelector('.mask-icon-container');
-                        if (iconContainer) {
-                            if (canvas.maskTool.isOverlayVisible) {
-                                button.classList.add('primary');
-                                iconContainer.style.opacity = '1';
+                $el("label.clipboard-switch.mask-switch", {
+                    id: `toggle-mask-switch-${node.id}`,
+                    style: { minWidth: "56px", maxWidth: "56px", width: "56px", paddingLeft: "0", paddingRight: "0" }
+                }, [
+                    $el("input", {
+                        type: "checkbox",
+                        checked: canvas.maskTool.isOverlayVisible,
+                        onchange: (e) => {
+                            const checked = e.target.checked;
+                            canvas.maskTool.isOverlayVisible = checked;
+                            canvas.render();
+                        }
+                    }),
+                    $el("span.switch-track"),
+                    $el("span.switch-labels", { style: { fontSize: "11px" } }, [
+                        $el("span.text-clipspace", { style: { paddingRight: "22px" } }, ["On"]),
+                        $el("span.text-system", { style: { paddingLeft: "20px" } }, ["Off"])
+                    ]),
+                    $el("span.switch-knob", {}, [
+                        (() => {
+                            // Ikona maski (SVG lub obrazek)
+                            const iconContainer = document.createElement('span');
+                            iconContainer.className = 'switch-icon';
+                            iconContainer.style.display = 'flex';
+                            iconContainer.style.alignItems = 'center';
+                            iconContainer.style.justifyContent = 'center';
+                            iconContainer.style.width = '16px';
+                            iconContainer.style.height = '16px';
+                            // Pobierz ikonę maski z iconLoader
+                            const icon = iconLoader.getIcon(LAYERFORGE_TOOLS.MASK);
+                            if (icon instanceof HTMLImageElement) {
+                                const img = icon.cloneNode();
+                                img.style.width = "16px";
+                                img.style.height = "16px";
+                                // Ustaw filtr w zależności od stanu checkboxa
+                                setTimeout(() => {
+                                    const input = document.getElementById(`toggle-mask-switch-${node.id}`)?.querySelector('input[type="checkbox"]');
+                                    const updateIconFilter = () => {
+                                        if (input && img) {
+                                            img.style.filter = input.checked
+                                                ? "brightness(0) invert(1)"
+                                                : "grayscale(1) brightness(0.7) opacity(0.6)";
+                                        }
+                                    };
+                                    if (input) {
+                                        input.addEventListener('change', updateIconFilter);
+                                        updateIconFilter();
+                                    }
+                                }, 0);
+                                iconContainer.appendChild(img);
                             }
                             else {
-                                button.classList.remove('primary');
-                                iconContainer.style.opacity = '0.5';
+                                iconContainer.textContent = "M";
+                                iconContainer.style.fontSize = "12px";
+                                iconContainer.style.color = "#fff";
                             }
-                        }
-                    }
-                }),
+                            return iconContainer;
+                        })()
+                    ])
+                ]),
                 $el("button.painter-button", {
                     textContent: "Edit Mask",
                     title: "Open the current canvas view in the mask editor",
