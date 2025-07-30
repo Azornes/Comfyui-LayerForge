@@ -293,9 +293,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             const heightInput = document.getElementById('canvas-height') as HTMLInputElement;
                             const width = parseInt(widthInput.value) || canvas.width;
                             const height = parseInt(heightInput.value) || canvas.height;
-                            canvas.updateOutputAreaSize(width, height);
+                            canvas.setOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
-
                         };
 
                         (document.getElementById('cancel-size') as HTMLButtonElement).onclick = () => {

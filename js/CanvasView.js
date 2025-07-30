@@ -262,7 +262,7 @@ async function createCanvasWidget(node, widget, app) {
                             const heightInput = document.getElementById('canvas-height');
                             const width = parseInt(widthInput.value) || canvas.width;
                             const height = parseInt(heightInput.value) || canvas.height;
-                            canvas.updateOutputAreaSize(width, height);
+                            canvas.setOutputAreaSize(width, height);
                             document.body.removeChild(dialog);
                         };
                         document.getElementById('cancel-size').onclick = () => {

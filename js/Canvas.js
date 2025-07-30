@@ -329,6 +329,36 @@ export class Canvas {
         return result;
     }
     /**
+     * Ustawia nowy rozmiar output area zgodnie z nowym systemem (resetuje rozszerzenia, pozycję, rozmiar)
+     */
+    setOutputAreaSize(width, height) {
+        // Reset rozszerzeń
+        this.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        this.outputAreaExtensionEnabled = false;
+        this.lastOutputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        // Oblicz środek obecnego output area
+        const prevBounds = this.outputAreaBounds;
+        const centerX = prevBounds.x + prevBounds.width / 2;
+        const centerY = prevBounds.y + prevBounds.height / 2;
+        // Nowa pozycja lewego górnego rogu, by środek pozostał w miejscu
+        const newX = centerX - width / 2;
+        const newY = centerY - height / 2;
+        // Ustaw nowy rozmiar bazowy i pozycję
+        this.originalCanvasSize = { width, height };
+        this.originalOutputAreaPosition = { x: newX, y: newY };
+        // Ustaw outputAreaBounds na nowy rozmiar i pozycję
+        this.outputAreaBounds = {
+            x: newX,
+            y: newY,
+            width,
+            height
+        };
+        // Zaktualizuj rozmiar przez istniejącą metodę (ustawia maskę, itp.)
+        this.updateOutputAreaSize(width, height, true);
+        this.render();
+        this.saveState();
+    }
+    /**
      * Eksportuje spłaszczony canvas jako blob
      */
     async getFlattenedCanvasAsBlob() {
