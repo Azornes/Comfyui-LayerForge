@@ -565,6 +565,43 @@ export class CanvasLayers {
         }
     }
 
+    /**
+     * Ustawia nowy rozmiar output area względem środka, resetuje rozszerzenia.
+     */
+    setOutputAreaSize(width: number, height: number): void {
+        // Reset rozszerzeń
+        this.canvas.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        this.canvas.outputAreaExtensionEnabled = false;
+        this.canvas.lastOutputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+
+        // Oblicz środek obecnego output area
+        const prevBounds = this.canvas.outputAreaBounds;
+        const centerX = prevBounds.x + prevBounds.width / 2;
+        const centerY = prevBounds.y + prevBounds.height / 2;
+
+        // Nowa pozycja lewego górnego rogu, by środek pozostał w miejscu
+        const newX = centerX - width / 2;
+        const newY = centerY - height / 2;
+
+        // Ustaw nowy rozmiar bazowy i pozycję
+        this.canvas.originalCanvasSize = { width, height };
+        this.canvas.originalOutputAreaPosition = { x: newX, y: newY };
+
+        // Ustaw outputAreaBounds na nowy rozmiar i pozycję
+        this.canvas.outputAreaBounds = {
+            x: newX,
+            y: newY,
+            width,
+            height
+        };
+
+        // Zaktualizuj rozmiar przez istniejącą metodę (ustawia maskę, itp.)
+        this.updateOutputAreaSize(width, height, true);
+
+        this.canvas.render();
+        this.canvas.saveState();
+    }
+
     getHandles(layer: Layer): Record<string, Point> {
         const centerX = layer.x + layer.width / 2;
         const centerY = layer.y + layer.height / 2;
