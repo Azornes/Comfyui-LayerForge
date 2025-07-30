@@ -11,6 +11,7 @@ export class CustomShapeMenu {
     private worldY: number;
     private uiInitialized: boolean;
     private tooltip: HTMLDivElement | null;
+    private isMinimized: boolean = false;
 
     constructor(canvas: Canvas) {
         this.canvas = canvas;
@@ -27,9 +28,10 @@ export class CustomShapeMenu {
         }
 
         this._createUI();
-        
+
         if (this.element) {
             this.element.style.display = 'block';
+            this._updateMinimizedState();
         }
 
         // Position in top-left corner of viewport (closer to edge)
@@ -67,16 +69,54 @@ export class CustomShapeMenu {
         this.element = document.createElement('div');
         this.element.id = 'layerforge-custom-shape-menu';
 
+        // --- MINIMIZED BAR ---
+        const minimizedBar = document.createElement('div');
+        minimizedBar.className = 'custom-shape-minimized-bar';
+        minimizedBar.textContent = "Custom Output Area Active";
+        minimizedBar.style.display = 'none';
+        minimizedBar.style.cursor = 'pointer';
+        minimizedBar.onclick = () => {
+            this.isMinimized = false;
+            this._updateMinimizedState();
+        };
+        this.element.appendChild(minimizedBar);
+
+        // --- FULL MENU ---
+        const fullMenu = document.createElement('div');
+        fullMenu.className = 'custom-shape-full-menu';
+
+        // Minimize button (top right)
+        const minimizeBtn = document.createElement('button');
+        minimizeBtn.innerHTML = "–";
+        minimizeBtn.title = "Minimize menu";
+        minimizeBtn.className = 'custom-shape-minimize-btn';
+        minimizeBtn.style.position = 'absolute';
+        minimizeBtn.style.top = '4px';
+        minimizeBtn.style.right = '4px';
+        minimizeBtn.style.width = '24px';
+        minimizeBtn.style.height = '24px';
+        minimizeBtn.style.border = 'none';
+        minimizeBtn.style.background = 'transparent';
+        minimizeBtn.style.color = '#888';
+        minimizeBtn.style.fontSize = '20px';
+        minimizeBtn.style.cursor = 'pointer';
+        minimizeBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.isMinimized = true;
+            this._updateMinimizedState();
+        };
+        fullMenu.appendChild(minimizeBtn);
+
         // Create menu content
         const lines = [
-            "🎯 Custom Output Area Active"
+            "Custom Output Area Active"
         ];
 
         lines.forEach(line => {
             const lineElement = document.createElement('div');
             lineElement.textContent = line;
             lineElement.className = 'menu-line';
-            this.element!.appendChild(lineElement);
+            fullMenu.appendChild(lineElement);
         });
 
         // Create a container for the entire shape mask feature set
@@ -276,7 +316,7 @@ export class CustomShapeMenu {
         featherSliderContainer.appendChild(featherValueDisplay);
         featureContainer.appendChild(featherSliderContainer);
 
-        this.element.appendChild(featureContainer);
+        fullMenu.appendChild(featureContainer);
 
         // Create output area extension container
         const extensionContainer = document.createElement('div');
@@ -394,8 +434,10 @@ export class CustomShapeMenu {
         slidersContainer.appendChild(createExtensionSlider('Right extension:', 'right'));
 
         extensionContainer.appendChild(slidersContainer);
-        this.element.appendChild(extensionContainer);
-        
+        fullMenu.appendChild(extensionContainer);
+
+        this.element.appendChild(fullMenu);
+
         // Add to DOM
         if (this.canvas.canvas.parentElement) {
             this.canvas.canvas.parentElement.appendChild(this.element);
@@ -405,6 +447,7 @@ export class CustomShapeMenu {
         
         this.uiInitialized = true;
         this._updateUI();
+        this._updateMinimizedState();
         
         // Add viewport change listener to update shape preview when zooming/panning
         this._addViewportChangeListener();
@@ -454,9 +497,13 @@ export class CustomShapeMenu {
 
     private _updateUI(): void {
         if (!this.element) return;
-        
+
+        // Always update only the full menu part
+        const fullMenu = this.element.querySelector('.custom-shape-full-menu') as HTMLElement;
+        if (!fullMenu) return;
+
         const setChecked = (id: string, checked: boolean) => {
-            const input = this.element!.querySelector(`#${id}`) as HTMLInputElement;
+            const input = fullMenu.querySelector(`#${id}`) as HTMLInputElement;
             if (input) input.checked = checked;
         };
 
@@ -465,24 +512,37 @@ export class CustomShapeMenu {
         setChecked('feather-checkbox', this.canvas.shapeMaskFeather);
         setChecked('extension-checkbox', this.canvas.outputAreaExtensionEnabled);
 
-        const expansionCheckbox = this.element.querySelector('#expansion-checkbox')?.parentElement as HTMLElement;
+        const expansionCheckbox = fullMenu.querySelector('#expansion-checkbox')?.parentElement as HTMLElement;
         if (expansionCheckbox) {
             expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
         
-        const featherCheckbox = this.element.querySelector('#feather-checkbox')?.parentElement as HTMLElement;
+        const featherCheckbox = fullMenu.querySelector('#feather-checkbox')?.parentElement as HTMLElement;
         if (featherCheckbox) {
             featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
 
-        const expansionSliderContainer = this.element.querySelector('#expansion-slider-container') as HTMLElement;
+        const expansionSliderContainer = fullMenu.querySelector('#expansion-slider-container') as HTMLElement;
         if (expansionSliderContainer) {
             expansionSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
         }
 
-        const featherSliderContainer = this.element.querySelector('#feather-slider-container') as HTMLElement;
+        const featherSliderContainer = fullMenu.querySelector('#feather-slider-container') as HTMLElement;
         if (featherSliderContainer) {
             featherSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
+        }
+    }
+
+    private _updateMinimizedState(): void {
+        if (!this.element) return;
+        const minimizedBar = this.element.querySelector('.custom-shape-minimized-bar') as HTMLElement;
+        const fullMenu = this.element.querySelector('.custom-shape-full-menu') as HTMLElement;
+        if (this.isMinimized) {
+            minimizedBar.style.display = 'block';
+            fullMenu.style.display = 'none';
+        } else {
+            minimizedBar.style.display = 'none';
+            fullMenu.style.display = 'block';
         }
     }
 
