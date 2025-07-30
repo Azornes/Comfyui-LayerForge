@@ -74,10 +74,10 @@ For a quick test of **LayerForge**, you can try the example workflow provided be
 
 **🔗 Download Example Workflow**
 
-![📥 LayerForge\_Example](https://github.com/user-attachments/assets/7572149a-bd5e-4f3b-8379-18bcc9ea3874)
+![📥 LayerForge\_Example1](https://github.com/user-attachments/assets/1b6e9feb-6549-4ed1-9ad2-011b477b8290)
 
 
-![📥 LayerForge\_Example](https://github.com/user-attachments/assets/7e594ebf-a047-46e1-972d-516b0f541743)
+![📥 LayerForge\_Example2](https://github.com/user-attachments/assets/7e594ebf-a047-46e1-972d-516b0f541743)
 
 
 
@@ -97,6 +97,9 @@ Click on the image above, then drag and drop it into your ComfyUI workflow windo
 | `Mouse Wheel`                | Zoom view in/out           |
 | `Shift + Click (background)` | Start resizing canvas area |
 | `Shift + Ctrl + Click`       | Start moving entire canvas |
+| `Shift + S + Left Click`     | Draw custom shape for output area |
+| `Single Click (background)`  | Deselect all layers        |
+| `Esc`                        | Close fullscreen editor mode |
 | `Double Click (background)`  | Deselect all layers        |
 
 ### Clipboard & I/O
@@ -114,10 +117,11 @@ Click on the image above, then drag and drop it into your ComfyUI workflow windo
 | `Click + Drag`        | Move selected layer(s)          |
 | `Ctrl + Click`        | Add/Remove layer from selection |
 | `Alt + Drag`          | Clone selected layer(s)         |
-| `Shift + Click`       | Show blend mode & opacity menu  |
+| `Right Click`         | Show blend mode & opacity menu  |
 | `Mouse Wheel`         | Scale layer (snaps to grid)     |
 | `Ctrl + Mouse Wheel`  | Fine-scale layer                |
 | `Shift + Mouse Wheel` | Rotate layer by 5°              |
+| `Shift + Ctrl + Mouse Wheel` | Snap rotation to 5° increments |
 | `Arrow Keys`          | Nudge layer by 1px              |
 | `Shift + Arrow Keys`  | Nudge layer by 10px             |
 | `[` or `]`            | Rotate by 1°                    |
