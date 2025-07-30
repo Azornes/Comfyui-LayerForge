@@ -487,6 +487,17 @@ export class CanvasLayersPanel {
             this.handleLayerClick(e, layer, index);
         });
 
+        // --- PRAWY PRZYCISK: ODJAZNACZ LAYER ---
+        layerRow.addEventListener('contextmenu', (e: MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
+                const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l: Layer) => l !== layer);
+                this.canvas.updateSelection(newSelection);
+                this.updateSelectionAppearance();
+            }
+        });
+
         layerRow.addEventListener('dblclick', (e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
