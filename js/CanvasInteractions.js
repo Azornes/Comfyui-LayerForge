@@ -198,6 +198,10 @@ export class CanvasInteractions {
                 this.updateCursor(coords.world);
                 break;
         }
+        // --- DYNAMICZNY PODGLĄD LINII CUSTOM SHAPE ---
+        if (this.canvas.shapeTool.isActive && !this.canvas.shapeTool.shape.isClosed) {
+            this.canvas.render();
+        }
     }
     handleMouseUp(e) {
         const coords = this.getMouseCoordinates(e);

@@ -143,10 +143,27 @@ export class ShapeTool {
         ctx.stroke();
 
         // Draw vertices
-        ctx.fillStyle = 'rgba(0, 255, 255, 1)';
+        const mouse = this.canvas.lastMousePosition;
+        const firstPoint = this.shape.points[0];
+        let highlightFirst = false;
+        if (!this.shape.isClosed && this.shape.points.length > 2 && mouse) {
+            const dx = mouse.x - firstPoint.x;
+            const dy = mouse.y - firstPoint.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 10 / this.canvas.viewport.zoom) {
+                highlightFirst = true;
+            }
+        }
+
         this.shape.points.forEach((point, index) => {
             ctx.beginPath();
-            ctx.arc(point.x, point.y, 4 / this.canvas.viewport.zoom, 0, 2 * Math.PI);
+            if (index === 0 && highlightFirst) {
+                ctx.arc(point.x, point.y, 8 / this.canvas.viewport.zoom, 0, 2 * Math.PI);
+                ctx.fillStyle = 'yellow';
+            } else {
+                ctx.arc(point.x, point.y, 4 / this.canvas.viewport.zoom, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(0, 255, 255, 1)';
+            }
             ctx.fill();
         });
 

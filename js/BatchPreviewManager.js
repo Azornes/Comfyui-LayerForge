@@ -179,8 +179,6 @@ export class BatchPreviewManager {
         this.layers.forEach((layer) => {
             layer.visible = true;
         });
-        // Clear selection - deselect all layers
-        this.canvas.updateSelection([]);
         // Update the layers panel to reflect visibility changes
         if (this.canvas.canvasLayersPanel) {
             this.canvas.canvasLayersPanel.onLayersChanged();
@@ -229,7 +227,11 @@ export class BatchPreviewManager {
         });
         // Show only the current layer
         layer.visible = true;
-        this.canvas.updateSelection([layer]);
+        // Deselect only this layer if it is selected
+        const selected = this.canvas.canvasSelection.selectedLayers;
+        if (selected && selected.includes(layer)) {
+            this.canvas.updateSelection(selected.filter((l) => l !== layer));
+        }
         // Update the layers panel to reflect visibility changes
         if (this.canvas.canvasLayersPanel) {
             this.canvas.canvasLayersPanel.onLayersChanged();
