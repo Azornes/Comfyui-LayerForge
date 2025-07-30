@@ -261,6 +261,45 @@ export class CanvasRenderer {
         }
         ctx.stroke();
     }
+    /**
+     * Check if custom shape overlaps with any active batch preview areas
+     */
+    isCustomShapeOverlappingWithBatchAreas() {
+        if (!this.canvas.outputAreaShape || !this.canvas.batchPreviewManagers || this.canvas.batchPreviewManagers.length === 0) {
+            return false;
+        }
+        // Get custom shape bounds
+        const bounds = this.canvas.outputAreaBounds;
+        const ext = this.canvas.outputAreaExtensionEnabled ? this.canvas.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+        const shapeOffsetX = bounds.x + ext.left;
+        const shapeOffsetY = bounds.y + ext.top;
+        const shape = this.canvas.outputAreaShape;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        // Calculate shape bounding box
+        shape.points.forEach((point) => {
+            const worldX = shapeOffsetX + point.x;
+            const worldY = shapeOffsetY + point.y;
+            minX = Math.min(minX, worldX);
+            maxX = Math.max(maxX, worldX);
+            minY = Math.min(minY, worldY);
+            maxY = Math.max(maxY, worldY);
+        });
+        const shapeBounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        // Check overlap with each active batch preview area
+        for (const manager of this.canvas.batchPreviewManagers) {
+            if (manager.generationArea) {
+                const area = manager.generationArea;
+                // Check if rectangles overlap
+                if (!(shapeBounds.x + shapeBounds.width < area.x ||
+                    area.x + area.width < shapeBounds.x ||
+                    shapeBounds.y + shapeBounds.height < area.y ||
+                    area.y + area.height < shapeBounds.y)) {
+                    return true; // Overlap detected
+                }
+            }
+        }
+        return false;
+    }
     drawCanvasOutline(ctx) {
         ctx.beginPath();
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
@@ -276,7 +315,8 @@ export class CanvasRenderer {
         const textWorldX = bounds.x + bounds.width / 2;
         const textWorldY = bounds.y + bounds.height + (20 / this.canvas.viewport.zoom);
         this.drawTextWithBackground(ctx, dimensionsText, textWorldX, textWorldY);
-        if (this.canvas.outputAreaShape) {
+        // Only draw custom shape if it doesn't overlap with batch preview areas
+        if (this.canvas.outputAreaShape && !this.isCustomShapeOverlappingWithBatchAreas()) {
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
             ctx.lineWidth = 2 / this.canvas.viewport.zoom;
@@ -351,29 +391,32 @@ export class CanvasRenderer {
         });
     }
     drawPendingGenerationAreas(ctx) {
-        const areasToDraw = [];
-        // 1. Get areas from active managers
-        if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
-            this.canvas.batchPreviewManagers.forEach((manager) => {
-                if (manager.generationArea) {
-                    areasToDraw.push(manager.generationArea);
-                }
-            });
-        }
-        // 2. Get the area from the pending context (if it exists)
+        const pendingAreas = [];
+        // 1. Get all pending generation areas (from pendingBatchContext)
         if (this.canvas.pendingBatchContext && this.canvas.pendingBatchContext.outputArea) {
-            areasToDraw.push(this.canvas.pendingBatchContext.outputArea);
+            pendingAreas.push(this.canvas.pendingBatchContext.outputArea);
         }
-        if (areasToDraw.length === 0) {
-            return;
-        }
-        // 3. Draw all collected areas
-        areasToDraw.forEach(area => {
-            this.drawStyledRect(ctx, area, {
-                strokeStyle: 'rgba(0, 150, 255, 0.9)',
-                lineWidth: 3,
-                dashPattern: [12, 6]
+        // 2. Draw only those pending areas, które NIE mają aktywnego batch preview managera dla tego samego obszaru
+        const isAreaCoveredByBatch = (area) => {
+            if (!this.canvas.batchPreviewManagers)
+                return false;
+            return this.canvas.batchPreviewManagers.some((manager) => {
+                if (!manager.generationArea)
+                    return false;
+                // Sprawdź czy obszary się pokrywają (prosty overlap AABB)
+                const a = area;
+                const b = manager.generationArea;
+                return !(a.x + a.width < b.x || b.x + b.width < a.x || a.y + a.height < b.y || b.y + b.height < a.y);
             });
+        };
+        pendingAreas.forEach(area => {
+            if (!isAreaCoveredByBatch(area)) {
+                this.drawStyledRect(ctx, area, {
+                    strokeStyle: 'rgba(0, 150, 255, 0.9)',
+                    lineWidth: 3,
+                    dashPattern: [12, 6]
+                });
+            }
         });
     }
     drawMaskAreaBounds(ctx) {

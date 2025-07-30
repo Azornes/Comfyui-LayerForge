@@ -234,6 +234,9 @@ export class BatchPreviewManager {
             layer.visible = true;
         });
         
+        // Clear selection - deselect all layers
+        this.canvas.updateSelection([]);
+        
         // Update the layers panel to reflect visibility changes
         if (this.canvas.canvasLayersPanel) {
             this.canvas.canvasLayersPanel.onLayersChanged();

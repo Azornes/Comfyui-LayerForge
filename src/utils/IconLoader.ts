@@ -13,7 +13,7 @@ export const LAYERFORGE_TOOLS = {
     DELETE: 'delete',
     DUPLICATE: 'duplicate',
     BLEND_MODE: 'blend_mode',
-    OPACITY: 'opacity',
+    OPACITY: 'opacity', 
     MASK: 'mask',
     BRUSH: 'brush',
     ERASER: 'eraser',
