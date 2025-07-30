@@ -339,18 +339,118 @@ export class CanvasRenderer {
             ctx.restore();
         }
     }
+    /**
+     * Sprawdza czy punkt w świecie jest przykryty przez warstwy o wyższym zIndex
+     */
+    isPointCoveredByHigherLayers(worldX, worldY, currentLayer) {
+        // Znajdź warstwy o wyższym zIndex niż aktualny layer
+        const higherLayers = this.canvas.layers.filter((l) => l.zIndex > currentLayer.zIndex && l.visible && l !== currentLayer);
+        for (const higherLayer of higherLayers) {
+            // Sprawdź czy punkt jest wewnątrz tego layera
+            const centerX = higherLayer.x + higherLayer.width / 2;
+            const centerY = higherLayer.y + higherLayer.height / 2;
+            // Przekształć punkt do lokalnego układu współrzędnych layera
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+            const rad = -higherLayer.rotation * Math.PI / 180;
+            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
+            // Sprawdź czy punkt jest wewnątrz prostokąta layera
+            if (Math.abs(rotatedX) <= higherLayer.width / 2 &&
+                Math.abs(rotatedY) <= higherLayer.height / 2) {
+                // Sprawdź przezroczystość layera - jeśli ma znaczącą nieprzezroczystość, uznaj za przykryty
+                if (higherLayer.opacity > 0.1) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    /**
+     * Rysuje linię z automatycznym przełączaniem między ciągłą a przerywaną w zależności od przykrycia
+     */
+    drawAdaptiveLine(ctx, startX, startY, endX, endY, layer) {
+        const segmentLength = 8 / this.canvas.viewport.zoom; // Długość segmentu do sprawdzania
+        const dashLength = 6 / this.canvas.viewport.zoom;
+        const gapLength = 4 / this.canvas.viewport.zoom;
+        const totalLength = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
+        const segments = Math.max(1, Math.floor(totalLength / segmentLength));
+        let currentX = startX;
+        let currentY = startY;
+        let lastCovered = null;
+        let segmentStart = { x: startX, y: startY };
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            const x = startX + (endX - startX) * t;
+            const y = startY + (endY - startY) * t;
+            // Przekształć współrzędne lokalne na światowe
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            const rad = layer.rotation * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            const worldX = centerX + (x * cos - y * sin);
+            const worldY = centerY + (x * sin + y * cos);
+            const isCovered = this.isPointCoveredByHigherLayers(worldX, worldY, layer);
+            // Jeśli stan się zmienił lub to ostatni segment, narysuj poprzedni odcinek
+            if (lastCovered !== null && (lastCovered !== isCovered || i === segments)) {
+                ctx.beginPath();
+                ctx.moveTo(segmentStart.x, segmentStart.y);
+                ctx.lineTo(currentX, currentY);
+                if (lastCovered) {
+                    // Przykryty - linia przerywana
+                    ctx.setLineDash([dashLength, gapLength]);
+                }
+                else {
+                    // Nie przykryty - linia ciągła
+                    ctx.setLineDash([]);
+                }
+                ctx.stroke();
+                segmentStart = { x: currentX, y: currentY };
+            }
+            lastCovered = isCovered;
+            currentX = x;
+            currentY = y;
+        }
+        // Narysuj ostatni segment jeśli potrzeba
+        if (lastCovered !== null) {
+            ctx.beginPath();
+            ctx.moveTo(segmentStart.x, segmentStart.y);
+            ctx.lineTo(endX, endY);
+            if (lastCovered) {
+                ctx.setLineDash([dashLength, gapLength]);
+            }
+            else {
+                ctx.setLineDash([]);
+            }
+            ctx.stroke();
+        }
+        // Resetuj dash pattern
+        ctx.setLineDash([]);
+    }
     drawSelectionFrame(ctx, layer) {
         const lineWidth = 2 / this.canvas.viewport.zoom;
         const handleRadius = 5 / this.canvas.viewport.zoom;
         ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = lineWidth;
-        ctx.beginPath();
-        ctx.rect(-layer.width / 2, -layer.height / 2, layer.width, layer.height);
-        ctx.stroke();
+        // Rysuj ramkę z adaptacyjnymi liniami (ciągłe/przerywane w zależności od przykrycia)
+        const halfW = layer.width / 2;
+        const halfH = layer.height / 2;
+        // Górna krawędź
+        this.drawAdaptiveLine(ctx, -halfW, -halfH, halfW, -halfH, layer);
+        // Prawa krawędź
+        this.drawAdaptiveLine(ctx, halfW, -halfH, halfW, halfH, layer);
+        // Dolna krawędź
+        this.drawAdaptiveLine(ctx, halfW, halfH, -halfW, halfH, layer);
+        // Lewa krawędź
+        this.drawAdaptiveLine(ctx, -halfW, halfH, -halfW, -halfH, layer);
+        // Rysuj linię do uchwytu rotacji (zawsze ciągła)
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(0, -layer.height / 2);
         ctx.lineTo(0, -layer.height / 2 - 20 / this.canvas.viewport.zoom);
         ctx.stroke();
+        // Rysuj uchwyty
         const handles = this.canvas.canvasLayers.getHandles(layer);
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#000000';
