@@ -52,27 +52,27 @@
 }
 
 .painter-button.success {
-    background-color: #4a7c59;
-    border-color: #3a6c49;
+    border-color: #4ae27a;
+    background-color: #444;
     color: #fff;
-    text-shadow: 0 1px 2px rgb(0,0,0);
+    box-shadow: 0 0 0 1.5px #4ae27a88;
 }
-
 .painter-button.success:hover {
-    background-color: #5a8c69;
-    border-color: #4a7c59;
+    border-color: #6aff9a;
+    box-shadow: 0 0 0 2.5px #6aff9a88;
+    background-color: #555;
 }
 
 .painter-button.danger {
-    background-color: #c54747;
-    border-color: #a53737;
+    border-color: #e24a4a;
+    background-color: #444;
     color: #fff;
-    text-shadow: 0 1px 2px rgb(0,0,0);
+    box-shadow: 0 0 0 1.5px #e24a4a88;
 }
-
 .painter-button.danger:hover {
-    background-color: #d55757;
-    border-color: #c54747;
+    border-color: #ff6a6a;
+    box-shadow: 0 0 0 2.5px #ff6a6a88;
+    background-color: #555;
 }
 
 .painter-button.icon-button {
