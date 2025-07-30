@@ -32,6 +32,7 @@ https://github.com/user-attachments/assets/0f557d87-fd5e-422b-ab7e-dbdd4cab156c
 
 ## ✨ Key Features
 
+- **Freeform Inpainting Area:** Draw any custom (non-rectangular) area directly inside the image for inpainting. The tool generates content that is coherent with the rest of the image, without requiring a brush.
 - **Persistent & Stateful:** Your work is automatically saved to the browser's IndexedDB, preserving your full canvas
   state (layers, positions, etc.) even after a page reload.
 - **Multi-Layer Editing:** Add, arrange, and manage multiple image layers with z-ordering.
