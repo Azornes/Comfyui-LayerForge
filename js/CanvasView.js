@@ -762,6 +762,7 @@ async function createCanvasWidget(node, widget, app) {
             overflow: "hidden"
         }
     }, [canvas.canvas]);
+    canvas.canvasContainer = canvasContainer;
     const layersPanelContainer = $el("div.painterLayersPanelContainer", {
         style: {
             position: "absolute",

@@ -29,6 +29,9 @@ export class CanvasLayers {
     public internalClipboard: Layer[];
     public clipboardPreference: ClipboardPreference;
     private distanceFieldCache: WeakMap<HTMLImageElement, Map<number, HTMLCanvasElement>>;
+    private blendMenuElement: HTMLDivElement | null = null;
+    private blendMenuWorldX: number = 0;
+    private blendMenuWorldY: number = 0;
 
     constructor(canvas: Canvas) {
         this.canvas = canvas;
@@ -654,15 +657,89 @@ export class CanvasLayers {
         return null;
     }
 
-    showBlendModeMenu(x: number, y: number): void {
+    private currentCloseMenuListener: ((e: MouseEvent) => void) | null = null;
+    
+    updateBlendModeMenuPosition(): void {
+        if (!this.blendMenuElement) return;
+
+        const screenX = (this.blendMenuWorldX - this.canvas.viewport.x) * this.canvas.viewport.zoom;
+        const screenY = (this.blendMenuWorldY - this.canvas.viewport.y) * this.canvas.viewport.zoom;
+
+        this.blendMenuElement.style.transform = `translate(${screenX}px, ${screenY}px)`;
+    }
+
+    showBlendModeMenu(worldX: number, worldY: number): void {
+        if (this.canvas.canvasSelection.selectedLayers.length === 0) {
+            return;
+        }
+        
+        // Find which selected layer is at the click position (topmost visible layer at that position)
+        let selectedLayer: Layer | null = null;
+        const visibleSelectedLayers = this.canvas.canvasSelection.selectedLayers.filter((layer: Layer) => layer.visible);
+        
+        if (visibleSelectedLayers.length === 0) {
+            return;
+        }
+        
+        // Sort by zIndex descending and find the first one that contains the click point
+        const sortedLayers = visibleSelectedLayers.sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
+        
+        for (const layer of sortedLayers) {
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            
+            // Transform click point to layer's local coordinates
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+            
+            const rad = -layer.rotation * Math.PI / 180;
+            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
+            
+            const withinX = Math.abs(rotatedX) <= layer.width / 2;
+            const withinY = Math.abs(rotatedY) <= layer.height / 2;
+            
+            // Check if click is within layer bounds
+            if (withinX && withinY) {
+                selectedLayer = layer;
+                break;
+            }
+        }
+        
+        // If no layer found at click position, fall back to topmost visible selected layer
+        if (!selectedLayer) {
+            selectedLayer = sortedLayers[0];
+        }
+        
+        // At this point selectedLayer is guaranteed to be non-null
+        if (!selectedLayer) {
+            return;
+        }
+        
+        // Remove any existing event listener first
+        if (this.currentCloseMenuListener) {
+            document.removeEventListener('mousedown', this.currentCloseMenuListener);
+            this.currentCloseMenuListener = null;
+        }
+        
         this.closeBlendModeMenu();
 
+        // Calculate position in WORLD coordinates (top-right of viewport)
+        const viewLeft = this.canvas.viewport.x;
+        const viewTop = this.canvas.viewport.y;
+        const viewWidth = this.canvas.canvas.width / this.canvas.viewport.zoom;
+
+        // Position near top-right corner
+        this.blendMenuWorldX = viewLeft + viewWidth - (250 / this.canvas.viewport.zoom); // 250px from right edge
+        this.blendMenuWorldY = viewTop + (10 / this.canvas.viewport.zoom); // 10px from top edge
+
         const menu = document.createElement('div');
+        this.blendMenuElement = menu;
         menu.id = 'blend-mode-menu';
         menu.style.cssText = `
-            position: fixed;
-            left: ${x}px;
-            top: ${y}px;
+            position: absolute;
+            top: 0;
+            left: 0;
             background: #2a2a2a;
             border: 1px solid #3a3a3a;
             border-radius: 4px;
@@ -688,10 +765,13 @@ export class CanvasLayers {
         `;
         
         const titleText = document.createElement('span');
-        titleText.textContent = 'Blend Mode';
+        titleText.textContent = `Blend Mode: ${selectedLayer.name}`;
         titleText.style.cssText = `
             flex: 1;
             cursor: move;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         `;
         
         const closeButton = document.createElement('button');
@@ -747,14 +827,12 @@ export class CanvasLayers {
         blendAreaSlider.min = '0';
         blendAreaSlider.max = '100';
         
-        const selectedLayerForBlendArea = this.canvas.canvasSelection.selectedLayers[0];
-        blendAreaSlider.value = selectedLayerForBlendArea?.blendArea?.toString() ?? '0';
+        blendAreaSlider.value = selectedLayer?.blendArea?.toString() ?? '0';
         
         blendAreaSlider.oninput = () => {
-            if (selectedLayerForBlendArea) {
+            if (selectedLayer) {
                 const newValue = parseInt(blendAreaSlider.value, 10);
-                selectedLayerForBlendArea.blendArea = newValue;
-                log.info(`Blend Area changed to: ${newValue}% for layer: ${selectedLayerForBlendArea.id}`);
+                selectedLayer.blendArea = newValue;
                 this.canvas.render();
             }
         };
@@ -770,17 +848,17 @@ export class CanvasLayers {
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
 
+        // Drag logic needs to update world coordinates, not screen coordinates
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging) {
-                const newX = e.clientX - dragOffset.x;
-                const newY = e.clientY - dragOffset.y;
-                const maxX = window.innerWidth - menu.offsetWidth;
-                const maxY = window.innerHeight - menu.offsetHeight;
-                menu.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
-                menu.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+                const dx = e.movementX / this.canvas.viewport.zoom;
+                const dy = e.movementY / this.canvas.viewport.zoom;
+                this.blendMenuWorldX += dx;
+                this.blendMenuWorldY += dy;
+                this.updateBlendModeMenuPosition();
             }
         };
-
+        
         const handleMouseUp = () => {
             if (isDragging) {
                 isDragging = false;
@@ -788,11 +866,9 @@ export class CanvasLayers {
                 document.removeEventListener('mouseup', handleMouseUp);
             }
         };
-
+        
         titleBar.addEventListener('mousedown', (e: MouseEvent) => {
             isDragging = true;
-            dragOffset.x = e.clientX - parseInt(menu.style.left, 10);
-            dragOffset.y = e.clientY - parseInt(menu.style.top, 10);
             e.preventDefault();
             e.stopPropagation();
             document.addEventListener('mousemove', handleMouseMove);
@@ -822,6 +898,12 @@ export class CanvasLayers {
             }
 
             option.onclick = () => {
+                // Re-check selected layer at the time of click
+                const currentSelectedLayer = this.canvas.canvasSelection.selectedLayers[0];
+                if (!currentSelectedLayer) {
+                    return;
+                }
+                
                 // Hide only the opacity sliders within other blend mode containers
                 content.querySelectorAll<HTMLDivElement>('.blend-mode-container').forEach(c => {
                     const opacitySlider = c.querySelector<HTMLInputElement>('input[type="range"]');
@@ -837,17 +919,21 @@ export class CanvasLayers {
                 slider.style.display = 'block';
                 option.style.backgroundColor = '#3a3a3a';
 
-                if (selectedLayer) {
-                    selectedLayer.blendMode = mode.name;
-                    this.canvas.render();
-                }
+                currentSelectedLayer.blendMode = mode.name;
+                this.canvas.render();
             };
 
             slider.addEventListener('input', () => {
-                if (selectedLayer) {
-                    selectedLayer.opacity = parseInt(slider.value, 10) / 100;
-                    this.canvas.render();
+                // Re-check selected layer at the time of slider input
+                const currentSelectedLayer = this.canvas.canvasSelection.selectedLayers[0];
+                if (!currentSelectedLayer) {
+                    return;
                 }
+                
+                const newOpacity = parseInt(slider.value, 10) / 100;
+                
+                currentSelectedLayer.opacity = newOpacity;
+                this.canvas.render();
             });
 
             slider.addEventListener('change', async () => {
@@ -883,22 +969,48 @@ export class CanvasLayers {
             e.stopPropagation();
         });
 
-        const container = this.canvas.canvas.parentElement || document.body;
-        container.appendChild(menu);
+        if (!this.canvas.canvasContainer) {
+            log.error("Canvas container not found, cannot append blend mode menu.");
+            return;
+        }
+        this.canvas.canvasContainer.appendChild(menu);
+        
+        this.updateBlendModeMenuPosition();
+
+        // Add listener for viewport changes
+        this.canvas.onViewportChange = () => this.updateBlendModeMenuPosition();
 
         const closeMenu = (e: MouseEvent) => {
             if (e.target instanceof Node && !menu.contains(e.target) && !isDragging) {
                 this.closeBlendModeMenu();
-                document.removeEventListener('mousedown', closeMenu);
+                if (this.currentCloseMenuListener) {
+                    document.removeEventListener('mousedown', this.currentCloseMenuListener);
+                    this.currentCloseMenuListener = null;
+                }
             }
         };
-        setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
+        
+        // Store the listener reference so we can remove it later
+        this.currentCloseMenuListener = closeMenu;
+        
+        setTimeout(() => {
+            document.addEventListener('mousedown', closeMenu);
+        }, 0);
     }
 
     closeBlendModeMenu(): void {
-        const menu = document.getElementById('blend-mode-menu');
-        if (menu && menu.parentNode) {
-            menu.parentNode.removeChild(menu);
+        log.info("=== BLEND MODE MENU CLOSING ===");
+        if (this.blendMenuElement && this.blendMenuElement.parentNode) {
+            log.info("Removing blend mode menu from DOM");
+            this.blendMenuElement.parentNode.removeChild(this.blendMenuElement);
+            this.blendMenuElement = null;
+        } else {
+            log.info("Blend mode menu not found or already removed");
+        }
+        
+        // Remove viewport change listener
+        if (this.canvas.onViewportChange) {
+            this.canvas.onViewportChange = null;
         }
     }
 

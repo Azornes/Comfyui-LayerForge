@@ -48,6 +48,7 @@ export class Canvas {
         this.layers = [];
         this.onStateChange = callbacks.onStateChange;
         this.onHistoryChange = callbacks.onHistoryChange;
+        this.onViewportChange = null;
         this.lastMousePosition = { x: 0, y: 0 };
         this.viewport = {
             x: -(this.width / 1.5),
@@ -60,6 +61,7 @@ export class Canvas {
         });
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
+        this.canvasContainer = null;
         this.dataInitialized = false;
         this.pendingDataCheck = null;
         this.imageCache = new Map();

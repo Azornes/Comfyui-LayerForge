@@ -47,6 +47,7 @@ const log = createModuleLogger('Canvas');
 export class Canvas {
     batchPreviewManagers: BatchPreviewManager[];
     canvas: HTMLCanvasElement;
+    canvasContainer: HTMLDivElement | null;
     canvasIO: CanvasIO;
     canvasInteractions: CanvasInteractions;
     canvasLayers: CanvasLayers;
@@ -84,6 +85,7 @@ export class Canvas {
     offscreenCanvas: HTMLCanvasElement;
     offscreenCtx: CanvasRenderingContext2D | null;
     onHistoryChange: ((historyInfo: { canUndo: boolean; canRedo: boolean; }) => void) | undefined;
+    onViewportChange: (() => void) | null;
     onStateChange: (() => void) | undefined;
     pendingBatchContext: any;
     pendingDataCheck: number | null;
@@ -105,6 +107,7 @@ export class Canvas {
         this.layers = [];
         this.onStateChange = callbacks.onStateChange;
         this.onHistoryChange = callbacks.onHistoryChange;
+        this.onViewportChange = null;
         this.lastMousePosition = {x: 0, y: 0};
 
         this.viewport = {
@@ -119,6 +122,7 @@ export class Canvas {
         });
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
+        this.canvasContainer = null;
 
         this.dataInitialized = false;
         this.pendingDataCheck = null;

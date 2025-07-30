@@ -83,6 +83,8 @@ export class CanvasInteractions {
         this.canvas.viewport.zoom = newZoom;
         this.canvas.viewport.x = worldCoords.x - (mouseBufferX / this.canvas.viewport.zoom);
         this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
+        
+        this.canvas.onViewportChange?.();
     }
 
     private renderAndSave(shouldSave: boolean = false): void {
@@ -132,6 +134,33 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this) as unknown as EventListener);
 
         this.canvas.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this) as EventListener);
+    }
+
+    /**
+     * Sprawdza czy punkt znajduje się w obszarze któregokolwiek z zaznaczonych layerów
+     */
+    isPointInSelectedLayers(worldX: number, worldY: number): boolean {
+        for (const layer of this.canvas.canvasSelection.selectedLayers) {
+            if (!layer.visible) continue;
+
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+
+            // Przekształć punkt do lokalnego układu współrzędnych layera
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+
+            const rad = -layer.rotation * Math.PI / 180;
+            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
+            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
+
+            // Sprawdź czy punkt jest wewnątrz prostokąta layera
+            if (Math.abs(rotatedX) <= layer.width / 2 && 
+                Math.abs(rotatedY) <= layer.height / 2) {
+                return true;
+            }
+        }
+        return false;
     }
 
     resetInteractionState(): void {
@@ -186,9 +215,10 @@ export class CanvasInteractions {
         if (e.button === 2) { // Prawy przycisk myszy
             this.preventEventDefaults(e);
             
-            const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(coords.world.x, coords.world.y);
-            if (clickedLayerResult && this.canvas.canvasSelection.selectedLayers.includes(clickedLayerResult.layer)) {
-                this.canvas.canvasLayers.showBlendModeMenu(coords.view.x, coords.view.y);
+            // Sprawdź czy kliknięto w obszarze któregokolwiek z zaznaczonych layerów (niezależnie od przykrycia)
+            if (this.isPointInSelectedLayers(coords.world.x, coords.world.y)) {
+                // Nowa logika przekazuje tylko współrzędne świata, menu pozycjonuje się samo
+                this.canvas.canvasLayers.showBlendModeMenu(coords.world.x, coords.world.y);
             }
             return;
         }
@@ -712,6 +742,7 @@ export class CanvasInteractions {
         this.canvas.viewport.y -= dy / this.canvas.viewport.zoom;
         this.interaction.panStart = {x: e.clientX, y: e.clientY};
         this.canvas.render();
+        this.canvas.onViewportChange?.();
     }
 
     dragLayers(worldCoords: Point): void {

@@ -815,6 +815,8 @@ $el("label.clipboard-switch.mask-switch", {
         }
     }, [canvas.canvas]) as HTMLDivElement;
 
+    canvas.canvasContainer = canvasContainer;
+
     const layersPanelContainer = $el("div.painterLayersPanelContainer", {
         style: {
             position: "absolute",
