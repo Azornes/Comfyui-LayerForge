@@ -241,8 +241,8 @@
         }
       ],
       "properties": {
-        "cnr_id": "Comfyui-Ycanvas",
-        "ver": "f6a491e83bab9481a2cac3367541a3b7803df9ab",
+        "cnr_id": "layerforge",
+        "ver": "22f5d028a2d4c3163014eba4896ef86810d81616",
         "Node name for S&R": "CanvasNode",
         "widget_ue_connectable": {}
       },
