@@ -21,6 +21,13 @@ export interface Layer {
     flipH?: boolean;
     flipV?: boolean;
     blendArea?: number;
+    cropMode?: boolean;           // czy warstwa jest w trybie crop
+    cropBounds?: {               // granice przycinania
+        x: number;              // offset od lewej krawędzi obrazu
+        y: number;              // offset od górnej krawędzi obrazu  
+        width: number;          // szerokość widocznego obszaru
+        height: number;         // wysokość widocznego obszaru
+    };
 }
 
 export interface ComfyNode {

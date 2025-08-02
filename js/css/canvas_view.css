@@ -51,6 +51,32 @@
     border-color: #3a76d6;
 }
 
+/* Crop mode button styling */
+.painter-button#crop-mode-btn {
+    background-color: #444;
+    border-color: #555;
+    color: #fff;
+    transition: all 0.2s ease-in-out;
+}
+
+.painter-button#crop-mode-btn.primary {
+    background-color: #0080ff;
+    border-color: #0070e0;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(0, 128, 255, 0.3);
+}
+
+.painter-button#crop-mode-btn.primary:hover {
+    background-color: #1090ff;
+    border-color: #0080ff;
+    box-shadow: 0 0 12px rgba(0, 128, 255, 0.4);
+}
+
+.painter-button#crop-mode-btn:hover {
+    background-color: #555;
+    border-color: #666;
+}
+
 .painter-button.success {
     border-color: #4ae27a;
     background-color: #444;

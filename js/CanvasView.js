@@ -294,6 +294,43 @@ async function createCanvasWidget(node, widget, app) {
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
                 $el("button.painter-button.requires-selection", {
+                    id: `crop-mode-btn-${node.id}`,
+                    textContent: "Crop Mode",
+                    title: "Toggle crop mode for selected layer(s)",
+                    onclick: () => {
+                        const cropBtn = controlPanel.querySelector(`#crop-mode-btn-${node.id}`);
+                        const selectedLayers = canvas.canvasSelection.selectedLayers;
+                        if (selectedLayers.length === 0)
+                            return;
+                        // Toggle crop mode for all selected layers
+                        const firstLayer = selectedLayers[0];
+                        const newCropMode = !firstLayer.cropMode;
+                        selectedLayers.forEach((layer) => {
+                            layer.cropMode = newCropMode;
+                            // Initialize crop bounds if entering crop mode
+                            if (newCropMode && !layer.cropBounds) {
+                                layer.cropBounds = {
+                                    x: 0,
+                                    y: 0,
+                                    width: layer.originalWidth,
+                                    height: layer.originalHeight
+                                };
+                            }
+                        });
+                        // Update button appearance
+                        if (newCropMode) {
+                            cropBtn.classList.add('primary');
+                            cropBtn.title = "Exit crop mode for selected layer(s)";
+                        }
+                        else {
+                            cropBtn.classList.remove('primary');
+                            cropBtn.title = "Toggle crop mode for selected layer(s)";
+                        }
+                        canvas.saveState();
+                        canvas.render();
+                    }
+                }),
+                $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
                     onclick: () => canvas.canvasLayers.rotateLayer(90)

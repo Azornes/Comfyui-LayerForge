@@ -433,8 +433,31 @@ export class CanvasLayers {
                 const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 
                 if (tempCtx) {
-                    // Draw the original image
-                    tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
+                    // This logic is now unified to handle both cropped and non-cropped images correctly.
+                    const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+
+                    if (!layer.originalWidth || !layer.originalHeight) {
+                        tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
+                    } else {
+                        const layerScaleX = layer.width / layer.originalWidth;
+                        const layerScaleY = layer.height / layer.originalHeight;
+
+                        const dWidth = s.width * layerScaleX;
+                        const dHeight = s.height * layerScaleY;
+                        
+                        // The destination is the top-left of the temp canvas, plus the scaled offset of the crop area.
+                        const dX = s.x * layerScaleX;
+                        const dY = s.y * layerScaleY;
+
+                        // We draw into a temp canvas of size layer.width x layer.height.
+                        // The destination rect must be positioned correctly within this temp canvas.
+                        // The dX/dY here are offsets from the top-left of the transform frame.
+                        tempCtx.drawImage(
+                            layer.image,
+                            s.x, s.y, s.width, s.height,
+                            dX, dY, dWidth, dHeight
+                        );
+                    }
                     
                     // Apply the distance field mask using destination-in for transparency effect
                     tempCtx.globalCompositeOperation = 'destination-in';
@@ -446,24 +469,51 @@ export class CanvasLayers {
                     ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 } else {
                     // Fallback to normal drawing
-                    ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                    ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                    ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                    this._drawLayerImage(ctx, layer);
                 }
             } else {
                 // Fallback to normal drawing
-                ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                this._drawLayerImage(ctx, layer);
             }
         } else {
             // Normal drawing without blend area effect
-            ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
-            ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-            ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            this._drawLayerImage(ctx, layer);
         }
         
         ctx.restore();
+    }
+
+    private _drawLayerImage(ctx: CanvasRenderingContext2D, layer: Layer): void {
+        ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        
+        // Use cropBounds if they exist, otherwise use the full image dimensions as the source
+        const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+
+        if (!layer.originalWidth || !layer.originalHeight) {
+            // Fallback for older layers without original dimensions or if data is missing
+            ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            return;
+        }
+
+        // Calculate the on-screen scale of the layer's transform frame
+        const layerScaleX = layer.width / layer.originalWidth;
+        const layerScaleY = layer.height / layer.originalHeight;
+
+        // Calculate the on-screen size of the cropped portion
+        const dWidth = s.width * layerScaleX;
+        const dHeight = s.height * layerScaleY;
+
+        // Calculate the on-screen position of the top-left of the cropped portion.
+        // This is relative to the layer's center (the context's 0,0).
+        const dX = (-layer.width / 2) + (s.x * layerScaleX);
+        const dY = (-layer.height / 2) + (s.y * layerScaleY);
+
+        ctx.drawImage(
+            layer.image,
+            s.x, s.y, s.width, s.height, // source rect (from original image)
+            dX, dY, dWidth, dHeight      // destination rect (scaled and positioned within the transform frame)
+        );
     }
 
     private getDistanceFieldMaskSync(image: HTMLImageElement, blendArea: number): HTMLCanvasElement | null {
@@ -606,23 +656,45 @@ export class CanvasLayers {
     }
 
     getHandles(layer: Layer): Record<string, Point> {
-        const centerX = layer.x + layer.width / 2;
-        const centerY = layer.y + layer.height / 2;
+        const layerCenterX = layer.x + layer.width / 2;
+        const layerCenterY = layer.y + layer.height / 2;
         const rad = layer.rotation * Math.PI / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
 
-        const halfW = layer.width / 2;
-        const halfH = layer.height / 2;
+        let handleCenterX, handleCenterY, halfW, halfH;
+
+        if (layer.cropMode && layer.cropBounds && layer.originalWidth) {
+            // CROP MODE: Handles are relative to the cropped area
+            const layerScaleX = layer.width / layer.originalWidth;
+            const layerScaleY = layer.height / layer.originalHeight;
+
+            const cropRectW = layer.cropBounds.width * layerScaleX;
+            const cropRectH = layer.cropBounds.height * layerScaleY;
+
+            // Center of the CROP rectangle in the layer's local, un-rotated space
+            const cropCenterX_local = (-layer.width / 2) + ((layer.cropBounds.x + layer.cropBounds.width / 2) * layerScaleX);
+            const cropCenterY_local = (-layer.height / 2) + ((layer.cropBounds.y + layer.cropBounds.height / 2) * layerScaleY);
+            
+            // Rotate this local center to find the world-space center of the crop rect
+            handleCenterX = layerCenterX + (cropCenterX_local * cos - cropCenterY_local * sin);
+            handleCenterY = layerCenterY + (cropCenterX_local * sin + cropCenterY_local * cos);
+            
+            halfW = cropRectW / 2;
+            halfH = cropRectH / 2;
+        } else {
+            // TRANSFORM MODE: Handles are relative to the full layer transform frame
+            handleCenterX = layerCenterX;
+            handleCenterY = layerCenterY;
+            halfW = layer.width / 2;
+            halfH = layer.height / 2;
+        }
+
         const localHandles: Record<string, Point> = {
-            'n': { x: 0, y: -halfH },
-            'ne': { x: halfW, y: -halfH },
-            'e': { x: halfW, y: 0 },
-            'se': { x: halfW, y: halfH },
-            's': { x: 0, y: halfH },
-            'sw': { x: -halfW, y: halfH },
-            'w': { x: -halfW, y: 0 },
-            'nw': { x: -halfW, y: -halfH },
+            'n': { x: 0, y: -halfH }, 'ne': { x: halfW, y: -halfH },
+            'e': { x: halfW, y: 0 }, 'se': { x: halfW, y: halfH },
+            's': { x: 0, y: halfH }, 'sw': { x: -halfW, y: halfH },
+            'w': { x: -halfW, y: 0 }, 'nw': { x: -halfW, y: -halfH },
             'rot': { x: 0, y: -halfH - 20 / this.canvas.viewport.zoom }
         };
 
@@ -630,8 +702,8 @@ export class CanvasLayers {
         for (const key in localHandles) {
             const p = localHandles[key];
             worldHandles[key] = {
-                x: centerX + (p.x * cos - p.y * sin),
-                y: centerY + (p.x * sin + p.y * cos)
+                x: handleCenterX + (p.x * cos - p.y * sin),
+                y: handleCenterY + (p.x * sin + p.y * cos)
             };
         }
         return worldHandles;

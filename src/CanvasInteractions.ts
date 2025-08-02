@@ -626,7 +626,10 @@ export class CanvasInteractions {
             width: layer.width, height: layer.height,
             rotation: layer.rotation,
             centerX: layer.x + layer.width / 2,
-            centerY: layer.y + layer.height / 2
+            centerY: layer.y + layer.height / 2,
+            originalWidth: layer.originalWidth,
+            originalHeight: layer.originalHeight,
+            cropBounds: layer.cropBounds ? { ...layer.cropBounds } : undefined
         };
         this.interaction.dragStart = {...worldCoords};
 
@@ -797,66 +800,137 @@ export class CanvasInteractions {
 
         if (this.interaction.isCtrlPressed) {
             const snapThreshold = 10 / this.canvas.viewport.zoom;
-            const snappedMouseX = snapToGrid(mouseX);
-            if (Math.abs(mouseX - snappedMouseX) < snapThreshold) mouseX = snappedMouseX;
-            const snappedMouseY = snapToGrid(mouseY);
-            if (Math.abs(mouseY - snappedMouseY) < snapThreshold) mouseY = snappedMouseY;
+            mouseX = Math.abs(mouseX - snapToGrid(mouseX)) < snapThreshold ? snapToGrid(mouseX) : mouseX;
+            mouseY = Math.abs(mouseY - snapToGrid(mouseY)) < snapThreshold ? snapToGrid(mouseY) : mouseY;
         }
 
         const o = this.interaction.transformOrigin;
         if (o.rotation === undefined || o.width === undefined || o.height === undefined || o.centerX === undefined || o.centerY === undefined) return;
+        
         const handle = this.interaction.resizeHandle;
         const anchor = this.interaction.resizeAnchor;
-
         const rad = o.rotation * Math.PI / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
 
+        // Vector from anchor to mouse
         const vecX = mouseX - anchor.x;
         const vecY = mouseY - anchor.y;
 
-        let newWidth = vecX * cos + vecY * sin;
-        let newHeight = vecY * cos - vecX * sin;
+        // Rotate vector to align with layer's local coordinates
+        let localVecX = vecX * cos + vecY * sin;
+        let localVecY = vecY * cos - vecX * sin;
 
-        if (isShiftPressed) {
-            const originalAspectRatio = o.width / o.height;
+        // Determine sign based on handle
+        const signX = handle?.includes('e') ? 1 : (handle?.includes('w') ? -1 : 0);
+        const signY = handle?.includes('s') ? 1 : (handle?.includes('n') ? -1 : 0);
+        
+        localVecX *= signX;
+        localVecY *= signY;
 
-            if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
-                newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
-            } else {
-                newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
+        // If not a corner handle, keep original dimension
+        if (signX === 0) localVecX = o.width;
+        if (signY === 0) localVecY = o.height;
+
+        if (layer.cropMode && o.cropBounds && o.originalWidth && o.originalHeight) {
+            // CROP MODE: Calculate delta based on mouse movement and apply to cropBounds.
+            
+            // Calculate mouse movement since drag start, in the layer's local coordinate system.
+            const dragStartX_local = this.interaction.dragStart.x - (o.centerX ?? 0);
+            const dragStartY_local = this.interaction.dragStart.y - (o.centerY ?? 0);
+            const mouseX_local = mouseX - (o.centerX ?? 0);
+            const mouseY_local = mouseY - (o.centerY ?? 0);
+            
+            // Rotate mouse delta into the layer's unrotated frame
+            const deltaX_world = mouseX_local - dragStartX_local;
+            const deltaY_world = mouseY_local - dragStartY_local;
+            const mouseDeltaX_local = deltaX_world * cos + deltaY_world * sin;
+            const mouseDeltaY_local = deltaY_world * cos - deltaX_world * sin;
+            
+            // Convert the on-screen mouse delta to an image-space delta.
+            const screenToImageScaleX = o.originalWidth / o.width;
+            const screenToImageScaleY = o.originalHeight / o.height;
+            
+            const delta_image_x = mouseDeltaX_local * screenToImageScaleX;
+            const delta_image_y = mouseDeltaY_local * screenToImageScaleY;
+            
+            let newCropBounds = { ...o.cropBounds }; // Start with the bounds from the beginning of the drag
+
+            // Apply the image-space delta to the appropriate edges of the crop bounds
+            if (handle?.includes('w')) {
+                newCropBounds.x += delta_image_x;
+                newCropBounds.width -= delta_image_x;
             }
+            if (handle?.includes('e')) {
+                newCropBounds.width += delta_image_x;
+            }
+            if (handle?.includes('n')) {
+                newCropBounds.y += delta_image_y;
+                newCropBounds.height -= delta_image_y;
+            }
+            if (handle?.includes('s')) {
+                newCropBounds.height += delta_image_y;
+            }
+            
+            // Clamp crop bounds to stay within the original image and maintain minimum size
+            if (newCropBounds.width < 1) {
+                if (handle?.includes('w')) newCropBounds.x = o.cropBounds.x + o.cropBounds.width -1;
+                newCropBounds.width = 1;
+            }
+            if (newCropBounds.height < 1) {
+                if (handle?.includes('n')) newCropBounds.y = o.cropBounds.y + o.cropBounds.height - 1;
+                newCropBounds.height = 1;
+            }
+            if (newCropBounds.x < 0) {
+                newCropBounds.width += newCropBounds.x;
+                newCropBounds.x = 0;
+            }
+            if (newCropBounds.y < 0) {
+                newCropBounds.height += newCropBounds.y;
+                newCropBounds.y = 0;
+            }
+            if (newCropBounds.x + newCropBounds.width > o.originalWidth) {
+                newCropBounds.width = o.originalWidth - newCropBounds.x;
+            }
+            if (newCropBounds.y + newCropBounds.height > o.originalHeight) {
+                newCropBounds.height = o.originalHeight - newCropBounds.y;
+            }
+
+            layer.cropBounds = newCropBounds;
+
+        } else {
+            // TRANSFORM MODE: Resize the layer's main transform frame
+            let newWidth = localVecX;
+            let newHeight = localVecY;
+            
+            if (isShiftPressed) {
+                const originalAspectRatio = o.width / o.height;
+                if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
+                    newHeight = (Math.sign(newHeight) || 1) * Math.abs(newWidth) / originalAspectRatio;
+                } else {
+                    newWidth = (Math.sign(newWidth) || 1) * Math.abs(newHeight) * originalAspectRatio;
+                }
+            }
+
+            if (newWidth < 10) newWidth = 10;
+            if (newHeight < 10) newHeight = 10;
+            
+            layer.width = newWidth;
+            layer.height = newHeight;
+            
+            // Update position to keep anchor point fixed
+            const deltaW = layer.width - o.width;
+            const deltaH = layer.height - o.height;
+            const shiftX = (deltaW / 2) * signX;
+            const shiftY = (deltaH / 2) * signY;
+            const worldShiftX = shiftX * cos - shiftY * sin;
+            const worldShiftY = shiftX * sin + shiftY * cos;
+            const newCenterX = o.centerX + worldShiftX;
+            const newCenterY = o.centerY + worldShiftY;
+            layer.x = newCenterX - layer.width / 2;
+            layer.y = newCenterY - layer.height / 2;
         }
 
-        let signX = handle?.includes('e') ? 1 : (handle?.includes('w') ? -1 : 0);
-        let signY = handle?.includes('s') ? 1 : (handle?.includes('n') ? -1 : 0);
-
-        newWidth *= signX;
-        newHeight *= signY;
-
-        if (signX === 0) newWidth = o.width;
-        if (signY === 0) newHeight = o.height;
-
-        if (newWidth < 10) newWidth = 10;
-        if (newHeight < 10) newHeight = 10;
-
-        layer.width = newWidth;
-        layer.height = newHeight;
-
-        const deltaW = newWidth - o.width;
-        const deltaH = newHeight - o.height;
-
-        const shiftX = (deltaW / 2) * signX;
-        const shiftY = (deltaH / 2) * signY;
-
-        const worldShiftX = shiftX * cos - shiftY * sin;
-        const worldShiftY = shiftX * sin + shiftY * cos;
-
-        const newCenterX = o.centerX + worldShiftX;
-        const newCenterY = o.centerY + worldShiftY;
-
-        layer.x = newCenterX - layer.width / 2;
-        layer.y = newCenterY - layer.height / 2;
         this.canvas.render();
     }
 

@@ -431,38 +431,63 @@ export class CanvasRenderer {
     drawSelectionFrame(ctx, layer) {
         const lineWidth = 2 / this.canvas.viewport.zoom;
         const handleRadius = 5 / this.canvas.viewport.zoom;
-        ctx.strokeStyle = '#00ff00';
-        ctx.lineWidth = lineWidth;
-        // Rysuj ramkę z adaptacyjnymi liniami (ciągłe/przerywane w zależności od przykrycia)
-        const halfW = layer.width / 2;
-        const halfH = layer.height / 2;
-        // Górna krawędź
-        this.drawAdaptiveLine(ctx, -halfW, -halfH, halfW, -halfH, layer);
-        // Prawa krawędź
-        this.drawAdaptiveLine(ctx, halfW, -halfH, halfW, halfH, layer);
-        // Dolna krawędź
-        this.drawAdaptiveLine(ctx, halfW, halfH, -halfW, halfH, layer);
-        // Lewa krawędź
-        this.drawAdaptiveLine(ctx, -halfW, halfH, -halfW, -halfH, layer);
-        // Rysuj linię do uchwytu rotacji (zawsze ciągła)
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(0, -layer.height / 2);
-        ctx.lineTo(0, -layer.height / 2 - 20 / this.canvas.viewport.zoom);
-        ctx.stroke();
-        // Rysuj uchwyty
+        if (layer.cropMode && layer.cropBounds && layer.originalWidth) {
+            // --- CROP MODE ---
+            ctx.lineWidth = lineWidth;
+            // 1. Draw dashed blue line for the full transform frame (the "original size" container)
+            ctx.strokeStyle = '#007bff';
+            ctx.setLineDash([8 / this.canvas.viewport.zoom, 8 / this.canvas.viewport.zoom]);
+            ctx.strokeRect(-layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            ctx.setLineDash([]);
+            // 2. Draw solid blue line for the crop bounds
+            const layerScaleX = layer.width / layer.originalWidth;
+            const layerScaleY = layer.height / layer.originalHeight;
+            const s = layer.cropBounds;
+            const cropRectX = (-layer.width / 2) + (s.x * layerScaleX);
+            const cropRectY = (-layer.height / 2) + (s.y * layerScaleY);
+            const cropRectW = s.width * layerScaleX;
+            const cropRectH = s.height * layerScaleY;
+            ctx.strokeStyle = '#007bff'; // Solid blue
+            this.drawAdaptiveLine(ctx, cropRectX, cropRectY, cropRectX + cropRectW, cropRectY, layer); // Top
+            this.drawAdaptiveLine(ctx, cropRectX + cropRectW, cropRectY, cropRectX + cropRectW, cropRectY + cropRectH, layer); // Right
+            this.drawAdaptiveLine(ctx, cropRectX + cropRectW, cropRectY + cropRectH, cropRectX, cropRectY + cropRectH, layer); // Bottom
+            this.drawAdaptiveLine(ctx, cropRectX, cropRectY + cropRectH, cropRectX, cropRectY, layer); // Left
+        }
+        else {
+            // --- TRANSFORM MODE ---
+            ctx.strokeStyle = '#00ff00'; // Green
+            ctx.lineWidth = lineWidth;
+            const halfW = layer.width / 2;
+            const halfH = layer.height / 2;
+            // Draw adaptive solid green line for transform frame
+            this.drawAdaptiveLine(ctx, -halfW, -halfH, halfW, -halfH, layer);
+            this.drawAdaptiveLine(ctx, halfW, -halfH, halfW, halfH, layer);
+            this.drawAdaptiveLine(ctx, halfW, halfH, -halfW, halfH, layer);
+            this.drawAdaptiveLine(ctx, -halfW, halfH, -halfW, -halfH, layer);
+            // Draw line to rotation handle
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(0, -halfH);
+            ctx.lineTo(0, -halfH - 20 / this.canvas.viewport.zoom);
+            ctx.stroke();
+        }
+        // --- DRAW HANDLES (Unified Logic) ---
         const handles = this.canvas.canvasLayers.getHandles(layer);
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1 / this.canvas.viewport.zoom;
         for (const key in handles) {
+            // Skip rotation handle in crop mode
+            if (layer.cropMode && key === 'rot')
+                continue;
             const point = handles[key];
-            ctx.beginPath();
+            // The handle position is already in world space, we need it in the layer's rotated space
             const localX = point.x - (layer.x + layer.width / 2);
             const localY = point.y - (layer.y + layer.height / 2);
             const rad = -layer.rotation * Math.PI / 180;
             const rotatedX = localX * Math.cos(rad) - localY * Math.sin(rad);
             const rotatedY = localX * Math.sin(rad) + localY * Math.cos(rad);
+            ctx.beginPath();
             ctx.arc(rotatedX, rotatedY, handleRadius, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
