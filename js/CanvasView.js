@@ -293,43 +293,37 @@ async function createCanvasWidget(node, widget, app) {
             ]),
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
-                $el("button.painter-button.requires-selection", {
-                    id: `crop-mode-btn-${node.id}`,
-                    textContent: "Crop Mode",
-                    title: "Toggle crop mode for selected layer(s)",
-                    onclick: () => {
-                        const cropBtn = controlPanel.querySelector(`#crop-mode-btn-${node.id}`);
-                        const selectedLayers = canvas.canvasSelection.selectedLayers;
-                        if (selectedLayers.length === 0)
-                            return;
-                        // Toggle crop mode for all selected layers
-                        const firstLayer = selectedLayers[0];
-                        const newCropMode = !firstLayer.cropMode;
-                        selectedLayers.forEach((layer) => {
-                            layer.cropMode = newCropMode;
-                            // Initialize crop bounds if entering crop mode
-                            if (newCropMode && !layer.cropBounds) {
-                                layer.cropBounds = {
-                                    x: 0,
-                                    y: 0,
-                                    width: layer.originalWidth,
-                                    height: layer.originalHeight
-                                };
-                            }
-                        });
-                        // Update button appearance
-                        if (newCropMode) {
-                            cropBtn.classList.add('primary');
-                            cropBtn.title = "Exit crop mode for selected layer(s)";
+                $el("label.clipboard-switch.requires-selection", {
+                    id: `crop-transform-switch-${node.id}`,
+                    title: "Toggle between Transform and Crop mode for selected layer(s)"
+                }, [
+                    $el("input", {
+                        type: "checkbox",
+                        checked: false,
+                        onchange: (e) => {
+                            const isCropMode = e.target.checked;
+                            const selectedLayers = canvas.canvasSelection.selectedLayers;
+                            if (selectedLayers.length === 0)
+                                return;
+                            selectedLayers.forEach((layer) => {
+                                layer.cropMode = isCropMode;
+                                if (isCropMode && !layer.cropBounds) {
+                                    layer.cropBounds = { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+                                }
+                            });
+                            canvas.saveState();
+                            canvas.render();
                         }
-                        else {
-                            cropBtn.classList.remove('primary');
-                            cropBtn.title = "Toggle crop mode for selected layer(s)";
-                        }
-                        canvas.saveState();
-                        canvas.render();
-                    }
-                }),
+                    }),
+                    $el("span.switch-track"),
+                    $el("span.switch-labels", { style: { fontSize: "11px" } }, [
+                        $el("span.text-clipspace", {}, ["Crop"]),
+                        $el("span.text-system", {}, ["Transform"])
+                    ]),
+                    $el("span.switch-knob", {}, [
+                        $el("span.switch-icon", { id: `crop-transform-icon-${node.id}` })
+                    ])
+                ]),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
@@ -666,18 +660,48 @@ async function createCanvasWidget(node, widget, app) {
     const updateButtonStates = () => {
         const selectionCount = canvas.canvasSelection.selectedLayers.length;
         const hasSelection = selectionCount > 0;
-        controlPanel.querySelectorAll('.requires-selection').forEach((btn) => {
-            const button = btn;
-            if (button.textContent === 'Fuse') {
-                button.disabled = selectionCount < 2;
-            }
-            else {
-                button.disabled = !hasSelection;
+        // --- Handle Standard Buttons ---
+        controlPanel.querySelectorAll('.requires-selection').forEach((el) => {
+            if (el.tagName === 'BUTTON') {
+                if (el.textContent === 'Fuse') {
+                    el.disabled = selectionCount < 2;
+                }
+                else {
+                    el.disabled = !hasSelection;
+                }
             }
         });
         const mattingBtn = controlPanel.querySelector('.matting-button');
         if (mattingBtn && !mattingBtn.classList.contains('loading')) {
             mattingBtn.disabled = selectionCount !== 1;
+        }
+        // --- Handle Crop/Transform Switch ---
+        const switchEl = controlPanel.querySelector(`#crop-transform-switch-${node.id}`);
+        if (switchEl) {
+            const input = switchEl.querySelector('input');
+            const knobIcon = switchEl.querySelector('.switch-icon');
+            const isDisabled = !hasSelection;
+            switchEl.classList.toggle('disabled', isDisabled);
+            input.disabled = isDisabled;
+            if (!isDisabled) {
+                const isCropMode = canvas.canvasSelection.selectedLayers[0].cropMode || false;
+                if (input.checked !== isCropMode) {
+                    input.checked = isCropMode;
+                }
+                // Update icon view
+                const iconTool = isCropMode ? LAYERFORGE_TOOLS.CROP : LAYERFORGE_TOOLS.TRANSFORM;
+                const icon = iconLoader.getIcon(iconTool);
+                if (icon instanceof HTMLImageElement) {
+                    knobIcon.innerHTML = '';
+                    const clonedIcon = icon.cloneNode();
+                    clonedIcon.style.width = '20px';
+                    clonedIcon.style.height = '20px';
+                    knobIcon.appendChild(clonedIcon);
+                }
+                else {
+                    knobIcon.textContent = isCropMode ? "✂️" : "✥";
+                }
+            }
         }
     };
     canvas.canvasSelection.onSelectionChange = updateButtonStates;

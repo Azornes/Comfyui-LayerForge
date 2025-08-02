@@ -19,13 +19,19 @@ export const LAYERFORGE_TOOLS = {
     SETTINGS: 'settings',
     SYSTEM_CLIPBOARD: 'system_clipboard',
     CLIPSPACE: 'clipspace',
+    CROP: 'crop',
+    TRANSFORM: 'transform',
 };
 // SVG Icons for LayerForge tools
 const SYSTEM_CLIPBOARD_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm5 15H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>`;
 const CLIPSPACE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">  <defs>    <mask id="cutout">      <rect width="100%" height="100%" fill="white"/>           <path         d="M5.485 23.76c-.568 0-1.026-.207-1.325-.598-.307-.402-.387-.964-.22-1.54l.672-2.315a.605.605 0 00-.1-.536.622.622 0 00-.494-.243H2.085c-.568 0-1.026-.207-1.325-.598-.307-.403-.387-.964-.22-1.54l2.31-7.917.255-.87c.343-1.18 1.592-2.14 2.786-2.14h2.313c.276 0 .519-.18.595-.442l.764-2.633C9.906 1.208 11.155.249 12.35.249l4.945-.008h3.62c.568 0 1.027.206 1.325.597.307.402.387.964.22 1.54l-1.035 3.566c-.343 1.178-1.593 2.137-2.787 2.137l-4.956.01H11.37a.618.618 0 00-.594.441l-1.928 6.604a.605.605 0 00.1.537c.118.153.3.243.495.243l3.275-.006h3.61c.568 0 1.026.206 1.325.598.307.402.387.964.22 1.54l-1.036 3.565c-.342 1.179-1.592 2.138-2.786 2.138l-4.957.01h-3.61z"         fill="black"         transform="translate(4.8 4.8) scale(0.6)"      />    </mask>  </defs>  <path     d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1z"     fill="#ffffff"     mask="url(#cutout)"  /></svg>`;
+const CROP_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M7,17V17.25V19H5V17.25V7H7V17M17,7H9V5H17V7M17,17H7V19H17V17Z"/></svg>`;
+const TRANSFORM_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M22,20H18V22H16V16H22V18H20V20M22,8H16V14H18V10H22V8M8,16H2V18H4V20H8V16M8,2H2V4H6V8H8V2Z" /></svg>`;
 const LAYERFORGE_TOOL_ICONS = {
     [LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SYSTEM_CLIPBOARD_ICON_SVG)}`,
     [LAYERFORGE_TOOLS.CLIPSPACE]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(CLIPSPACE_ICON_SVG)}`,
+    [LAYERFORGE_TOOLS.CROP]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(CROP_ICON_SVG)}`,
+    [LAYERFORGE_TOOLS.TRANSFORM]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(TRANSFORM_ICON_SVG)}`,
     [LAYERFORGE_TOOLS.VISIBILITY]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>')}`,
     [LAYERFORGE_TOOLS.MOVE]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/></svg>')}`,
     [LAYERFORGE_TOOLS.ROTATE]: `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff"><path d="M12,6V9L16,5L12,1V4A8,8 0 0,0 4,12C4,13.57 4.46,15.03 5.24,16.26L6.7,14.8C6.25,13.97 6,13 6,12A6,6 0 0,1 12,6M18.76,7.74L17.3,9.2C17.74,10.04 18,11 18,12A6,6 0 0,1 12,18V15L8,19L12,23V20A8,8 0 0,0 20,12C20,10.43 19.54,8.97 18.76,7.74Z"/></svg>')}`,
@@ -54,7 +60,9 @@ const LAYERFORGE_TOOL_COLORS = {
     [LAYERFORGE_TOOLS.BRUSH]: '#4285F4',
     [LAYERFORGE_TOOLS.ERASER]: '#FBBC05',
     [LAYERFORGE_TOOLS.SHAPE]: '#FF6D01',
-    [LAYERFORGE_TOOLS.SETTINGS]: '#F06292'
+    [LAYERFORGE_TOOLS.SETTINGS]: '#F06292',
+    [LAYERFORGE_TOOLS.CROP]: '#EA4335',
+    [LAYERFORGE_TOOLS.TRANSFORM]: '#34A853',
 };
 export class IconLoader {
     constructor() {

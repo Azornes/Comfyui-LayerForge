@@ -332,6 +332,20 @@
     opacity: 0;
 }
 
+/* Disabled state for switch */
+.clipboard-switch.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background: #3a3a3a !important; /* Override gradient */
+    border-color: #4a4a4a !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.clipboard-switch.disabled .switch-knob {
+    background-color: #4a4a4a !important;
+}
+
 
 .painter-separator {
     width: 1px;
