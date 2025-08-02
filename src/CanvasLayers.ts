@@ -370,6 +370,9 @@ export class CanvasLayers {
     }
 
     getLayerAtPosition(worldX: number, worldY: number): { layer: Layer, localX: number, localY: number } | null {
+        // Always sort by zIndex so topmost is checked first
+        this.canvas.layers.sort((a, b) => a.zIndex - b.zIndex);
+
         for (let i = this.canvas.layers.length - 1; i >= 0; i--) {
             const layer = this.canvas.layers[i];
 
