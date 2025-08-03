@@ -1095,19 +1095,15 @@ export class CanvasLayers {
 
     async getLayerImageData(layer: Layer): Promise<string> {
         try {
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height, '2d', { willReadFrequently: true });
+            const width = layer.originalWidth || layer.width;
+            const height = layer.originalHeight || layer.height;
+
+            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(width, height, '2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
 
-            // We need to draw the layer relative to the new canvas, so we "move" it to 0,0
-            // by creating a temporary layer object for drawing.
-            const layerToDraw = {
-                ...layer,
-                x: 0,
-                y: 0,
-            };
-
-            this._drawLayer(tempCtx, layerToDraw);
-
+            // Use original image directly to ensure full quality
+            tempCtx.drawImage(layer.image, 0, 0, width, height);
+            
             const dataUrl = tempCanvas.toDataURL('image/png');
             if (!dataUrl.startsWith('data:image/png;base64,')) {
                 throw new Error("Invalid image data format");

@@ -430,6 +430,8 @@ async function createCanvasWidget(node, widget, app) {
                             delete newLayer.imageId;
                             canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.canvasSelection.updateSelection([newLayer]);
+                            // Invalidate processed image cache when layer image changes (matting)
+                            canvas.canvasLayers.invalidateProcessedImageCache(newLayer.id);
                             canvas.render();
                             canvas.saveState();
                             showSuccessNotification("Background removed successfully!");
