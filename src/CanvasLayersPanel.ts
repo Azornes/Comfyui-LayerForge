@@ -152,7 +152,7 @@ export class CanvasLayersPanel {
 
     setupControlButtons(): void {
         if (!this.container) return;
-        const deleteBtn = this.container.querySelector('#delete-layer-btn');
+        const deleteBtn = this.container.querySelector('#delete-layer-btn') as HTMLButtonElement;
 
         // Add delete icon to button
         if (deleteBtn) {
@@ -164,6 +164,9 @@ export class CanvasLayersPanel {
             log.info('Delete layer button clicked');
             this.deleteSelectedLayers();
         });
+
+        // Initial button state update
+        this.updateButtonStates();
     }
 
     renderLayers(): void {
@@ -273,6 +276,7 @@ export class CanvasLayersPanel {
                 const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l: Layer) => l !== layer);
                 this.canvas.updateSelection(newSelection);
                 this.updateSelectionAppearance();
+                this.updateButtonStates();
             }
         });
 
@@ -310,7 +314,8 @@ export class CanvasLayersPanel {
         this.canvas.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
         
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
-        this.updateSelectionAppearance(); 
+        this.updateSelectionAppearance();
+        this.updateButtonStates();
 
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
@@ -530,11 +535,31 @@ export class CanvasLayersPanel {
     }
 
     /**
+     * Aktualizuje stan przycisków w zależności od zaznaczenia warstw
+     */
+    updateButtonStates(): void {
+        if (!this.container) return;
+        
+        const deleteBtn = this.container.querySelector('#delete-layer-btn') as HTMLButtonElement;
+        const hasSelectedLayers = this.canvas.canvasSelection.selectedLayers.length > 0;
+        
+        if (deleteBtn) {
+            deleteBtn.disabled = !hasSelectedLayers;
+            deleteBtn.title = hasSelectedLayers 
+                ? `Delete ${this.canvas.canvasSelection.selectedLayers.length} selected layer(s)`
+                : 'No layers selected';
+        }
+        
+        log.debug(`Button states updated - delete button ${hasSelectedLayers ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
      * Aktualizuje panel gdy zmieni się zaznaczenie (wywoływane z zewnątrz).
      * Zamiast pełnego renderowania, tylko aktualizujemy wygląd.
      */
     onSelectionChanged(): void {
         this.updateSelectionAppearance();
+        this.updateButtonStates();
     }
 
     destroy(): void {

@@ -139,6 +139,8 @@ export class CanvasLayersPanel {
             log.info('Delete layer button clicked');
             this.deleteSelectedLayers();
         });
+        // Initial button state update
+        this.updateButtonStates();
     }
     renderLayers() {
         if (!this.layersContainer) {
@@ -228,6 +230,7 @@ export class CanvasLayersPanel {
                 const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l) => l !== layer);
                 this.canvas.updateSelection(newSelection);
                 this.updateSelectionAppearance();
+                this.updateButtonStates();
             }
         });
         layerRow.addEventListener('dblclick', (e) => {
@@ -260,6 +263,7 @@ export class CanvasLayersPanel {
         this.canvas.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
         this.updateSelectionAppearance();
+        this.updateButtonStates();
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
     startEditingLayerName(nameElement, layer) {
@@ -441,11 +445,28 @@ export class CanvasLayersPanel {
         });
     }
     /**
+     * Aktualizuje stan przycisków w zależności od zaznaczenia warstw
+     */
+    updateButtonStates() {
+        if (!this.container)
+            return;
+        const deleteBtn = this.container.querySelector('#delete-layer-btn');
+        const hasSelectedLayers = this.canvas.canvasSelection.selectedLayers.length > 0;
+        if (deleteBtn) {
+            deleteBtn.disabled = !hasSelectedLayers;
+            deleteBtn.title = hasSelectedLayers
+                ? `Delete ${this.canvas.canvasSelection.selectedLayers.length} selected layer(s)`
+                : 'No layers selected';
+        }
+        log.debug(`Button states updated - delete button ${hasSelectedLayers ? 'enabled' : 'disabled'}`);
+    }
+    /**
      * Aktualizuje panel gdy zmieni się zaznaczenie (wywoływane z zewnątrz).
      * Zamiast pełnego renderowania, tylko aktualizujemy wygląd.
      */
     onSelectionChanged() {
         this.updateSelectionAppearance();
+        this.updateButtonStates();
     }
     destroy() {
         if (this.container && this.container.parentNode) {
