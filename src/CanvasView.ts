@@ -131,7 +131,6 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                 }),
                 $el("button.painter-button.icon-button", {
                     textContent: "?",
-                    title: "Show shortcuts",
                     onmouseenter: (e: MouseEvent) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
                         showTooltip(e.target as HTMLElement, content);
@@ -210,10 +209,24 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         ])
     ]);
 
+    // Helper function to get current tooltip content based on switch state
+    const getCurrentTooltipContent = () => {
+        const checked = (switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement).checked;
+        return checked ? clipspaceClipboardTooltip : systemClipboardTooltip;
+    };
+
+    // Helper function to update tooltip content if it's currently visible
+    const updateTooltipIfVisible = () => {
+        // Only update if tooltip is currently visible
+        if (helpTooltip.style.display === 'block') {
+            const tooltipContent = getCurrentTooltipContent();
+            showTooltip(switchEl, tooltipContent);
+        }
+    };
+
     // Tooltip logic
     switchEl.addEventListener("mouseenter", (e: MouseEvent) => {
-        const checked = (switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement).checked;
-        const tooltipContent = checked ? clipspaceClipboardTooltip : systemClipboardTooltip;
+        const tooltipContent = getCurrentTooltipContent();
         showTooltip(switchEl, tooltipContent);
     });
     switchEl.addEventListener("mouseleave", hideTooltip);
@@ -231,6 +244,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             "🗂️",
             "📋"
         );
+        
+        // Update tooltip content immediately after state change
+        updateTooltipIfVisible();
     });
     
     // Initial state

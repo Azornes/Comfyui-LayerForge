@@ -98,7 +98,6 @@ async function createCanvasWidget(node, widget, app) {
                 }),
                 $el("button.painter-button.icon-button", {
                     textContent: "?",
-                    title: "Show shortcuts",
                     onmouseenter: (e) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
                         showTooltip(e.target, content);
@@ -177,10 +176,22 @@ async function createCanvasWidget(node, widget, app) {
                                 $el("span.switch-icon")
                             ])
                         ]);
+                        // Helper function to get current tooltip content based on switch state
+                        const getCurrentTooltipContent = () => {
+                            const checked = switchEl.querySelector('input[type="checkbox"]').checked;
+                            return checked ? clipspaceClipboardTooltip : systemClipboardTooltip;
+                        };
+                        // Helper function to update tooltip content if it's currently visible
+                        const updateTooltipIfVisible = () => {
+                            // Only update if tooltip is currently visible
+                            if (helpTooltip.style.display === 'block') {
+                                const tooltipContent = getCurrentTooltipContent();
+                                showTooltip(switchEl, tooltipContent);
+                            }
+                        };
                         // Tooltip logic
                         switchEl.addEventListener("mouseenter", (e) => {
-                            const checked = switchEl.querySelector('input[type="checkbox"]').checked;
-                            const tooltipContent = checked ? clipspaceClipboardTooltip : systemClipboardTooltip;
+                            const tooltipContent = getCurrentTooltipContent();
                             showTooltip(switchEl, tooltipContent);
                         });
                         switchEl.addEventListener("mouseleave", hideTooltip);
@@ -189,6 +200,8 @@ async function createCanvasWidget(node, widget, app) {
                         const knobIcon = switchEl.querySelector('.switch-knob .switch-icon');
                         input.addEventListener('change', () => {
                             updateSwitchIcon(knobIcon, input.checked, LAYERFORGE_TOOLS.CLIPSPACE, LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD, "🗂️", "📋");
+                            // Update tooltip content immediately after state change
+                            updateTooltipIfVisible();
                         });
                         // Initial state
                         iconLoader.preloadToolIcons().then(() => {
