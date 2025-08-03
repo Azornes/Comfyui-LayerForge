@@ -286,6 +286,9 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         const preparedLayers = await Promise.all(this.canvas.layers.map(async (layer, index) => {
             const newLayer = { ...layer, imageId: layer.imageId || '' };
             delete newLayer.image;
+            // Remove cache properties that cannot be serialized for the worker
+            delete newLayer.blendedImageCache;
+            delete newLayer.blendedImageDirty;
             if (layer.image instanceof HTMLImageElement) {
                 if (layer.imageId) {
                     newLayer.imageId = layer.imageId;

@@ -28,6 +28,8 @@ export interface Layer {
         width: number;          // szerokość widocznego obszaru
         height: number;         // wysokość widocznego obszaru
     };
+    blendedImageCache?: HTMLCanvasElement; // Cache for the pre-rendered blendArea effect
+    blendedImageDirty?: boolean; // Flag to invalidate the cache
 }
 
 export interface ComfyNode {
