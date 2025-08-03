@@ -534,7 +534,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             $el("div.painter-button-group", {id: "mask-controls"}, [
 $el("label.clipboard-switch.mask-switch", {
     id: `toggle-mask-switch-${node.id}`,
-    style: { minWidth: "56px", maxWidth: "56px", width: "56px", paddingLeft: "0", paddingRight: "0" }
+    style: { minWidth: "56px", maxWidth: "56px", width: "56px", paddingLeft: "0", paddingRight: "0" },
+    title: "Toggle mask overlay visibility on canvas (mask still affects output when disabled)"
 }, [
     $el("input", {
         type: "checkbox",
