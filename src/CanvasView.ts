@@ -33,6 +33,40 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     });
     const imageCache = new ImageCache();
 
+    /**
+     * Helper function to update the icon of a switch component.
+     * @param knobIconEl The HTML element for the switch's knob icon.
+     * @param isChecked The current state of the switch (e.g., checkbox.checked).
+     * @param iconToolTrue The icon tool name for the 'true' state.
+     * @param iconToolFalse The icon tool name for the 'false' state.
+     * @param fallbackTrue The text fallback for the 'true' state.
+     * @param fallbackFalse The text fallback for the 'false' state.
+     */
+    const updateSwitchIcon = (
+        knobIconEl: HTMLElement, 
+        isChecked: boolean, 
+        iconToolTrue: string, 
+        iconToolFalse: string, 
+        fallbackTrue: string, 
+        fallbackFalse: string
+    ) => {
+        if (!knobIconEl) return;
+        
+        const iconTool = isChecked ? iconToolTrue : iconToolFalse;
+        const fallbackText = isChecked ? fallbackTrue : fallbackFalse;
+        const icon = iconLoader.getIcon(iconTool);
+
+        knobIconEl.innerHTML = ''; // Clear previous icon
+        if (icon instanceof HTMLImageElement) {
+            const clonedIcon = icon.cloneNode() as HTMLImageElement;
+            clonedIcon.style.width = '20px';
+            clonedIcon.style.height = '20px';
+            knobIconEl.appendChild(clonedIcon);
+        } else {
+            knobIconEl.textContent = fallbackText;
+        }
+    };
+
     const helpTooltip = $el("div.painter-tooltip", {
         id: `painter-help-tooltip-${node.id}`,
     }) as HTMLDivElement;
@@ -184,29 +218,31 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     });
     switchEl.addEventListener("mouseleave", hideTooltip);
 
-    // Dynamic icon and text update on toggle
+    // Dynamic icon update on toggle
     const input = switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement;
     const knobIcon = switchEl.querySelector('.switch-knob .switch-icon') as HTMLElement;
     
-    const updateSwitchView = (isClipspace: boolean) => {
-        const iconTool = isClipspace ? LAYERFORGE_TOOLS.CLIPSPACE : LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD;
-        const icon = iconLoader.getIcon(iconTool);
-        if (icon instanceof HTMLImageElement) {
-            knobIcon.innerHTML = '';
-            const clonedIcon = icon.cloneNode() as HTMLImageElement;
-            clonedIcon.style.width = '20px';
-            clonedIcon.style.height = '20px';
-            knobIcon.appendChild(clonedIcon);
-        } else {
-             knobIcon.textContent = isClipspace ? "🗂️" : "📋";
-        }
-    };
-    
-    input.addEventListener('change', () => updateSwitchView(input.checked));
+    input.addEventListener('change', () => {
+        updateSwitchIcon(
+            knobIcon,
+            input.checked,
+            LAYERFORGE_TOOLS.CLIPSPACE,
+            LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD,
+            "🗂️",
+            "📋"
+        );
+    });
     
     // Initial state
     iconLoader.preloadToolIcons().then(() => {
-        updateSwitchView(isClipspace);
+        updateSwitchIcon(
+            knobIcon,
+            isClipspace,
+            LAYERFORGE_TOOLS.CLIPSPACE,
+            LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD,
+            "🗂️",
+            "📋"
+        );
     });
 
     return switchEl;
@@ -326,38 +362,68 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
-                $el("label.clipboard-switch.requires-selection", { 
-                    id: `crop-transform-switch-${node.id}`,
-                    title: "Toggle between Transform and Crop mode for selected layer(s)"
-                }, [
-                    $el("input", {
-                        type: "checkbox",
-                        checked: false,
-                        onchange: (e: Event) => {
-                            const isCropMode = (e.target as HTMLInputElement).checked;
-                            const selectedLayers = canvas.canvasSelection.selectedLayers;
-                            if (selectedLayers.length === 0) return;
-                            
-                            selectedLayers.forEach((layer: Layer) => {
-                                layer.cropMode = isCropMode;
-                                if (isCropMode && !layer.cropBounds) {
-                                    layer.cropBounds = { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
-                                }
-                            });
-                            
-                            canvas.saveState();
-                            canvas.render();
-                        }
-                    }),
-                    $el("span.switch-track"),
-                    $el("span.switch-labels", { style: { fontSize: "11px" } }, [
-                        $el("span.text-clipspace", {}, ["Crop"]),
-                        $el("span.text-system", {}, ["Transform"])
-                    ]),
-                    $el("span.switch-knob", {}, [
-                        $el("span.switch-icon", { id: `crop-transform-icon-${node.id}`})
-                    ])
-                ]),
+                (() => {
+                    const switchEl = $el("label.clipboard-switch.requires-selection", { 
+                        id: `crop-transform-switch-${node.id}`,
+                        title: "Toggle between Transform and Crop mode for selected layer(s)"
+                    }, [
+                        $el("input", {
+                            type: "checkbox",
+                            checked: false,
+                            onchange: (e: Event) => {
+                                const isCropMode = (e.target as HTMLInputElement).checked;
+                                const selectedLayers = canvas.canvasSelection.selectedLayers;
+                                if (selectedLayers.length === 0) return;
+                                
+                                selectedLayers.forEach((layer: Layer) => {
+                                    layer.cropMode = isCropMode;
+                                    if (isCropMode && !layer.cropBounds) {
+                                        layer.cropBounds = { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+                                    }
+                                });
+                                
+                                canvas.saveState();
+                                canvas.render();
+                            }
+                        }),
+                        $el("span.switch-track"),
+                        $el("span.switch-labels", { style: { fontSize: "11px" } }, [
+                            $el("span.text-clipspace", {}, ["Crop"]),
+                            $el("span.text-system", {}, ["Transform"])
+                        ]),
+                        $el("span.switch-knob", {}, [
+                            $el("span.switch-icon", { id: `crop-transform-icon-${node.id}`})
+                        ])
+                    ]);
+
+                    const input = switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                    const knobIcon = switchEl.querySelector('.switch-icon') as HTMLElement;
+
+                    input.addEventListener('change', () => {
+                        updateSwitchIcon(
+                            knobIcon,
+                            input.checked,
+                            LAYERFORGE_TOOLS.CROP,
+                            LAYERFORGE_TOOLS.TRANSFORM,
+                            "✂️",
+                            "✥"
+                        );
+                    });
+                    
+                    // Initial state
+                    iconLoader.preloadToolIcons().then(() => {
+                        updateSwitchIcon(
+                            knobIcon,
+                            false, // Initial state is transform
+                            LAYERFORGE_TOOLS.CROP,
+                            LAYERFORGE_TOOLS.TRANSFORM,
+                            "✂️",
+                            "✥"
+                        );
+                    });
+
+                    return switchEl;
+                })(),
                 $el("button.painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
@@ -738,17 +804,14 @@ $el("label.clipboard-switch.mask-switch", {
                 }
                 
                 // Update icon view
-                const iconTool = isCropMode ? LAYERFORGE_TOOLS.CROP : LAYERFORGE_TOOLS.TRANSFORM;
-                const icon = iconLoader.getIcon(iconTool);
-                if (icon instanceof HTMLImageElement) {
-                    knobIcon.innerHTML = '';
-                    const clonedIcon = icon.cloneNode() as HTMLImageElement;
-                    clonedIcon.style.width = '20px';
-                    clonedIcon.style.height = '20px';
-                    knobIcon.appendChild(clonedIcon);
-                } else {
-                    knobIcon.textContent = isCropMode ? "✂️" : "✥";
-                }
+                updateSwitchIcon(
+                    knobIcon,
+                    isCropMode,
+                    LAYERFORGE_TOOLS.CROP,
+                    LAYERFORGE_TOOLS.TRANSFORM,
+                    "✂️",
+                    "✥"
+                );
             }
         }
     };

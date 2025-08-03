@@ -21,6 +21,7 @@ interface BlendMode {
 
 export class CanvasLayers {
     private canvas: Canvas;
+    private _canvasMaskCache: Map<HTMLCanvasElement, Map<number, HTMLCanvasElement>> = new Map();
     public clipboardManager: ClipboardManager;
     private blendModes: BlendMode[];
     private selectedBlendMode: string | null;
@@ -428,15 +429,39 @@ export class CanvasLayers {
 
         if (needsBlendAreaEffect) {
             log.debug(`Applying blend area effect for layer ${layer.id}, blendArea: ${blendArea}%`);
-            // Get or create distance field mask
-            const maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
-            
+
+            // --- BLEND AREA MASK: Use cropped region if cropBounds is set ---
+            let maskCanvas: HTMLCanvasElement | null = null;
+            let maskWidth = layer.width;
+            let maskHeight = layer.height;
+
+            if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
+                // Create a cropped canvas
+                const s = layer.cropBounds;
+                const { canvas: cropCanvas, ctx: cropCtx } = createCanvas(s.width, s.height);
+                if (cropCtx) {
+                    cropCtx.drawImage(
+                        layer.image,
+                        s.x, s.y, s.width, s.height,
+                        0, 0, s.width, s.height
+                    );
+                    // Generate distance field mask for the cropped region
+                    maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
+                    maskWidth = s.width;
+                    maskHeight = s.height;
+                }
+            } else {
+                // No crop, use full image
+                maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
+                maskWidth = layer.originalWidth || layer.width;
+                maskHeight = layer.originalHeight || layer.height;
+            }
+
             if (maskCanvas) {
                 // Create a temporary canvas for the masked layer
                 const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 
                 if (tempCtx) {
-                    // This logic is now unified to handle both cropped and non-cropped images correctly.
                     const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
 
                     if (!layer.originalWidth || !layer.originalHeight) {
@@ -447,24 +472,24 @@ export class CanvasLayers {
 
                         const dWidth = s.width * layerScaleX;
                         const dHeight = s.height * layerScaleY;
-                        
-                        // The destination is the top-left of the temp canvas, plus the scaled offset of the crop area.
                         const dX = s.x * layerScaleX;
                         const dY = s.y * layerScaleY;
 
-                        // We draw into a temp canvas of size layer.width x layer.height.
-                        // The destination rect must be positioned correctly within this temp canvas.
-                        // The dX/dY here are offsets from the top-left of the transform frame.
                         tempCtx.drawImage(
                             layer.image,
                             s.x, s.y, s.width, s.height,
                             dX, dY, dWidth, dHeight
                         );
+
+                        // --- Apply the distance field mask only to the visible (cropped) area ---
+                        tempCtx.globalCompositeOperation = 'destination-in';
+                        // Scale the mask to match the drawn area
+                        tempCtx.drawImage(
+                            maskCanvas,
+                            0, 0, maskWidth, maskHeight,
+                            dX, dY, dWidth, dHeight
+                        );
                     }
-                    
-                    // Apply the distance field mask using destination-in for transparency effect
-                    tempCtx.globalCompositeOperation = 'destination-in';
-                    tempCtx.drawImage(maskCanvas, 0, 0, layer.width, layer.height);
                     
                     // Draw the result
                     ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
@@ -519,30 +544,54 @@ export class CanvasLayers {
         );
     }
 
-    private getDistanceFieldMaskSync(image: HTMLImageElement, blendArea: number): HTMLCanvasElement | null {
-        // Check cache first
-        let imageCache = this.distanceFieldCache.get(image);
-        if (!imageCache) {
-            imageCache = new Map();
-            this.distanceFieldCache.set(image, imageCache);
-        }
-        
-        let maskCanvas = imageCache.get(blendArea);
-        if (!maskCanvas) {
+    private getDistanceFieldMaskSync(imageOrCanvas: HTMLImageElement | HTMLCanvasElement, blendArea: number): HTMLCanvasElement | null {
+        // Use a WeakMap for images, and a Map for canvases (since canvases are not always stable references)
+        let cacheKey: any = imageOrCanvas;
+        if (imageOrCanvas instanceof HTMLCanvasElement) {
+            // For canvases, use a Map on this instance (not WeakMap)
+            if (!this._canvasMaskCache) this._canvasMaskCache = new Map();
+            let canvasCache = this._canvasMaskCache.get(imageOrCanvas);
+            if (!canvasCache) {
+                canvasCache = new Map();
+                this._canvasMaskCache.set(imageOrCanvas, canvasCache);
+            }
+            if (canvasCache.has(blendArea)) {
+                log.info(`Using cached distance field mask for blendArea: ${blendArea}% (canvas)`);
+                return canvasCache.get(blendArea) || null;
+            }
             try {
-                log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
-                maskCanvas = createDistanceFieldMaskSync(image, blendArea);
+                log.info(`Creating distance field mask for blendArea: ${blendArea}% (canvas)`);
+                const maskCanvas = createDistanceFieldMaskSync(imageOrCanvas as any, blendArea);
                 log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
-                imageCache.set(blendArea, maskCanvas);
+                canvasCache.set(blendArea, maskCanvas);
+                return maskCanvas;
             } catch (error) {
-                log.error('Failed to create distance field mask:', error);
+                log.error('Failed to create distance field mask (canvas):', error);
                 return null;
             }
         } else {
-            log.info(`Using cached distance field mask for blendArea: ${blendArea}%`);
+            // For images, use the original WeakMap cache
+            let imageCache = this.distanceFieldCache.get(imageOrCanvas);
+            if (!imageCache) {
+                imageCache = new Map();
+                this.distanceFieldCache.set(imageOrCanvas, imageCache);
+            }
+            let maskCanvas = imageCache.get(blendArea);
+            if (!maskCanvas) {
+                try {
+                    log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
+                    maskCanvas = createDistanceFieldMaskSync(imageOrCanvas, blendArea);
+                    log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
+                    imageCache.set(blendArea, maskCanvas);
+                } catch (error) {
+                    log.error('Failed to create distance field mask:', error);
+                    return null;
+                }
+            } else {
+                log.info(`Using cached distance field mask for blendArea: ${blendArea}%`);
+            }
+            return maskCanvas;
         }
-        
-        return maskCanvas;
     }
 
     private _drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
