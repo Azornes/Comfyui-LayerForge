@@ -1,6 +1,7 @@
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { createCanvas } from "./utils/CommonUtils.js";
+import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
 import type { Canvas } from './Canvas';
 import type { Layer } from './types';
 
@@ -33,6 +34,9 @@ export class CanvasLayersPanel {
         // Preload icons
         this.initializeIcons();
 
+        // Load CSS for layers panel
+        addStylesheet(getUrl('./css/layers_panel.css'));
+
         log.info('CanvasLayersPanel initialized');
     }
 
@@ -47,23 +51,16 @@ export class CanvasLayersPanel {
 
     private createIconElement(toolName: string, size: number = 16): HTMLElement {
         const iconContainer = document.createElement('div');
-        iconContainer.style.cssText = `
-            width: ${size}px;
-            height: ${size}px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
+        iconContainer.className = 'icon-container';
+        iconContainer.style.width = `${size}px`;
+        iconContainer.style.height = `${size}px`;
 
         const icon = iconLoader.getIcon(toolName);
         if (icon) {
             if (icon instanceof HTMLImageElement) {
                 const img = icon.cloneNode() as HTMLImageElement;
-                img.style.cssText = `
-                    width: ${size}px;
-                    height: ${size}px;
-                    filter: brightness(0) invert(1);
-                `;
+                img.style.width = `${size}px`;
+                img.style.height = `${size}px`;
                 iconContainer.appendChild(img);
             } else if (icon instanceof HTMLCanvasElement) {
                 const { canvas, ctx } = createCanvas(size, size);
@@ -74,9 +71,9 @@ export class CanvasLayersPanel {
             }
         } else {
             // Fallback text
+            iconContainer.classList.add('fallback-text');
             iconContainer.textContent = toolName.charAt(0).toUpperCase();
             iconContainer.style.fontSize = `${size * 0.6}px`;
-            iconContainer.style.color = '#ffffff';
         }
 
         return iconContainer;
@@ -88,25 +85,16 @@ export class CanvasLayersPanel {
         } else {
             // Create a "hidden" version of the visibility icon
             const iconContainer = document.createElement('div');
-            iconContainer.style.cssText = `
-                width: 16px;
-                height: 16px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                opacity: 0.5;
-            `;
+            iconContainer.className = 'icon-container visibility-hidden';
+            iconContainer.style.width = '16px';
+            iconContainer.style.height = '16px';
 
             const icon = iconLoader.getIcon(LAYERFORGE_TOOLS.VISIBILITY);
             if (icon) {
                 if (icon instanceof HTMLImageElement) {
                     const img = icon.cloneNode() as HTMLImageElement;
-                    img.style.cssText = `
-                        width: 16px;
-                        height: 16px;
-                        filter: brightness(0) invert(1);
-                        opacity: 0.3;
-                    `;
+                    img.style.width = '16px';
+                    img.style.height = '16px';
                     iconContainer.appendChild(img);
                 } else if (icon instanceof HTMLCanvasElement) {
                     const { canvas, ctx } = createCanvas(16, 16);
@@ -118,9 +106,9 @@ export class CanvasLayersPanel {
                 }
             } else {
                 // Fallback
+                iconContainer.classList.add('fallback-text');
                 iconContainer.textContent = 'H';
                 iconContainer.style.fontSize = '10px';
-                iconContainer.style.color = '#888888';
             }
 
             return iconContainer;
@@ -144,8 +132,6 @@ export class CanvasLayersPanel {
         `;
 
         this.layersContainer = this.container.querySelector<HTMLElement>('#layers-container');
-
-        this.injectStyles();
         
         // Setup event listeners dla przycisków
         this.setupControlButtons();
@@ -163,214 +149,6 @@ export class CanvasLayersPanel {
         return this.container;
     }
 
-    injectStyles(): void {
-        const styleId = 'layers-panel-styles';
-        if (document.getElementById(styleId)) {
-            return; // Style już istnieją
-        }
-
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
-            .layers-panel {
-                background: #2a2a2a;
-                border: 1px solid #3a3a3a;
-                border-radius: 4px;
-                padding: 8px;
-                height: 100%;
-                overflow: hidden;
-                font-family: Arial, sans-serif;
-                font-size: 12px;
-                color: #ffffff;
-                user-select: none;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .layers-panel-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding-bottom: 8px;
-                border-bottom: 1px solid #3a3a3a;
-                margin-bottom: 8px;
-            }
-
-            .layers-panel-title {
-                font-weight: bold;
-                color: #ffffff;
-            }
-
-            .layers-panel-controls {
-                display: flex;
-                gap: 4px;
-            }
-
-            .layers-btn {
-                background: #3a3a3a;
-                border: 1px solid #4a4a4a;
-                color: #ffffff;
-                padding: 4px 8px;
-                border-radius: 3px;
-                cursor: pointer;
-                font-size: 11px;
-            }
-
-            .layers-btn:hover {
-                background: #4a4a4a;
-            }
-
-            .layers-btn:active {
-                background: #5a5a5a;
-            }
-
-            .layers-container {
-                flex: 1;
-                overflow-y: auto;
-                overflow-x: hidden;
-            }
-
-            .layer-row {
-                display: flex;
-                align-items: center;
-                padding: 6px 4px;
-                margin-bottom: 2px;
-                border-radius: 3px;
-                cursor: pointer;
-                transition: background-color 0.15s ease;
-                position: relative;
-                gap: 6px;
-            }
-
-            .layer-row:hover {
-                background: rgba(255, 255, 255, 0.05);
-            }
-
-            .layer-row.selected {
-                background: #2d5aa0 !important;
-                box-shadow: inset 0 0 0 1px #4a7bc8;
-            }
-
-            .layer-row.dragging {
-                opacity: 0.6;
-            }
-
-
-            .layer-thumbnail {
-                width: 48px;
-                height: 48px;
-                border: 1px solid #4a4a4a;
-                border-radius: 2px;
-                background: transparent;
-                position: relative;
-                flex-shrink: 0;
-                overflow: hidden;
-            }
-
-            .layer-thumbnail canvas {
-                width: 100%;
-                height: 100%;
-                display: block;
-            }
-
-            .layer-thumbnail::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background-image: 
-                    linear-gradient(45deg, #555 25%, transparent 25%), 
-                    linear-gradient(-45deg, #555 25%, transparent 25%), 
-                    linear-gradient(45deg, transparent 75%, #555 75%), 
-                    linear-gradient(-45deg, transparent 75%, #555 75%);
-                background-size: 8px 8px;
-                background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
-                z-index: 1;
-            }
-
-            .layer-thumbnail canvas {
-                position: relative;
-                z-index: 2;
-            }
-
-            .layer-name {
-                flex: 1;
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                padding: 2px 4px;
-                border-radius: 2px;
-                color: #ffffff;
-            }
-
-            .layer-name.editing {
-                background: #4a4a4a;
-                border: 1px solid #6a6a6a;
-                outline: none;
-                color: #ffffff;
-            }
-
-            .layer-name input {
-                background: transparent;
-                border: none;
-                color: #ffffff;
-                font-size: 12px;
-                width: 100%;
-                outline: none;
-            }
-
-            .drag-insertion-line {
-                position: absolute;
-                left: 0;
-                right: 0;
-                height: 2px;
-                background: #4a7bc8;
-                border-radius: 1px;
-                z-index: 1000;
-                box-shadow: 0 0 4px rgba(74, 123, 200, 0.6);
-            }
-
-            .layers-container::-webkit-scrollbar {
-                width: 6px;
-            }
-
-            .layers-container::-webkit-scrollbar-track {
-                background: #2a2a2a;
-            }
-
-            .layers-container::-webkit-scrollbar-thumb {
-                background: #4a4a4a;
-                border-radius: 3px;
-            }
-
-            .layers-container::-webkit-scrollbar-thumb:hover {
-                background: #5a5a5a;
-            }
-
-            .layer-visibility-toggle {
-                width: 20px;
-                height: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                border-radius: 2px;
-                font-size: 14px;
-                flex-shrink: 0;
-                transition: background-color 0.15s ease;
-            }
-
-            .layer-visibility-toggle:hover {
-                background: rgba(255, 255, 255, 0.1);
-            }
-        `;
-        
-        document.head.appendChild(style);
-        log.debug('Styles injected');
-    }
 
     setupControlButtons(): void {
         if (!this.container) return;
