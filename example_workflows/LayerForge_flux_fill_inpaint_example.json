@@ -1,8 +1,8 @@
 {
   "id": "d26732fd-91ea-4503-8d0d-383544823cec",
   "revision": 0,
-  "last_node_id": 49,
-  "last_link_id": 112,
+  "last_node_id": 52,
+  "last_link_id": 114,
   "nodes": [
     {
       "id": 7,
@@ -18,7 +18,7 @@
       "flags": {
         "collapsed": true
       },
-      "order": 6,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
@@ -62,7 +62,7 @@
         58
       ],
       "flags": {},
-      "order": 8,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
@@ -103,7 +103,7 @@
         26
       ],
       "flags": {},
-      "order": 7,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {
@@ -260,7 +260,7 @@
         46
       ],
       "flags": {},
-      "order": 12,
+      "order": 14,
       "mode": 0,
       "inputs": [
         {
@@ -304,7 +304,7 @@
         58
       ],
       "flags": {},
-      "order": 10,
+      "order": 12,
       "mode": 0,
       "inputs": [
         {
@@ -344,7 +344,7 @@
         138
       ],
       "flags": {},
-      "order": 9,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -365,12 +365,12 @@
         {
           "name": "pixels",
           "type": "IMAGE",
-          "link": 106
+          "link": 113
         },
         {
           "name": "mask",
           "type": "MASK",
-          "link": 107
+          "link": 114
         }
       ],
       "outputs": [
@@ -421,7 +421,7 @@
         262
       ],
       "flags": {},
-      "order": 11,
+      "order": 13,
       "mode": 0,
       "inputs": [
         {
@@ -462,7 +462,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        858769863184862,
+        1006953529460557,
         "randomize",
         20,
         1,
@@ -526,7 +526,7 @@
         893.8499755859375
       ],
       "flags": {},
-      "order": 13,
+      "order": 15,
       "mode": 0,
       "inputs": [
         {
@@ -550,15 +550,15 @@
       "id": 23,
       "type": "CLIPTextEncode",
       "pos": [
-        -835.4583129882812,
-        878.8148193359375
+        -905.195556640625,
+        924.5140991210938
       ],
       "size": [
         311.0955810546875,
         108.43277740478516
       ],
       "flags": {},
-      "order": 5,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
@@ -591,18 +591,64 @@
       "bgcolor": "#353"
     },
     {
-      "id": 48,
-      "type": "CanvasNode",
+      "id": 51,
+      "type": "Note",
       "pos": [
-        -514.2837524414062,
-        543.1272583007812
+        -916.8970947265625,
+        476.72564697265625
       ],
       "size": [
-        1862.893798828125,
-        1237.79638671875
+        350.92510986328125,
+        250.50831604003906
       ],
       "flags": {},
       "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "How to Use Polygonal Selection\n- Start Drawing: Hold Shift + S and left-click to place the first point of your polygonal selection.\n\n- Add Points: Continue left-clicking to place additional points. Each click adds a new vertex to your polygon.\n\n- Close Selection: Click back on the first point (or close to it) to complete and close the polygonal selection.\n\n- Run Inpainting: Once your selection is complete, run your inpainting workflow as usual. The generated content will seamlessly integrate with the existing image."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 52,
+      "type": "Note",
+      "pos": [
+        -911.10205078125,
+        769.1378173828125
+      ],
+      "size": [
+        350.28143310546875,
+        99.23915100097656
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "Add a description at the bottom to tell the model what to generate."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 50,
+      "type": "LayerForgeNode",
+      "pos": [
+        -553.9073486328125,
+        478.2644348144531
+      ],
+      "size": [
+        1879.927490234375,
+        1259.4072265625
+      ],
+      "flags": {},
+      "order": 6,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -610,29 +656,29 @@
           "name": "image",
           "type": "IMAGE",
           "links": [
-            106
+            113
           ]
         },
         {
           "name": "mask",
           "type": "MASK",
           "links": [
-            107
+            114
           ]
         }
       ],
       "properties": {
         "cnr_id": "layerforge",
-        "ver": "22f5d028a2d4c3163014eba4896ef86810d81616",
-        "Node name for S&R": "CanvasNode",
+        "ver": "1bd261bee0c96c03cfac992ccabdea9544616a57",
+        "Node name for S&R": "LayerForgeNode",
         "widget_ue_connectable": {}
       },
       "widgets_values": [
         false,
         false,
         true,
-        963,
-        "48",
+        18,
+        "50",
         ""
       ]
     }
@@ -735,22 +781,6 @@
       "IMAGE"
     ],
     [
-      106,
-      48,
-      0,
-      38,
-      3,
-      "IMAGE"
-    ],
-    [
-      107,
-      48,
-      1,
-      38,
-      4,
-      "MASK"
-    ],
-    [
       110,
       38,
       2,
@@ -773,6 +803,22 @@
       8,
       0,
       "LATENT"
+    ],
+    [
+      113,
+      50,
+      0,
+      38,
+      3,
+      "IMAGE"
+    ],
+    [
+      114,
+      50,
+      1,
+      38,
+      4,
+      "MASK"
     ]
   ],
   "groups": [],
@@ -781,8 +827,8 @@
     "ds": {
       "scale": 0.6588450000000008,
       "offset": [
-        1318.77716124466,
-        -32.39290875553955
+        1117.7398801488407,
+        -110.40634975151642
       ]
     },
     "ue_links": [],

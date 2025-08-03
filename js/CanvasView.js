@@ -1014,7 +1014,7 @@ async function createCanvasWidget(node, widget, app) {
 }
 const canvasNodeInstances = new Map();
 app.registerExtension({
-    name: "Comfy.CanvasNode",
+    name: "Comfy.LayerForgeNode",
     init() {
         addStylesheet(getUrl('./css/canvas_view.css'));
         const originalQueuePrompt = app.queuePrompt;
@@ -1048,7 +1048,7 @@ app.registerExtension({
         };
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeType.comfyClass === "CanvasNode") {
+        if (nodeType.comfyClass === "LayerForgeNode") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");

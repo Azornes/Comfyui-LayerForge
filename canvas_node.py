@@ -90,7 +90,7 @@ class BiRefNet(torch.nn.Module):
         return [output]
 
 
-class CanvasNode:
+class LayerForgeNode:
     _canvas_data_storage = {}
     _storage_lock = threading.Lock()
     
@@ -912,12 +912,3 @@ def convert_tensor_to_base64(tensor, alpha_mask=None, original_alpha=None):
         log_debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
         raise
 
-CanvasNode.setup_routes()
-
-NODE_CLASS_MAPPINGS = {
-    "CanvasNode": CanvasNode
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "CanvasNode": "LayerForge"
-}

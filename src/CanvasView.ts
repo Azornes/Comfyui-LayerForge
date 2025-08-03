@@ -1165,7 +1165,7 @@ $el("label.clipboard-switch.mask-switch", {
 const canvasNodeInstances = new Map<number, CanvasWidget>();
 
 app.registerExtension({
-    name: "Comfy.CanvasNode",
+    name: "Comfy.LayerForgeNode",
 
     init() {
         addStylesheet(getUrl('./css/canvas_view.css'));
@@ -1204,7 +1204,7 @@ app.registerExtension({
     },
 
     async beforeRegisterNodeDef(nodeType: any, nodeData: any, app: ComfyApp) {
-        if (nodeType.comfyClass === "CanvasNode") {
+        if (nodeType.comfyClass === "LayerForgeNode") {
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function (this: ComfyNode) {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");

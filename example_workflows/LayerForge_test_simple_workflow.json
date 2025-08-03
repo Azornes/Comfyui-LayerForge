@@ -1,19 +1,137 @@
 {
   "id": "c7ba7096-c52c-4978-8843-e87ce219b6a8",
   "revision": 0,
-  "last_node_id": 707,
-  "last_link_id": 1499,
+  "last_node_id": 710,
+  "last_link_id": 1505,
   "nodes": [
+    {
+      "id": 708,
+      "type": "LayerForgeNode",
+      "pos": [
+        -3077.55615234375,
+        -3358.0537109375
+      ],
+      "size": [
+        1150,
+        1000
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            1500
+          ]
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            1501
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "layerforge",
+        "ver": "1bd261bee0c96c03cfac992ccabdea9544616a57",
+        "widget_ue_connectable": {},
+        "Node name for S&R": "LayerForgeNode"
+      },
+      "widgets_values": [
+        false,
+        false,
+        false,
+        11,
+        "708",
+        ""
+      ]
+    },
+    {
+      "id": 709,
+      "type": "Reroute",
+      "pos": [
+        -1920.4510498046875,
+        -3559.688232421875
+      ],
+      "size": [
+        75,
+        26
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "",
+          "type": "*",
+          "link": 1500
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "IMAGE",
+          "links": [
+            1502,
+            1503
+          ]
+        }
+      ],
+      "properties": {
+        "showOutputText": false,
+        "horizontal": false
+      }
+    },
+    {
+      "id": 710,
+      "type": "Reroute",
+      "pos": [
+        -1917.6273193359375,
+        -3524.312744140625
+      ],
+      "size": [
+        75,
+        26
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "",
+          "type": "*",
+          "link": 1501
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "MASK",
+          "links": [
+            1504,
+            1505
+          ]
+        }
+      ],
+      "properties": {
+        "showOutputText": false,
+        "horizontal": false
+      }
+    },
     {
       "id": 369,
       "type": "PreviewImage",
       "pos": [
-        -1699.1021728515625,
-        -3355.60498046875
+        -1914.3177490234375,
+        -2807.92724609375
       ],
       "size": [
-        660.91162109375,
-        400.2092590332031
+        710,
+        450
       ],
       "flags": {},
       "order": 6,
@@ -38,21 +156,21 @@
       "id": 606,
       "type": "PreviewImage",
       "pos": [
-        -1911.126708984375,
-        -2916.072998046875
+        -1913.4202880859375,
+        -3428.773193359375
       ],
       "size": [
-        551.7399291992188,
-        546.8018798828125
+        700,
+        510
       ],
       "flags": {},
-      "order": 1,
+      "order": 3,
       "mode": 0,
       "inputs": [
         {
           "name": "images",
           "type": "IMAGE",
-          "link": 1495
+          "link": 1503
         }
       ],
       "outputs": [],
@@ -63,93 +181,31 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": []
-    },
-    {
-      "id": 603,
-      "type": "PreviewImage",
-      "pos": [
-        -1344.1650390625,
-        -2915.117919921875
-      ],
-      "size": [
-        601.4136962890625,
-        527.1531372070312
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 1236
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.34",
-        "Node name for S&R": "PreviewImage",
-        "widget_ue_connectable": {}
-      },
-      "widgets_values": []
-    },
-    {
-      "id": 680,
-      "type": "SaveImage",
-      "pos": [
-        -1025.9984130859375,
-        -3357.975341796875
-      ],
-      "size": [
-        278.8309020996094,
-        395.84002685546875
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "images",
-          "type": "IMAGE",
-          "link": 1465
-        }
-      ],
-      "outputs": [],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.3.34",
-        "Node name for S&R": "SaveImage",
-        "widget_ue_connectable": {}
-      },
-      "widgets_values": [
-        "ComfyUI"
-      ]
     },
     {
       "id": 442,
       "type": "JoinImageWithAlpha",
       "pos": [
-        -1902.5858154296875,
-        -3187.159423828125
+        -1190.1787109375,
+        -3237.75732421875
       ],
       "size": [
         176.86483764648438,
         46
       ],
       "flags": {},
-      "order": 2,
+      "order": 5,
       "mode": 0,
       "inputs": [
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 1494
+          "link": 1502
         },
         {
           "name": "alpha",
           "type": "MASK",
-          "link": 1497
+          "link": 1505
         }
       ],
       "outputs": [
@@ -171,24 +227,86 @@
       "widgets_values": []
     },
     {
+      "id": 603,
+      "type": "PreviewImage",
+      "pos": [
+        -1188.5968017578125,
+        -3143.6875
+      ],
+      "size": [
+        640,
+        510
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1236
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "PreviewImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 680,
+      "type": "SaveImage",
+      "pos": [
+        -536.2315673828125,
+        -3135.49755859375
+      ],
+      "size": [
+        279.97137451171875,
+        282
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 1465
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.34",
+        "Node name for S&R": "SaveImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
       "id": 706,
       "type": "MaskToImage",
       "pos": [
-        -1901.433349609375,
-        -3332.2021484375
+        -1911.38525390625,
+        -2875.74658203125
       ],
       "size": [
         184.62362670898438,
         26
       ],
       "flags": {},
-      "order": 3,
+      "order": 4,
       "mode": 0,
       "inputs": [
         {
           "name": "mask",
           "type": "MASK",
-          "link": 1498
+          "link": 1504
         }
       ],
       "outputs": [
@@ -203,57 +321,10 @@
       "properties": {
         "cnr_id": "comfy-core",
         "ver": "0.3.44",
-        "widget_ue_connectable": {},
-        "Node name for S&R": "MaskToImage"
-      }
-    },
-    {
-      "id": 697,
-      "type": "CanvasNode",
-      "pos": [
-        -2968.572998046875,
-        -3347.89306640625
-      ],
-      "size": [
-        1044.9053955078125,
-        980.680908203125
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "image",
-          "type": "IMAGE",
-          "links": [
-            1494,
-            1495
-          ]
-        },
-        {
-          "name": "mask",
-          "type": "MASK",
-          "links": [
-            1497,
-            1498
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "layerforge",
-        "ver": "22f5d028a2d4c3163014eba4896ef86810d81616",
-        "Node name for S&R": "CanvasNode",
+        "Node name for S&R": "MaskToImage",
         "widget_ue_connectable": {}
       },
-      "widgets_values": [
-        true,
-        false,
-        "697",
-        15,
-        "697",
-        ""
-      ]
+      "widgets_values": []
     }
   ],
   "links": [
@@ -274,54 +345,70 @@
       "IMAGE"
     ],
     [
-      1494,
-      697,
-      0,
-      442,
-      0,
-      "IMAGE"
-    ],
-    [
-      1495,
-      697,
-      0,
-      606,
-      0,
-      "IMAGE"
-    ],
-    [
-      1497,
-      697,
-      1,
-      442,
-      1,
-      "MASK"
-    ],
-    [
-      1498,
-      697,
-      1,
-      706,
-      0,
-      "MASK"
-    ],
-    [
       1499,
       706,
       0,
       369,
       0,
       "IMAGE"
+    ],
+    [
+      1500,
+      708,
+      0,
+      709,
+      0,
+      "*"
+    ],
+    [
+      1501,
+      708,
+      1,
+      710,
+      0,
+      "*"
+    ],
+    [
+      1502,
+      709,
+      0,
+      442,
+      0,
+      "IMAGE"
+    ],
+    [
+      1503,
+      709,
+      0,
+      606,
+      0,
+      "IMAGE"
+    ],
+    [
+      1504,
+      710,
+      0,
+      706,
+      0,
+      "MASK"
+    ],
+    [
+      1505,
+      710,
+      0,
+      442,
+      1,
+      "MASK"
     ]
   ],
   "groups": [],
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.9646149645000008,
+      "scale": 0.7972024500000005,
       "offset": [
-        3002.5649125522764,
-        3543.443319064718
+        3208.3419155969927,
+        3617.011371212156
       ]
     },
     "ue_links": [],
