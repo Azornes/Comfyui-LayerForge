@@ -245,6 +245,14 @@ export class CanvasInteractions {
         if (this.interaction.mode === 'dragging' && this.canvas.canvasSelection.selectedLayers.length > 0) {
             this.logDragCompletion(coords);
         }
+        // Handle end of crop bounds transformation before resetting interaction state
+        if (this.interaction.mode === 'resizing' && this.interaction.transformingLayer?.cropMode) {
+            this.canvas.canvasLayers.handleCropBoundsTransformEnd(this.interaction.transformingLayer);
+        }
+        // Handle end of scale transformation (normal transform mode) before resetting interaction state
+        if (this.interaction.mode === 'resizing' && this.interaction.transformingLayer && !this.interaction.transformingLayer.cropMode) {
+            this.canvas.canvasLayers.handleScaleTransformEnd(this.interaction.transformingLayer);
+        }
         // Zapisz stan tylko, jeśli faktycznie doszło do zmiany (przeciąganie, transformacja, duplikacja)
         const stateChangingInteraction = ['dragging', 'resizing', 'rotating'].includes(this.interaction.mode);
         const duplicatedInDrag = this.interaction.hasClonedInDrag;
@@ -363,6 +371,8 @@ export class CanvasInteractions {
             layer.height *= scaleFactor;
             layer.x += (oldWidth - layer.width) / 2;
             layer.y += (oldHeight - layer.height) / 2;
+            // Handle wheel scaling end for layers with blend area
+            this.canvas.canvasLayers.handleWheelScalingEnd(layer);
         }
     }
     calculateGridBasedScaling(oldHeight, deltaY) {
