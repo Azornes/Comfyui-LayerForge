@@ -359,7 +359,6 @@ export class CanvasLayers {
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
             layer.width *= scale;
             layer.height *= scale;
-            this.invalidateBlendCache(layer);
         });
         this.canvas.render();
         this.canvas.requestSaveState();
@@ -370,7 +369,6 @@ export class CanvasLayers {
 
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
             layer.rotation += angle;
-            this.invalidateBlendCache(layer);
         });
         this.canvas.render();
         this.canvas.requestSaveState();
@@ -434,25 +432,80 @@ export class CanvasLayers {
         const needsBlendAreaEffect = blendArea > 0;
 
         if (needsBlendAreaEffect) {
-            // Check if we have a valid cached blended image
-            if (layer.blendedImageCache && !layer.blendedImageDirty) {
-                // Use cached blended image for optimal performance
-                ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
-                ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                ctx.drawImage(layer.blendedImageCache, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            log.debug(`Applying blend area effect for layer ${layer.id}, blendArea: ${blendArea}%`);
+
+            // --- BLEND AREA MASK: Use cropped region if cropBounds is set ---
+            let maskCanvas: HTMLCanvasElement | null = null;
+            let maskWidth = layer.width;
+            let maskHeight = layer.height;
+
+            if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
+                // Create a cropped canvas
+                const s = layer.cropBounds;
+                const { canvas: cropCanvas, ctx: cropCtx } = createCanvas(s.width, s.height);
+                if (cropCtx) {
+                    cropCtx.drawImage(
+                        layer.image,
+                        s.x, s.y, s.width, s.height,
+                        0, 0, s.width, s.height
+                    );
+                    // Generate distance field mask for the cropped region
+                    maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
+                    maskWidth = s.width;
+                    maskHeight = s.height;
+                }
             } else {
-                // Cache is invalid or doesn't exist, update it
-                this.updateLayerBlendEffect(layer);
+                // No crop, use full image
+                maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
+                maskWidth = layer.originalWidth || layer.width;
+                maskHeight = layer.originalHeight || layer.height;
+            }
+
+            if (maskCanvas) {
+                // Create a temporary canvas for the masked layer
+                const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
                 
-                // Use the newly created cache if available, otherwise fallback
-                if (layer.blendedImageCache) {
+                if (tempCtx) {
+                    const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+
+                    if (!layer.originalWidth || !layer.originalHeight) {
+                        tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
+                    } else {
+                        const layerScaleX = layer.width / layer.originalWidth;
+                        const layerScaleY = layer.height / layer.originalHeight;
+
+                        const dWidth = s.width * layerScaleX;
+                        const dHeight = s.height * layerScaleY;
+                        const dX = s.x * layerScaleX;
+                        const dY = s.y * layerScaleY;
+
+                        tempCtx.drawImage(
+                            layer.image,
+                            s.x, s.y, s.width, s.height,
+                            dX, dY, dWidth, dHeight
+                        );
+
+                        // --- Apply the distance field mask only to the visible (cropped) area ---
+                        tempCtx.globalCompositeOperation = 'destination-in';
+                        // Scale the mask to match the drawn area
+                        tempCtx.drawImage(
+                            maskCanvas,
+                            0, 0, maskWidth, maskHeight,
+                            dX, dY, dWidth, dHeight
+                        );
+                    }
+                    
+                    // Draw the result
                     ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
                     ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                    ctx.drawImage(layer.blendedImageCache, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                    ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
                 } else {
                     // Fallback to normal drawing
                     this._drawLayerImage(ctx, layer);
                 }
+            } else {
+                // Fallback to normal drawing
+                this._drawLayerImage(ctx, layer);
             }
         } else {
             // Normal drawing without blend area effect
@@ -493,113 +546,6 @@ export class CanvasLayers {
             s.x, s.y, s.width, s.height, // source rect (from original image)
             dX, dY, dWidth, dHeight      // destination rect (scaled and positioned within the transform frame)
         );
-    }
-
-    /**
-     * Invalidates the blended image cache for a layer
-     */
-    public invalidateBlendCache(layer: Layer): void {
-        layer.blendedImageDirty = true;
-        layer.blendedImageCache = undefined;
-    }
-
-    /**
-     * Updates the blended image cache for a layer with blendArea effect
-     */
-    public updateLayerBlendEffect(layer: Layer): void {
-        const blendArea = layer.blendArea ?? 0;
-        
-        if (blendArea <= 0) {
-            // No blend effect needed, clear cache
-            layer.blendedImageCache = undefined;
-            layer.blendedImageDirty = false;
-            return;
-        }
-
-        try {
-            log.debug(`Updating blend effect cache for layer ${layer.id}, blendArea: ${blendArea}%`);
-
-            // Create the blended image using the same logic as _drawLayer
-            let maskCanvas: HTMLCanvasElement | null = null;
-            let maskWidth = layer.width;
-            let maskHeight = layer.height;
-
-            if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
-                // Create a cropped canvas
-                const s = layer.cropBounds;
-                const { canvas: cropCanvas, ctx: cropCtx } = createCanvas(s.width, s.height);
-                if (cropCtx) {
-                    cropCtx.drawImage(
-                        layer.image,
-                        s.x, s.y, s.width, s.height,
-                        0, 0, s.width, s.height
-                    );
-                    // Generate distance field mask for the cropped region
-                    maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
-                    maskWidth = s.width;
-                    maskHeight = s.height;
-                }
-            } else {
-                // No crop, use full image
-                maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
-                maskWidth = layer.originalWidth || layer.width;
-                maskHeight = layer.originalHeight || layer.height;
-            }
-
-            if (maskCanvas) {
-                // Create the final blended canvas
-                const { canvas: blendedCanvas, ctx: blendedCtx } = createCanvas(layer.width, layer.height);
-                
-                if (blendedCtx) {
-                    const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
-
-                    if (!layer.originalWidth || !layer.originalHeight) {
-                        blendedCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-                    } else {
-                        const layerScaleX = layer.width / layer.originalWidth;
-                        const layerScaleY = layer.height / layer.originalHeight;
-
-                        const dWidth = s.width * layerScaleX;
-                        const dHeight = s.height * layerScaleY;
-                        const dX = s.x * layerScaleX;
-                        const dY = s.y * layerScaleY;
-
-                        blendedCtx.drawImage(
-                            layer.image,
-                            s.x, s.y, s.width, s.height,
-                            dX, dY, dWidth, dHeight
-                        );
-
-                        // Apply the distance field mask only to the visible (cropped) area
-                        blendedCtx.globalCompositeOperation = 'destination-in';
-                        // Scale the mask to match the drawn area
-                        blendedCtx.drawImage(
-                            maskCanvas,
-                            0, 0, maskWidth, maskHeight,
-                            dX, dY, dWidth, dHeight
-                        );
-                    }
-                    
-                    // Store the blended result in cache
-                    layer.blendedImageCache = blendedCanvas;
-                    layer.blendedImageDirty = false;
-                    
-                    log.debug(`Blend effect cache updated for layer ${layer.id}`);
-                } else {
-                    log.warn(`Failed to create blended canvas context for layer ${layer.id}`);
-                    layer.blendedImageCache = undefined;
-                    layer.blendedImageDirty = false;
-                }
-            } else {
-                log.warn(`Failed to create distance field mask for layer ${layer.id}`);
-                layer.blendedImageCache = undefined;
-                layer.blendedImageDirty = false;
-            }
-        } catch (error) {
-            log.error(`Error updating blend effect for layer ${layer.id}:`, error);
-            layer.blendedImageCache = undefined;
-            layer.blendedImageDirty = false;
-        }
     }
 
     private getDistanceFieldMaskSync(imageOrCanvas: HTMLImageElement | HTMLCanvasElement, blendArea: number): HTMLCanvasElement | null {
@@ -669,7 +615,6 @@ export class CanvasLayers {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
             layer.flipH = !layer.flipH;
-            this.invalidateBlendCache(layer);
         });
         this.canvas.render();
         this.canvas.requestSaveState();
@@ -679,7 +624,6 @@ export class CanvasLayers {
         if (this.canvas.canvasSelection.selectedLayers.length === 0) return;
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
             layer.flipV = !layer.flipV;
-            this.invalidateBlendCache(layer);
         });
         this.canvas.render();
         this.canvas.requestSaveState();
@@ -965,17 +909,11 @@ export class CanvasLayers {
             if (selectedLayer) {
                 const newValue = parseInt(blendAreaSlider.value, 10);
                 selectedLayer.blendArea = newValue;
-                // Invalidate cache when blend area changes
-                this.invalidateBlendCache(selectedLayer);
                 this.canvas.render();
             }
         };
 
         blendAreaSlider.addEventListener('change', () => {
-            if (selectedLayer) {
-                // Update the blend effect cache when the slider value is finalized
-                this.updateLayerBlendEffect(selectedLayer);
-            }
             this.canvas.saveState();
         });
         
