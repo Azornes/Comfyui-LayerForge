@@ -1188,9 +1188,17 @@ export class CanvasLayers {
             const cropRectW = layer.cropBounds.width * layerScaleX;
             const cropRectH = layer.cropBounds.height * layerScaleY;
 
+            // Effective crop bounds start position, accounting for flips.
+            const effectiveCropX = layer.flipH 
+                ? layer.originalWidth - (layer.cropBounds.x + layer.cropBounds.width) 
+                : layer.cropBounds.x;
+            const effectiveCropY = layer.flipV 
+                ? layer.originalHeight - (layer.cropBounds.y + layer.cropBounds.height) 
+                : layer.cropBounds.y;
+
             // Center of the CROP rectangle in the layer's local, un-rotated space
-            const cropCenterX_local = (-layer.width / 2) + ((layer.cropBounds.x + layer.cropBounds.width / 2) * layerScaleX);
-            const cropCenterY_local = (-layer.height / 2) + ((layer.cropBounds.y + layer.cropBounds.height / 2) * layerScaleY);
+            const cropCenterX_local = (-layer.width / 2) + ((effectiveCropX + layer.cropBounds.width / 2) * layerScaleX);
+            const cropCenterY_local = (-layer.height / 2) + ((effectiveCropY + layer.cropBounds.height / 2) * layerScaleY);
             
             // Rotate this local center to find the world-space center of the crop rect
             handleCenterX = layerCenterX + (cropCenterX_local * cos - cropCenterY_local * sin);
@@ -1206,13 +1214,13 @@ export class CanvasLayers {
             halfH = layer.height / 2;
         }
 
-        const localHandles: Record<string, Point> = {
-            'n': { x: 0, y: -halfH }, 'ne': { x: halfW, y: -halfH },
-            'e': { x: halfW, y: 0 }, 'se': { x: halfW, y: halfH },
-            's': { x: 0, y: halfH }, 'sw': { x: -halfW, y: halfH },
-            'w': { x: -halfW, y: 0 }, 'nw': { x: -halfW, y: -halfH },
-            'rot': { x: 0, y: -halfH - 20 / this.canvas.viewport.zoom }
-        };
+    const localHandles: Record<string, Point> = {
+        'n': { x: 0, y: -halfH }, 'ne': { x: halfW, y: -halfH },
+        'e': { x: halfW, y: 0 }, 'se': { x: halfW, y: halfH },
+        's': { x: 0, y: halfH }, 'sw': { x: -halfW, y: halfH },
+        'w': { x: -halfW, y: 0 }, 'nw': { x: -halfW, y: -halfH },
+        'rot': { x: 0, y: -halfH - 20 / this.canvas.viewport.zoom }
+    };
 
         const worldHandles: Record<string, Point> = {};
         for (const key in localHandles) {

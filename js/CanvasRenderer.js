@@ -467,8 +467,10 @@ export class CanvasRenderer {
             // Draw line to rotation handle
             ctx.setLineDash([]);
             ctx.beginPath();
-            ctx.moveTo(0, -halfH);
-            ctx.lineTo(0, -halfH - 20 / this.canvas.viewport.zoom);
+            const startY = layer.flipV ? halfH : -halfH;
+            const endY = startY + (layer.flipV ? 1 : -1) * (20 / this.canvas.viewport.zoom);
+            ctx.moveTo(0, startY);
+            ctx.lineTo(0, endY);
             ctx.stroke();
         }
         // --- DRAW HANDLES (Unified Logic) ---
@@ -476,19 +478,29 @@ export class CanvasRenderer {
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1 / this.canvas.viewport.zoom;
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
         for (const key in handles) {
             // Skip rotation handle in crop mode
             if (layer.cropMode && key === 'rot')
                 continue;
             const point = handles[key];
-            // The handle position is already in world space, we need it in the layer's rotated space
-            const localX = point.x - (layer.x + layer.width / 2);
-            const localY = point.y - (layer.y + layer.height / 2);
+            // The handle position is already in world space.
+            // We need to convert it to the layer's local, un-rotated space.
+            const dx = point.x - centerX;
+            const dy = point.y - centerY;
+            // "Un-rotate" the position to get it in the layer's local, un-rotated space
             const rad = -layer.rotation * Math.PI / 180;
-            const rotatedX = localX * Math.cos(rad) - localY * Math.sin(rad);
-            const rotatedY = localX * Math.sin(rad) + localY * Math.cos(rad);
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            // The context is already flipped. We need to flip the coordinates
+            // to match the visual transformation, so the arc is drawn in the correct place.
+            const finalX = localX * (layer.flipH ? -1 : 1);
+            const finalY = localY * (layer.flipV ? -1 : 1);
             ctx.beginPath();
-            ctx.arc(rotatedX, rotatedY, handleRadius, 0, Math.PI * 2);
+            ctx.arc(finalX, finalY, handleRadius, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
         }

@@ -857,8 +857,15 @@ export class CanvasInteractions {
             // Rotate mouse delta into the layer's unrotated frame
             const deltaX_world = mouseX_local - dragStartX_local;
             const deltaY_world = mouseY_local - dragStartY_local;
-            const mouseDeltaX_local = deltaX_world * cos + deltaY_world * sin;
-            const mouseDeltaY_local = deltaY_world * cos - deltaX_world * sin;
+            let mouseDeltaX_local = deltaX_world * cos + deltaY_world * sin;
+            let mouseDeltaY_local = deltaY_world * cos - deltaX_world * sin;
+
+            if (layer.flipH) {
+                mouseDeltaX_local *= -1;
+            }
+            if (layer.flipV) {
+                mouseDeltaY_local *= -1;
+            }
             
             // Convert the on-screen mouse delta to an image-space delta.
             const screenToImageScaleX = o.originalWidth / o.width;
@@ -870,22 +877,37 @@ export class CanvasInteractions {
             let newCropBounds = { ...o.cropBounds }; // Start with the bounds from the beginning of the drag
 
             // Apply the image-space delta to the appropriate edges of the crop bounds
+            const isFlippedH = layer.flipH;
+            const isFlippedV = layer.flipV;
+            
             if (handle?.includes('w')) {
-                newCropBounds.x += delta_image_x;
-                newCropBounds.width -= delta_image_x;
+                if (isFlippedH) newCropBounds.width += delta_image_x;
+                else {
+                    newCropBounds.x += delta_image_x;
+                    newCropBounds.width -= delta_image_x;
+                }
             }
             if (handle?.includes('e')) {
-                newCropBounds.width += delta_image_x;
+                if (isFlippedH) {
+                    newCropBounds.x += delta_image_x;
+                    newCropBounds.width -= delta_image_x;
+                } else newCropBounds.width += delta_image_x;
             }
             if (handle?.includes('n')) {
-                newCropBounds.y += delta_image_y;
-                newCropBounds.height -= delta_image_y;
+                if (isFlippedV) newCropBounds.height += delta_image_y;
+                else {
+                    newCropBounds.y += delta_image_y;
+                    newCropBounds.height -= delta_image_y;
+                }
             }
             if (handle?.includes('s')) {
-                newCropBounds.height += delta_image_y;
+                if (isFlippedV) {
+                    newCropBounds.y += delta_image_y;
+                    newCropBounds.height -= delta_image_y;
+                } else newCropBounds.height += delta_image_y;
             }
-            
-            // Clamp crop bounds to stay within the original image and maintain minimum size
+			
+			// Clamp crop bounds to stay within the original image and maintain minimum size
             if (newCropBounds.width < 1) {
                 if (handle?.includes('w')) newCropBounds.x = o.cropBounds.x + o.cropBounds.width -1;
                 newCropBounds.width = 1;
