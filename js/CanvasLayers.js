@@ -484,14 +484,19 @@ export class CanvasLayers {
         }
         ctx.restore();
     }
-    _drawLayerImage(ctx, layer) {
-        ctx.globalCompositeOperation = layer.blendMode || 'normal';
-        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+    /**
+     * Zunifikowana funkcja do rysowania obrazu warstwy z crop
+     * @param ctx Canvas context
+     * @param layer Warstwa do narysowania
+     * @param offsetX Przesunięcie X względem środka warstwy (domyślnie -width/2)
+     * @param offsetY Przesunięcie Y względem środka warstwy (domyślnie -height/2)
+     */
+    drawLayerImageWithCrop(ctx, layer, offsetX = -layer.width / 2, offsetY = -layer.height / 2) {
         // Use cropBounds if they exist, otherwise use the full image dimensions as the source
         const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
         if (!layer.originalWidth || !layer.originalHeight) {
             // Fallback for older layers without original dimensions or if data is missing
-            ctx.drawImage(layer.image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            ctx.drawImage(layer.image, offsetX, offsetY, layer.width, layer.height);
             return;
         }
         // Calculate the on-screen scale of the layer's transform frame
@@ -500,23 +505,25 @@ export class CanvasLayers {
         // Calculate the on-screen size of the cropped portion
         const dWidth = s.width * layerScaleX;
         const dHeight = s.height * layerScaleY;
-        // Calculate the on-screen position of the top-left of the cropped portion.
-        // This is relative to the layer's center (the context's 0,0).
-        const dX = (-layer.width / 2) + (s.x * layerScaleX);
-        const dY = (-layer.height / 2) + (s.y * layerScaleY);
+        // Calculate the on-screen position of the top-left of the cropped portion
+        const dX = offsetX + (s.x * layerScaleX);
+        const dY = offsetY + (s.y * layerScaleY);
         ctx.drawImage(layer.image, s.x, s.y, s.width, s.height, // source rect (from original image)
-        dX, dY, dWidth, dHeight // destination rect (scaled and positioned within the transform frame)
+        dX, dY, dWidth, dHeight // destination rect (scaled and positioned)
         );
     }
+    _drawLayerImage(ctx, layer) {
+        ctx.globalCompositeOperation = layer.blendMode || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        this.drawLayerImageWithCrop(ctx, layer);
+    }
     /**
-     * Draw layer with live blend area effect during user activity (original behavior)
+     * Zunifikowana funkcja do tworzenia maski blend area dla warstwy
+     * @param layer Warstwa dla której tworzymy maskę
+     * @returns Obiekt zawierający maskę i jej wymiary lub null
      */
-    _drawLayerWithLiveBlendArea(ctx, layer) {
+    createBlendAreaMask(layer) {
         const blendArea = layer.blendArea ?? 0;
-        // --- BLEND AREA MASK: Use cropped region if cropBounds is set ---
-        let maskCanvas = null;
-        let maskWidth = layer.width;
-        let maskHeight = layer.height;
         if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
             // Create a cropped canvas
             const s = layer.cropBounds;
@@ -524,47 +531,77 @@ export class CanvasLayers {
             if (cropCtx) {
                 cropCtx.drawImage(layer.image, s.x, s.y, s.width, s.height, 0, 0, s.width, s.height);
                 // Generate distance field mask for the cropped region
-                maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
-                maskWidth = s.width;
-                maskHeight = s.height;
+                const maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
+                if (maskCanvas) {
+                    return {
+                        maskCanvas,
+                        maskWidth: s.width,
+                        maskHeight: s.height
+                    };
+                }
             }
         }
         else {
             // No crop, use full image
-            maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
-            maskWidth = layer.originalWidth || layer.width;
-            maskHeight = layer.originalHeight || layer.height;
+            const maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
+            if (maskCanvas) {
+                return {
+                    maskCanvas,
+                    maskWidth: layer.originalWidth || layer.width,
+                    maskHeight: layer.originalHeight || layer.height
+                };
+            }
         }
-        if (maskCanvas) {
-            // Create a temporary canvas for the masked layer
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
-            if (tempCtx) {
-                const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
-                if (!layer.originalWidth || !layer.originalHeight) {
-                    tempCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-                }
-                else {
-                    const layerScaleX = layer.width / layer.originalWidth;
-                    const layerScaleY = layer.height / layer.originalHeight;
-                    const dWidth = s.width * layerScaleX;
-                    const dHeight = s.height * layerScaleY;
-                    const dX = s.x * layerScaleX;
-                    const dY = s.y * layerScaleY;
-                    tempCtx.drawImage(layer.image, s.x, s.y, s.width, s.height, dX, dY, dWidth, dHeight);
-                    // --- Apply the distance field mask only to the visible (cropped) area ---
-                    tempCtx.globalCompositeOperation = 'destination-in';
-                    // Scale the mask to match the drawn area
-                    tempCtx.drawImage(maskCanvas, 0, 0, maskWidth, maskHeight, dX, dY, dWidth, dHeight);
-                }
-                // Draw the result
-                ctx.globalCompositeOperation = layer.blendMode || 'normal';
-                ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-                ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        return null;
+    }
+    /**
+     * Zunifikowana funkcja do rysowania warstwy z blend area na canvas
+     * @param ctx Canvas context
+     * @param layer Warstwa do narysowania
+     * @param offsetX Przesunięcie X (domyślnie -width/2)
+     * @param offsetY Przesunięcie Y (domyślnie -height/2)
+     */
+    drawLayerWithBlendArea(ctx, layer, offsetX = -layer.width / 2, offsetY = -layer.height / 2) {
+        const maskInfo = this.createBlendAreaMask(layer);
+        if (maskInfo) {
+            const { maskCanvas, maskWidth, maskHeight } = maskInfo;
+            const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
+            if (!layer.originalWidth || !layer.originalHeight) {
+                // Fallback - just draw the image normally
+                ctx.drawImage(layer.image, offsetX, offsetY, layer.width, layer.height);
             }
             else {
-                // Fallback to normal drawing
-                this._drawLayerImage(ctx, layer);
+                const layerScaleX = layer.width / layer.originalWidth;
+                const layerScaleY = layer.height / layer.originalHeight;
+                const dWidth = s.width * layerScaleX;
+                const dHeight = s.height * layerScaleY;
+                const dX = offsetX + (s.x * layerScaleX);
+                const dY = offsetY + (s.y * layerScaleY);
+                // Draw the image
+                ctx.drawImage(layer.image, s.x, s.y, s.width, s.height, dX, dY, dWidth, dHeight);
+                // Apply the distance field mask
+                ctx.globalCompositeOperation = 'destination-in';
+                ctx.drawImage(maskCanvas, 0, 0, maskWidth, maskHeight, dX, dY, dWidth, dHeight);
             }
+        }
+        else {
+            // Fallback - just draw the image normally
+            this.drawLayerImageWithCrop(ctx, layer, offsetX, offsetY);
+        }
+    }
+    /**
+     * Draw layer with live blend area effect during user activity (original behavior)
+     */
+    _drawLayerWithLiveBlendArea(ctx, layer) {
+        // Create a temporary canvas for the masked layer
+        const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
+        if (tempCtx) {
+            // Draw the layer with blend area to temp canvas
+            this.drawLayerWithBlendArea(tempCtx, layer, 0, 0);
+            // Draw the result with blend mode and opacity
+            ctx.globalCompositeOperation = layer.blendMode || 'normal';
+            ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+            ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         }
         else {
             // Fallback to normal drawing
@@ -696,55 +733,12 @@ export class CanvasLayers {
         if (!processedCtx)
             return null;
         if (needsBlendAreaEffect) {
-            // --- BLEND AREA MASK: Use cropped region if cropBounds is set ---
-            let maskCanvas = null;
-            let maskWidth = layer.width;
-            let maskHeight = layer.height;
-            if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
-                // Create a cropped canvas
-                const s = layer.cropBounds;
-                const { canvas: cropCanvas, ctx: cropCtx } = createCanvas(s.width, s.height);
-                if (cropCtx) {
-                    cropCtx.drawImage(layer.image, s.x, s.y, s.width, s.height, 0, 0, s.width, s.height);
-                    // Generate distance field mask for the cropped region
-                    maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
-                    maskWidth = s.width;
-                    maskHeight = s.height;
-                }
-            }
-            else {
-                // No crop, use full image
-                maskCanvas = this.getDistanceFieldMaskSync(layer.image, blendArea);
-                maskWidth = layer.originalWidth || layer.width;
-                maskHeight = layer.originalHeight || layer.height;
-            }
-            if (maskCanvas) {
-                const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
-                if (!layer.originalWidth || !layer.originalHeight) {
-                    processedCtx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-                }
-                else {
-                    const layerScaleX = layer.width / layer.originalWidth;
-                    const layerScaleY = layer.height / layer.originalHeight;
-                    const dWidth = s.width * layerScaleX;
-                    const dHeight = s.height * layerScaleY;
-                    const dX = s.x * layerScaleX;
-                    const dY = s.y * layerScaleY;
-                    processedCtx.drawImage(layer.image, s.x, s.y, s.width, s.height, dX, dY, dWidth, dHeight);
-                    // --- Apply the distance field mask only to the visible (cropped) area ---
-                    processedCtx.globalCompositeOperation = 'destination-in';
-                    // Scale the mask to match the drawn area
-                    processedCtx.drawImage(maskCanvas, 0, 0, maskWidth, maskHeight, dX, dY, dWidth, dHeight);
-                }
-            }
-            else {
-                // Fallback - just draw the image normally
-                this._drawLayerImageToCanvas(processedCtx, layer);
-            }
+            // Use the unified blend area drawing function
+            this.drawLayerWithBlendArea(processedCtx, layer, 0, 0);
         }
         else {
             // Just apply crop effect without blend area
-            this._drawLayerImageToCanvas(processedCtx, layer);
+            this.drawLayerImageWithCrop(processedCtx, layer, 0, 0);
         }
         // Convert canvas to image
         const processedImage = new Image();
@@ -752,28 +746,11 @@ export class CanvasLayers {
         return processedImage;
     }
     /**
-     * Helper method to draw layer image to a specific canvas context
+     * Helper method to draw layer image to a specific canvas context (position 0,0)
+     * Uses the unified drawLayerImageWithCrop function
      */
     _drawLayerImageToCanvas(ctx, layer) {
-        // Use cropBounds if they exist, otherwise use the full image dimensions as the source
-        const s = layer.cropBounds || { x: 0, y: 0, width: layer.originalWidth, height: layer.originalHeight };
-        if (!layer.originalWidth || !layer.originalHeight) {
-            // Fallback for older layers without original dimensions or if data is missing
-            ctx.drawImage(layer.image, 0, 0, layer.width, layer.height);
-            return;
-        }
-        // Calculate the on-screen scale of the layer's transform frame
-        const layerScaleX = layer.width / layer.originalWidth;
-        const layerScaleY = layer.height / layer.originalHeight;
-        // Calculate the on-screen size of the cropped portion
-        const dWidth = s.width * layerScaleX;
-        const dHeight = s.height * layerScaleY;
-        // Calculate the on-screen position of the top-left of the cropped portion.
-        const dX = s.x * layerScaleX;
-        const dY = s.y * layerScaleY;
-        ctx.drawImage(layer.image, s.x, s.y, s.width, s.height, // source rect (from original image)
-        dX, dY, dWidth, dHeight // destination rect (scaled and positioned within the canvas)
-        );
+        this.drawLayerImageWithCrop(ctx, layer, 0, 0);
     }
     /**
      * Invalidate processed image cache for a specific layer
@@ -810,33 +787,78 @@ export class CanvasLayers {
         log.info('Cleared all processed image cache and pending timers');
     }
     /**
+     * Zunifikowana funkcja do obsługi transformacji końcowych
+     * @param layer Warstwa do przetworzenia
+     * @param transformType Typ transformacji (crop, scale, wheel)
+     * @param delay Opóźnienie w ms (domyślnie 0)
+     */
+    handleTransformEnd(layer, transformType, delay = 0) {
+        if (!layer.blendArea)
+            return;
+        const layerId = layer.id;
+        const cacheKey = this.getProcessedImageCacheKey(layer);
+        // Add to appropriate transforming set to continue live rendering
+        let transformingSet;
+        let transformName;
+        switch (transformType) {
+            case 'crop':
+                transformingSet = this.layersTransformingCropBounds;
+                transformName = 'crop bounds';
+                break;
+            case 'scale':
+                transformingSet = this.layersTransformingScale;
+                transformName = 'scale';
+                break;
+            case 'wheel':
+                transformingSet = this.layersWheelScaling;
+                transformName = 'wheel';
+                break;
+        }
+        transformingSet.add(layerId);
+        // Create processed image asynchronously with optional delay
+        const executeTransform = () => {
+            try {
+                const processedImage = this.createProcessedImage(layer);
+                if (processedImage) {
+                    this.processedImageCache.set(cacheKey, processedImage);
+                    log.debug(`Cached processed image for layer ${layerId} after ${transformName} transform`);
+                    // Only now remove from live rendering set and trigger re-render
+                    transformingSet.delete(layerId);
+                    this.canvas.render();
+                }
+            }
+            catch (error) {
+                log.error(`Failed to create processed image after ${transformName} transform:`, error);
+                // Fallback: remove from live rendering even if cache creation failed
+                transformingSet.delete(layerId);
+            }
+        };
+        if (delay > 0) {
+            // For wheel scaling, use debounced approach
+            const timerKey = `${layerId}_${transformType}scaling`;
+            const existingTimer = this.processedImageDebounceTimers.get(timerKey);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+            }
+            const timer = window.setTimeout(() => {
+                log.debug(`Creating new cache for layer ${layerId} after ${transformName} scaling stopped`);
+                executeTransform();
+                this.processedImageDebounceTimers.delete(timerKey);
+            }, delay);
+            this.processedImageDebounceTimers.set(timerKey, timer);
+        }
+        else {
+            // For crop and scale, use immediate async approach
+            setTimeout(executeTransform, 0);
+        }
+    }
+    /**
      * Handle end of crop bounds transformation - create cache asynchronously but keep live rendering until ready
      */
     handleCropBoundsTransformEnd(layer) {
         if (!layer.cropMode || !layer.blendArea)
             return;
-        const layerId = layer.id;
-        const cacheKey = this.getProcessedImageCacheKey(layer);
-        // Add to transforming set to continue live rendering
-        this.layersTransformingCropBounds.add(layerId);
-        // Create processed image asynchronously
-        setTimeout(() => {
-            try {
-                const processedImage = this.createProcessedImage(layer);
-                if (processedImage) {
-                    this.processedImageCache.set(cacheKey, processedImage);
-                    log.debug(`Cached processed image for layer ${layerId} after crop bounds transform`);
-                    // Only now remove from live rendering set and trigger re-render
-                    this.layersTransformingCropBounds.delete(layerId);
-                    this.canvas.render();
-                }
-            }
-            catch (error) {
-                log.error('Failed to create processed image after crop bounds transform:', error);
-                // Fallback: remove from live rendering even if cache creation failed
-                this.layersTransformingCropBounds.delete(layerId);
-            }
-        }, 0); // Use setTimeout to make it asynchronous
+        this.handleTransformEnd(layer, 'crop', 0);
     }
     /**
      * Handle end of scale transformation - create cache asynchronously but keep live rendering until ready
@@ -844,28 +866,7 @@ export class CanvasLayers {
     handleScaleTransformEnd(layer) {
         if (!layer.blendArea)
             return;
-        const layerId = layer.id;
-        const cacheKey = this.getProcessedImageCacheKey(layer);
-        // Add to transforming set to continue live rendering
-        this.layersTransformingScale.add(layerId);
-        // Create processed image asynchronously
-        setTimeout(() => {
-            try {
-                const processedImage = this.createProcessedImage(layer);
-                if (processedImage) {
-                    this.processedImageCache.set(cacheKey, processedImage);
-                    log.debug(`Cached processed image for layer ${layerId} after scale transform`);
-                    // Only now remove from live rendering set and trigger re-render
-                    this.layersTransformingScale.delete(layerId);
-                    this.canvas.render();
-                }
-            }
-            catch (error) {
-                log.error('Failed to create processed image after scale transform:', error);
-                // Fallback: remove from live rendering even if cache creation failed
-                this.layersTransformingScale.delete(layerId);
-            }
-        }, 0); // Use setTimeout to make it asynchronous
+        this.handleTransformEnd(layer, 'scale', 0);
     }
     /**
      * Handle end of wheel/button scaling - use debounced cache creation
@@ -873,26 +874,7 @@ export class CanvasLayers {
     handleWheelScalingEnd(layer) {
         if (!layer.blendArea)
             return;
-        const layerId = layer.id;
-        // Add to wheel scaling set to use cached image during scaling
-        this.layersWheelScaling.add(layerId);
-        log.debug(`Added layer ${layerId} to wheel scaling set for cached rendering`);
-        // Clear any existing wheel scaling timer
-        const existingTimer = this.processedImageDebounceTimers.get(`${layerId}_wheelscaling`);
-        if (existingTimer) {
-            clearTimeout(existingTimer);
-        }
-        // Schedule cache creation ONLY after scaling stops (debounced)
-        const timer = window.setTimeout(() => {
-            log.debug(`Creating new cache for layer ${layerId} after wheel scaling stopped`);
-            // Now create new cache after scaling has stopped
-            this.scheduleProcessedImageCreation(layer, this.getProcessedImageCacheKey(layer));
-            // Remove from wheel scaling set after cache creation is scheduled
-            this.layersWheelScaling.delete(layerId);
-            log.debug(`Removed layer ${layerId} from wheel scaling set after cache creation scheduled`);
-            this.processedImageDebounceTimers.delete(`${layerId}_wheelscaling`);
-        }, 500); // 500ms delay to ensure scaling has stopped
-        this.processedImageDebounceTimers.set(`${layerId}_wheelscaling`, timer);
+        this.handleTransformEnd(layer, 'wheel', 500);
     }
     getDistanceFieldMaskSync(imageOrCanvas, blendArea) {
         // Use a WeakMap for images, and a Map for canvases (since canvases are not always stable references)
