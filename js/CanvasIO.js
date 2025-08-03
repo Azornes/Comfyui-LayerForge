@@ -239,7 +239,9 @@ export class CanvasIO {
         catch (error) {
             log.error(`Failed to send data for node ${nodeId}:`, error);
             throw new Error(`Failed to get confirmation from server for node ${nodeId}. ` +
-                `Make sure that the nodeId: (${nodeId}) matches the "node_id" value in the node options. If they don't match, you may need to manually set the node_id to ${nodeId}.`);
+                `Make sure that the nodeId: (${nodeId}) matches the "node_id" value in the node options. If they don't match, you may need to manually set the node_id to ${nodeId}.` +
+                `If the issue persists, try using a different browser. Some issues have been observed specifically with portable versions of Chrome, ` +
+                `which may have limitations related to memory or WebSocket handling. Consider testing in a standard Chrome installation, Firefox, or another browser.`);
         }
     }
     async addInputToCanvas(inputImage, inputMask) {
