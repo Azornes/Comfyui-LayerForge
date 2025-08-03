@@ -166,10 +166,14 @@ export class BatchPreviewManager {
         this.maskWasVisible = this.canvas.maskTool.isOverlayVisible;
         if (this.maskWasVisible) {
             this.canvas.maskTool.toggleOverlayVisibility();
-            const toggleBtn = document.getElementById(`toggle-mask-btn-${this.canvas.node.id}`);
-            if (toggleBtn) {
-                toggleBtn.classList.remove('primary');
-                const iconContainer = toggleBtn.querySelector('.mask-icon-container') as HTMLElement;
+            const toggleSwitch = document.getElementById(`toggle-mask-switch-${this.canvas.node.id}`);
+            if (toggleSwitch) {
+                const checkbox = toggleSwitch.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+                toggleSwitch.classList.remove('primary');
+                const iconContainer = toggleSwitch.querySelector('.switch-icon') as HTMLElement;
                 if (iconContainer) {
                     iconContainer.style.opacity = '0.5';
                 }
@@ -218,10 +222,14 @@ export class BatchPreviewManager {
 
         if (this.maskWasVisible && !this.canvas.maskTool.isOverlayVisible) {
             this.canvas.maskTool.toggleOverlayVisibility();
-            const toggleBtn = document.getElementById(`toggle-mask-btn-${String(this.canvas.node.id)}`);
-            if (toggleBtn) {
-                toggleBtn.classList.add('primary');
-                const iconContainer = toggleBtn.querySelector('.mask-icon-container') as HTMLElement;
+            const toggleSwitch = document.getElementById(`toggle-mask-switch-${String(this.canvas.node.id)}`);
+            if (toggleSwitch) {
+                const checkbox = toggleSwitch.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+                toggleSwitch.classList.add('primary');
+                const iconContainer = toggleSwitch.querySelector('.switch-icon') as HTMLElement;
                 if (iconContainer) {
                     iconContainer.style.opacity = '1';
                 }
