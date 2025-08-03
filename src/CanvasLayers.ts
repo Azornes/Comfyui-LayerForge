@@ -3,6 +3,7 @@ import {createModuleLogger} from "./utils/LoggerUtils.js";
 import {generateUUID, generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 import {showErrorNotification, showSuccessNotification} from "./utils/NotificationUtils.js";
+import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
 // @ts-ignore
 import {app} from "../../scripts/app.js";
 // @ts-ignore
@@ -57,6 +58,9 @@ export class CanvasLayers {
         this.isAdjustingOpacity = false;
         this.internalClipboard = [];
         this.clipboardPreference = 'system';
+        
+        // Load CSS for blend mode menu
+        addStylesheet(getUrl('./css/blend_mode_menu.css'));
     }
 
     async copySelectedLayers(): Promise<void> {
@@ -916,70 +920,17 @@ export class CanvasLayers {
         const menu = document.createElement('div');
         this.blendMenuElement = menu;
         menu.id = 'blend-mode-menu';
-        menu.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            border-radius: 4px;
-            z-index: 10000;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            min-width: 200px;
-        `;
 
         const titleBar = document.createElement('div');
-        titleBar.style.cssText = `
-            background: #3a3a3a;
-            color: white;
-            padding: 8px 10px;
-            cursor: move;
-            user-select: none;
-            border-radius: 3px 3px 0 0;
-            font-size: 12px;
-            font-weight: bold;
-            border-bottom: 1px solid #4a4a4a;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        `;
+        titleBar.className = 'blend-menu-title-bar';
         
         const titleText = document.createElement('span');
         titleText.textContent = `Blend Mode: ${selectedLayer.name}`;
-        titleText.style.cssText = `
-            flex: 1;
-            cursor: move;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        `;
+        titleText.className = 'blend-menu-title-text';
         
         const closeButton = document.createElement('button');
         closeButton.textContent = '×';
-        closeButton.style.cssText = `
-            background: none;
-            border: none;
-            color: white;
-            font-size: 18px;
-            cursor: pointer;
-            padding: 0;
-            margin: 0;
-            width: 20px;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 3px;
-            transition: background-color 0.2s;
-        `;
-        
-        closeButton.onmouseover = () => {
-            closeButton.style.backgroundColor = '#4a4a4a';
-        };
-        
-        closeButton.onmouseout = () => {
-            closeButton.style.backgroundColor = 'transparent';
-        };
+        closeButton.className = 'blend-menu-close-button';
         
         closeButton.onclick = (e: MouseEvent) => {
             e.stopPropagation();
@@ -990,22 +941,23 @@ export class CanvasLayers {
         titleBar.appendChild(closeButton);
 
         const content = document.createElement('div');
-        content.style.cssText = `padding: 5px;`;
+        content.className = 'blend-menu-content';
 
         menu.appendChild(titleBar);
         menu.appendChild(content);
 
         const blendAreaContainer = document.createElement('div');
-        blendAreaContainer.style.cssText = `padding: 5px 10px; border-bottom: 1px solid #4a4a4a;`;
+        blendAreaContainer.className = 'blend-area-container';
     
         const blendAreaLabel = document.createElement('label');
         blendAreaLabel.textContent = 'Blend Area';
-        blendAreaLabel.style.color = 'white';
+        blendAreaLabel.className = 'blend-area-label';
         
         const blendAreaSlider = document.createElement('input');
         blendAreaSlider.type = 'range';
         blendAreaSlider.min = '0';
         blendAreaSlider.max = '100';
+        blendAreaSlider.className = 'blend-area-slider';
         
         blendAreaSlider.value = selectedLayer?.blendArea?.toString() ?? '0';
         
@@ -1064,23 +1016,22 @@ export class CanvasLayers {
         this.blendModes.forEach((mode: BlendMode) => {
             const container = document.createElement('div');
             container.className = 'blend-mode-container';
-            container.style.cssText = `margin-bottom: 5px;`;
 
             const option = document.createElement('div');
-            option.style.cssText = `padding: 5px 10px; color: white; cursor: pointer; transition: background-color 0.2s;`;
+            option.className = 'blend-mode-option';
             option.textContent = `${mode.label} (${mode.name})`;
 
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = '0';
             slider.max = '100';
+            slider.className = 'blend-opacity-slider';
             const selectedLayer = this.canvas.canvasSelection.selectedLayers[0];
             slider.value = selectedLayer ? String(Math.round(selectedLayer.opacity * 100)) : '100';
-            slider.style.cssText = `width: 100%; margin: 5px 0; display: none;`;
 
             if (selectedLayer && selectedLayer.blendMode === mode.name) {
-                slider.style.display = 'block';
-                option.style.backgroundColor = '#3a3a3a';
+                container.classList.add('active');
+                option.classList.add('active');
             }
 
             option.onclick = () => {
@@ -1090,20 +1041,18 @@ export class CanvasLayers {
                     return;
                 }
                 
-                // Hide only the opacity sliders within other blend mode containers
+                // Remove active class from all containers and options
                 content.querySelectorAll<HTMLDivElement>('.blend-mode-container').forEach(c => {
-                    const opacitySlider = c.querySelector<HTMLInputElement>('input[type="range"]');
-                    if (opacitySlider) {
-                        opacitySlider.style.display = 'none';
-                    }
-                    const optionDiv = c.querySelector<HTMLDivElement>('div');
+                    c.classList.remove('active');
+                    const optionDiv = c.querySelector<HTMLDivElement>('.blend-mode-option');
                     if (optionDiv) {
-                        optionDiv.style.backgroundColor = '';
+                        optionDiv.classList.remove('active');
                     }
                 });
 
-                slider.style.display = 'block';
-                option.style.backgroundColor = '#3a3a3a';
+                // Add active class to current container and option
+                container.classList.add('active');
+                option.classList.add('active');
 
                 currentSelectedLayer.blendMode = mode.name;
                 this.canvas.render();

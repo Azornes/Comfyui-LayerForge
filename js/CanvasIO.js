@@ -238,7 +238,8 @@ export class CanvasIO {
         }
         catch (error) {
             log.error(`Failed to send data for node ${nodeId}:`, error);
-            throw new Error(`Failed to get confirmation from server for node ${nodeId}. The workflow might not have the latest canvas data.`);
+            throw new Error(`Failed to get confirmation from server for node ${nodeId}. ` +
+                `Make sure that the nodeId: (${nodeId}) matches the "node_id" value in the node options. If they don't match, you may need to manually set the node_id to ${nodeId}.`);
         }
     }
     async addInputToCanvas(inputImage, inputMask) {
