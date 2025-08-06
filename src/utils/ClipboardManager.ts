@@ -1,6 +1,7 @@
 import {createModuleLogger} from "./LoggerUtils.js";
 import { showNotification, showInfoNotification } from "./NotificationUtils.js";
 import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
+import { safeClipspacePaste } from "./ClipspaceUtils.js";
 
 // @ts-ignore
 import {api} from "../../../scripts/api.js";
@@ -56,7 +57,13 @@ export class ClipboardManager {
      */
     tryClipspacePaste = withErrorHandling(async (addMode: AddMode): Promise<boolean> => {
         log.info("Attempting to paste from ComfyUI Clipspace");
-        ComfyApp.pasteFromClipspace(this.canvas.node);
+        
+        // Use the unified clipspace validation and paste function
+        const pasteSuccess = safeClipspacePaste(this.canvas.node);
+        if (!pasteSuccess) {
+            log.debug("Safe clipspace paste failed");
+            return false;
+        }
 
         if (this.canvas.node.imgs && this.canvas.node.imgs.length > 0) {
             const clipspaceImage = this.canvas.node.imgs[0];

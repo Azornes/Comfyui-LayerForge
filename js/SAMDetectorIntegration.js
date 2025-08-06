@@ -6,6 +6,7 @@ import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.j
 import { processImageToMask } from "./utils/MaskProcessingUtils.js";
 import { convertToImage } from "./utils/ImageUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
+import { validateAndFixClipspace } from "./utils/ClipspaceUtils.js";
 const log = createModuleLogger('SAMDetectorIntegration');
 /**
  * SAM Detector Integration for LayerForge
@@ -324,6 +325,8 @@ async function handleSAMDetectorResult(node, resultImage) {
         node.samOriginalImgSrc = null;
     }
 }
+// Store original onClipspaceEditorSave function to restore later
+let originalOnClipspaceEditorSave = null;
 // Function to setup SAM Detector hook in menu options
 export function setupSAMDetectorHook(node, options) {
     // Hook into "Open in SAM Detector" with delay since Impact Pack adds it asynchronously
@@ -347,8 +350,39 @@ export function setupSAMDetectorHook(node, options) {
                         // Set the image to the node for clipspace
                         node.imgs = [uploadResult.imageElement];
                         node.clipspaceImg = uploadResult.imageElement;
+                        // Ensure proper clipspace structure for updated ComfyUI
+                        if (!ComfyApp.clipspace) {
+                            ComfyApp.clipspace = {};
+                        }
+                        // Set up clipspace with proper indices
+                        ComfyApp.clipspace.imgs = [uploadResult.imageElement];
+                        ComfyApp.clipspace.selectedIndex = 0;
+                        ComfyApp.clipspace.combinedIndex = 0;
+                        ComfyApp.clipspace.img_paste_mode = 'selected';
                         // Copy to ComfyUI clipspace
                         ComfyApp.copyToClipspace(node);
+                        // Override onClipspaceEditorSave to fix clipspace structure before pasteFromClipspace
+                        if (!originalOnClipspaceEditorSave) {
+                            originalOnClipspaceEditorSave = ComfyApp.onClipspaceEditorSave;
+                            ComfyApp.onClipspaceEditorSave = function () {
+                                log.debug("SAM Detector onClipspaceEditorSave called, using unified clipspace validation");
+                                // Use the unified clipspace validation function
+                                const isValid = validateAndFixClipspace();
+                                if (!isValid) {
+                                    log.error("Clipspace validation failed, cannot proceed with paste");
+                                    return;
+                                }
+                                // Call the original function
+                                if (originalOnClipspaceEditorSave) {
+                                    originalOnClipspaceEditorSave.call(ComfyApp);
+                                }
+                                // Restore the original function after use
+                                if (originalOnClipspaceEditorSave) {
+                                    ComfyApp.onClipspaceEditorSave = originalOnClipspaceEditorSave;
+                                    originalOnClipspaceEditorSave = null;
+                                }
+                            };
+                        }
                         // Start monitoring for SAM Detector results
                         startSAMDetectorMonitoring(node);
                         log.info("Canvas automatically sent to clipspace and monitoring started");
