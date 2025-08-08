@@ -234,7 +234,10 @@ export class CanvasInteractions {
         switch (this.interaction.mode) {
             case 'drawingMask':
                 this.canvas.maskTool.handleMouseMove(coords.world, coords.view);
-                this.canvas.render();
+                // Only render if actually drawing, not just moving cursor
+                if (this.canvas.maskTool.isDrawing) {
+                    this.canvas.render();
+                }
                 break;
             case 'panning':
                 this.panViewport(e);
@@ -256,6 +259,10 @@ export class CanvasInteractions {
                 break;
             default:
                 this.updateCursor(coords.world);
+                // Update brush cursor on overlay if mask tool is active
+                if (this.canvas.maskTool.isActive) {
+                    this.canvas.canvasRenderer.drawMaskBrushCursor(coords.world);
+                }
                 break;
         }
         // --- DYNAMICZNY PODGLĄD LINII CUSTOM SHAPE ---
@@ -350,8 +357,17 @@ export class CanvasInteractions {
             this.performZoomOperation(coords.world, zoomFactor);
         }
         else {
-            // Layer transformation when layers are selected
-            this.handleLayerWheelTransformation(e);
+            // Check if mouse is over any selected layer
+            const isOverSelectedLayer = this.isPointInSelectedLayers(coords.world.x, coords.world.y);
+            if (isOverSelectedLayer) {
+                // Layer transformation when layers are selected and mouse is over selected layer
+                this.handleLayerWheelTransformation(e);
+            }
+            else {
+                // Zoom operation when mouse is not over selected layers
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+                this.performZoomOperation(coords.world, zoomFactor);
+            }
         }
         this.canvas.render();
         if (!this.canvas.maskTool.isActive) {

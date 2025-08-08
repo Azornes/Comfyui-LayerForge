@@ -7,6 +7,8 @@ export class CanvasRenderer {
         this.lastRenderTime = 0;
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
+        // Initialize overlay canvas
+        this.initOverlay();
     }
     /**
      * Helper function to draw text with background at world coordinates
@@ -158,6 +160,9 @@ export class CanvasRenderer {
             this.canvas.canvas.height = this.canvas.offscreenCanvas.height;
         }
         this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
+        // Ensure overlay canvas is in DOM and properly sized
+        this.addOverlayToDOM();
+        this.updateOverlaySize();
         // Update Batch Preview UI positions
         if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
             this.canvas.batchPreviewManagers.forEach((manager) => {
@@ -582,5 +587,126 @@ export class CanvasRenderer {
             backgroundColor: "rgba(255, 100, 100, 0.8)",
             padding: 8
         });
+    }
+    /**
+     * Initialize overlay canvas for lightweight overlays like brush cursor
+     */
+    initOverlay() {
+        // Setup overlay canvas to match main canvas
+        this.updateOverlaySize();
+        // Position overlay canvas on top of main canvas
+        this.canvas.overlayCanvas.style.position = 'absolute';
+        this.canvas.overlayCanvas.style.left = '0px';
+        this.canvas.overlayCanvas.style.top = '0px';
+        this.canvas.overlayCanvas.style.pointerEvents = 'none';
+        this.canvas.overlayCanvas.style.zIndex = '20'; // Above other overlays
+        // Add overlay to DOM when main canvas is added
+        this.addOverlayToDOM();
+        log.debug('Overlay canvas initialized');
+    }
+    /**
+     * Add overlay canvas to DOM if main canvas has a parent
+     */
+    addOverlayToDOM() {
+        if (this.canvas.canvas.parentElement && !this.canvas.overlayCanvas.parentElement) {
+            this.canvas.canvas.parentElement.appendChild(this.canvas.overlayCanvas);
+            log.debug('Overlay canvas added to DOM');
+        }
+    }
+    /**
+     * Update overlay canvas size to match main canvas
+     */
+    updateOverlaySize() {
+        if (this.canvas.overlayCanvas.width !== this.canvas.canvas.clientWidth ||
+            this.canvas.overlayCanvas.height !== this.canvas.canvas.clientHeight) {
+            this.canvas.overlayCanvas.width = Math.max(1, this.canvas.canvas.clientWidth);
+            this.canvas.overlayCanvas.height = Math.max(1, this.canvas.canvas.clientHeight);
+            log.debug(`Overlay canvas resized to ${this.canvas.overlayCanvas.width}x${this.canvas.overlayCanvas.height}`);
+        }
+    }
+    /**
+     * Clear overlay canvas
+     */
+    clearOverlay() {
+        this.canvas.overlayCtx.clearRect(0, 0, this.canvas.overlayCanvas.width, this.canvas.overlayCanvas.height);
+    }
+    /**
+     * Draw mask brush cursor on overlay canvas with visual feedback for size, strength and hardness
+     * @param worldPoint World coordinates of cursor
+     */
+    drawMaskBrushCursor(worldPoint) {
+        if (!this.canvas.maskTool.isActive || !this.canvas.isMouseOver) {
+            this.clearOverlay();
+            return;
+        }
+        // Update overlay size if needed
+        this.updateOverlaySize();
+        // Clear previous cursor
+        this.clearOverlay();
+        // Convert world coordinates to screen coordinates
+        const screenX = (worldPoint.x - this.canvas.viewport.x) * this.canvas.viewport.zoom;
+        const screenY = (worldPoint.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
+        // Get brush properties
+        const brushRadius = (this.canvas.maskTool.brushSize / 2) * this.canvas.viewport.zoom;
+        const brushStrength = this.canvas.maskTool.brushStrength;
+        const brushHardness = this.canvas.maskTool.brushHardness;
+        // Save context state
+        this.canvas.overlayCtx.save();
+        // 1. Draw inner fill to visualize STRENGTH (opacity)
+        // Higher strength = more opaque fill
+        this.canvas.overlayCtx.beginPath();
+        this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
+        this.canvas.overlayCtx.fillStyle = `rgba(255, 255, 255, ${brushStrength * 0.2})`; // Max 20% opacity for visibility
+        this.canvas.overlayCtx.fill();
+        // 2. Draw gradient edge to visualize HARDNESS
+        // Hard brush = sharp edge, Soft brush = gradient edge
+        if (brushHardness < 1) {
+            // Create radial gradient for soft brushes
+            const innerRadius = brushRadius * brushHardness;
+            const gradient = this.canvas.overlayCtx.createRadialGradient(screenX, screenY, innerRadius, screenX, screenY, brushRadius);
+            // Inner part is solid
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${0.3 + brushStrength * 0.3})`);
+            // Outer part fades based on hardness
+            gradient.addColorStop(1, `rgba(255, 255, 255, ${0.05})`);
+            this.canvas.overlayCtx.beginPath();
+            this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
+            this.canvas.overlayCtx.fillStyle = gradient;
+            this.canvas.overlayCtx.fill();
+        }
+        // 3. Draw outer circle (SIZE indicator)
+        this.canvas.overlayCtx.beginPath();
+        this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
+        // Make the stroke opacity also reflect strength slightly
+        const strokeOpacity = 0.4 + brushStrength * 0.4; // Range from 0.4 to 0.8
+        this.canvas.overlayCtx.strokeStyle = `rgba(255, 255, 255, ${strokeOpacity})`;
+        this.canvas.overlayCtx.lineWidth = 1.5;
+        // Use solid line for hard brushes, dashed for soft brushes
+        if (brushHardness > 0.8) {
+            // Hard brush - solid line
+            this.canvas.overlayCtx.setLineDash([]);
+        }
+        else {
+            // Soft brush - dashed line, dash length based on hardness
+            const dashLength = 2 + (1 - brushHardness) * 4; // Longer dashes for softer brushes
+            this.canvas.overlayCtx.setLineDash([dashLength, dashLength]);
+        }
+        this.canvas.overlayCtx.stroke();
+        // 4. Optional: Draw center dot for very precise brushes
+        if (brushRadius < 5) {
+            this.canvas.overlayCtx.beginPath();
+            this.canvas.overlayCtx.arc(screenX, screenY, 1, 0, 2 * Math.PI);
+            this.canvas.overlayCtx.fillStyle = `rgba(255, 255, 255, ${strokeOpacity})`;
+            this.canvas.overlayCtx.fill();
+        }
+        // Restore context state
+        this.canvas.overlayCtx.restore();
+    }
+    /**
+     * Update overlay position when viewport changes
+     */
+    updateOverlayPosition() {
+        // Overlay canvas is positioned absolutely, so it doesn't need repositioning
+        // Just ensure it's the right size
+        this.updateOverlaySize();
     }
 }

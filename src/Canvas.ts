@@ -84,6 +84,8 @@ export class Canvas {
     node: ComfyNode;
     offscreenCanvas: HTMLCanvasElement;
     offscreenCtx: CanvasRenderingContext2D | null;
+    overlayCanvas: HTMLCanvasElement;
+    overlayCtx: CanvasRenderingContext2D;
     onHistoryChange: ((historyInfo: { canUndo: boolean; canRedo: boolean; }) => void) | undefined;
     onViewportChange: (() => void) | null;
     onStateChange: (() => void) | undefined;
@@ -122,6 +124,16 @@ export class Canvas {
         });
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
+        
+        // Create overlay canvas for brush cursor and other lightweight overlays
+        const { canvas: overlayCanvas, ctx: overlayCtx } = createCanvas(0, 0, '2d', {
+            alpha: true,
+            willReadFrequently: false
+        });
+        if (!overlayCtx) throw new Error("Could not create overlay canvas context");
+        this.overlayCanvas = overlayCanvas;
+        this.overlayCtx = overlayCtx;
+        
         this.canvasContainer = null;
 
         this.dataInitialized = false;

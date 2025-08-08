@@ -28,8 +28,8 @@ export class MaskTool {
         this.isOverlayVisible = true;
         this.isActive = false;
         this.brushSize = 20;
-        this.brushStrength = 0.5;
-        this.brushHardness = 0.5;
+        this._brushStrength = 0.5;
+        this._brushHardness = 0.5;
         this.isDrawing = false;
         this.lastPosition = null;
         const { canvas: previewCanvas, ctx: previewCtx } = createCanvas(1, 1, '2d', { willReadFrequently: true });
@@ -79,8 +79,15 @@ export class MaskTool {
             this.canvasInstance.canvas.parentElement.appendChild(this.previewCanvas);
         }
     }
+    // Getters for brush properties
+    get brushStrength() {
+        return this._brushStrength;
+    }
+    get brushHardness() {
+        return this._brushHardness;
+    }
     setBrushHardness(hardness) {
-        this.brushHardness = Math.max(0, Math.min(1, hardness));
+        this._brushHardness = Math.max(0, Math.min(1, hardness));
     }
     initMaskCanvas() {
         // Initialize chunked system
@@ -671,7 +678,7 @@ export class MaskTool {
         this.brushSize = Math.max(1, size);
     }
     setBrushStrength(strength) {
-        this.brushStrength = Math.max(0, Math.min(1, strength));
+        this._brushStrength = Math.max(0, Math.min(1, strength));
     }
     handleMouseDown(worldCoords, viewCoords) {
         if (!this.isActive)
@@ -697,6 +704,8 @@ export class MaskTool {
     handleMouseLeave() {
         this.previewVisible = false;
         this.clearPreview();
+        // Clear overlay canvas when mouse leaves
+        this.canvasInstance.canvasRenderer.clearOverlay();
     }
     handleMouseEnter() {
         this.previewVisible = true;
@@ -767,13 +776,13 @@ export class MaskTool {
         chunk.ctx.moveTo(startLocal.x, startLocal.y);
         chunk.ctx.lineTo(endLocal.x, endLocal.y);
         const gradientRadius = this.brushSize / 2;
-        if (this.brushHardness === 1) {
-            chunk.ctx.strokeStyle = `rgba(255, 255, 255, ${this.brushStrength})`;
+        if (this._brushHardness === 1) {
+            chunk.ctx.strokeStyle = `rgba(255, 255, 255, ${this._brushStrength})`;
         }
         else {
-            const innerRadius = gradientRadius * this.brushHardness;
+            const innerRadius = gradientRadius * this._brushHardness;
             const gradient = chunk.ctx.createRadialGradient(endLocal.x, endLocal.y, innerRadius, endLocal.x, endLocal.y, gradientRadius);
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.brushStrength})`);
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${this._brushStrength})`);
             gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
             chunk.ctx.strokeStyle = gradient;
         }
@@ -903,18 +912,12 @@ export class MaskTool {
     }
     drawBrushPreview(viewCoords) {
         if (!this.previewVisible || this.isDrawing) {
-            this.clearPreview();
+            this.canvasInstance.canvasRenderer.clearOverlay();
             return;
         }
-        this.clearPreview();
-        const zoom = this.canvasInstance.viewport.zoom;
-        const radius = (this.brushSize / 2) * zoom;
-        this.previewCtx.beginPath();
-        this.previewCtx.arc(viewCoords.x, viewCoords.y, radius, 0, 2 * Math.PI);
-        this.previewCtx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-        this.previewCtx.lineWidth = 1;
-        this.previewCtx.setLineDash([2, 4]);
-        this.previewCtx.stroke();
+        // Use overlay canvas instead of preview canvas for brush cursor
+        const worldCoords = this.canvasInstance.lastMousePosition;
+        this.canvasInstance.canvasRenderer.drawMaskBrushCursor(worldCoords);
     }
     clearPreview() {
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
