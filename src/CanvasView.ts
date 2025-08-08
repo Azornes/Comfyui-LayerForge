@@ -641,6 +641,24 @@ $el("label.clipboard-switch.mask-switch", {
                     }
                 }),
                 $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
+                    $el("label", {for: "preview-opacity-slider", textContent: "Mask Opacity:"}),
+                    $el("input", {
+                        id: "preview-opacity-slider",
+                        type: "range",
+                        min: "0",
+                        max: "1",
+                        step: "0.05",
+                        value: "0.5",
+                        oninput: (e: Event) => {
+                            const value = (e.target as HTMLInputElement).value;
+                            canvas.maskTool.setPreviewOpacity(parseFloat(value));
+                            const valueEl = document.getElementById('preview-opacity-value');
+                            if (valueEl) valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
+                        }
+                    }),
+                    $el("div.slider-value", {id: "preview-opacity-value"}, ["50%"])
+                ]),
+                $el("div.painter-slider-container.mask-control", {style: {display: 'none'}}, [
                     $el("label", {for: "brush-size-slider", textContent: "Size:"}),
                     $el("input", {
                         id: "brush-size-slider",

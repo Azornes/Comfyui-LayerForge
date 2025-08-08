@@ -3,11 +3,15 @@ import { createCanvas } from "./utils/CommonUtils.js";
 const log = createModuleLogger('Mask_tool');
 export class MaskTool {
     constructor(canvasInstance, callbacks = {}) {
+        // Track strokes during drawing for efficient overlay updates
+        this.currentStrokePoints = [];
         this.ACTIVE_MASK_UPDATE_DELAY = 16; // ~60fps throttling
         this.SHAPE_PREVIEW_THROTTLE_DELAY = 16; // ~60fps throttling for preview
         this.canvasInstance = canvasInstance;
         this.mainCanvas = canvasInstance.canvas;
         this.onStateChange = callbacks.onStateChange || null;
+        // Initialize stroke tracking for overlay drawing
+        this.currentStrokePoints = [];
         // Initialize chunked mask system
         this.maskChunks = new Map();
         this.chunkSize = 512;
@@ -30,6 +34,7 @@ export class MaskTool {
         this.brushSize = 20;
         this._brushStrength = 0.5;
         this._brushHardness = 0.5;
+        this._previewOpacity = 0.5; // Default 50% opacity for preview
         this.isDrawing = false;
         this.lastPosition = null;
         const { canvas: previewCanvas, ctx: previewCtx } = createCanvas(1, 1, '2d', { willReadFrequently: true });
@@ -86,8 +91,20 @@ export class MaskTool {
     get brushHardness() {
         return this._brushHardness;
     }
+    get previewOpacity() {
+        return this._previewOpacity;
+    }
     setBrushHardness(hardness) {
         this._brushHardness = Math.max(0, Math.min(1, hardness));
+    }
+    setPreviewOpacity(opacity) {
+        this._previewOpacity = Math.max(0, Math.min(1, opacity));
+        // Update the stroke overlay canvas opacity when preview opacity changes
+        if (this.canvasInstance.canvasRenderer && this.canvasInstance.canvasRenderer.strokeOverlayCanvas) {
+            this.canvasInstance.canvasRenderer.strokeOverlayCanvas.style.opacity = String(this._previewOpacity);
+        }
+        // Trigger canvas render to update mask display opacity
+        this.canvasInstance.render();
     }
     initMaskCanvas() {
         // Initialize chunked system
@@ -685,9 +702,10 @@ export class MaskTool {
             return;
         this.isDrawing = true;
         this.lastPosition = worldCoords;
-        // Activate chunks around the drawing position for performance
-        this.updateActiveChunksForDrawing(worldCoords);
-        this.draw(worldCoords);
+        // Initialize stroke tracking for live preview
+        this.currentStrokePoints = [worldCoords];
+        // Clear any previous stroke overlay
+        this.canvasInstance.canvasRenderer.clearMaskStrokeOverlay();
         this.clearPreview();
     }
     handleMouseMove(worldCoords, viewCoords) {
@@ -696,16 +714,69 @@ export class MaskTool {
         }
         if (!this.isActive || !this.isDrawing)
             return;
-        // Dynamically update active chunks as user moves while drawing
-        this.updateActiveChunksForDrawing(worldCoords);
-        this.draw(worldCoords);
+        // Add point to stroke tracking
+        this.currentStrokePoints.push(worldCoords);
+        // Draw interpolated segments for smooth strokes without gaps
+        if (this.lastPosition) {
+            // Calculate distance between last and current position
+            const dx = worldCoords.x - this.lastPosition.x;
+            const dy = worldCoords.y - this.lastPosition.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            // If distance is small, just draw a single segment
+            if (distance < this.brushSize / 4) {
+                this.canvasInstance.canvasRenderer.drawMaskStrokeSegment(this.lastPosition, worldCoords);
+            }
+            else {
+                // Interpolate points for smooth drawing without gaps
+                const interpolatedPoints = this.interpolatePoints(this.lastPosition, worldCoords, distance);
+                // Draw all interpolated segments
+                for (let i = 0; i < interpolatedPoints.length - 1; i++) {
+                    this.canvasInstance.canvasRenderer.drawMaskStrokeSegment(interpolatedPoints[i], interpolatedPoints[i + 1]);
+                }
+            }
+        }
         this.lastPosition = worldCoords;
+    }
+    /**
+     * Interpolates points between two positions to create smooth strokes without gaps
+     * Based on the BrushTool's approach for eliminating dotted lines during fast drawing
+     */
+    interpolatePoints(start, end, distance) {
+        const points = [];
+        // Calculate number of interpolated points based on brush size
+        // More points = smoother line
+        const stepSize = Math.max(1, this.brushSize / 6); // Adjust divisor for smoothness
+        const numSteps = Math.ceil(distance / stepSize);
+        // Always include start point
+        points.push(start);
+        // Interpolate intermediate points
+        for (let i = 1; i < numSteps; i++) {
+            const t = i / numSteps;
+            points.push({
+                x: start.x + (end.x - start.x) * t,
+                y: start.y + (end.y - start.y) * t
+            });
+        }
+        // Always include end point
+        points.push(end);
+        return points;
+    }
+    /**
+     * Called when viewport changes during drawing to update stroke overlay
+     * This ensures the stroke preview scales correctly with zoom changes
+     */
+    handleViewportChange() {
+        if (this.isDrawing && this.currentStrokePoints.length > 1) {
+            // Redraw the entire stroke overlay with new viewport settings
+            this.canvasInstance.canvasRenderer.redrawMaskStrokeOverlay(this.currentStrokePoints);
+        }
     }
     handleMouseLeave() {
         this.previewVisible = false;
         this.clearPreview();
-        // Clear overlay canvas when mouse leaves
+        // Clear overlay canvases when mouse leaves
         this.canvasInstance.canvasRenderer.clearOverlay();
+        this.canvasInstance.canvasRenderer.clearMaskStrokeOverlay();
     }
     handleMouseEnter() {
         this.previewVisible = true;
@@ -715,10 +786,15 @@ export class MaskTool {
             return;
         if (this.isDrawing) {
             this.isDrawing = false;
+            // Commit the stroke from overlay to actual mask chunks
+            this.commitStrokeToChunks();
+            // Clear stroke overlay and reset state
+            this.canvasInstance.canvasRenderer.clearMaskStrokeOverlay();
+            this.currentStrokePoints = [];
             this.lastPosition = null;
             this.currentDrawingChunk = null;
             // After drawing is complete, update active canvas to show all chunks
-            this.updateActiveMaskCanvas(true); // forceShowAll = true
+            this.updateActiveMaskCanvas(true); // Force full update
             this.completeMaskOperation();
             this.drawBrushPreview(viewCoords);
         }
@@ -732,6 +808,38 @@ export class MaskTool {
         // Only update active canvas if we drew on chunks that are currently visible
         // This prevents unnecessary recomposition during drawing
         this.updateActiveCanvasIfNeeded(this.lastPosition, worldCoords);
+    }
+    /**
+     * Commits the current stroke from overlay to actual mask chunks
+     * This replays the entire stroke path with interpolation to ensure pixel-perfect accuracy
+     */
+    commitStrokeToChunks() {
+        if (this.currentStrokePoints.length < 2) {
+            return; // Need at least 2 points for a stroke
+        }
+        log.debug(`Committing stroke with ${this.currentStrokePoints.length} points to chunks`);
+        // Replay the entire stroke path with interpolation for smooth, accurate lines
+        for (let i = 1; i < this.currentStrokePoints.length; i++) {
+            const startPoint = this.currentStrokePoints[i - 1];
+            const endPoint = this.currentStrokePoints[i];
+            // Calculate distance between points
+            const dx = endPoint.x - startPoint.x;
+            const dy = endPoint.y - startPoint.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < this.brushSize / 4) {
+                // Small distance - draw single segment
+                this.drawOnChunks(startPoint, endPoint);
+            }
+            else {
+                // Large distance - interpolate for smooth line without gaps
+                const interpolatedPoints = this.interpolatePoints(startPoint, endPoint, distance);
+                // Draw all interpolated segments
+                for (let j = 0; j < interpolatedPoints.length - 1; j++) {
+                    this.drawOnChunks(interpolatedPoints[j], interpolatedPoints[j + 1]);
+                }
+            }
+        }
+        log.debug("Stroke committed to chunks successfully with interpolation");
     }
     /**
      * Draws a line between two world coordinates on the appropriate chunks
@@ -814,28 +922,17 @@ export class MaskTool {
         return true; // For now, always draw - more precise intersection can be added later
     }
     /**
-     * Updates active canvas when drawing affects chunks with throttling to prevent lag
-     * During drawing, only updates the affected active chunks for performance
+     * Updates active canvas when drawing affects chunks
+     * Since we now use overlay during drawing, this is only called after drawing is complete
      */
     updateActiveCanvasIfNeeded(startWorld, endWorld) {
-        // Calculate which chunks were affected by this drawing operation
-        const minX = Math.min(startWorld.x, endWorld.x) - this.brushSize;
-        const maxX = Math.max(startWorld.x, endWorld.x) + this.brushSize;
-        const minY = Math.min(startWorld.y, endWorld.y) - this.brushSize;
-        const maxY = Math.max(startWorld.y, endWorld.y) + this.brushSize;
-        const affectedChunkMinX = Math.floor(minX / this.chunkSize);
-        const affectedChunkMinY = Math.floor(minY / this.chunkSize);
-        const affectedChunkMaxX = Math.floor(maxX / this.chunkSize);
-        const affectedChunkMaxY = Math.floor(maxY / this.chunkSize);
-        // During drawing, only update affected chunks that are active for performance
-        if (this.isDrawing) {
-            // Use throttled partial update for active chunks only
-            this.scheduleThrottledActiveMaskUpdate(affectedChunkMinX, affectedChunkMinY, affectedChunkMaxX, affectedChunkMaxY);
-        }
-        else {
+        // This method is now simplified - we only update after drawing is complete
+        // The overlay handles all live preview, so we don't need complex chunk activation
+        if (!this.isDrawing) {
             // Not drawing - do full update to show all chunks
             this.updateActiveMaskCanvas(true);
         }
+        // During drawing, we don't update chunks at all - overlay handles preview
     }
     /**
      * Schedules a throttled update of the active mask canvas to prevent excessive redraws

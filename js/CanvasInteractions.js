@@ -68,6 +68,10 @@ export class CanvasInteractions {
         this.canvas.viewport.zoom = newZoom;
         this.canvas.viewport.x = worldCoords.x - (mouseBufferX / this.canvas.viewport.zoom);
         this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
+        // Update stroke overlay if mask tool is drawing during zoom
+        if (this.canvas.maskTool.isDrawing) {
+            this.canvas.maskTool.handleViewportChange();
+        }
         this.canvas.onViewportChange?.();
     }
     renderAndSave(shouldSave = false) {
@@ -161,7 +165,7 @@ export class CanvasInteractions {
         const mods = this.getModifierState(e);
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseDown(coords.world, coords.view);
-            this.canvas.render();
+            // Don't render here - mask tool will handle its own drawing
             return;
         }
         if (this.canvas.shapeTool.isActive) {
@@ -234,10 +238,7 @@ export class CanvasInteractions {
         switch (this.interaction.mode) {
             case 'drawingMask':
                 this.canvas.maskTool.handleMouseMove(coords.world, coords.view);
-                // Only render if actually drawing, not just moving cursor
-                if (this.canvas.maskTool.isDrawing) {
-                    this.canvas.render();
-                }
+                // Don't render during mask drawing - it's handled by mask tool internally
                 break;
             case 'panning':
                 this.panViewport(e);
@@ -274,6 +275,7 @@ export class CanvasInteractions {
         const coords = this.getMouseCoordinates(e);
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseUp(coords.view);
+            // Render only once after drawing is complete
             this.canvas.render();
             return;
         }
@@ -712,6 +714,10 @@ export class CanvasInteractions {
         this.canvas.viewport.x -= dx / this.canvas.viewport.zoom;
         this.canvas.viewport.y -= dy / this.canvas.viewport.zoom;
         this.interaction.panStart = { x: e.clientX, y: e.clientY };
+        // Update stroke overlay if mask tool is drawing during pan
+        if (this.canvas.maskTool.isDrawing) {
+            this.canvas.maskTool.handleViewportChange();
+        }
         this.canvas.render();
         this.canvas.onViewportChange?.();
     }

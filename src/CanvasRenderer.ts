@@ -8,6 +8,9 @@ export class CanvasRenderer {
     lastRenderTime: any;
     renderAnimationFrame: any;
     renderInterval: any;
+    // Overlay used to preview in-progress mask strokes (separate from cursor overlay)
+    strokeOverlayCanvas!: HTMLCanvasElement;
+    strokeOverlayCtx!: CanvasRenderingContext2D;
     constructor(canvas: any) {
         this.canvas = canvas;
         this.renderAnimationFrame = null;
@@ -15,8 +18,9 @@ export class CanvasRenderer {
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
         
-        // Initialize overlay canvas
+        // Initialize overlay canvases
         this.initOverlay();
+        this.initStrokeOverlay();
     }
 
     /**
@@ -144,9 +148,11 @@ export class CanvasRenderer {
             ctx.save();
 
             if (this.canvas.maskTool.isActive) {
+                // In draw mask mode, use the previewOpacity value from the slider
                 ctx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = 0.5;
+                ctx.globalAlpha = this.canvas.maskTool.previewOpacity;
             } else {
+                // When not in draw mask mode, show mask at full opacity
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.globalAlpha = 1.0;
             }
@@ -208,9 +214,11 @@ export class CanvasRenderer {
         }
         this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
 
-        // Ensure overlay canvas is in DOM and properly sized
+        // Ensure overlay canvases are in DOM and properly sized
         this.addOverlayToDOM();
         this.updateOverlaySize();
+        this.addStrokeOverlayToDOM();
+        this.updateStrokeOverlaySize();
 
         // Update Batch Preview UI positions
         if (this.canvas.batchPreviewManagers && this.canvas.batchPreviewManagers.length > 0) {
@@ -770,6 +778,141 @@ export class CanvasRenderer {
     }
 
     /**
+     * Initialize a dedicated overlay for real-time mask stroke preview
+     */
+    initStrokeOverlay(): void {
+        // Create canvas if not created yet
+        if (!this.strokeOverlayCanvas) {
+            this.strokeOverlayCanvas = document.createElement('canvas');
+            const ctx = this.strokeOverlayCanvas.getContext('2d');
+            if (!ctx) {
+                throw new Error('Failed to get 2D context for stroke overlay canvas');
+            }
+            this.strokeOverlayCtx = ctx;
+        }
+
+        // Size match main canvas
+        this.updateStrokeOverlaySize();
+
+        // Position above main canvas but below cursor overlay
+        this.strokeOverlayCanvas.style.position = 'absolute';
+        this.strokeOverlayCanvas.style.left = '1px';
+        this.strokeOverlayCanvas.style.top = '1px';
+        this.strokeOverlayCanvas.style.pointerEvents = 'none';
+        this.strokeOverlayCanvas.style.zIndex = '19'; // Below cursor overlay (20)
+        // Opacity is now controlled by MaskTool.previewOpacity
+        this.strokeOverlayCanvas.style.opacity = String(this.canvas.maskTool.previewOpacity || 0.5);
+
+        // Add to DOM
+        this.addStrokeOverlayToDOM();
+        log.debug('Stroke overlay canvas initialized');
+    }
+
+    /**
+     * Add stroke overlay canvas to DOM if needed
+     */
+    addStrokeOverlayToDOM(): void {
+        if (this.canvas.canvas.parentElement && !this.strokeOverlayCanvas.parentElement) {
+            this.canvas.canvas.parentElement.appendChild(this.strokeOverlayCanvas);
+            log.debug('Stroke overlay canvas added to DOM');
+        }
+    }
+
+    /**
+     * Ensure stroke overlay size matches main canvas
+     */
+    updateStrokeOverlaySize(): void {
+        const w = Math.max(1, this.canvas.canvas.clientWidth);
+        const h = Math.max(1, this.canvas.canvas.clientHeight);
+        if (this.strokeOverlayCanvas.width !== w || this.strokeOverlayCanvas.height !== h) {
+            this.strokeOverlayCanvas.width = w;
+            this.strokeOverlayCanvas.height = h;
+            log.debug(`Stroke overlay resized to ${w}x${h}`);
+        }
+    }
+
+    /**
+     * Clear the stroke overlay
+     */
+    clearMaskStrokeOverlay(): void {
+        if (!this.strokeOverlayCtx) return;
+        this.strokeOverlayCtx.clearRect(0, 0, this.strokeOverlayCanvas.width, this.strokeOverlayCanvas.height);
+    }
+
+    /**
+     * Draw a preview stroke segment onto the stroke overlay in screen space
+     * Uses line drawing with gradient to match MaskTool's drawLineOnChunk exactly
+     */
+    drawMaskStrokeSegment(startWorld: { x: number; y: number }, endWorld: { x: number; y: number }): void {
+        // Ensure overlay is present and sized
+        this.updateStrokeOverlaySize();
+
+        const zoom = this.canvas.viewport.zoom;
+        const toScreen = (p: { x: number; y: number }) => ({
+            x: (p.x - this.canvas.viewport.x) * zoom,
+            y: (p.y - this.canvas.viewport.y) * zoom
+        });
+
+        const startScreen = toScreen(startWorld);
+        const endScreen = toScreen(endWorld);
+
+        const brushRadius = (this.canvas.maskTool.brushSize / 2) * zoom;
+        const hardness = this.canvas.maskTool.brushHardness;
+        const strength = this.canvas.maskTool.brushStrength;
+
+        // If strength is 0, don't draw anything
+        if (strength <= 0) {
+            return;
+        }
+
+        this.strokeOverlayCtx.save();
+        
+        // Draw line segment exactly as MaskTool does
+        this.strokeOverlayCtx.beginPath();
+        this.strokeOverlayCtx.moveTo(startScreen.x, startScreen.y);
+        this.strokeOverlayCtx.lineTo(endScreen.x, endScreen.y);
+        
+        // Match the gradient setup from MaskTool's drawLineOnChunk
+        if (hardness === 1) {
+            this.strokeOverlayCtx.strokeStyle = `rgba(255, 255, 255, ${strength})`;
+        } else {
+            const innerRadius = brushRadius * hardness;
+            const gradient = this.strokeOverlayCtx.createRadialGradient(
+                endScreen.x, endScreen.y, innerRadius,
+                endScreen.x, endScreen.y, brushRadius
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${strength})`);
+            gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+            this.strokeOverlayCtx.strokeStyle = gradient;
+        }
+        
+        // Match line properties from MaskTool
+        this.strokeOverlayCtx.lineWidth = this.canvas.maskTool.brushSize * zoom;
+        this.strokeOverlayCtx.lineCap = 'round';
+        this.strokeOverlayCtx.lineJoin = 'round';
+        this.strokeOverlayCtx.globalCompositeOperation = 'source-over';
+        this.strokeOverlayCtx.stroke();
+        
+        this.strokeOverlayCtx.restore();
+    }
+
+    /**
+     * Redraws the entire stroke overlay from world coordinates
+     * Used when viewport changes during drawing to maintain visual consistency
+     */
+    redrawMaskStrokeOverlay(strokePoints: { x: number; y: number }[]): void {
+        if (strokePoints.length < 2) return;
+
+        // Clear the overlay first
+        this.clearMaskStrokeOverlay();
+
+        // Redraw all segments with current viewport
+        for (let i = 1; i < strokePoints.length; i++) {
+            this.drawMaskStrokeSegment(strokePoints[i - 1], strokePoints[i]);
+        }
+    }
+
+    /**
      * Draw mask brush cursor on overlay canvas with visual feedback for size, strength and hardness
      * @param worldPoint World coordinates of cursor
      */
@@ -797,27 +940,29 @@ export class CanvasRenderer {
         // Save context state
         this.canvas.overlayCtx.save();
         
-        // 1. Draw inner fill to visualize STRENGTH (opacity)
-        // Higher strength = more opaque fill
-        this.canvas.overlayCtx.beginPath();
-        this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
-        this.canvas.overlayCtx.fillStyle = `rgba(255, 255, 255, ${brushStrength * 0.2})`; // Max 20% opacity for visibility
-        this.canvas.overlayCtx.fill();
-        
-        // 2. Draw gradient edge to visualize HARDNESS
-        // Hard brush = sharp edge, Soft brush = gradient edge
-        if (brushHardness < 1) {
-            // Create radial gradient for soft brushes
-            const innerRadius = brushRadius * brushHardness;
+        // If strength is 0, just draw outline
+        if (brushStrength > 0) {
+            // Draw inner fill to visualize brush effect - matches actual brush rendering
             const gradient = this.canvas.overlayCtx.createRadialGradient(
-                screenX, screenY, innerRadius,
+                screenX, screenY, 0,
                 screenX, screenY, brushRadius
             );
             
-            // Inner part is solid
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${0.3 + brushStrength * 0.3})`);
-            // Outer part fades based on hardness
-            gradient.addColorStop(1, `rgba(255, 255, 255, ${0.05})`);
+            // Preview alpha - subtle to not obscure content
+            const previewAlpha = brushStrength * 0.15; // Very subtle preview (max 15% opacity)
+            
+            if (brushHardness === 1) {
+                // Hard brush - uniform fill within radius
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${previewAlpha})`);
+                gradient.addColorStop(1, `rgba(255, 255, 255, ${previewAlpha})`);
+            } else {
+                // Soft brush - gradient fade matching actual brush
+                gradient.addColorStop(0, `rgba(255, 255, 255, ${previewAlpha})`);
+                if (brushHardness > 0) {
+                    gradient.addColorStop(brushHardness, `rgba(255, 255, 255, ${previewAlpha})`);
+                }
+                gradient.addColorStop(1, `rgba(255, 255, 255, 0)`);
+            }
             
             this.canvas.overlayCtx.beginPath();
             this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
@@ -825,28 +970,28 @@ export class CanvasRenderer {
             this.canvas.overlayCtx.fill();
         }
         
-        // 3. Draw outer circle (SIZE indicator)
+        // Draw outer circle (SIZE indicator)
         this.canvas.overlayCtx.beginPath();
         this.canvas.overlayCtx.arc(screenX, screenY, brushRadius, 0, 2 * Math.PI);
         
-        // Make the stroke opacity also reflect strength slightly
-        const strokeOpacity = 0.4 + brushStrength * 0.4; // Range from 0.4 to 0.8
+        // Stroke opacity based on strength (dimmer when strength is 0)
+        const strokeOpacity = brushStrength > 0 ? (0.4 + brushStrength * 0.4) : 0.3;
         this.canvas.overlayCtx.strokeStyle = `rgba(255, 255, 255, ${strokeOpacity})`;
         this.canvas.overlayCtx.lineWidth = 1.5;
         
-        // Use solid line for hard brushes, dashed for soft brushes
+        // Visual feedback for hardness
         if (brushHardness > 0.8) {
             // Hard brush - solid line
             this.canvas.overlayCtx.setLineDash([]);
         } else {
-            // Soft brush - dashed line, dash length based on hardness
-            const dashLength = 2 + (1 - brushHardness) * 4; // Longer dashes for softer brushes
+            // Soft brush - dashed line
+            const dashLength = 2 + (1 - brushHardness) * 4;
             this.canvas.overlayCtx.setLineDash([dashLength, dashLength]);
         }
         
         this.canvas.overlayCtx.stroke();
         
-        // 4. Optional: Draw center dot for very precise brushes
+        // Center dot for small brushes
         if (brushRadius < 5) {
             this.canvas.overlayCtx.beginPath();
             this.canvas.overlayCtx.arc(screenX, screenY, 1, 0, 2 * Math.PI);
