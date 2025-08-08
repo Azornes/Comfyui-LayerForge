@@ -282,36 +282,61 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
                 log.debug("Attempting to reload SAM result image");
                 const originalSrc = resultImage.src;
                 
-                // Add cache-busting parameter to force fresh load
-                const url = new URL(originalSrc);
-                url.searchParams.set('_t', Date.now().toString());
-                
-                await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.onload = () => {
-                        // Copy the loaded image data to the original image
-                        resultImage.src = img.src;
-                        resultImage.width = img.width;
-                        resultImage.height = img.height;
-                        log.debug("SAM result image reloaded successfully", {
-                            width: img.width,
-                            height: img.height,
-                            originalSrc: originalSrc,
-                            newSrc: img.src
+                // Check if it's a data URL (base64) - don't add parameters to data URLs
+                if (originalSrc.startsWith('data:')) {
+                    log.debug("Image is a data URL, skipping reload with parameters");
+                    // For data URLs, just ensure the image is loaded
+                    if (!resultImage.complete || resultImage.naturalWidth === 0) {
+                        await new Promise((resolve, reject) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                resultImage.width = img.width;
+                                resultImage.height = img.height;
+                                log.debug("Data URL image loaded successfully", {
+                                    width: img.width,
+                                    height: img.height
+                                });
+                                resolve(img);
+                            };
+                            img.onerror = (error) => {
+                                log.error("Failed to load data URL image", error);
+                                reject(error);
+                            };
+                            img.src = originalSrc; // Use original src without modifications
                         });
-                        resolve(img);
-                    };
-                    img.onerror = (error) => {
-                        log.error("Failed to reload SAM result image", {
-                            originalSrc: originalSrc,
-                            newSrc: url.toString(),
-                            error: error
-                        });
-                        reject(error);
-                    };
-                    img.src = url.toString();
-                });
+                    }
+                } else {
+                    // For regular URLs, add cache-busting parameter
+                    const url = new URL(originalSrc);
+                    url.searchParams.set('_t', Date.now().toString());
+                    
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = "anonymous";
+                        img.onload = () => {
+                            // Copy the loaded image data to the original image
+                            resultImage.src = img.src;
+                            resultImage.width = img.width;
+                            resultImage.height = img.height;
+                            log.debug("SAM result image reloaded successfully", {
+                                width: img.width,
+                                height: img.height,
+                                originalSrc: originalSrc,
+                                newSrc: img.src
+                            });
+                            resolve(img);
+                        };
+                        img.onerror = (error) => {
+                            log.error("Failed to reload SAM result image", {
+                                originalSrc: originalSrc,
+                                newSrc: url.toString(),
+                                error: error
+                            });
+                            reject(error);
+                        };
+                        img.src = url.toString();
+                    });
+                }
             }
         } catch (error) {
             log.error("Failed to load image from SAM Detector.", error);
@@ -333,32 +358,43 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
         // Apply mask to LayerForge canvas using MaskTool.setMask method
         log.debug("Checking canvas and maskTool availability", {
             hasCanvas: !!canvas,
+            hasCanvasProperty: !!canvas.canvas,
+            canvasCanvasKeys: canvas.canvas ? Object.keys(canvas.canvas) : [],
             hasMaskTool: !!canvas.maskTool,
+            hasCanvasMaskTool: !!(canvas.canvas && canvas.canvas.maskTool),
             maskToolType: typeof canvas.maskTool,
+            canvasMaskToolType: canvas.canvas ? typeof canvas.canvas.maskTool : 'undefined',
             canvasKeys: Object.keys(canvas)
         });
 
-        if (!canvas.maskTool) {
+        // Get the actual Canvas object and its maskTool
+        const actualCanvas = canvas.canvas || canvas;
+        const maskTool = actualCanvas.maskTool;
+
+        if (!maskTool) {
             log.error("MaskTool is not available. Canvas state:", {
                 hasCanvas: !!canvas,
+                hasActualCanvas: !!actualCanvas,
                 canvasConstructor: canvas.constructor.name,
+                actualCanvasConstructor: actualCanvas ? actualCanvas.constructor.name : 'undefined',
                 canvasKeys: Object.keys(canvas),
-                maskToolValue: canvas.maskTool
+                actualCanvasKeys: actualCanvas ? Object.keys(actualCanvas) : [],
+                maskToolValue: maskTool
             });
             throw new Error("Mask tool not available or not initialized");
         }
 
-        log.debug("Applying SAM mask to canvas using addMask method");
+        log.debug("Applying SAM mask to canvas using setMask method");
 
-        // Use the addMask method which overlays on existing mask without clearing it
-        canvas.maskTool.addMask(maskAsImage);
+        // Use the setMask method which clears existing mask and sets new one
+        maskTool.setMask(maskAsImage);
 
         // Update canvas and save state (same as MaskEditorIntegration)
-        canvas.render();
-        canvas.saveState();
+        actualCanvas.render();
+        actualCanvas.saveState();
 
         // Update node preview using PreviewUtils
-        await updateNodePreview(canvas, node, true);
+        await updateNodePreview(actualCanvas, node, true);
 
         log.info("SAM Detector mask applied successfully to LayerForge canvas");
 
@@ -399,13 +435,21 @@ export function setupSAMDetectorHook(node: ComfyNode, options: any[]) {
                     log.info("Intercepted 'Open in SAM Detector' - automatically sending to clipspace and starting monitoring");
                     
                     // Automatically send canvas to clipspace and start monitoring
-                    if ((node as any).canvasWidget && (node as any).canvasWidget.canvas) {
-                        const canvas = (node as any).canvasWidget; // canvasWidget IS the Canvas object
+                    if ((node as any).canvasWidget) {
+                        const canvasWidget = (node as any).canvasWidget;
+                        const canvas = canvasWidget.canvas || canvasWidget; // Get actual Canvas object
                         
-                        // Use ImageUploadUtils to upload canvas
+                        // Use ImageUploadUtils to upload canvas and get server URL (Impact Pack compatibility)
                         const uploadResult = await uploadCanvasAsImage(canvas, {
                             filenamePrefix: 'layerforge-sam',
                             nodeId: node.id
+                        });
+
+                        log.debug("Uploaded canvas for SAM Detector", {
+                            filename: uploadResult.filename,
+                            imageUrl: uploadResult.imageUrl,
+                            width: uploadResult.imageElement.width,
+                            height: uploadResult.imageElement.height
                         });
 
                         // Set the image to the node for clipspace

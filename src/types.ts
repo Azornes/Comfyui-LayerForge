@@ -1,6 +1,14 @@
 import type { Canvas as CanvasClass } from './Canvas';
 import type { CanvasLayers } from './CanvasLayers';
 
+export interface ComfyWidget {
+    name: string;
+    type: string;
+    value: any;
+    callback?: (value: any) => void;
+    options?: any;
+}
+
 export interface Layer {
     id: string;
     image: HTMLImageElement;
@@ -32,15 +40,16 @@ export interface Layer {
 
 export interface ComfyNode {
     id: number;
+    type: string;
+    widgets: ComfyWidget[];
     imgs?: HTMLImageElement[];
-    widgets: any[];
-    size: [number, number];
-    graph: any;
-    canvasWidget?: any;
+    size?: [number, number];
     onResize?: () => void;
-    addDOMWidget: (name: string, type: string, element: HTMLElement, options?: any) => any;
-    addWidget: (type: string, name: string, value: any, callback?: (value: any) => void, options?: any) => any;
-    setDirtyCanvas: (force: boolean, dirty: boolean) => void;
+    setDirtyCanvas?: (dirty: boolean, propagate: boolean) => void;
+    graph?: any;
+    onRemoved?: () => void;
+    addDOMWidget?: (name: string, type: string, element: HTMLElement) => void;
+    inputs?: Array<{ link: any }>;
 }
 
 declare global {
@@ -79,8 +88,13 @@ export interface Canvas {
     imageCache: any;
     dataInitialized: boolean;
     pendingDataCheck: number | null;
+    pendingInputDataCheck: number | null;
     pendingBatchContext: any;
     canvasLayers: any;
+    inputDataLoaded: boolean;
+    lastLoadedLinkId: any;
+    lastLoadedMaskLinkId: any;
+    outputAreaBounds: OutputAreaBounds;
     saveState: () => void;
     render: () => void;
     updateSelection: (layers: Layer[]) => void;

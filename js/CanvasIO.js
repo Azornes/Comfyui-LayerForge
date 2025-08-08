@@ -314,12 +314,26 @@ export class CanvasIO {
     async initNodeData() {
         try {
             log.info("Starting node data initialization...");
+            // First check for input data from the backend (new feature)
+            await this.checkForInputData();
+            // If we've already loaded input data, don't continue with old initialization
+            if (this.canvas.inputDataLoaded) {
+                log.debug("Input data already loaded, skipping old initialization");
+                this.canvas.dataInitialized = true;
+                return;
+            }
             if (!this.canvas.node || !this.canvas.node.inputs) {
                 log.debug("Node or inputs not ready");
                 return this.scheduleDataCheck();
             }
             if (this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
                 const imageLinkId = this.canvas.node.inputs[0].link;
+                // Check if we already loaded this link
+                if (this.canvas.lastLoadedLinkId === imageLinkId) {
+                    log.debug(`Link ${imageLinkId} already loaded via new system, marking as initialized`);
+                    this.canvas.dataInitialized = true;
+                    return;
+                }
                 const imageData = window.app.nodeOutputs[imageLinkId];
                 if (imageData) {
                     log.debug("Found image data:", imageData);
@@ -330,6 +344,10 @@ export class CanvasIO {
                     log.debug("Image data not available yet");
                     return this.scheduleDataCheck();
                 }
+            }
+            else {
+                // No input connected, mark as initialized to stop repeated checks
+                this.canvas.dataInitialized = true;
             }
             if (this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
                 const maskLinkId = this.canvas.node.inputs[1].link;
@@ -344,6 +362,321 @@ export class CanvasIO {
             log.error("Error in initNodeData:", error);
             return this.scheduleDataCheck();
         }
+    }
+    async checkForInputData() {
+        try {
+            const nodeId = this.canvas.node.id;
+            log.info(`Checking for input data for node ${nodeId}...`);
+            // Track loaded links separately for image and mask
+            let imageLoaded = false;
+            let maskLoaded = false;
+            // First, try to get data from connected node's output if available
+            if (this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
+                const linkId = this.canvas.node.inputs[0].link;
+                const graph = this.canvas.node.graph;
+                // Check if we already loaded this link
+                if (this.canvas.lastLoadedLinkId === linkId) {
+                    log.debug(`Image link ${linkId} already loaded`);
+                    imageLoaded = true;
+                }
+                else {
+                    if (graph) {
+                        const link = graph.links[linkId];
+                        if (link) {
+                            const sourceNode = graph.getNodeById(link.origin_id);
+                            if (sourceNode && sourceNode.imgs && sourceNode.imgs.length > 0) {
+                                // The connected node has images in its output
+                                log.info("Found image in connected node's output, loading directly");
+                                const img = sourceNode.imgs[0];
+                                // Mark this link as loaded
+                                this.canvas.lastLoadedLinkId = linkId;
+                                // DON'T clear existing layers - just add a new one
+                                // Determine add mode
+                                const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
+                                const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
+                                // Add the image to canvas as a new layer
+                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode, this.canvas.outputAreaBounds);
+                                this.canvas.inputDataLoaded = true;
+                                imageLoaded = true;
+                                log.info("Input image added as new layer from connected node");
+                                this.canvas.render();
+                                this.canvas.saveState();
+                            }
+                        }
+                    }
+                }
+            }
+            // Check for mask input separately
+            if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+                const maskLinkId = this.canvas.node.inputs[1].link;
+                // Check if we already loaded this mask link
+                if (this.canvas.lastLoadedMaskLinkId === maskLinkId) {
+                    log.debug(`Mask link ${maskLinkId} already loaded`);
+                    maskLoaded = true;
+                }
+                else {
+                    // Try to get mask tensor from nodeOutputs using origin_id (not link id)
+                    const graph = this.canvas.node.graph;
+                    let maskOutput = null;
+                    if (graph) {
+                        const link = graph.links[maskLinkId];
+                        if (link && link.origin_id) {
+                            // Use origin_id to get the actual node output
+                            const nodeOutput = window.app?.nodeOutputs?.[link.origin_id];
+                            log.debug(`Looking for mask output from origin node ${link.origin_id}, found:`, !!nodeOutput);
+                            if (nodeOutput) {
+                                log.debug(`Node ${link.origin_id} output structure:`, {
+                                    hasData: !!nodeOutput.data,
+                                    hasShape: !!nodeOutput.shape,
+                                    dataType: typeof nodeOutput.data,
+                                    shapeType: typeof nodeOutput.shape,
+                                    keys: Object.keys(nodeOutput)
+                                });
+                                // Only use if it has actual tensor data
+                                if (nodeOutput.data && nodeOutput.shape) {
+                                    maskOutput = nodeOutput;
+                                }
+                            }
+                        }
+                    }
+                    if (maskOutput && maskOutput.data && maskOutput.shape) {
+                        try {
+                            // Derive dimensions from shape or explicit width/height
+                            let width = maskOutput.width || 0;
+                            let height = maskOutput.height || 0;
+                            const shape = maskOutput.shape; // e.g. [1,H,W] or [1,H,W,1]
+                            if ((!width || !height) && Array.isArray(shape)) {
+                                if (shape.length >= 3) {
+                                    height = shape[1];
+                                    width = shape[2];
+                                }
+                                else if (shape.length === 2) {
+                                    height = shape[0];
+                                    width = shape[1];
+                                }
+                            }
+                            if (!width || !height) {
+                                throw new Error("Cannot determine mask dimensions from nodeOutputs");
+                            }
+                            // Determine channels count
+                            let channels = 1;
+                            if (Array.isArray(shape) && shape.length >= 4) {
+                                channels = shape[3];
+                            }
+                            else if (maskOutput.channels) {
+                                channels = maskOutput.channels;
+                            }
+                            else {
+                                const len = maskOutput.data.length;
+                                channels = Math.max(1, Math.floor(len / (width * height)));
+                            }
+                            // Create GRAYSCALE image from tensor; RGB = luminance, A = 255 (MaskTool.setMask reads luminance)
+                            const { canvas: maskCanvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
+                            if (!ctx)
+                                throw new Error("Could not create mask context");
+                            const imgData = ctx.createImageData(width, height);
+                            const arr = maskOutput.data;
+                            const min = (maskOutput.min_val !== undefined) ? maskOutput.min_val : 0;
+                            const max = (maskOutput.max_val !== undefined) ? maskOutput.max_val : 1;
+                            const denom = (max - min) || 1;
+                            const pixelCount = width * height;
+                            for (let i = 0; i < pixelCount; i++) {
+                                const baseIndex = i * channels;
+                                let v;
+                                if (channels === 1) {
+                                    v = arr[i];
+                                }
+                                else if (channels >= 3) {
+                                    // If image-like, compute luminance from RGB channels
+                                    const r = arr[baseIndex + 0] ?? 0;
+                                    const g = arr[baseIndex + 1] ?? 0;
+                                    const b = arr[baseIndex + 2] ?? 0;
+                                    v = 0.299 * r + 0.587 * g + 0.114 * b;
+                                }
+                                else {
+                                    v = arr[baseIndex] ?? 0;
+                                }
+                                let norm = (v - min) / denom;
+                                if (!isFinite(norm))
+                                    norm = 0;
+                                norm = Math.max(0, Math.min(1, norm));
+                                const lum = Math.round(norm * 255);
+                                const o = i * 4;
+                                imgData.data[o] = lum; // R
+                                imgData.data[o + 1] = lum; // G
+                                imgData.data[o + 2] = lum; // B
+                                imgData.data[o + 3] = 255; // A fixed (MaskTool computes alpha from luminance)
+                            }
+                            ctx.putImageData(imgData, 0, 0);
+                            // Convert to HTMLImageElement
+                            const maskImg = await new Promise((resolve, reject) => {
+                                const img = new Image();
+                                img.onload = () => resolve(img);
+                                img.onerror = reject;
+                                img.src = maskCanvas.toDataURL();
+                            });
+                            // Respect fit_on_add (scale to output area)
+                            const widgets = this.canvas.node.widgets;
+                            const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
+                            const shouldFit = fitOnAddWidget && fitOnAddWidget.value;
+                            let finalMaskImg = maskImg;
+                            if (shouldFit) {
+                                const bounds = this.canvas.outputAreaBounds;
+                                const scale = Math.min(bounds.width / maskImg.width, bounds.height / maskImg.height);
+                                const scaledWidth = Math.max(1, Math.round(maskImg.width * scale));
+                                const scaledHeight = Math.max(1, Math.round(maskImg.height * scale));
+                                const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
+                                if (!scaledCtx)
+                                    throw new Error("Could not create scaled mask context");
+                                scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
+                                finalMaskImg = await new Promise((resolve, reject) => {
+                                    const img = new Image();
+                                    img.onload = () => resolve(img);
+                                    img.onerror = reject;
+                                    img.src = scaledCanvas.toDataURL();
+                                });
+                            }
+                            // Apply to MaskTool (centers internally)
+                            if (this.canvas.maskTool) {
+                                this.canvas.maskTool.setMask(finalMaskImg, true);
+                                this.canvas.canvasState.saveMaskState();
+                                this.canvas.render();
+                                // Mark this mask link as loaded to avoid re-applying
+                                this.canvas.lastLoadedMaskLinkId = maskLinkId;
+                                maskLoaded = true;
+                                log.info("Applied input mask from nodeOutputs immediately on connection" + (shouldFit ? " (fitted to output area)" : ""));
+                            }
+                        }
+                        catch (err) {
+                            log.warn("Failed to apply mask from nodeOutputs immediately; will wait for backend input_mask after execution", err);
+                        }
+                    }
+                    else {
+                        // nodeOutputs exist but don't have tensor data yet (need workflow execution)
+                        log.info(`Mask node ${graph.links[maskLinkId]?.origin_id} found but has no tensor data yet. Mask will be applied automatically after workflow execution.`);
+                        // Don't retry - data won't be available until workflow runs
+                    }
+                }
+            }
+            // If both are already loaded from connected nodes, we're done
+            const nodeInputs = this.canvas.node.inputs;
+            if (imageLoaded && (!nodeInputs || !nodeInputs[1] || maskLoaded)) {
+                return;
+            }
+            // If no data from connected node, check backend
+            const response = await fetch(`/layerforge/get_input_data/${nodeId}`);
+            const result = await response.json();
+            if (result.success && result.has_input) {
+                // Check if we already loaded image data (by checking the current link)
+                if (!imageLoaded && this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
+                    const currentLinkId = this.canvas.node.inputs[0].link;
+                    if (this.canvas.lastLoadedLinkId !== currentLinkId) {
+                        // Mark this link as loaded
+                        this.canvas.lastLoadedLinkId = currentLinkId;
+                        imageLoaded = false; // Will load from backend
+                    }
+                }
+                // Check if we already loaded mask data
+                if (!maskLoaded && this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+                    const currentMaskLinkId = this.canvas.node.inputs[1].link;
+                    if (this.canvas.lastLoadedMaskLinkId !== currentMaskLinkId) {
+                        // Mark this mask link as loaded
+                        this.canvas.lastLoadedMaskLinkId = currentMaskLinkId;
+                        maskLoaded = false; // Will load from backend
+                    }
+                }
+                log.info("Input data found from backend, adding to canvas");
+                const inputData = result.data;
+                // DON'T clear existing layers - just add new ones
+                // Mark that we've loaded input data to avoid reloading
+                this.canvas.inputDataLoaded = true;
+                // Determine add mode based on fit_on_add setting
+                const widgets = this.canvas.node.widgets;
+                const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
+                const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
+                // Load input image if provided and not already loaded
+                if (!imageLoaded && inputData.input_image) {
+                    const img = new Image();
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = inputData.input_image;
+                    });
+                    // Add image to canvas at output area position
+                    const layer = await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode, this.canvas.outputAreaBounds // Place at output area
+                    );
+                    // Don't apply mask to the layer anymore - we'll handle it separately
+                    log.info("Input image added as new layer to canvas");
+                    this.canvas.render();
+                    this.canvas.saveState();
+                }
+                else {
+                    log.debug("No input image in data");
+                }
+                // Handle mask separately (not tied to layer) if not already loaded
+                if (!maskLoaded && inputData.input_mask) {
+                    log.info("Processing input mask");
+                    // Load mask image
+                    const maskImg = new Image();
+                    await new Promise((resolve, reject) => {
+                        maskImg.onload = resolve;
+                        maskImg.onerror = reject;
+                        maskImg.src = inputData.input_mask;
+                    });
+                    // Determine if we should fit the mask or use it at original size
+                    const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
+                    const shouldFit = fitOnAddWidget && fitOnAddWidget.value;
+                    if (shouldFit && this.canvas.maskTool) {
+                        // Scale mask to fit output area if fit_on_add is enabled
+                        const bounds = this.canvas.outputAreaBounds;
+                        const scale = Math.min(bounds.width / maskImg.width, bounds.height / maskImg.height);
+                        // Create scaled mask canvas
+                        const scaledWidth = Math.round(maskImg.width * scale);
+                        const scaledHeight = Math.round(maskImg.height * scale);
+                        const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
+                        if (!scaledCtx)
+                            throw new Error("Could not create scaled mask context");
+                        // Draw scaled mask
+                        scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
+                        // Convert scaled canvas to image
+                        const scaledMaskImg = new Image();
+                        await new Promise((resolve, reject) => {
+                            scaledMaskImg.onload = resolve;
+                            scaledMaskImg.onerror = reject;
+                            scaledMaskImg.src = scaledCanvas.toDataURL();
+                        });
+                        // Apply scaled mask to mask tool
+                        this.canvas.maskTool.setMask(scaledMaskImg, true);
+                    }
+                    else if (this.canvas.maskTool) {
+                        // Apply mask at original size
+                        this.canvas.maskTool.setMask(maskImg, true);
+                    }
+                    // Save the mask state
+                    this.canvas.canvasState.saveMaskState();
+                    log.info("Applied input mask to mask tool" + (shouldFit ? " (fitted to output area)" : " (original size)"));
+                }
+            }
+            else {
+                log.debug("No input data from backend");
+                // Don't schedule another check - we'll only check when explicitly triggered
+            }
+        }
+        catch (error) {
+            log.error("Error checking for input data:", error);
+            // Don't schedule another check on error
+        }
+    }
+    scheduleInputDataCheck() {
+        // Schedule a retry for mask data check when nodeOutputs are not ready yet
+        if (this.canvas.pendingInputDataCheck) {
+            clearTimeout(this.canvas.pendingInputDataCheck);
+        }
+        this.canvas.pendingInputDataCheck = window.setTimeout(() => {
+            this.canvas.pendingInputDataCheck = null;
+            log.debug("Retrying input data check for mask...");
+            this.checkForInputData();
+        }, 500); // Shorter delay for mask data retry
     }
     scheduleDataCheck() {
         if (this.canvas.pendingDataCheck) {

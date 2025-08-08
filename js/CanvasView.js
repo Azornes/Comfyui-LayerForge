@@ -911,7 +911,9 @@ async function createCanvasWidget(node, widget, app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer, layersPanelContainer]);
-    node.addDOMWidget("mainContainer", "widget", mainContainer);
+    if (node.addDOMWidget) {
+        node.addDOMWidget("mainContainer", "widget", mainContainer);
+    }
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
     let backdrop = null;
     let originalParent = null;
@@ -1000,7 +1002,11 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.canvasExecutionStates) {
         window.canvasExecutionStates = new Map();
     }
-    node.canvasWidget = canvas;
+    // Store the entire widget object, not just the canvas
+    node.canvasWidget = {
+        canvas: canvas,
+        panel: controlPanel
+    };
     setTimeout(() => {
         canvas.loadInitialState();
         if (canvas.canvasLayersPanel) {
@@ -1017,7 +1023,7 @@ async function createCanvasWidget(node, widget, app) {
             if (canvas && canvas.setPreviewVisibility) {
                 canvas.setPreviewVisibility(value);
             }
-            if (node.graph && node.graph.canvas) {
+            if (node.graph && node.graph.canvas && node.setDirtyCanvas) {
                 node.setDirtyCanvas(true, true);
             }
         };
@@ -1096,9 +1102,117 @@ app.registerExtension({
                 const canvasWidget = await createCanvasWidget(this, null, app);
                 canvasNodeInstances.set(this.id, canvasWidget);
                 log.info(`Registered CanvasNode instance for ID: ${this.id}`);
+                // Store the canvas widget on the node
+                this.canvasWidget = canvasWidget;
+                // Check if there are already connected inputs
                 setTimeout(() => {
-                    this.setDirtyCanvas(true, true);
-                }, 100);
+                    if (this.inputs && this.inputs.length > 0) {
+                        // Check if input_image (index 0) is connected
+                        if (this.inputs[0] && this.inputs[0].link) {
+                            log.info("Input image already connected on node creation, checking for data...");
+                            if (canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
+                                canvasWidget.canvas.inputDataLoaded = false;
+                                canvasWidget.canvas.canvasIO.checkForInputData();
+                            }
+                        }
+                    }
+                    if (this.setDirtyCanvas) {
+                        this.setDirtyCanvas(true, true);
+                    }
+                }, 500);
+            };
+            // Add onConnectionsChange handler to detect when inputs are connected
+            nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
+                log.info(`onConnectionsChange called: type=${type}, index=${index}, connected=${connected}`, link_info);
+                // Check if this is an input connection (type 1 = INPUT)
+                if (type === 1) {
+                    // Get the canvas widget - it might be in different places
+                    const canvasWidget = this.canvasWidget;
+                    const canvas = canvasWidget?.canvas || canvasWidget;
+                    if (!canvas || !canvas.canvasIO) {
+                        log.warn("Canvas not ready in onConnectionsChange, scheduling retry...");
+                        // Retry multiple times with increasing delays
+                        const retryDelays = [500, 1000, 2000];
+                        let retryCount = 0;
+                        const tryAgain = () => {
+                            const retryCanvas = this.canvasWidget?.canvas || this.canvasWidget;
+                            if (retryCanvas && retryCanvas.canvasIO) {
+                                log.info("Canvas now ready, checking for input data...");
+                                if (connected) {
+                                    retryCanvas.inputDataLoaded = false;
+                                    retryCanvas.canvasIO.checkForInputData();
+                                }
+                            }
+                            else if (retryCount < retryDelays.length) {
+                                log.warn(`Canvas still not ready, retry ${retryCount + 1}/${retryDelays.length}...`);
+                                setTimeout(tryAgain, retryDelays[retryCount++]);
+                            }
+                            else {
+                                log.error("Canvas failed to initialize after multiple retries");
+                            }
+                        };
+                        setTimeout(tryAgain, retryDelays[retryCount++]);
+                        return;
+                    }
+                    // Handle input_image connection (index 0)
+                    if (index === 0) {
+                        if (connected && link_info) {
+                            log.info("Input image connected, marking for data check...");
+                            // Reset the input data loaded flag to allow loading the new connection
+                            canvas.inputDataLoaded = false;
+                            // Also reset the last loaded image source and link ID to allow the new image
+                            canvas.lastLoadedImageSrc = undefined;
+                            canvas.lastLoadedLinkId = undefined;
+                            // Mark that we have a pending input connection
+                            canvas.hasPendingInputConnection = true;
+                            // Check for data immediately when connected
+                            setTimeout(() => {
+                                log.info("Checking for input data after connection...");
+                                canvas.canvasIO.checkForInputData();
+                            }, 500);
+                        }
+                        else {
+                            log.info("Input image disconnected");
+                            canvas.hasPendingInputConnection = false;
+                            // Reset when disconnected so a new connection can load
+                            canvas.inputDataLoaded = false;
+                            canvas.lastLoadedImageSrc = undefined;
+                            canvas.lastLoadedLinkId = undefined;
+                        }
+                    }
+                    // Handle input_mask connection (index 1)
+                    if (index === 1) {
+                        if (connected && link_info) {
+                            log.info("Input mask connected");
+                            // Mark that we have a pending mask connection
+                            canvas.hasPendingMaskConnection = true;
+                            // Check for data immediately when connected
+                            setTimeout(() => {
+                                log.info("Checking for input data after mask connection...");
+                                canvas.canvasIO.checkForInputData();
+                            }, 500);
+                        }
+                        else {
+                            log.info("Input mask disconnected");
+                            canvas.hasPendingMaskConnection = false;
+                        }
+                    }
+                }
+            };
+            // Add onExecuted handler to check for input data after workflow execution
+            const originalOnExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = function (message) {
+                log.info("Node executed, checking for input data...");
+                const canvas = this.canvasWidget?.canvas || this.canvasWidget;
+                if (canvas && canvas.canvasIO) {
+                    // Don't reset inputDataLoaded - just check for new data
+                    // The checkForInputData method will handle checking if we already loaded this image
+                    canvas.canvasIO.checkForInputData();
+                }
+                // Call original if it exists
+                if (originalOnExecuted) {
+                    originalOnExecuted.apply(this, arguments);
+                }
             };
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function () {

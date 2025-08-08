@@ -73,6 +73,8 @@ export class Canvas {
         this.canvasContainer = null;
         this.dataInitialized = false;
         this.pendingDataCheck = null;
+        this.pendingInputDataCheck = null;
+        this.inputDataLoaded = false;
         this.imageCache = new Map();
         this.requestSaveState = () => { };
         this.outputAreaShape = null;
@@ -372,6 +374,10 @@ export class Canvas {
             return widget ? widget.value : false;
         };
         const handleExecutionStart = () => {
+            // Check for input data when execution starts, but don't reset the flag
+            log.debug('Execution started, checking for input data...');
+            // Don't reset inputDataLoaded here - we want to remember if we already loaded this input
+            this.canvasIO.checkForInputData();
             if (getAutoRefreshValue()) {
                 lastExecutionStartTime = Date.now();
                 // Store a snapshot of the context for the upcoming batch
@@ -394,6 +400,9 @@ export class Canvas {
             }
         };
         const handleExecutionSuccess = async () => {
+            // Always check for input data after execution completes
+            log.debug('Execution success, checking for input data...');
+            await this.canvasIO.checkForInputData();
             if (getAutoRefreshValue()) {
                 log.info('Auto-refresh triggered, importing latest images.');
                 if (!this.pendingBatchContext) {

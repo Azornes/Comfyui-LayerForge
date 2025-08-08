@@ -507,7 +507,6 @@ export class MaskEditorIntegration {
             maskSize: {width: bounds.width, height: bounds.height}
         });
 
-        // Use the chunk system instead of direct canvas manipulation
         this.maskTool.setMask(maskAsImage);
 
         // Update node preview using PreviewUtils

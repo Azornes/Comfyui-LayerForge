@@ -1445,13 +1445,44 @@ export class MaskTool {
         this.isOverlayVisible = !this.isOverlayVisible;
         log.info(`Mask overlay visibility toggled to: ${this.isOverlayVisible}`);
     }
-    setMask(image) {
-        // Clear existing mask chunks in the output area first
+    setMask(image, isFromInputMask = false) {
         const bounds = this.canvasInstance.outputAreaBounds;
-        this.clearMaskInArea(bounds.x, bounds.y, image.width, image.height);
-        // Add the new mask using the chunk system
-        this.addMask(image);
-        log.info(`MaskTool set new mask using chunk system at bounds (${bounds.x}, ${bounds.y})`);
+        if (isFromInputMask) {
+            // For INPUT MASK - process black background to transparent using luminance
+            // Center like input images
+            const centerX = bounds.x + (bounds.width - image.width) / 2;
+            const centerY = bounds.y + (bounds.height - image.height) / 2;
+            // Prepare mask where alpha = luminance (white = applied, black = transparent)
+            const { canvas: maskCanvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
+            if (!ctx)
+                throw new Error("Could not create mask processing context");
+            ctx.drawImage(image, 0, 0);
+            const imgData = ctx.getImageData(0, 0, image.width, image.height);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+                data[i] = 255; // force white color (color channels ignored downstream)
+                data[i + 1] = 255;
+                data[i + 2] = 255;
+                data[i + 3] = lum; // alpha encodes mask strength: white -> strong, black -> 0
+            }
+            ctx.putImageData(imgData, 0, 0);
+            // Clear target area and apply to chunked system at centered position
+            this.clearMaskInArea(centerX, centerY, image.width, image.height);
+            this.applyMaskCanvasToChunks(maskCanvas, centerX, centerY);
+            // Refresh state and UI
+            this.updateActiveMaskCanvas(true);
+            this.canvasInstance.canvasState.saveMaskState();
+            this.canvasInstance.render();
+            log.info(`MaskTool set INPUT MASK at centered position (${centerX}, ${centerY}) using luminance as alpha`);
+        }
+        else {
+            // For SAM Detector and other sources - just clear and add without processing
+            this.clearMaskInArea(bounds.x, bounds.y, bounds.width, bounds.height);
+            this.addMask(image);
+            log.info(`MaskTool set mask using chunk system at bounds (${bounds.x}, ${bounds.y})`);
+        }
     }
     /**
      * Clears mask data in a specific area by clearing affected chunks
