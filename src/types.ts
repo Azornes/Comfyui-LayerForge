@@ -94,6 +94,7 @@ export interface Canvas {
     inputDataLoaded: boolean;
     lastLoadedLinkId: any;
     lastLoadedMaskLinkId: any;
+    lastLoadedImageSrc?: string;
     outputAreaBounds: OutputAreaBounds;
     saveState: () => void;
     render: () => void;

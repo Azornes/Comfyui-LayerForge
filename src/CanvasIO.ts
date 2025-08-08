@@ -436,47 +436,100 @@ export class CanvasIO {
             // Track loaded links separately for image and mask
             let imageLoaded = false;
             let maskLoaded = false;
+            let imageChanged = false;
             
             // First, try to get data from connected node's output if available
             if (this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
                 const linkId = this.canvas.node.inputs[0].link;
                 const graph = (this.canvas.node as any).graph;
                 
-                // Check if we already loaded this link
-                if (this.canvas.lastLoadedLinkId === linkId) {
-                    log.debug(`Image link ${linkId} already loaded`);
-                    imageLoaded = true;
-                } else {
+                // Always check if images have changed first
+                if (graph) {
+                    const link = graph.links[linkId];
+                    if (link) {
+                        const sourceNode = graph.getNodeById(link.origin_id);
+                        if (sourceNode && sourceNode.imgs && sourceNode.imgs.length > 0) {
+                            // Create current batch identifier (all image sources combined)
+                            const currentBatchImageSrcs = sourceNode.imgs.map((img: HTMLImageElement) => img.src).join('|');
+                            
+                            // Check if this is the same link we loaded before
+                            if (this.canvas.lastLoadedLinkId === linkId) {
+                                // Same link, check if images actually changed
+                                if (this.canvas.lastLoadedImageSrc !== currentBatchImageSrcs) {
+                                    log.info(`Batch images changed for link ${linkId} (${sourceNode.imgs.length} images), will reload...`);
+                                    log.debug(`Previous batch hash: ${this.canvas.lastLoadedImageSrc?.substring(0, 100)}...`);
+                                    log.debug(`Current batch hash: ${currentBatchImageSrcs.substring(0, 100)}...`);
+                                    imageChanged = true;
+                                    // Clear the inputDataLoaded flag to force reload from backend
+                                    this.canvas.inputDataLoaded = false;
+                                    // Clear the lastLoadedImageSrc to force reload
+                                    this.canvas.lastLoadedImageSrc = undefined;
+                                    // Clear backend data to force fresh load
+                                    fetch(`/layerforge/clear_input_data/${nodeId}`, { method: 'POST' })
+                                        .then(() => log.debug("Backend input data cleared due to image change"))
+                                        .catch(err => log.error("Failed to clear backend data:", err));
+                                } else {
+                                    log.debug(`Batch images for link ${linkId} unchanged (${sourceNode.imgs.length} images)`);
+                                    imageLoaded = true;
+                                }
+                            } else {
+                                // Different link or first load
+                                log.info(`New link ${linkId} detected, will load ${sourceNode.imgs.length} images`);
+                                imageChanged = false; // It's not a change, it's a new link
+                                imageLoaded = false; // Need to load
+                                // Reset the inputDataLoaded flag for new link
+                                this.canvas.inputDataLoaded = false;
+                            }
+                        }
+                    }
+                }
+                
+                if (!imageLoaded || imageChanged) {
+                    // Reset the inputDataLoaded flag when images change
+                    if (imageChanged) {
+                        this.canvas.inputDataLoaded = false;
+                        log.info("Resetting inputDataLoaded flag due to image change");
+                    }
                 
                     if (graph) {
                         const link = graph.links[linkId];
                         if (link) {
                             const sourceNode = graph.getNodeById(link.origin_id);
                             if (sourceNode && sourceNode.imgs && sourceNode.imgs.length > 0) {
-                                // The connected node has images in its output
-                                log.info("Found image in connected node's output, loading directly");
-                                const img = sourceNode.imgs[0];
+                                // The connected node has images in its output - handle multiple images (batch)
+                                log.info(`Found ${sourceNode.imgs.length} image(s) in connected node's output, loading all`);
                                 
-                                // Mark this link as loaded
+                                // Create a combined source identifier for batch detection
+                                const batchImageSrcs = sourceNode.imgs.map((img: HTMLImageElement) => img.src).join('|');
+                                
+                                // Mark this link and batch sources as loaded
                                 this.canvas.lastLoadedLinkId = linkId;
+                                this.canvas.lastLoadedImageSrc = batchImageSrcs;
                                     
-                                    // DON'T clear existing layers - just add a new one
+                                    // Don't clear layers - just add new ones
+                                    if (imageChanged) {
+                                        log.info("Image change detected, will add new layers");
+                                    }
                                     
                                     // Determine add mode
                                     const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
                                     const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
                                     
-                                    // Add the image to canvas as a new layer
-                                    await this.canvas.canvasLayers.addLayerWithImage(
-                                        img, 
-                                        {},
-                                        addMode,
-                                        this.canvas.outputAreaBounds
-                                    );
+                                    // Add all images from the batch as separate layers
+                                    for (let i = 0; i < sourceNode.imgs.length; i++) {
+                                        const img = sourceNode.imgs[i];
+                                        await this.canvas.canvasLayers.addLayerWithImage(
+                                            img, 
+                                            { name: `Batch Image ${i + 1}` }, // Give each layer a unique name
+                                            addMode,
+                                            this.canvas.outputAreaBounds
+                                        );
+                                        log.debug(`Added batch image ${i + 1}/${sourceNode.imgs.length} to canvas`);
+                                    }
                                     
                                 this.canvas.inputDataLoaded = true;
                                 imageLoaded = true;
-                                log.info("Input image added as new layer from connected node");
+                                log.info(`All ${sourceNode.imgs.length} input images from batch added as separate layers`);
                                 this.canvas.render();
                                 this.canvas.saveState();
                             }
@@ -644,17 +697,37 @@ export class CanvasIO {
                 }
             }
             
-            // If both are already loaded from connected nodes, we're done
+            // Even if images are already loaded from connected nodes, still check backend for fresh execution data.
+            // We'll dedupe by comparing backend payload hash with lastLoadedImageSrc.
             const nodeInputs = this.canvas.node.inputs;
-            if (imageLoaded && (!nodeInputs || !nodeInputs[1] || maskLoaded)) {
-                return;
-            }
             
-            // If no data from connected node, check backend
+            // Check backend for input data
             const response = await fetch(`/layerforge/get_input_data/${nodeId}`);
             const result = await response.json();
 
             if (result.success && result.has_input) {
+                // Dedupe: skip only if backend payload matches last loaded batch hash
+                let backendBatchHash: string | undefined;
+                if (result.data?.input_images_batch && Array.isArray(result.data.input_images_batch)) {
+                    backendBatchHash = result.data.input_images_batch.map((i: any) => i.data).join('|');
+                } else if (result.data?.input_image) {
+                    backendBatchHash = result.data.input_image;
+                }
+                // Check mask separately - don't skip if only images are unchanged
+                let shouldCheckMask = false;
+                if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+                    shouldCheckMask = true;
+                }
+                
+                if (backendBatchHash && this.canvas.lastLoadedImageSrc === backendBatchHash && !shouldCheckMask) {
+                    log.debug("Backend input data unchanged and no mask to check, skipping reload");
+                    this.canvas.inputDataLoaded = true;
+                    return;
+                } else if (backendBatchHash && this.canvas.lastLoadedImageSrc === backendBatchHash && shouldCheckMask) {
+                    log.debug("Images unchanged but need to check mask, continuing...");
+                    imageLoaded = true; // Mark images as already loaded to skip reloading them
+                }
+                
                 // Check if we already loaded image data (by checking the current link)
                 if (!imageLoaded && this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
                     const currentLinkId = this.canvas.node.inputs[0].link;
@@ -665,22 +738,35 @@ export class CanvasIO {
                     }
                 }
                 
-                // Check if we already loaded mask data
-                if (!maskLoaded && this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+                // Always check for mask data from backend when there's a mask input
+                // Don't rely on maskLoaded flag from nodeOutputs check
+                if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
                     const currentMaskLinkId = this.canvas.node.inputs[1].link;
-                    if (this.canvas.lastLoadedMaskLinkId !== currentMaskLinkId) {
-                        // Mark this mask link as loaded
-                        this.canvas.lastLoadedMaskLinkId = currentMaskLinkId;
-                        maskLoaded = false; // Will load from backend
-                    }
+                    // Always reset mask loaded flag and clear lastLoadedMaskLinkId to force fresh load
+                    maskLoaded = false;
+                    // Clear the stored mask link to force reload from backend
+                    this.canvas.lastLoadedMaskLinkId = undefined;
+                    log.debug(`Mask input detected, will force check backend for mask data`);
                 }
                 
                 log.info("Input data found from backend, adding to canvas");
                 const inputData = result.data;
                 
-                // DON'T clear existing layers - just add new ones
+                // Compute backend batch hash for dedupe and state
+                let backendHashNow: string | undefined;
+                if (inputData?.input_images_batch && Array.isArray(inputData.input_images_batch)) {
+                    backendHashNow = inputData.input_images_batch.map((i: any) => i.data).join('|');
+                } else if (inputData?.input_image) {
+                    backendHashNow = inputData.input_image;
+                }
                 
-                // Mark that we've loaded input data to avoid reloading
+                // Just update the hash without removing any layers
+                if (backendHashNow) {
+                    log.info("New backend input data detected, adding new layers");
+                    this.canvas.lastLoadedImageSrc = backendHashNow;
+                }
+                
+                // Mark that we've loaded input data for this execution
                 this.canvas.inputDataLoaded = true;
                 
                 // Determine add mode based on fit_on_add setting
@@ -688,30 +774,60 @@ export class CanvasIO {
                 const fitOnAddWidget = widgets ? widgets.find((w: any) => w.name === "fit_on_add") : null;
                 const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
                 
-                // Load input image if provided and not already loaded
-                if (!imageLoaded && inputData.input_image) {
-                    const img = new Image();
-                    await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
-                        img.src = inputData.input_image;
-                    });
-                    
-                    // Add image to canvas at output area position
-                    const layer = await this.canvas.canvasLayers.addLayerWithImage(
-                        img, 
-                        {},
-                        addMode,
-                        this.canvas.outputAreaBounds  // Place at output area
-                    );
-                    
-                    // Don't apply mask to the layer anymore - we'll handle it separately
-                    
-                    log.info("Input image added as new layer to canvas");
-                    this.canvas.render();
-                    this.canvas.saveState();
-                } else {
-                    log.debug("No input image in data");
+                // Load input image(s) if provided and not already loaded
+                if (!imageLoaded) {
+                    if (inputData.input_images_batch) {
+                        // Handle batch of images
+                        const batch = inputData.input_images_batch;
+                        log.info(`Processing batch of ${batch.length} images from backend`);
+                        
+                        for (let i = 0; i < batch.length; i++) {
+                            const imgData = batch[i];
+                            const img = new Image();
+                            await new Promise((resolve, reject) => {
+                                img.onload = resolve;
+                                img.onerror = reject;
+                                img.src = imgData.data;
+                            });
+                            
+                            // Add image to canvas with unique name
+                            await this.canvas.canvasLayers.addLayerWithImage(
+                                img, 
+                                { name: `Batch Image ${i + 1}` },
+                                addMode,
+                                this.canvas.outputAreaBounds
+                            );
+                            
+                            log.debug(`Added batch image ${i + 1}/${batch.length} from backend`);
+                        }
+                        
+                        log.info(`All ${batch.length} batch images added from backend`);
+                        this.canvas.render();
+                        this.canvas.saveState();
+                        
+                    } else if (inputData.input_image) {
+                        // Handle single image (backward compatibility)
+                        const img = new Image();
+                        await new Promise((resolve, reject) => {
+                            img.onload = resolve;
+                            img.onerror = reject;
+                            img.src = inputData.input_image;
+                        });
+                        
+                        // Add image to canvas at output area position
+                        await this.canvas.canvasLayers.addLayerWithImage(
+                            img, 
+                            {},
+                            addMode,
+                            this.canvas.outputAreaBounds
+                        );
+                        
+                        log.info("Single input image added as new layer to canvas");
+                        this.canvas.render();
+                        this.canvas.saveState();
+                    } else {
+                        log.debug("No input image data from backend");
+                    }
                 }
                 
                 // Handle mask separately (not tied to layer) if not already loaded
@@ -791,7 +907,7 @@ export class CanvasIO {
         this.canvas.pendingInputDataCheck = window.setTimeout(() => {
             this.canvas.pendingInputDataCheck = null;
             log.debug("Retrying input data check for mask...");
-            this.checkForInputData();
+            
         }, 500); // Shorter delay for mask data retry
     }
 

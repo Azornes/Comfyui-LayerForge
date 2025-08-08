@@ -263,24 +263,48 @@ class LayerForgeNode:
                     input_data = {}
                     
                     if input_image is not None:
-                        # Convert image tensor to base64
+                        # Convert image tensor(s) to base64 - handle batch
                         if isinstance(input_image, torch.Tensor):
                             # Ensure correct shape [B, H, W, C]
                             if input_image.dim() == 3:
                                 input_image = input_image.unsqueeze(0)
                             
-                            # Convert to numpy and then to PIL
-                            img_np = (input_image.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
-                            pil_img = Image.fromarray(img_np, 'RGB')
+                            batch_size = input_image.shape[0]
+                            log_info(f"Processing batch of {batch_size} image(s)")
                             
-                            # Convert to base64
-                            buffered = io.BytesIO()
-                            pil_img.save(buffered, format="PNG")
-                            img_str = base64.b64encode(buffered.getvalue()).decode()
-                            input_data['input_image'] = f"data:image/png;base64,{img_str}"
-                            input_data['input_image_width'] = pil_img.width
-                            input_data['input_image_height'] = pil_img.height
-                            log_debug(f"Stored input image: {pil_img.width}x{pil_img.height}")
+                            if batch_size == 1:
+                                # Single image - keep backward compatibility
+                                img_np = (input_image.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
+                                pil_img = Image.fromarray(img_np, 'RGB')
+                                
+                                # Convert to base64
+                                buffered = io.BytesIO()
+                                pil_img.save(buffered, format="PNG")
+                                img_str = base64.b64encode(buffered.getvalue()).decode()
+                                input_data['input_image'] = f"data:image/png;base64,{img_str}"
+                                input_data['input_image_width'] = pil_img.width
+                                input_data['input_image_height'] = pil_img.height
+                                log_debug(f"Stored single input image: {pil_img.width}x{pil_img.height}")
+                            else:
+                                # Multiple images - store as array
+                                images_array = []
+                                for i in range(batch_size):
+                                    img_np = (input_image[i].cpu().numpy() * 255).astype(np.uint8)
+                                    pil_img = Image.fromarray(img_np, 'RGB')
+                                    
+                                    # Convert to base64
+                                    buffered = io.BytesIO()
+                                    pil_img.save(buffered, format="PNG")
+                                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                                    images_array.append({
+                                        'data': f"data:image/png;base64,{img_str}",
+                                        'width': pil_img.width,
+                                        'height': pil_img.height
+                                    })
+                                    log_debug(f"Stored batch image {i+1}/{batch_size}: {pil_img.width}x{pil_img.height}")
+                                
+                                input_data['input_images_batch'] = images_array
+                                log_info(f"Stored batch of {batch_size} images")
                     
                     if input_mask is not None:
                         # Convert mask tensor to base64
@@ -498,7 +522,7 @@ class LayerForgeNode:
                 
                 with cls._storage_lock:
                     input_key = f"{node_id}_input"
-                    input_data = cls._canvas_data_storage.pop(input_key, None)
+                    input_data = cls._canvas_data_storage.get(input_key, None)
                 
                 if input_data:
                     log_info(f"Input data found for node {node_id}, sending to frontend")
@@ -516,6 +540,32 @@ class LayerForgeNode:
                     
             except Exception as e:
                 log_error(f"Error in get_input_data: {str(e)}")
+                return web.json_response({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
+
+        @PromptServer.instance.routes.post("/layerforge/clear_input_data/{node_id}")
+        async def clear_input_data(request):
+            try:
+                node_id = request.match_info["node_id"]
+                log_info(f"Clearing input data for node: {node_id}")
+                
+                with cls._storage_lock:
+                    input_key = f"{node_id}_input"
+                    if input_key in cls._canvas_data_storage:
+                        del cls._canvas_data_storage[input_key]
+                        log_info(f"Input data cleared for node {node_id}")
+                    else:
+                        log_debug(f"No input data to clear for node {node_id}")
+                
+                return web.json_response({
+                    'success': True,
+                    'message': f'Input data cleared for node {node_id}'
+                })
+                    
+            except Exception as e:
+                log_error(f"Error in clear_input_data: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
