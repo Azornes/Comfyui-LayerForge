@@ -10,15 +10,29 @@ interface MouseCoordinates {
     view: Point;
 }
 
+interface TransformOrigin {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    centerX: number;
+    centerY: number;
+    originalWidth?: number;
+    originalHeight?: number;
+    cropBounds?: { x: number; y: number; width: number; height: number };
+}
+
 interface InteractionState {
     mode: 'none' | 'panning' | 'dragging' | 'resizing' | 'rotating' | 'drawingMask' | 'resizingCanvas' | 'movingCanvas' | 'potential-drag' | 'drawingShape';
     panStart: Point;
     dragStart: Point;
-    transformOrigin: Partial<Layer> & { centerX?: number, centerY?: number };
+    transformOrigin: TransformOrigin | null;
     resizeHandle: string | null;
     resizeAnchor: Point;
     canvasResizeStart: Point;
     isCtrlPressed: boolean;
+    isMetaPressed: boolean;
     isAltPressed: boolean;
     isShiftPressed: boolean;
     isSPressed: boolean;
@@ -35,17 +49,35 @@ export class CanvasInteractions {
     public interaction: InteractionState;
     private originalLayerPositions: Map<Layer, Point>;
 
+    // Bound event handlers to enable proper removeEventListener and avoid leaks
+    private onMouseDown = (e: MouseEvent) => this.handleMouseDown(e);
+    private onMouseMove = (e: MouseEvent) => this.handleMouseMove(e);
+    private onMouseUp = (e: MouseEvent) => this.handleMouseUp(e);
+    private onMouseEnter = (e: MouseEvent) => { this.canvas.isMouseOver = true; this.handleMouseEnter(e); };
+    private onMouseLeave = (e: MouseEvent) => { this.canvas.isMouseOver = false; this.handleMouseLeave(e); };
+    private onWheel = (e: WheelEvent) => this.handleWheel(e);
+    private onKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
+    private onKeyUp = (e: KeyboardEvent) => this.handleKeyUp(e);
+    private onDragOver = (e: DragEvent) => this.handleDragOver(e);
+    private onDragEnter = (e: DragEvent) => this.handleDragEnter(e);
+    private onDragLeave = (e: DragEvent) => this.handleDragLeave(e);
+    private onDrop = (e: DragEvent) => { this.handleDrop(e); };
+    private onContextMenu = (e: MouseEvent) => this.handleContextMenu(e);
+    private onBlur = () => this.handleBlur();
+    private onPaste = (e: ClipboardEvent) => this.handlePasteEvent(e);
+
     constructor(canvas: Canvas) {
         this.canvas = canvas;
         this.interaction = {
             mode: 'none',
             panStart: { x: 0, y: 0 },
             dragStart: { x: 0, y: 0 },
-            transformOrigin: {},
+            transformOrigin: null,
             resizeHandle: null,
             resizeAnchor: { x: 0, y: 0 },
             canvasResizeStart: { x: 0, y: 0 },
             isCtrlPressed: false,
+            isMetaPressed: false,
             isAltPressed: false,
             isShiftPressed: false,
             isSPressed: false,
@@ -74,7 +106,6 @@ export class CanvasInteractions {
     }
 
     private performZoomOperation(worldCoords: Point, zoomFactor: number): void {
-        const rect = this.canvas.canvas.getBoundingClientRect();
         const mouseBufferX = (worldCoords.x - this.canvas.viewport.x) * this.canvas.viewport.zoom;
         const mouseBufferY = (worldCoords.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
 
@@ -106,34 +137,49 @@ export class CanvasInteractions {
     }
 
     setupEventListeners(): void {
-        this.canvas.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('wheel', this.handleWheel.bind(this) as EventListener, { passive: false });
-        this.canvas.canvas.addEventListener('keydown', this.handleKeyDown.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('keyup', this.handleKeyUp.bind(this) as EventListener);
+        this.canvas.canvas.addEventListener('mousedown', this.onMouseDown as EventListener);
+        this.canvas.canvas.addEventListener('mousemove', this.onMouseMove as EventListener);
+        this.canvas.canvas.addEventListener('mouseup', this.onMouseUp as EventListener);
+        this.canvas.canvas.addEventListener('wheel', this.onWheel as EventListener, { passive: false });
+        this.canvas.canvas.addEventListener('keydown', this.onKeyDown as EventListener);
+        this.canvas.canvas.addEventListener('keyup', this.onKeyUp as EventListener);
 
         // Add a blur event listener to the window to reset key states
-        window.addEventListener('blur', this.handleBlur.bind(this));
+        window.addEventListener('blur', this.onBlur);
 
-        document.addEventListener('paste', this.handlePasteEvent.bind(this));
+        document.addEventListener('paste', this.onPaste as unknown as EventListener);
 
-        this.canvas.canvas.addEventListener('mouseenter', (e: MouseEvent) => {
-            this.canvas.isMouseOver = true;
-            this.handleMouseEnter(e);
-        });
-        this.canvas.canvas.addEventListener('mouseleave', (e: MouseEvent) => {
-            this.canvas.isMouseOver = false;
-            this.handleMouseLeave(e);
-        });
+        this.canvas.canvas.addEventListener('mouseenter', this.onMouseEnter as EventListener);
+        this.canvas.canvas.addEventListener('mouseleave', this.onMouseLeave as EventListener);
 
-        this.canvas.canvas.addEventListener('dragover', this.handleDragOver.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('dragenter', this.handleDragEnter.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('dragleave', this.handleDragLeave.bind(this) as EventListener);
-        this.canvas.canvas.addEventListener('drop', this.handleDrop.bind(this) as unknown as EventListener);
+        this.canvas.canvas.addEventListener('dragover', this.onDragOver as EventListener);
+        this.canvas.canvas.addEventListener('dragenter', this.onDragEnter as EventListener);
+        this.canvas.canvas.addEventListener('dragleave', this.onDragLeave as EventListener);
+        this.canvas.canvas.addEventListener('drop', this.onDrop as unknown as EventListener);
 
-        this.canvas.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this) as EventListener);
+        this.canvas.canvas.addEventListener('contextmenu', this.onContextMenu as EventListener);
+    }
+
+    teardownEventListeners(): void {
+        this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown as EventListener);
+        this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove as EventListener);
+        this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp as EventListener);
+        this.canvas.canvas.removeEventListener('wheel', this.onWheel as EventListener);
+        this.canvas.canvas.removeEventListener('keydown', this.onKeyDown as EventListener);
+        this.canvas.canvas.removeEventListener('keyup', this.onKeyUp as EventListener);
+
+        window.removeEventListener('blur', this.onBlur);
+        document.removeEventListener('paste', this.onPaste as unknown as EventListener);
+
+        this.canvas.canvas.removeEventListener('mouseenter', this.onMouseEnter as EventListener);
+        this.canvas.canvas.removeEventListener('mouseleave', this.onMouseLeave as EventListener);
+
+        this.canvas.canvas.removeEventListener('dragover', this.onDragOver as EventListener);
+        this.canvas.canvas.removeEventListener('dragenter', this.onDragEnter as EventListener);
+        this.canvas.canvas.removeEventListener('dragleave', this.onDragLeave as EventListener);
+        this.canvas.canvas.removeEventListener('drop', this.onDrop as unknown as EventListener);
+
+        this.canvas.canvas.removeEventListener('contextmenu', this.onContextMenu as EventListener);
     }
 
     /**
@@ -222,7 +268,7 @@ export class CanvasInteractions {
             }
             return;
         }
-        if (e.button !== 0) { // Środkowy przycisk
+        if (e.button === 1) { // Środkowy przycisk
             this.startPanning(e);
             return;
         }
@@ -241,7 +287,7 @@ export class CanvasInteractions {
         }
         
         // 4. Domyślna akcja na tle (lewy przycisk bez modyfikatorów)
-        this.startPanningOrClearSelection(e);
+        this.startPanning(e, true); // clearSelection = true
     }
 
     handleMouseMove(e: MouseEvent): void {
@@ -462,7 +508,7 @@ export class CanvasInteractions {
     }
 
     private calculateGridBasedScaling(oldHeight: number, deltaY: number): number {
-        const gridSize = 64;
+        const gridSize = 64; // Grid size - could be made configurable in the future
         const direction = deltaY > 0 ? -1 : 1;
         let targetHeight;
 
@@ -487,6 +533,7 @@ export class CanvasInteractions {
 
     handleKeyDown(e: KeyboardEvent): void {
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
+        if (e.key === 'Meta') this.interaction.isMetaPressed = true;
         if (e.key === 'Shift') this.interaction.isShiftPressed = true;
         if (e.key === 'Alt') {
             this.interaction.isAltPressed = true;
@@ -571,6 +618,7 @@ export class CanvasInteractions {
 
     handleKeyUp(e: KeyboardEvent): void {
         if (e.key === 'Control') this.interaction.isCtrlPressed = false;
+        if (e.key === 'Meta') this.interaction.isMetaPressed = false;
         if (e.key === 'Shift') this.interaction.isShiftPressed = false;
         if (e.key === 'Alt') this.interaction.isAltPressed = false;
         if (e.key.toLowerCase() === 's') this.interaction.isSPressed = false;
@@ -590,6 +638,7 @@ export class CanvasInteractions {
     handleBlur(): void {
         log.debug('Window lost focus, resetting key states.');
         this.interaction.isCtrlPressed = false;
+        this.interaction.isMetaPressed = false;
         this.interaction.isAltPressed = false;
         this.interaction.isShiftPressed = false;
         this.interaction.isSPressed = false;
@@ -615,6 +664,12 @@ export class CanvasInteractions {
     }
 
     updateCursor(worldCoords: Point): void {
+        // If actively rotating, show grabbing cursor
+        if (this.interaction.mode === 'rotating') {
+            this.canvas.canvas.style.cursor = 'grabbing';
+            return;
+        }
+
         const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
 
         if (transformTarget) {
@@ -663,7 +718,8 @@ export class CanvasInteractions {
 
     prepareForDrag(layer: Layer, worldCoords: Point): void {
         // Zaktualizuj zaznaczenie, ale nie zapisuj stanu
-        if (this.interaction.isCtrlPressed) {
+        // Support both Ctrl (Windows/Linux) and Cmd (macOS) for multi-selection
+        if (this.interaction.isCtrlPressed || this.interaction.isMetaPressed) {
             const index = this.canvas.canvasSelection.selectedLayers.indexOf(layer);
             if (index === -1) {
                 this.canvas.canvasSelection.updateSelection([...this.canvas.canvasSelection.selectedLayers, layer]);
@@ -681,14 +737,13 @@ export class CanvasInteractions {
         this.interaction.dragStart = {...worldCoords};
     }
 
-    startPanningOrClearSelection(e: MouseEvent): void {
-        // Ta funkcja jest teraz wywoływana tylko gdy kliknięto na tło bez modyfikatorów.
-        // Domyślna akcja: wyczyść zaznaczenie i rozpocznij panoramowanie.
-        if (!this.interaction.isCtrlPressed) {
+    startPanning(e: MouseEvent, clearSelection: boolean = true): void {
+        // Unified panning method - can optionally clear selection
+        if (clearSelection && !this.interaction.isCtrlPressed) {
             this.canvas.canvasSelection.updateSelection([]);
         }
         this.interaction.mode = 'panning';
-        this.interaction.panStart = {x: e.clientX, y: e.clientY};
+        this.interaction.panStart = { x: e.clientX, y: e.clientY };
     }
 
     startCanvasResize(worldCoords: Point): void {
@@ -741,14 +796,6 @@ export class CanvasInteractions {
         
         this.canvas.render();
         this.canvas.saveState();
-    }
-
-    startPanning(e: MouseEvent): void {
-        if (!this.interaction.isCtrlPressed) {
-            this.canvas.canvasSelection.updateSelection([]);
-        }
-        this.interaction.mode = 'panning';
-        this.interaction.panStart = { x: e.clientX, y: e.clientY };
     }
 
     panViewport(e: MouseEvent): void {
@@ -818,7 +865,7 @@ export class CanvasInteractions {
         }
 
         const o = this.interaction.transformOrigin;
-        if (o.rotation === undefined || o.width === undefined || o.height === undefined || o.centerX === undefined || o.centerY === undefined) return;
+        if (!o) return;
         
         const handle = this.interaction.resizeHandle;
         const anchor = this.interaction.resizeAnchor;
@@ -974,7 +1021,7 @@ export class CanvasInteractions {
         if (!layer) return;
 
         const o = this.interaction.transformOrigin;
-        if (o.rotation === undefined || o.centerX === undefined || o.centerY === undefined) return;
+        if (!o) return;
         const startAngle = Math.atan2(this.interaction.dragStart.y - o.centerY, this.interaction.dragStart.x - o.centerX);
         const currentAngle = Math.atan2(worldCoords.y - o.centerY, worldCoords.x - o.centerX);
         let angleDiff = (currentAngle - startAngle) * 180 / Math.PI;
