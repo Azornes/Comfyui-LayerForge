@@ -404,12 +404,10 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         }
         if (this.maskUndoStack.length > 0) {
             const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
-            const maskCanvas = this.canvas.maskTool.getMask();
-            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
-            if (maskCtx) {
-                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-                maskCtx.drawImage(prevState, 0, 0);
-            }
+            // Use the new restoreMaskFromSavedState method that properly clears chunks first
+            this.canvas.maskTool.restoreMaskFromSavedState(prevState);
+            // Clear stroke overlay to prevent old drawing previews from persisting
+            this.canvas.canvasRenderer.clearMaskStrokeOverlay();
             this.canvas.render();
         }
         this.canvas.updateHistoryButtons();
@@ -420,12 +418,10 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         const nextState = this.maskRedoStack.pop();
         if (nextState) {
             this.maskUndoStack.push(nextState);
-            const maskCanvas = this.canvas.maskTool.getMask();
-            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
-            if (maskCtx) {
-                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-                maskCtx.drawImage(nextState, 0, 0);
-            }
+            // Use the new restoreMaskFromSavedState method that properly clears chunks first
+            this.canvas.maskTool.restoreMaskFromSavedState(nextState);
+            // Clear stroke overlay to prevent old drawing previews from persisting
+            this.canvas.canvasRenderer.clearMaskStrokeOverlay();
             this.canvas.render();
         }
         this.canvas.updateHistoryButtons();

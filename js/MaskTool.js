@@ -1352,6 +1352,23 @@ export class MaskTool {
         this.canvasInstance.render();
         log.info("Cleared all mask data from all chunks");
     }
+    /**
+     * Clears all chunks and restores mask from saved state
+     * This is used during undo/redo operations to ensure clean state restoration
+     */
+    restoreMaskFromSavedState(savedMaskCanvas) {
+        // First, clear ALL chunks to ensure no leftover data
+        this.clearAllMaskChunks();
+        // Now apply the saved mask state to chunks
+        if (savedMaskCanvas.width > 0 && savedMaskCanvas.height > 0) {
+            // Apply the saved mask to the chunk system at the correct position
+            const bounds = this.canvasInstance.outputAreaBounds;
+            this.applyMaskCanvasToChunks(savedMaskCanvas, this.x, this.y);
+        }
+        // Update the active mask canvas to show the restored state
+        this.updateActiveMaskCanvas(true);
+        log.debug("Restored mask from saved state with clean chunk system");
+    }
     getMask() {
         // Return the current active mask canvas which shows all chunks
         // Only update if there are pending changes to avoid unnecessary redraws
