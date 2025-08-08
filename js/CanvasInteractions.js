@@ -49,6 +49,14 @@ export class CanvasInteractions {
             view: this.canvas.getMouseViewCoordinates(e)
         };
     }
+    getModifierState(e) {
+        return {
+            ctrl: this.interaction.isCtrlPressed || e?.ctrlKey || false,
+            shift: this.interaction.isShiftPressed || e?.shiftKey || false,
+            alt: this.interaction.isAltPressed || e?.altKey || false,
+            meta: this.interaction.isMetaPressed || e?.metaKey || false,
+        };
+    }
     preventEventDefaults(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -150,6 +158,7 @@ export class CanvasInteractions {
     handleMouseDown(e) {
         this.canvas.canvas.focus();
         const coords = this.getMouseCoordinates(e);
+        const mods = this.getModifierState(e);
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseDown(coords.world, coords.view);
             this.canvas.render();
@@ -161,11 +170,11 @@ export class CanvasInteractions {
         }
         // --- Ostateczna, poprawna kolejność sprawdzania ---
         // 1. Akcje globalne z modyfikatorami (mają najwyższy priorytet)
-        if (e.shiftKey && e.ctrlKey) {
+        if (mods.shift && mods.ctrl) {
             this.startCanvasMove(coords.world);
             return;
         }
-        if (e.shiftKey) {
+        if (mods.shift) {
             // Clear custom shape when starting canvas resize
             if (this.canvas.outputAreaShape) {
                 // If auto-apply shape mask is enabled, remove the mask before clearing the shape
@@ -350,14 +359,15 @@ export class CanvasInteractions {
         }
     }
     handleLayerWheelTransformation(e) {
+        const mods = this.getModifierState(e);
         const rotationStep = 5 * (e.deltaY > 0 ? -1 : 1);
         const direction = e.deltaY < 0 ? 1 : -1;
         this.canvas.canvasSelection.selectedLayers.forEach((layer) => {
-            if (e.shiftKey) {
-                this.handleLayerRotation(layer, e.ctrlKey, direction, rotationStep);
+            if (mods.shift) {
+                this.handleLayerRotation(layer, mods.ctrl, direction, rotationStep);
             }
             else {
-                this.handleLayerScaling(layer, e.ctrlKey, e.deltaY);
+                this.handleLayerScaling(layer, mods.ctrl, e.deltaY);
             }
         });
     }
@@ -446,11 +456,12 @@ export class CanvasInteractions {
             return;
         }
         // Globalne skróty (Undo/Redo/Copy/Paste)
-        if (e.ctrlKey || e.metaKey) {
+        const mods = this.getModifierState(e);
+        if (mods.ctrl || mods.meta) {
             let handled = true;
             switch (e.key.toLowerCase()) {
                 case 'z':
-                    if (e.shiftKey) {
+                    if (mods.shift) {
                         this.canvas.redo();
                     }
                     else {
@@ -477,7 +488,7 @@ export class CanvasInteractions {
         }
         // Skróty kontekstowe (zależne od zaznaczenia)
         if (this.canvas.canvasSelection.selectedLayers.length > 0) {
-            const step = e.shiftKey ? 10 : 1;
+            const step = mods.shift ? 10 : 1;
             let needsRender = false;
             // Używamy e.code dla spójności i niezależności od układu klawiatury
             const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
@@ -609,7 +620,8 @@ export class CanvasInteractions {
     prepareForDrag(layer, worldCoords) {
         // Zaktualizuj zaznaczenie, ale nie zapisuj stanu
         // Support both Ctrl (Windows/Linux) and Cmd (macOS) for multi-selection
-        if (this.interaction.isCtrlPressed || this.interaction.isMetaPressed) {
+        const mods = this.getModifierState();
+        if (mods.ctrl || mods.meta) {
             const index = this.canvas.canvasSelection.selectedLayers.indexOf(layer);
             if (index === -1) {
                 this.canvas.canvasSelection.updateSelection([...this.canvas.canvasSelection.selectedLayers, layer]);
