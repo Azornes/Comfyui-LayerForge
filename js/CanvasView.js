@@ -1112,7 +1112,8 @@ app.registerExtension({
                             log.info("Input image already connected on node creation, checking for data...");
                             if (canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
                                 canvasWidget.canvas.inputDataLoaded = false;
-                                canvasWidget.canvas.canvasIO.checkForInputData();
+                                // Only allow images on init; mask should load only on mask connect or execution
+                                canvasWidget.canvas.canvasIO.checkForInputData({ allowImage: true, allowMask: false, reason: "init_image_connected" });
                             }
                         }
                     }
@@ -1140,7 +1141,11 @@ app.registerExtension({
                                 log.info("Canvas now ready, checking for input data...");
                                 if (connected) {
                                     retryCanvas.inputDataLoaded = false;
-                                    retryCanvas.canvasIO.checkForInputData();
+                                    // Respect which input triggered the connection:
+                                    const opts = (index === 1)
+                                        ? { allowImage: false, allowMask: true, reason: "mask_connect" }
+                                        : { allowImage: true, allowMask: false, reason: "image_connect" };
+                                    retryCanvas.canvasIO.checkForInputData(opts);
                                 }
                             }
                             else if (retryCount < retryDelays.length) {
@@ -1165,10 +1170,21 @@ app.registerExtension({
                             canvas.lastLoadedLinkId = undefined;
                             // Mark that we have a pending input connection
                             canvas.hasPendingInputConnection = true;
+                            // If mask input is not connected and a mask was auto-applied from input_mask before, clear it now
+                            if (!(this.inputs && this.inputs[1] && this.inputs[1].link)) {
+                                if (canvas.maskAppliedFromInput && canvas.maskTool) {
+                                    canvas.maskTool.clear();
+                                    canvas.render();
+                                    canvas.maskAppliedFromInput = false;
+                                    canvas.lastLoadedMaskLinkId = undefined;
+                                    log.info("Cleared auto-applied mask because input_image connected without input_mask");
+                                }
+                            }
                             // Check for data immediately when connected
                             setTimeout(() => {
                                 log.info("Checking for input data after connection...");
-                                canvas.canvasIO.checkForInputData();
+                                // Only load images here; masks should not auto-load on image connect
+                                canvas.canvasIO.checkForInputData({ allowImage: true, allowMask: false, reason: "image_connect" });
                             }, 500);
                         }
                         else {
@@ -1189,12 +1205,19 @@ app.registerExtension({
                             // Check for data immediately when connected
                             setTimeout(() => {
                                 log.info("Checking for input data after mask connection...");
-                                canvas.canvasIO.checkForInputData();
+                                // Only load mask here; images are handled by image connect or execution
+                                canvas.canvasIO.checkForInputData({ allowImage: false, allowMask: true, reason: "mask_connect" });
                             }, 500);
                         }
                         else {
                             log.info("Input mask disconnected");
                             canvas.hasPendingMaskConnection = false;
+                            // If the current mask came from input_mask, clear it to avoid affecting images when mask is not connected
+                            if (canvas.maskAppliedFromInput && canvas.maskTool) {
+                                canvas.maskAppliedFromInput = false;
+                                canvas.lastLoadedMaskLinkId = undefined;
+                                log.info("Cleared auto-applied mask due to mask input disconnection");
+                            }
                         }
                     }
                 }
@@ -1206,8 +1229,8 @@ app.registerExtension({
                 const canvas = this.canvasWidget?.canvas || this.canvasWidget;
                 if (canvas && canvas.canvasIO) {
                     // Don't reset inputDataLoaded - just check for new data
-                    // The checkForInputData method will handle checking if we already loaded this image
-                    canvas.canvasIO.checkForInputData();
+                    // On execution we allow both image and mask to load
+                    canvas.canvasIO.checkForInputData({ allowImage: true, allowMask: true, reason: "execution" });
                 }
                 // Call original if it exists
                 if (originalOnExecuted) {

@@ -376,8 +376,8 @@ export class Canvas {
         const handleExecutionStart = () => {
             // Check for input data when execution starts, but don't reset the flag
             log.debug('Execution started, checking for input data...');
-            // Don't reset inputDataLoaded here - we want to remember if we already loaded this input
-            this.canvasIO.checkForInputData();
+            // On start, only allow images; mask should load on mask-connect or after execution completes
+            this.canvasIO.checkForInputData({ allowImage: true, allowMask: false, reason: 'execution_start' });
             if (getAutoRefreshValue()) {
                 lastExecutionStartTime = Date.now();
                 // Store a snapshot of the context for the upcoming batch
@@ -402,7 +402,7 @@ export class Canvas {
         const handleExecutionSuccess = async () => {
             // Always check for input data after execution completes
             log.debug('Execution success, checking for input data...');
-            await this.canvasIO.checkForInputData();
+            await this.canvasIO.checkForInputData({ allowImage: true, allowMask: true, reason: 'execution_success' });
             if (getAutoRefreshValue()) {
                 log.info('Auto-refresh triggered, importing latest images.');
                 if (!this.pendingBatchContext) {

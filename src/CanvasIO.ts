@@ -428,18 +428,21 @@ export class CanvasIO {
         }
     }
 
-    async checkForInputData(): Promise<void> {
+    async checkForInputData(options?: { allowImage?: boolean; allowMask?: boolean; reason?: string }): Promise<void> {
         try {
             const nodeId = this.canvas.node.id;
-            log.info(`Checking for input data for node ${nodeId}...`);
+            const allowImage = options?.allowImage ?? true;
+            const allowMask = options?.allowMask ?? true;
+            const reason = options?.reason ?? 'unspecified';
+            log.info(`Checking for input data for node ${nodeId}... opts: image=${allowImage}, mask=${allowMask}, reason=${reason}`);
             
             // Track loaded links separately for image and mask
             let imageLoaded = false;
             let maskLoaded = false;
             let imageChanged = false;
             
-            // First, try to get data from connected node's output if available
-            if (this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
+            // First, try to get data from connected node's output if available (IMAGES)
+            if (allowImage && this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
                 const linkId = this.canvas.node.inputs[0].link;
                 const graph = (this.canvas.node as any).graph;
                 
@@ -491,10 +494,11 @@ export class CanvasIO {
                         log.info("Resetting inputDataLoaded flag due to image change");
                     }
                 
-                    if (graph) {
-                        const link = graph.links[linkId];
-                        if (link) {
-                            const sourceNode = graph.getNodeById(link.origin_id);
+                    if ((this.canvas.node as any).graph) {
+                        const graph2 = (this.canvas.node as any).graph;
+                        const link2 = graph2.links[linkId];
+                        if (link2) {
+                            const sourceNode = graph2.getNodeById(link2.origin_id);
                             if (sourceNode && sourceNode.imgs && sourceNode.imgs.length > 0) {
                                 // The connected node has images in its output - handle multiple images (batch)
                                 log.info(`Found ${sourceNode.imgs.length} image(s) in connected node's output, loading all`);
@@ -506,27 +510,27 @@ export class CanvasIO {
                                 this.canvas.lastLoadedLinkId = linkId;
                                 this.canvas.lastLoadedImageSrc = batchImageSrcs;
                                     
-                                    // Don't clear layers - just add new ones
-                                    if (imageChanged) {
-                                        log.info("Image change detected, will add new layers");
-                                    }
-                                    
-                                    // Determine add mode
-                                    const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-                                    const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
-                                    
-                                    // Add all images from the batch as separate layers
-                                    for (let i = 0; i < sourceNode.imgs.length; i++) {
-                                        const img = sourceNode.imgs[i];
-                                        await this.canvas.canvasLayers.addLayerWithImage(
-                                            img, 
-                                            { name: `Batch Image ${i + 1}` }, // Give each layer a unique name
-                                            addMode,
-                                            this.canvas.outputAreaBounds
-                                        );
-                                        log.debug(`Added batch image ${i + 1}/${sourceNode.imgs.length} to canvas`);
-                                    }
-                                    
+                                // Don't clear layers - just add new ones
+                                if (imageChanged) {
+                                    log.info("Image change detected, will add new layers");
+                                }
+                                
+                                // Determine add mode
+                                const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
+                                const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
+                                
+                                // Add all images from the batch as separate layers
+                                for (let i = 0; i < sourceNode.imgs.length; i++) {
+                                    const img = sourceNode.imgs[i];
+                                    await this.canvas.canvasLayers.addLayerWithImage(
+                                        img, 
+                                        { name: `Batch Image ${i + 1}` }, // Give each layer a unique name
+                                        addMode,
+                                        this.canvas.outputAreaBounds
+                                    );
+                                    log.debug(`Added batch image ${i + 1}/${sourceNode.imgs.length} to canvas`);
+                                }
+                                
                                 this.canvas.inputDataLoaded = true;
                                 imageLoaded = true;
                                 log.info(`All ${sourceNode.imgs.length} input images from batch added as separate layers`);
@@ -538,8 +542,8 @@ export class CanvasIO {
                 }
             }
             
-            // Check for mask input separately
-            if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+            // Check for mask input separately (from nodeOutputs) ONLY when allowed
+            if (allowMask && this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
                 const maskLinkId = this.canvas.node.inputs[1].link;
                 
                 // Check if we already loaded this mask link
@@ -678,7 +682,8 @@ export class CanvasIO {
                             
                             // Apply to MaskTool (centers internally)
                             if (this.canvas.maskTool) {
-                        this.canvas.maskTool.setMask(finalMaskImg, true);
+                                this.canvas.maskTool.setMask(finalMaskImg, true);
+                                (this.canvas as any).maskAppliedFromInput = true;
                                 this.canvas.canvasState.saveMaskState();
                                 this.canvas.render();
                                 // Mark this mask link as loaded to avoid re-applying
@@ -691,17 +696,34 @@ export class CanvasIO {
                         }
                     } else {
                         // nodeOutputs exist but don't have tensor data yet (need workflow execution)
-                        log.info(`Mask node ${graph.links[maskLinkId]?.origin_id} found but has no tensor data yet. Mask will be applied automatically after workflow execution.`);
+                        log.info(`Mask node ${(this.canvas.node as any).graph?.links[maskLinkId]?.origin_id} found but has no tensor data yet. Mask will be applied automatically after workflow execution.`);
                         // Don't retry - data won't be available until workflow runs
                     }
                 }
             }
             
-            // Even if images are already loaded from connected nodes, still check backend for fresh execution data.
-            // We'll dedupe by comparing backend payload hash with lastLoadedImageSrc.
-            const nodeInputs = this.canvas.node.inputs;
+            // Only check backend if we have actual inputs connected
+            const hasImageInput = this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link;
+            const hasMaskInput = this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link;
+
+            // If mask input is disconnected, clear any currently applied mask to ensure full separation
+            if (!hasMaskInput) {
+                if (this.canvas.maskTool) {
+                    this.canvas.maskTool.clear();
+                    this.canvas.render();
+                }
+                (this.canvas as any).maskAppliedFromInput = false;
+                this.canvas.lastLoadedMaskLinkId = undefined;
+                log.info("Mask input disconnected - cleared mask to enforce separation from input_image");
+            }
             
-            // Check backend for input data
+            if (!hasImageInput && !hasMaskInput) {
+                log.debug("No inputs connected, skipping backend check");
+                this.canvas.inputDataLoaded = true;
+                return;
+            }
+            
+            // Check backend for input data only if we have connected inputs
             const response = await fetch(`/layerforge/get_input_data/${nodeId}`);
             const result = await response.json();
 
@@ -713,11 +735,8 @@ export class CanvasIO {
                 } else if (result.data?.input_image) {
                     backendBatchHash = result.data.input_image;
                 }
-                // Check mask separately - don't skip if only images are unchanged
-                let shouldCheckMask = false;
-                if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
-                    shouldCheckMask = true;
-                }
+                // Check mask separately - don't skip if only images are unchanged AND mask is actually connected AND allowed
+                const shouldCheckMask = hasMaskInput && allowMask;
                 
                 if (backendBatchHash && this.canvas.lastLoadedImageSrc === backendBatchHash && !shouldCheckMask) {
                     log.debug("Backend input data unchanged and no mask to check, skipping reload");
@@ -729,7 +748,7 @@ export class CanvasIO {
                 }
                 
                 // Check if we already loaded image data (by checking the current link)
-                if (!imageLoaded && this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
+                if (allowImage && !imageLoaded && this.canvas.node.inputs && this.canvas.node.inputs[0] && this.canvas.node.inputs[0].link) {
                     const currentLinkId = this.canvas.node.inputs[0].link;
                     if (this.canvas.lastLoadedLinkId !== currentLinkId) {
                         // Mark this link as loaded
@@ -738,15 +757,26 @@ export class CanvasIO {
                     }
                 }
                 
-                // Always check for mask data from backend when there's a mask input
-                // Don't rely on maskLoaded flag from nodeOutputs check
-                if (this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link) {
+                // Check for mask data from backend ONLY when mask input is actually connected AND allowed
+                // Only reset if the mask link actually changed
+                if (allowMask && hasMaskInput && this.canvas.node.inputs && this.canvas.node.inputs[1]) {
                     const currentMaskLinkId = this.canvas.node.inputs[1].link;
-                    // Always reset mask loaded flag and clear lastLoadedMaskLinkId to force fresh load
-                    maskLoaded = false;
-                    // Clear the stored mask link to force reload from backend
-                    this.canvas.lastLoadedMaskLinkId = undefined;
-                    log.debug(`Mask input detected, will force check backend for mask data`);
+                    // Only reset if this is a different mask link than what we loaded before
+                    if (this.canvas.lastLoadedMaskLinkId !== currentMaskLinkId) {
+                        maskLoaded = false;
+                        log.debug(`New mask input detected (${currentMaskLinkId}), will check backend for mask data`);
+                    } else {
+                        log.debug(`Same mask input (${currentMaskLinkId}), mask already loaded`);
+                        maskLoaded = true;
+                    }
+                } else {
+                    // No mask input connected, or mask loading not allowed right now
+                    maskLoaded = true; // Mark as loaded to skip mask processing
+                    if (!allowMask) {
+                        log.debug("Mask loading is currently disabled by caller, skipping mask check");
+                    } else {
+                        log.debug("No mask input connected, skipping mask check");
+                    }
                 }
                 
                 log.info("Input data found from backend, adding to canvas");
@@ -774,8 +804,8 @@ export class CanvasIO {
                 const fitOnAddWidget = widgets ? widgets.find((w: any) => w.name === "fit_on_add") : null;
                 const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
                 
-                // Load input image(s) if provided and not already loaded
-                if (!imageLoaded) {
+                // Load input image(s) only if image input is actually connected, not already loaded, and allowed
+                if (allowImage && !imageLoaded && hasImageInput) {
                     if (inputData.input_images_batch) {
                         // Handle batch of images
                         const batch = inputData.input_images_batch;
@@ -828,10 +858,12 @@ export class CanvasIO {
                     } else {
                         log.debug("No input image data from backend");
                     }
+                } else if (!hasImageInput && (inputData.input_images_batch || inputData.input_image)) {
+                    log.debug("Backend has image data but no image input connected, skipping image load");
                 }
                 
-                // Handle mask separately (not tied to layer) if not already loaded
-                if (!maskLoaded && inputData.input_mask) {
+                // Handle mask separately only if mask input is actually connected, allowed, and not already loaded
+                if (allowMask && !maskLoaded && hasMaskInput && inputData.input_mask) {
                     log.info("Processing input mask");
                     
                     // Load mask image
@@ -843,8 +875,8 @@ export class CanvasIO {
                     });
                     
                     // Determine if we should fit the mask or use it at original size
-                    const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-                    const shouldFit = fitOnAddWidget && fitOnAddWidget.value;
+                    const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
+                    const shouldFit = fitOnAddWidget2 && fitOnAddWidget2.value;
                     
                     if (shouldFit && this.canvas.maskTool) {
                         // Scale mask to fit output area if fit_on_add is enabled
@@ -883,10 +915,15 @@ export class CanvasIO {
                         this.canvas.maskTool.setMask(maskImg, true);
                     }
                     
+                    (this.canvas as any).maskAppliedFromInput = true;
                     // Save the mask state
-                    this.canvas.canvasState.saveMaskState();
+                    this.canvas.canvasState.saveMaskState()
                     
                     log.info("Applied input mask to mask tool" + (shouldFit ? " (fitted to output area)" : " (original size)"));
+                } else if (!hasMaskInput && inputData.input_mask) {
+                    log.debug("Backend has mask data but no mask input connected, skipping mask load");
+                } else if (!allowMask && inputData.input_mask) {
+                    log.debug("Mask input data present in backend but mask loading is disabled by caller; skipping");
                 }
             } else {
                 log.debug("No input data from backend");
