@@ -103,6 +103,7 @@ export class CanvasLayersPanel {
         this.container.tabIndex = 0; // Umożliwia fokus na panelu
         this.container.innerHTML = `
             <div class="layers-panel-header">
+                <div class="master-visibility-toggle" title="Toggle all layers visibility"></div>
                 <span class="layers-panel-title">Layers</span>
                 <div class="layers-panel-controls">
                     <button class="layers-btn" id="delete-layer-btn" title="Delete layer"></button>
@@ -115,6 +116,7 @@ export class CanvasLayersPanel {
         this.layersContainer = this.container.querySelector('#layers-container');
         // Setup event listeners dla przycisków
         this.setupControlButtons();
+        this.setupMasterVisibilityToggle();
         // Dodaj listener dla klawiatury, aby usuwanie działało z panelu
         this.container.addEventListener('keydown', (e) => {
             if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -142,6 +144,67 @@ export class CanvasLayersPanel {
         // Initial button state update
         this.updateButtonStates();
     }
+    setupMasterVisibilityToggle() {
+        if (!this.container)
+            return;
+        const toggleContainer = this.container.querySelector('.master-visibility-toggle');
+        if (!toggleContainer)
+            return;
+        const updateToggleState = () => {
+            const total = this.canvas.layers.length;
+            const visibleCount = this.canvas.layers.filter(l => l.visible).length;
+            toggleContainer.innerHTML = '';
+            const checkboxContainer = document.createElement('div');
+            checkboxContainer.className = 'checkbox-container';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'master-visibility-checkbox';
+            const customCheckbox = document.createElement('span');
+            customCheckbox.className = 'custom-checkbox';
+            checkboxContainer.appendChild(checkbox);
+            checkboxContainer.appendChild(customCheckbox);
+            if (visibleCount === 0) {
+                checkbox.checked = false;
+                checkbox.indeterminate = false;
+                customCheckbox.classList.remove('checked', 'indeterminate');
+            }
+            else if (visibleCount === total) {
+                checkbox.checked = true;
+                checkbox.indeterminate = false;
+                customCheckbox.classList.add('checked');
+                customCheckbox.classList.remove('indeterminate');
+            }
+            else {
+                checkbox.checked = false;
+                checkbox.indeterminate = true;
+                customCheckbox.classList.add('indeterminate');
+                customCheckbox.classList.remove('checked');
+            }
+            checkboxContainer.addEventListener('click', (e) => {
+                e.stopPropagation();
+                let newVisible;
+                if (checkbox.indeterminate) {
+                    newVisible = false; // hide all when mixed
+                }
+                else if (checkbox.checked) {
+                    newVisible = false; // toggle to hide all
+                }
+                else {
+                    newVisible = true; // toggle to show all
+                }
+                this.canvas.layers.forEach(layer => {
+                    layer.visible = newVisible;
+                });
+                this.canvas.render();
+                this.canvas.requestSaveState();
+                updateToggleState();
+                this.renderLayers();
+            });
+            toggleContainer.appendChild(checkboxContainer);
+        };
+        updateToggleState();
+        this._updateMasterVisibilityToggle = updateToggleState;
+    }
     renderLayers() {
         if (!this.layersContainer) {
             log.warn('Layers container not initialized');
@@ -158,6 +221,8 @@ export class CanvasLayersPanel {
             if (this.layersContainer)
                 this.layersContainer.appendChild(layerElement);
         });
+        if (this._updateMasterVisibilityToggle)
+            this._updateMasterVisibilityToggle();
         log.debug(`Rendered ${sortedLayers.length} layers`);
     }
     createLayerElement(layer, index) {
