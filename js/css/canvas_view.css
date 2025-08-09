@@ -638,7 +638,7 @@
     width: 100vw;
     height: 100vh;
     background-color: rgba(0, 0, 0, 0.8);
-    z-index: 111;
+    z-index: 999999;
     display: flex;
     align-items: center;
     justify-content: center;
