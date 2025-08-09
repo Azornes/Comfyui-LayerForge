@@ -314,3 +314,102 @@ export function canvasToMaskImage(canvas) {
         img.src = canvas.toDataURL();
     });
 }
+/**
+ * Scales an image to fit within specified bounds while maintaining aspect ratio
+ * @param image - Image to scale
+ * @param targetWidth - Target width to fit within
+ * @param targetHeight - Target height to fit within
+ * @returns Promise with scaled Image element
+ */
+export async function scaleImageToFit(image, targetWidth, targetHeight) {
+    const scale = Math.min(targetWidth / image.width, targetHeight / image.height);
+    const scaledWidth = Math.max(1, Math.round(image.width * scale));
+    const scaledHeight = Math.max(1, Math.round(image.height * scale));
+    const { canvas, ctx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
+    if (!ctx)
+        throw new Error("Could not create scaled image context");
+    ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+    return new Promise((resolve, reject) => {
+        const scaledImg = new Image();
+        scaledImg.onload = () => resolve(scaledImg);
+        scaledImg.onerror = reject;
+        scaledImg.src = canvas.toDataURL();
+    });
+}
+/**
+ * Unified tensor to image data conversion
+ * Handles both RGB images and grayscale masks
+ * @param tensor - Input tensor data
+ * @param mode - 'rgb' for images or 'grayscale' for masks
+ * @returns ImageData object
+ */
+export function tensorToImageData(tensor, mode = 'rgb') {
+    try {
+        const shape = tensor.shape;
+        const height = shape[1];
+        const width = shape[2];
+        const channels = shape[3] || 1; // Default to 1 for masks
+        log.debug("Converting tensor:", { shape, channels, mode });
+        const imageData = new ImageData(width, height);
+        const data = new Uint8ClampedArray(width * height * 4);
+        const flatData = tensor.data;
+        const pixelCount = width * height;
+        const min = tensor.min_val ?? 0;
+        const max = tensor.max_val ?? 1;
+        const denom = (max - min) || 1;
+        for (let i = 0; i < pixelCount; i++) {
+            const pixelIndex = i * 4;
+            const tensorIndex = i * channels;
+            let lum;
+            if (mode === 'grayscale' || channels === 1) {
+                lum = flatData[tensorIndex];
+            }
+            else {
+                // Compute luminance for RGB
+                const r = flatData[tensorIndex + 0] ?? 0;
+                const g = flatData[tensorIndex + 1] ?? 0;
+                const b = flatData[tensorIndex + 2] ?? 0;
+                lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+            let norm = (lum - min) / denom;
+            if (!isFinite(norm))
+                norm = 0;
+            norm = Math.max(0, Math.min(1, norm));
+            const value = Math.round(norm * 255);
+            if (mode === 'grayscale') {
+                // For masks: RGB = value, A = 255 (MaskTool reads luminance)
+                data[pixelIndex] = value;
+                data[pixelIndex + 1] = value;
+                data[pixelIndex + 2] = value;
+                data[pixelIndex + 3] = 255;
+            }
+            else {
+                // For images: RGB from channels, A = 255
+                for (let c = 0; c < Math.min(3, channels); c++) {
+                    const channelValue = flatData[tensorIndex + c];
+                    const channelNorm = (channelValue - min) / denom;
+                    data[pixelIndex + c] = Math.round(channelNorm * 255);
+                }
+                data[pixelIndex + 3] = 255;
+            }
+        }
+        imageData.data.set(data);
+        return imageData;
+    }
+    catch (error) {
+        log.error("Error converting tensor:", error);
+        return null;
+    }
+}
+/**
+ * Creates an HTMLImageElement from ImageData
+ * @param imageData - Input ImageData
+ * @returns Promise with HTMLImageElement
+ */
+export async function createImageFromImageData(imageData) {
+    const { canvas, ctx } = createCanvas(imageData.width, imageData.height, '2d', { willReadFrequently: true });
+    if (!ctx)
+        throw new Error("Could not create canvas context");
+    ctx.putImageData(imageData, 0, 0);
+    return await createImageFromSource(canvas.toDataURL());
+}

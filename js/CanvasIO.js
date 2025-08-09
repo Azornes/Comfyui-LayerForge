@@ -2,6 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
+import { scaleImageToFit, createImageFromSource, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 const log = createModuleLogger('CanvasIO');
 export class CanvasIO {
     constructor(canvas) {
@@ -247,17 +248,12 @@ export class CanvasIO {
     async addInputToCanvas(inputImage, inputMask) {
         try {
             log.debug("Adding input to canvas:", { inputImage });
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(inputImage.width, inputImage.height);
-            if (!tempCtx)
-                throw new Error("Could not create temp context");
-            const imgData = new ImageData(new Uint8ClampedArray(inputImage.data), inputImage.width, inputImage.height);
-            tempCtx.putImageData(imgData, 0, 0);
-            const image = new Image();
-            await new Promise((resolve, reject) => {
-                image.onload = resolve;
-                image.onerror = reject;
-                image.src = tempCanvas.toDataURL();
-            });
+            // Use unified tensorToImageData for RGB image
+            const imageData = tensorToImageData(inputImage, 'rgb');
+            if (!imageData)
+                throw new Error("Failed to convert input image tensor");
+            // Create HTMLImageElement from ImageData
+            const image = await createImageFromImageData(imageData);
             const bounds = this.canvas.outputAreaBounds;
             const scale = Math.min(bounds.width / inputImage.width * 0.8, bounds.height / inputImage.height * 0.8);
             const layer = await this.canvas.canvasLayers.addLayerWithImage(image, {
@@ -283,17 +279,10 @@ export class CanvasIO {
             if (!tensor || !tensor.data || !tensor.width || !tensor.height) {
                 throw new Error("Invalid tensor data");
             }
-            const { canvas, ctx } = createCanvas(tensor.width, tensor.height, '2d', { willReadFrequently: true });
-            if (!ctx)
-                throw new Error("Could not create canvas context");
-            const imageData = new ImageData(new Uint8ClampedArray(tensor.data), tensor.width, tensor.height);
-            ctx.putImageData(imageData, 0, 0);
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = (e) => reject(new Error("Failed to load image: " + e));
-                img.src = canvas.toDataURL();
-            });
+            const imageData = tensorToImageData(tensor, 'rgb');
+            if (!imageData)
+                throw new Error("Failed to convert tensor to image data");
+            return await createImageFromImageData(imageData);
         }
         catch (error) {
             log.error("Error converting tensor to image:", error);
@@ -526,51 +515,17 @@ export class CanvasIO {
                                 const len = maskOutput.data.length;
                                 channels = Math.max(1, Math.floor(len / (width * height)));
                             }
-                            // Create GRAYSCALE image from tensor; RGB = luminance, A = 255 (MaskTool.setMask reads luminance)
+                            // Use unified tensorToImageData for masks
+                            const maskImageData = tensorToImageData(maskOutput, 'grayscale');
+                            if (!maskImageData)
+                                throw new Error("Failed to convert mask tensor to image data");
+                            // Create canvas and put image data
                             const { canvas: maskCanvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
                             if (!ctx)
                                 throw new Error("Could not create mask context");
-                            const imgData = ctx.createImageData(width, height);
-                            const arr = maskOutput.data;
-                            const min = (maskOutput.min_val !== undefined) ? maskOutput.min_val : 0;
-                            const max = (maskOutput.max_val !== undefined) ? maskOutput.max_val : 1;
-                            const denom = (max - min) || 1;
-                            const pixelCount = width * height;
-                            for (let i = 0; i < pixelCount; i++) {
-                                const baseIndex = i * channels;
-                                let v;
-                                if (channels === 1) {
-                                    v = arr[i];
-                                }
-                                else if (channels >= 3) {
-                                    // If image-like, compute luminance from RGB channels
-                                    const r = arr[baseIndex + 0] ?? 0;
-                                    const g = arr[baseIndex + 1] ?? 0;
-                                    const b = arr[baseIndex + 2] ?? 0;
-                                    v = 0.299 * r + 0.587 * g + 0.114 * b;
-                                }
-                                else {
-                                    v = arr[baseIndex] ?? 0;
-                                }
-                                let norm = (v - min) / denom;
-                                if (!isFinite(norm))
-                                    norm = 0;
-                                norm = Math.max(0, Math.min(1, norm));
-                                const lum = Math.round(norm * 255);
-                                const o = i * 4;
-                                imgData.data[o] = lum; // R
-                                imgData.data[o + 1] = lum; // G
-                                imgData.data[o + 2] = lum; // B
-                                imgData.data[o + 3] = 255; // A fixed (MaskTool computes alpha from luminance)
-                            }
-                            ctx.putImageData(imgData, 0, 0);
+                            ctx.putImageData(maskImageData, 0, 0);
                             // Convert to HTMLImageElement
-                            const maskImg = await new Promise((resolve, reject) => {
-                                const img = new Image();
-                                img.onload = () => resolve(img);
-                                img.onerror = reject;
-                                img.src = maskCanvas.toDataURL();
-                            });
+                            const maskImg = await createImageFromSource(maskCanvas.toDataURL());
                             // Respect fit_on_add (scale to output area)
                             const widgets = this.canvas.node.widgets;
                             const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
@@ -578,19 +533,7 @@ export class CanvasIO {
                             let finalMaskImg = maskImg;
                             if (shouldFit) {
                                 const bounds = this.canvas.outputAreaBounds;
-                                const scale = Math.min(bounds.width / maskImg.width, bounds.height / maskImg.height);
-                                const scaledWidth = Math.max(1, Math.round(maskImg.width * scale));
-                                const scaledHeight = Math.max(1, Math.round(maskImg.height * scale));
-                                const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
-                                if (!scaledCtx)
-                                    throw new Error("Could not create scaled mask context");
-                                scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
-                                finalMaskImg = await new Promise((resolve, reject) => {
-                                    const img = new Image();
-                                    img.onload = () => resolve(img);
-                                    img.onerror = reject;
-                                    img.src = scaledCanvas.toDataURL();
-                                });
+                                finalMaskImg = await scaleImageToFit(maskImg, bounds.width, bounds.height);
                             }
                             // Apply to MaskTool (centers internally)
                             if (this.canvas.maskTool) {
@@ -719,12 +662,7 @@ export class CanvasIO {
                         log.info(`Processing batch of ${batch.length} images from backend`);
                         for (let i = 0; i < batch.length; i++) {
                             const imgData = batch[i];
-                            const img = new Image();
-                            await new Promise((resolve, reject) => {
-                                img.onload = resolve;
-                                img.onerror = reject;
-                                img.src = imgData.data;
-                            });
+                            const img = await createImageFromSource(imgData.data);
                             // Add image to canvas with unique name
                             await this.canvas.canvasLayers.addLayerWithImage(img, { name: `Batch Image ${i + 1}` }, addMode, this.canvas.outputAreaBounds);
                             log.debug(`Added batch image ${i + 1}/${batch.length} from backend`);
@@ -735,12 +673,7 @@ export class CanvasIO {
                     }
                     else if (inputData.input_image) {
                         // Handle single image (backward compatibility)
-                        const img = new Image();
-                        await new Promise((resolve, reject) => {
-                            img.onload = resolve;
-                            img.onerror = reject;
-                            img.src = inputData.input_image;
-                        });
+                        const img = await createImageFromSource(inputData.input_image);
                         // Add image to canvas at output area position
                         await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode, this.canvas.outputAreaBounds);
                         log.info("Single input image added as new layer to canvas");
@@ -758,40 +691,18 @@ export class CanvasIO {
                 if (allowMask && !maskLoaded && hasMaskInput && inputData.input_mask) {
                     log.info("Processing input mask");
                     // Load mask image
-                    const maskImg = new Image();
-                    await new Promise((resolve, reject) => {
-                        maskImg.onload = resolve;
-                        maskImg.onerror = reject;
-                        maskImg.src = inputData.input_mask;
-                    });
+                    const maskImg = await createImageFromSource(inputData.input_mask);
                     // Determine if we should fit the mask or use it at original size
                     const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
                     const shouldFit = fitOnAddWidget2 && fitOnAddWidget2.value;
+                    let finalMaskImg = maskImg;
                     if (shouldFit && this.canvas.maskTool) {
-                        // Scale mask to fit output area if fit_on_add is enabled
                         const bounds = this.canvas.outputAreaBounds;
-                        const scale = Math.min(bounds.width / maskImg.width, bounds.height / maskImg.height);
-                        // Create scaled mask canvas
-                        const scaledWidth = Math.round(maskImg.width * scale);
-                        const scaledHeight = Math.round(maskImg.height * scale);
-                        const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
-                        if (!scaledCtx)
-                            throw new Error("Could not create scaled mask context");
-                        // Draw scaled mask
-                        scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
-                        // Convert scaled canvas to image
-                        const scaledMaskImg = new Image();
-                        await new Promise((resolve, reject) => {
-                            scaledMaskImg.onload = resolve;
-                            scaledMaskImg.onerror = reject;
-                            scaledMaskImg.src = scaledCanvas.toDataURL();
-                        });
-                        // Apply scaled mask to mask tool
-                        this.canvas.maskTool.setMask(scaledMaskImg, true);
+                        finalMaskImg = await scaleImageToFit(maskImg, bounds.width, bounds.height);
                     }
-                    else if (this.canvas.maskTool) {
-                        // Apply mask at original size
-                        this.canvas.maskTool.setMask(maskImg, true);
+                    // Apply to MaskTool (centers internally)
+                    if (this.canvas.maskTool) {
+                        this.canvas.maskTool.setMask(finalMaskImg, true);
                     }
                     this.canvas.maskAppliedFromInput = true;
                     // Save the mask state
@@ -903,51 +814,10 @@ export class CanvasIO {
         }
     }
     convertTensorToImageData(tensor) {
-        try {
-            const shape = tensor.shape;
-            const height = shape[1];
-            const width = shape[2];
-            const channels = shape[3];
-            log.debug("Converting tensor:", {
-                shape: shape,
-                dataRange: {
-                    min: tensor.min_val,
-                    max: tensor.max_val
-                }
-            });
-            const imageData = new ImageData(width, height);
-            const data = new Uint8ClampedArray(width * height * 4);
-            const flatData = tensor.data;
-            const pixelCount = width * height;
-            for (let i = 0; i < pixelCount; i++) {
-                const pixelIndex = i * 4;
-                const tensorIndex = i * channels;
-                for (let c = 0; c < channels; c++) {
-                    const value = flatData[tensorIndex + c];
-                    const normalizedValue = (value - tensor.min_val) / (tensor.max_val - tensor.min_val);
-                    data[pixelIndex + c] = Math.round(normalizedValue * 255);
-                }
-                data[pixelIndex + 3] = 255;
-            }
-            imageData.data.set(data);
-            return imageData;
-        }
-        catch (error) {
-            log.error("Error converting tensor:", error);
-            return null;
-        }
+        return tensorToImageData(tensor, 'rgb');
     }
     async createImageFromData(imageData) {
-        return new Promise((resolve, reject) => {
-            const { canvas, ctx } = createCanvas(imageData.width, imageData.height, '2d', { willReadFrequently: true });
-            if (!ctx)
-                throw new Error("Could not create canvas context");
-            ctx.putImageData(imageData, 0, 0);
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = canvas.toDataURL();
-        });
+        return createImageFromImageData(imageData);
     }
     async processMaskData(maskData) {
         try {
@@ -1007,12 +877,7 @@ export class CanvasIO {
                 log.info(`Received ${result.images.length} new images, adding to canvas.`);
                 const newLayers = [];
                 for (const imageData of result.images) {
-                    const img = new Image();
-                    await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
-                        img.src = imageData;
-                    });
+                    const img = await createImageFromSource(imageData);
                     let processedImage = img;
                     // If there's a custom shape, clip the image to that shape
                     if (this.canvas.outputAreaShape && this.canvas.outputAreaShape.isClosed) {
@@ -1039,33 +904,27 @@ export class CanvasIO {
         }
     }
     async clipImageToShape(image, shape) {
-        return new Promise((resolve, reject) => {
-            const { canvas, ctx } = createCanvas(image.width, image.height);
-            if (!ctx) {
-                reject(new Error("Could not create canvas context for clipping"));
-                return;
-            }
-            // Draw the image first
-            ctx.drawImage(image, 0, 0);
-            // Calculate custom shape position accounting for extensions
-            // Custom shape should maintain its relative position within the original canvas area
-            const ext = this.canvas.outputAreaExtensionEnabled ? this.canvas.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
-            const shapeOffsetX = ext.left; // Add left extension to maintain relative position
-            const shapeOffsetY = ext.top; // Add top extension to maintain relative position
-            // Create a clipping mask using the shape with extension offset
-            ctx.globalCompositeOperation = 'destination-in';
-            ctx.beginPath();
-            ctx.moveTo(shape.points[0].x + shapeOffsetX, shape.points[0].y + shapeOffsetY);
-            for (let i = 1; i < shape.points.length; i++) {
-                ctx.lineTo(shape.points[i].x + shapeOffsetX, shape.points[i].y + shapeOffsetY);
-            }
-            ctx.closePath();
-            ctx.fill();
-            // Create a new image from the clipped canvas
-            const clippedImage = new Image();
-            clippedImage.onload = () => resolve(clippedImage);
-            clippedImage.onerror = () => reject(new Error("Failed to create clipped image"));
-            clippedImage.src = canvas.toDataURL();
-        });
+        const { canvas, ctx } = createCanvas(image.width, image.height);
+        if (!ctx) {
+            throw new Error("Could not create canvas context for clipping");
+        }
+        // Draw the image first
+        ctx.drawImage(image, 0, 0);
+        // Calculate custom shape position accounting for extensions
+        // Custom shape should maintain its relative position within the original canvas area
+        const ext = this.canvas.outputAreaExtensionEnabled ? this.canvas.outputAreaExtensions : { top: 0, bottom: 0, left: 0, right: 0 };
+        const shapeOffsetX = ext.left; // Add left extension to maintain relative position
+        const shapeOffsetY = ext.top; // Add top extension to maintain relative position
+        // Create a clipping mask using the shape with extension offset
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.beginPath();
+        ctx.moveTo(shape.points[0].x + shapeOffsetX, shape.points[0].y + shapeOffsetY);
+        for (let i = 1; i < shape.points.length; i++) {
+            ctx.lineTo(shape.points[i].x + shapeOffsetX, shape.points[i].y + shapeOffsetY);
+        }
+        ctx.closePath();
+        ctx.fill();
+        // Create a new image from the clipped canvas
+        return await createImageFromSource(canvas.toDataURL());
     }
 }

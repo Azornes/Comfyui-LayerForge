@@ -411,3 +411,86 @@ export async function scaleImageToFit(image: HTMLImageElement, targetWidth: numb
         scaledImg.src = canvas.toDataURL();
     });
 }
+
+/**
+ * Unified tensor to image data conversion
+ * Handles both RGB images and grayscale masks
+ * @param tensor - Input tensor data
+ * @param mode - 'rgb' for images or 'grayscale' for masks
+ * @returns ImageData object
+ */
+export function tensorToImageData(tensor: any, mode: 'rgb' | 'grayscale' = 'rgb'): ImageData | null {
+    try {
+        const shape = tensor.shape;
+        const height = shape[1];
+        const width = shape[2];
+        const channels = shape[3] || 1; // Default to 1 for masks
+
+        log.debug("Converting tensor:", { shape, channels, mode });
+
+        const imageData = new ImageData(width, height);
+        const data = new Uint8ClampedArray(width * height * 4);
+
+        const flatData = tensor.data;
+        const pixelCount = width * height;
+
+        const min = tensor.min_val ?? 0;
+        const max = tensor.max_val ?? 1;
+        const denom = (max - min) || 1;
+
+        for (let i = 0; i < pixelCount; i++) {
+            const pixelIndex = i * 4;
+            const tensorIndex = i * channels;
+
+            let lum: number;
+            if (mode === 'grayscale' || channels === 1) {
+                lum = flatData[tensorIndex];
+            } else {
+                // Compute luminance for RGB
+                const r = flatData[tensorIndex + 0] ?? 0;
+                const g = flatData[tensorIndex + 1] ?? 0;
+                const b = flatData[tensorIndex + 2] ?? 0;
+                lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+
+            let norm = (lum - min) / denom;
+            if (!isFinite(norm)) norm = 0;
+            norm = Math.max(0, Math.min(1, norm));
+            const value = Math.round(norm * 255);
+
+            if (mode === 'grayscale') {
+                // For masks: RGB = value, A = 255 (MaskTool reads luminance)
+                data[pixelIndex] = value;
+                data[pixelIndex + 1] = value;
+                data[pixelIndex + 2] = value;
+                data[pixelIndex + 3] = 255;
+            } else {
+                // For images: RGB from channels, A = 255
+                for (let c = 0; c < Math.min(3, channels); c++) {
+                    const channelValue = flatData[tensorIndex + c];
+                    const channelNorm = (channelValue - min) / denom;
+                    data[pixelIndex + c] = Math.round(channelNorm * 255);
+                }
+                data[pixelIndex + 3] = 255;
+            }
+        }
+
+        imageData.data.set(data);
+        return imageData;
+    } catch (error) {
+        log.error("Error converting tensor:", error);
+        return null;
+    }
+}
+
+/**
+ * Creates an HTMLImageElement from ImageData
+ * @param imageData - Input ImageData
+ * @returns Promise with HTMLImageElement
+ */
+export async function createImageFromImageData(imageData: ImageData): Promise<HTMLImageElement> {
+    const { canvas, ctx } = createCanvas(imageData.width, imageData.height, '2d', { willReadFrequently: true });
+    if (!ctx) throw new Error("Could not create canvas context");
+    ctx.putImageData(imageData, 0, 0);
+    return await createImageFromSource(canvas.toDataURL());
+}
