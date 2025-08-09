@@ -2,6 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
+import { scaleImageToFit } from "./utils/ImageUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape } from './types';
 
@@ -665,19 +666,7 @@ export class CanvasIO {
                             let finalMaskImg: HTMLImageElement = maskImg;
                             if (shouldFit) {
                                 const bounds = this.canvas.outputAreaBounds;
-                                const scale = Math.min(bounds.width / maskImg.width, bounds.height / maskImg.height);
-                                const scaledWidth = Math.max(1, Math.round(maskImg.width * scale));
-                                const scaledHeight = Math.max(1, Math.round(maskImg.height * scale));
-                                const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
-                                if (!scaledCtx) throw new Error("Could not create scaled mask context");
-                                scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
-                                
-                                finalMaskImg = await new Promise<HTMLImageElement>((resolve, reject) => {
-                                    const img = new Image();
-                                    img.onload = () => resolve(img);
-                                    img.onerror = reject;
-                                    img.src = scaledCanvas.toDataURL();
-                                });
+                                finalMaskImg = await scaleImageToFit(maskImg, bounds.width, bounds.height);
                             }
                             
                             // Apply to MaskTool (centers internally)
@@ -880,41 +869,15 @@ export class CanvasIO {
                     const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
                     const shouldFit = fitOnAddWidget2 && fitOnAddWidget2.value;
                     
+                    let finalMaskImg: HTMLImageElement = maskImg;
                     if (shouldFit && this.canvas.maskTool) {
-                        // Scale mask to fit output area if fit_on_add is enabled
                         const bounds = this.canvas.outputAreaBounds;
-                        const scale = Math.min(
-                            bounds.width / maskImg.width,
-                            bounds.height / maskImg.height
-                        );
-                        
-                        // Create scaled mask canvas
-                        const scaledWidth = Math.round(maskImg.width * scale);
-                        const scaledHeight = Math.round(maskImg.height * scale);
-                        const { canvas: scaledCanvas, ctx: scaledCtx } = createCanvas(
-                            scaledWidth,
-                            scaledHeight,
-                            '2d',
-                            { willReadFrequently: true }
-                        );
-                        if (!scaledCtx) throw new Error("Could not create scaled mask context");
-                        
-                        // Draw scaled mask
-                        scaledCtx.drawImage(maskImg, 0, 0, scaledWidth, scaledHeight);
-                        
-                        // Convert scaled canvas to image
-                        const scaledMaskImg = new Image();
-                        await new Promise((resolve, reject) => {
-                            scaledMaskImg.onload = resolve;
-                            scaledMaskImg.onerror = reject;
-                            scaledMaskImg.src = scaledCanvas.toDataURL();
-                        });
-                        
-                        // Apply scaled mask to mask tool
-                        this.canvas.maskTool.setMask(scaledMaskImg, true);
-                    } else if (this.canvas.maskTool) {
-                        // Apply mask at original size
-                        this.canvas.maskTool.setMask(maskImg, true);
+                        finalMaskImg = await scaleImageToFit(maskImg, bounds.width, bounds.height);
+                    }
+                    
+                    // Apply to MaskTool (centers internally)
+                    if (this.canvas.maskTool) {
+                        this.canvas.maskTool.setMask(finalMaskImg, true);
                     }
                     
                     (this.canvas as any).maskAppliedFromInput = true;

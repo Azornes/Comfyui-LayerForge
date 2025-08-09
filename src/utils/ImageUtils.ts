@@ -386,3 +386,28 @@ export function canvasToMaskImage(canvas: HTMLCanvasElement): Promise<HTMLImageE
         img.src = canvas.toDataURL();
     });
 }
+
+/**
+ * Scales an image to fit within specified bounds while maintaining aspect ratio
+ * @param image - Image to scale
+ * @param targetWidth - Target width to fit within
+ * @param targetHeight - Target height to fit within
+ * @returns Promise with scaled Image element
+ */
+export async function scaleImageToFit(image: HTMLImageElement, targetWidth: number, targetHeight: number): Promise<HTMLImageElement> {
+    const scale = Math.min(targetWidth / image.width, targetHeight / image.height);
+    const scaledWidth = Math.max(1, Math.round(image.width * scale));
+    const scaledHeight = Math.max(1, Math.round(image.height * scale));
+    
+    const { canvas, ctx } = createCanvas(scaledWidth, scaledHeight, '2d', { willReadFrequently: true });
+    if (!ctx) throw new Error("Could not create scaled image context");
+    
+    ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+    
+    return new Promise((resolve, reject) => {
+        const scaledImg = new Image();
+        scaledImg.onload = () => resolve(scaledImg);
+        scaledImg.onerror = reject;
+        scaledImg.src = canvas.toDataURL();
+    });
+}
