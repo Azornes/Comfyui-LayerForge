@@ -652,8 +652,8 @@ export class CanvasRenderer {
         this.updateStrokeOverlaySize();
         // Position above main canvas but below cursor overlay
         this.strokeOverlayCanvas.style.position = 'absolute';
-        this.strokeOverlayCanvas.style.left = '0px';
-        this.strokeOverlayCanvas.style.top = '0px';
+        this.strokeOverlayCanvas.style.left = '1px';
+        this.strokeOverlayCanvas.style.top = '1px';
         this.strokeOverlayCanvas.style.pointerEvents = 'none';
         this.strokeOverlayCanvas.style.zIndex = '19'; // Below cursor overlay (20)
         // Opacity is now controlled by MaskTool.previewOpacity
