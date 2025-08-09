@@ -1368,12 +1368,18 @@ app.registerExtension({
                     if (index === 1) {
                         if (connected && link_info) {
                             log.info("Input mask connected");
+                            
+                            // DON'T clear existing mask when connecting a new input
+                            // Reset the loaded mask link ID to allow loading from the new connection
+                            canvas.lastLoadedMaskLinkId = undefined;
+                            
                             // Mark that we have a pending mask connection
                             canvas.hasPendingMaskConnection = true;
                             // Check for data immediately when connected
                             setTimeout(() => {
                                 log.info("Checking for input data after mask connection...");
-                                // Only load mask here; images are handled by image connect or execution
+                                // Only load mask here if it's immediately available from the connected node
+                                // Don't load stale masks from backend storage
                                 canvas.canvasIO.checkForInputData({ allowImage: false, allowMask: true, reason: "mask_connect" });
                             }, 500);
                         } else {

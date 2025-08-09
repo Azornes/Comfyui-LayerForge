@@ -620,10 +620,6 @@ export class CanvasIO {
             const hasMaskInput = this.canvas.node.inputs && this.canvas.node.inputs[1] && this.canvas.node.inputs[1].link;
             // If mask input is disconnected, clear any currently applied mask to ensure full separation
             if (!hasMaskInput) {
-                if (this.canvas.maskTool) {
-                    this.canvas.maskTool.clear();
-                    this.canvas.render();
-                }
                 this.canvas.maskAppliedFromInput = false;
                 this.canvas.lastLoadedMaskLinkId = undefined;
                 log.info("Mask input disconnected - cleared mask to enforce separation from input_image");
@@ -631,6 +627,11 @@ export class CanvasIO {
             if (!hasImageInput && !hasMaskInput) {
                 log.debug("No inputs connected, skipping backend check");
                 this.canvas.inputDataLoaded = true;
+                return;
+            }
+            // Skip backend check during mask connection if we didn't get immediate data
+            if (reason === "mask_connect" && !maskLoaded) {
+                log.info("No immediate mask data available during connection, skipping backend check to avoid stale data. Will check after execution.");
                 return;
             }
             // Check backend for input data only if we have connected inputs
