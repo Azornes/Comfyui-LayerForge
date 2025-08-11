@@ -6,6 +6,10 @@ body:
   - type: markdown
     attributes:
       value: |
+        **Before suggesting a new feature, please make sure you are using the latest version of the project and that this functionality does not already exist.**
+  - type: markdown
+    attributes:
+      value: |
         *Please fill this form with as much information as possible, provide screenshots and/or illustrations of the feature if possible*
   - type: textarea
     id: feature

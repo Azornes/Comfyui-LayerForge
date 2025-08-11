@@ -3,11 +3,17 @@ description: Suggest improvements or additions to documentation
 title: "[Docs] "
 labels: [documentation]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        > This template is only for suggesting improvements or additions **to existing documentation**.  
+        > If you want to suggest a new feature, functionality, or enhancement for the project itself, please use the **Feature Request** template instead.  
+        > Thank you!
   - type: input
     id: doc_area
     attributes:
       label: Area of documentation
-      placeholder: e.g. Getting started, Node API, Deployment guide
+      placeholder: e.g. Key Features, Installation, Controls & Shortcuts
     validations:
       required: true
   - type: textarea
