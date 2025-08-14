@@ -196,6 +196,117 @@ export class CanvasLayers {
             }
         }
     }
+    /**
+     * Automatically adjust output area to fit selected layers
+     * Calculates precise bounding box for all selected layers including rotation and crop mode support
+     */
+    autoAdjustOutputToSelection() {
+        const selectedLayers = this.canvas.canvasSelection.selectedLayers;
+        if (selectedLayers.length === 0) {
+            return false;
+        }
+        // Calculate bounding box of selected layers
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        selectedLayers.forEach((layer) => {
+            // For crop mode layers, use the visible crop bounds
+            if (layer.cropMode && layer.cropBounds && layer.originalWidth && layer.originalHeight) {
+                const layerScaleX = layer.width / layer.originalWidth;
+                const layerScaleY = layer.height / layer.originalHeight;
+                const cropWidth = layer.cropBounds.width * layerScaleX;
+                const cropHeight = layer.cropBounds.height * layerScaleY;
+                const effectiveCropX = layer.flipH
+                    ? layer.originalWidth - (layer.cropBounds.x + layer.cropBounds.width)
+                    : layer.cropBounds.x;
+                const effectiveCropY = layer.flipV
+                    ? layer.originalHeight - (layer.cropBounds.y + layer.cropBounds.height)
+                    : layer.cropBounds.y;
+                const cropOffsetX = effectiveCropX * layerScaleX;
+                const cropOffsetY = effectiveCropY * layerScaleY;
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                const rad = layer.rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                // Calculate corners of the crop rectangle
+                const corners = [
+                    { x: cropOffsetX, y: cropOffsetY },
+                    { x: cropOffsetX + cropWidth, y: cropOffsetY },
+                    { x: cropOffsetX + cropWidth, y: cropOffsetY + cropHeight },
+                    { x: cropOffsetX, y: cropOffsetY + cropHeight }
+                ];
+                corners.forEach(p => {
+                    // Transform to layer space (centered)
+                    const localX = p.x - layer.width / 2;
+                    const localY = p.y - layer.height / 2;
+                    // Apply rotation
+                    const worldX = centerX + (localX * cos - localY * sin);
+                    const worldY = centerY + (localX * sin + localY * cos);
+                    minX = Math.min(minX, worldX);
+                    minY = Math.min(minY, worldY);
+                    maxX = Math.max(maxX, worldX);
+                    maxY = Math.max(maxY, worldY);
+                });
+            }
+            else {
+                // For normal layers, use the full layer bounds
+                const centerX = layer.x + layer.width / 2;
+                const centerY = layer.y + layer.height / 2;
+                const rad = layer.rotation * Math.PI / 180;
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                const halfW = layer.width / 2;
+                const halfH = layer.height / 2;
+                const corners = [
+                    { x: -halfW, y: -halfH },
+                    { x: halfW, y: -halfH },
+                    { x: halfW, y: halfH },
+                    { x: -halfW, y: halfH }
+                ];
+                corners.forEach(p => {
+                    const worldX = centerX + (p.x * cos - p.y * sin);
+                    const worldY = centerY + (p.x * sin + p.y * cos);
+                    minX = Math.min(minX, worldX);
+                    minY = Math.min(minY, worldY);
+                    maxX = Math.max(maxX, worldX);
+                    maxY = Math.max(maxY, worldY);
+                });
+            }
+        });
+        // Calculate new dimensions without padding for precise fit
+        const newWidth = Math.ceil(maxX - minX);
+        const newHeight = Math.ceil(maxY - minY);
+        if (newWidth <= 0 || newHeight <= 0) {
+            log.error("Cannot calculate valid output area dimensions");
+            return false;
+        }
+        // Update output area bounds
+        this.canvas.outputAreaBounds = {
+            x: minX,
+            y: minY,
+            width: newWidth,
+            height: newHeight
+        };
+        // Update canvas dimensions
+        this.canvas.width = newWidth;
+        this.canvas.height = newHeight;
+        this.canvas.maskTool.resize(newWidth, newHeight);
+        this.canvas.canvas.width = newWidth;
+        this.canvas.canvas.height = newHeight;
+        // Reset extensions
+        this.canvas.outputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        this.canvas.outputAreaExtensionEnabled = false;
+        this.canvas.lastOutputAreaExtensions = { top: 0, bottom: 0, left: 0, right: 0 };
+        // Update original canvas size and position
+        this.canvas.originalCanvasSize = { width: newWidth, height: newHeight };
+        this.canvas.originalOutputAreaPosition = { x: minX, y: minY };
+        // Save state and render
+        this.canvas.render();
+        this.canvas.saveState();
+        log.info(`Auto-adjusted output area to fit ${selectedLayers.length} selected layer(s)`, {
+            bounds: { x: minX, y: minY, width: newWidth, height: newHeight }
+        });
+        return true;
+    }
     pasteLayers() {
         if (this.internalClipboard.length === 0)
             return;

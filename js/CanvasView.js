@@ -8,7 +8,7 @@ import { clearAllCanvasStates } from "./db.js";
 import { ImageCache } from "./ImageCache.js";
 import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./utils/LoggerUtils.js";
-import { showErrorNotification, showSuccessNotification, showInfoNotification } from "./utils/NotificationUtils.js";
+import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
@@ -213,6 +213,25 @@ async function createCanvasWidget(node, widget, app) {
             ]),
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
+                $el("button.painter-button.requires-selection", {
+                    textContent: "Auto Adjust Output",
+                    title: "Automatically adjust output area to fit selected layers",
+                    onclick: () => {
+                        const selectedLayers = canvas.canvasSelection.selectedLayers;
+                        if (selectedLayers.length === 0) {
+                            showWarningNotification("Please select one or more layers first");
+                            return;
+                        }
+                        const success = canvas.canvasLayers.autoAdjustOutputToSelection();
+                        if (success) {
+                            const bounds = canvas.outputAreaBounds;
+                            showSuccessNotification(`Output area adjusted to ${bounds.width}x${bounds.height}px`);
+                        }
+                        else {
+                            showErrorNotification("Cannot calculate valid output area dimensions");
+                        }
+                    }
+                }),
                 $el("button.painter-button", {
                     textContent: "Output Area Size",
                     title: "Set the size of the output area",

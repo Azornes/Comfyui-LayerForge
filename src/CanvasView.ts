@@ -268,6 +268,25 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
             $el("div.painter-separator"),
             $el("div.painter-button-group", {}, [
+                $el("button.painter-button.requires-selection", {
+                    textContent: "Auto Adjust Output",
+                    title: "Automatically adjust output area to fit selected layers",
+                    onclick: () => {
+                        const selectedLayers = canvas.canvasSelection.selectedLayers;
+                        if (selectedLayers.length === 0) {
+                            showWarningNotification("Please select one or more layers first");
+                            return;
+                        }
+                        
+                        const success = canvas.canvasLayers.autoAdjustOutputToSelection();
+                        if (success) {
+                            const bounds = canvas.outputAreaBounds;
+                            showSuccessNotification(`Output area adjusted to ${bounds.width}x${bounds.height}px`);
+                        } else {
+                            showErrorNotification("Cannot calculate valid output area dimensions");
+                        }
+                    }
+                }),
                 $el("button.painter-button", {
                     textContent: "Output Area Size",
                     title: "Set the size of the output area",
