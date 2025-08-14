@@ -39,6 +39,8 @@ export class CanvasInteractions {
             keyMovementInProgress: false,
             canvasResizeRect: null,
             canvasMoveRect: null,
+            outputAreaTransformHandle: null,
+            outputAreaTransformAnchor: { x: 0, y: 0 },
         };
         this.originalLayerPositions = new Map();
     }
@@ -157,6 +159,7 @@ export class CanvasInteractions {
         this.interaction.canvasMoveRect = null;
         this.interaction.hasClonedInDrag = false;
         this.interaction.transformingLayer = null;
+        this.interaction.outputAreaTransformHandle = null;
         this.canvas.canvas.style.cursor = 'default';
     }
     handleMouseDown(e) {
@@ -166,6 +169,18 @@ export class CanvasInteractions {
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseDown(coords.world, coords.view);
             // Don't render here - mask tool will handle its own drawing
+            return;
+        }
+        if (this.interaction.mode === 'transformingOutputArea') {
+            // Check if clicking on output area transform handle
+            const handle = this.getOutputAreaHandle(coords.world);
+            if (handle) {
+                this.startOutputAreaTransform(handle, coords.world);
+                return;
+            }
+            // If clicking outside, exit transform mode
+            this.interaction.mode = 'none';
+            this.canvas.render();
             return;
         }
         if (this.canvas.shapeTool.isActive) {
@@ -258,6 +273,14 @@ export class CanvasInteractions {
             case 'movingCanvas':
                 this.updateCanvasMove(coords.world);
                 break;
+            case 'transformingOutputArea':
+                if (this.interaction.outputAreaTransformHandle) {
+                    this.resizeOutputAreaFromHandle(coords.world, e.shiftKey);
+                }
+                else {
+                    this.updateOutputAreaTransformCursor(coords.world);
+                }
+                break;
             default:
                 this.updateCursor(coords.world);
                 // Update brush cursor on overlay if mask tool is active
@@ -284,6 +307,10 @@ export class CanvasInteractions {
         }
         if (this.interaction.mode === 'movingCanvas') {
             this.finalizeCanvasMove();
+        }
+        if (this.interaction.mode === 'transformingOutputArea' && this.interaction.outputAreaTransformHandle) {
+            this.finalizeOutputAreaTransform();
+            return;
         }
         // Log layer positions when dragging ends
         if (this.interaction.mode === 'dragging' && this.canvas.canvasSelection.selectedLayers.length > 0) {
@@ -1127,5 +1154,169 @@ export class CanvasInteractions {
             }
         }
         await this.canvas.canvasLayers.clipboardManager.handlePaste('mouse', preference);
+    }
+    // New methods for output area transformation
+    activateOutputAreaTransform() {
+        // Clear any existing interaction state before starting transform
+        this.resetInteractionState();
+        // Deactivate any active tools that might conflict
+        if (this.canvas.shapeTool.isActive) {
+            this.canvas.shapeTool.deactivate();
+        }
+        if (this.canvas.maskTool.isActive) {
+            this.canvas.maskTool.deactivate();
+        }
+        // Clear selection to avoid confusion
+        this.canvas.canvasSelection.updateSelection([]);
+        // Set transform mode
+        this.interaction.mode = 'transformingOutputArea';
+        this.canvas.render();
+    }
+    getOutputAreaHandle(worldCoords) {
+        const bounds = this.canvas.outputAreaBounds;
+        const threshold = 10 / this.canvas.viewport.zoom;
+        // Define handle positions
+        const handles = {
+            'nw': { x: bounds.x, y: bounds.y },
+            'n': { x: bounds.x + bounds.width / 2, y: bounds.y },
+            'ne': { x: bounds.x + bounds.width, y: bounds.y },
+            'e': { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
+            'se': { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+            's': { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height },
+            'sw': { x: bounds.x, y: bounds.y + bounds.height },
+            'w': { x: bounds.x, y: bounds.y + bounds.height / 2 },
+        };
+        for (const [name, pos] of Object.entries(handles)) {
+            const dx = worldCoords.x - pos.x;
+            const dy = worldCoords.y - pos.y;
+            if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+                return name;
+            }
+        }
+        return null;
+    }
+    startOutputAreaTransform(handle, worldCoords) {
+        this.interaction.outputAreaTransformHandle = handle;
+        this.interaction.dragStart = { ...worldCoords };
+        const bounds = this.canvas.outputAreaBounds;
+        this.interaction.transformOrigin = {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            rotation: 0,
+            centerX: bounds.x + bounds.width / 2,
+            centerY: bounds.y + bounds.height / 2
+        };
+        // Set anchor point (opposite corner for resize)
+        const anchorMap = {
+            'nw': { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+            'n': { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height },
+            'ne': { x: bounds.x, y: bounds.y + bounds.height },
+            'e': { x: bounds.x, y: bounds.y + bounds.height / 2 },
+            'se': { x: bounds.x, y: bounds.y },
+            's': { x: bounds.x + bounds.width / 2, y: bounds.y },
+            'sw': { x: bounds.x + bounds.width, y: bounds.y },
+            'w': { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
+        };
+        this.interaction.outputAreaTransformAnchor = anchorMap[handle];
+    }
+    resizeOutputAreaFromHandle(worldCoords, isShiftPressed) {
+        const o = this.interaction.transformOrigin;
+        if (!o)
+            return;
+        const handle = this.interaction.outputAreaTransformHandle;
+        const anchor = this.interaction.outputAreaTransformAnchor;
+        let newX = o.x;
+        let newY = o.y;
+        let newWidth = o.width;
+        let newHeight = o.height;
+        // Calculate new dimensions based on handle
+        if (handle?.includes('w')) {
+            const deltaX = worldCoords.x - anchor.x;
+            newWidth = Math.abs(deltaX);
+            newX = Math.min(worldCoords.x, anchor.x);
+        }
+        if (handle?.includes('e')) {
+            const deltaX = worldCoords.x - anchor.x;
+            newWidth = Math.abs(deltaX);
+            newX = Math.min(worldCoords.x, anchor.x);
+        }
+        if (handle?.includes('n')) {
+            const deltaY = worldCoords.y - anchor.y;
+            newHeight = Math.abs(deltaY);
+            newY = Math.min(worldCoords.y, anchor.y);
+        }
+        if (handle?.includes('s')) {
+            const deltaY = worldCoords.y - anchor.y;
+            newHeight = Math.abs(deltaY);
+            newY = Math.min(worldCoords.y, anchor.y);
+        }
+        // Maintain aspect ratio if shift is held
+        if (isShiftPressed && o.width > 0 && o.height > 0) {
+            const aspectRatio = o.width / o.height;
+            if (handle === 'n' || handle === 's') {
+                newWidth = newHeight * aspectRatio;
+            }
+            else if (handle === 'e' || handle === 'w') {
+                newHeight = newWidth / aspectRatio;
+            }
+            else {
+                // Corner handles
+                const proposedRatio = newWidth / newHeight;
+                if (proposedRatio > aspectRatio) {
+                    newHeight = newWidth / aspectRatio;
+                }
+                else {
+                    newWidth = newHeight * aspectRatio;
+                }
+            }
+        }
+        // Snap to grid if Ctrl is held
+        if (this.interaction.isCtrlPressed) {
+            newX = snapToGrid(newX);
+            newY = snapToGrid(newY);
+            newWidth = snapToGrid(newWidth);
+            newHeight = snapToGrid(newHeight);
+        }
+        // Apply minimum size
+        if (newWidth < 10)
+            newWidth = 10;
+        if (newHeight < 10)
+            newHeight = 10;
+        // Update output area bounds temporarily for preview
+        this.canvas.outputAreaBounds = {
+            x: newX,
+            y: newY,
+            width: newWidth,
+            height: newHeight
+        };
+        this.canvas.render();
+    }
+    updateOutputAreaTransformCursor(worldCoords) {
+        const handle = this.getOutputAreaHandle(worldCoords);
+        if (handle) {
+            const cursorMap = {
+                'n': 'ns-resize', 's': 'ns-resize',
+                'e': 'ew-resize', 'w': 'ew-resize',
+                'nw': 'nwse-resize', 'se': 'nwse-resize',
+                'ne': 'nesw-resize', 'sw': 'nesw-resize',
+            };
+            this.canvas.canvas.style.cursor = cursorMap[handle] || 'default';
+        }
+        else {
+            this.canvas.canvas.style.cursor = 'default';
+        }
+    }
+    finalizeOutputAreaTransform() {
+        const bounds = this.canvas.outputAreaBounds;
+        // Update canvas size and mask tool
+        this.canvas.updateOutputAreaSize(bounds.width, bounds.height);
+        // Update mask canvas for new output area
+        this.canvas.maskTool.updateMaskCanvasForOutputArea();
+        // Save state
+        this.canvas.saveState();
+        // Reset transform handle but keep transform mode active
+        this.interaction.outputAreaTransformHandle = null;
     }
 }

@@ -289,88 +289,11 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                 }),
                 $el("button.painter-button", {
                     textContent: "Output Area Size",
-                    title: "Set the size of the output area",
+                    title: "Transform output area - drag handles to resize",
                     onclick: () => {
-                        const dialog = $el("div.painter-dialog", {
-                            style: {
-                                position: 'fixed',
-                                left: '50%',
-                                top: '50%',
-                                transform: 'translate(-50%, -50%)',
-                                zIndex: '9999'
-                            }
-                        }, [
-                            $el("div", {
-                                style: {
-                                    color: "white",
-                                    marginBottom: "10px"
-                                }
-                            }, [
-                                $el("label", {
-                                    style: {
-                                        marginRight: "5px"
-                                    }
-                                }, [
-                                    $el("span", {}, ["Width: "])
-                                ]),
-                                $el("input", {
-                                    type: "number",
-                                    id: "canvas-width",
-                                    value: String(canvas.width),
-                                    min: "1",
-                                    max: "4096"
-                                })
-                            ]),
-                            $el("div", {
-                                style: {
-                                    color: "white",
-                                    marginBottom: "10px"
-                                }
-                            }, [
-                                $el("label", {
-                                    style: {
-                                        marginRight: "5px"
-                                    }
-                                }, [
-                                    $el("span", {}, ["Height: "])
-                                ]),
-                                $el("input", {
-                                    type: "number",
-                                    id: "canvas-height",
-                                    value: String(canvas.height),
-                                    min: "1",
-                                    max: "4096"
-                                })
-                            ]),
-                            $el("div", {
-                                style: {
-                                    textAlign: "right"
-                                }
-                            }, [
-                                $el("button", {
-                                    id: "cancel-size",
-                                    textContent: "Cancel"
-                                }),
-                                $el("button", {
-                                    id: "confirm-size",
-                                    textContent: "OK"
-                                })
-                            ])
-                        ]);
-                        document.body.appendChild(dialog);
-
-                        (document.getElementById('confirm-size') as HTMLButtonElement).onclick = () => {
-                            const widthInput = document.getElementById('canvas-width') as HTMLInputElement;
-                            const heightInput = document.getElementById('canvas-height') as HTMLInputElement;
-                            const width = parseInt(widthInput.value) || canvas.width;
-                            const height = parseInt(heightInput.value) || canvas.height;
-                            canvas.setOutputAreaSize(width, height);
-                            document.body.removeChild(dialog);
-                        };
-
-                        (document.getElementById('cancel-size') as HTMLButtonElement).onclick = () => {
-                            document.body.removeChild(dialog);
-                        };
+                        // Activate output area transform mode
+                        canvas.canvasInteractions.activateOutputAreaTransform();
+                        showInfoNotification("Click and drag the handles to resize the output area. Click anywhere else to exit.", 3000);
                     }
                 }),
                 $el("button.painter-button.requires-selection", {

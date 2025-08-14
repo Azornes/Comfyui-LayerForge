@@ -195,6 +195,7 @@ export class CanvasRenderer {
         this.renderInteractionElements(ctx);
         this.canvas.shapeTool.render(ctx);
         this.drawMaskAreaBounds(ctx); // Draw mask area bounds when mask tool is active
+        this.renderOutputAreaTransformHandles(ctx); // Draw output area transform handles
         this.renderLayerInfo(ctx);
         
         // Update custom shape menu position and visibility
@@ -1010,5 +1011,47 @@ export class CanvasRenderer {
         // Overlay canvas is positioned absolutely, so it doesn't need repositioning
         // Just ensure it's the right size
         this.updateOverlaySize();
+    }
+
+    /**
+     * Draw transform handles for output area when in transform mode
+     */
+    renderOutputAreaTransformHandles(ctx: any): void {
+        if (this.canvas.canvasInteractions.interaction.mode !== 'transformingOutputArea') {
+            return;
+        }
+
+        const bounds = this.canvas.outputAreaBounds;
+        const handleRadius = 5 / this.canvas.viewport.zoom;
+        
+        // Define handle positions
+        const handles = {
+            'nw': { x: bounds.x, y: bounds.y },
+            'n': { x: bounds.x + bounds.width / 2, y: bounds.y },
+            'ne': { x: bounds.x + bounds.width, y: bounds.y },
+            'e': { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
+            'se': { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+            's': { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height },
+            'sw': { x: bounds.x, y: bounds.y + bounds.height },
+            'w': { x: bounds.x, y: bounds.y + bounds.height / 2 },
+        };
+
+        // Draw handles
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1 / this.canvas.viewport.zoom;
+
+        for (const [name, pos] of Object.entries(handles)) {
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, handleRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // Draw a highlight around the output area
+        ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+        ctx.lineWidth = 3 / this.canvas.viewport.zoom;
+        ctx.setLineDash([]);
+        ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 }
