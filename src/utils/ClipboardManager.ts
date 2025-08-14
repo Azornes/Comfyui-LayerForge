@@ -1,5 +1,5 @@
 import {createModuleLogger} from "./LoggerUtils.js";
-import { showNotification, showInfoNotification } from "./NotificationUtils.js";
+import { showNotification, showInfoNotification, showErrorNotification, showWarningNotification } from "./NotificationUtils.js";
 import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
 import { safeClipspacePaste } from "./ClipspaceUtils.js";
 
@@ -34,6 +34,7 @@ export class ClipboardManager {
         if (this.canvas.canvasLayers.internalClipboard.length > 0) {
             log.info("Found layers in internal clipboard, pasting layers");
             this.canvas.canvasLayers.pasteLayers();
+            showInfoNotification("Layers pasted from internal clipboard");
             return true;
         }
 
@@ -44,10 +45,22 @@ export class ClipboardManager {
                 return true;
             }
             log.info("No image found in ComfyUI Clipspace");
+            // Don't show error here, will try system clipboard next
         }
 
         log.info("Attempting paste from system clipboard");
-        return await this.trySystemClipboardPaste(addMode);
+        const systemSuccess = await this.trySystemClipboardPaste(addMode);
+        
+        if (!systemSuccess) {
+            // No valid image found in any clipboard
+            if (preference === 'clipspace') {
+                showWarningNotification("No valid image found in Clipspace or system clipboard");
+            } else {
+                showWarningNotification("No valid image found in clipboard");
+            }
+        }
+        
+        return systemSuccess;
     }, 'ClipboardManager.handlePaste');
 
     /**
@@ -72,6 +85,7 @@ export class ClipboardManager {
                 const img = new Image();
                 img.onload = async () => {
                     await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                    showInfoNotification("Image pasted from Clipspace");
                 };
                 img.src = clipspaceImage.src;
                 return true;
@@ -105,6 +119,7 @@ export class ClipboardManager {
                                 img.onload = async () => {
                                     log.info("Successfully loaded image from system clipboard");
                                     await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                                    showInfoNotification("Image pasted from system clipboard");
                                 };
                                 if (event.target?.result) {
                                     img.src = event.target.result as string;
@@ -240,15 +255,17 @@ export class ClipboardManager {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 return new Promise((resolve) => {
-                    img.onload = async () => {
-                        log.info("Successfully loaded image from URL");
-                        await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                        resolve(true);
-                    };
-                    img.onerror = () => {
-                        log.warn("Failed to load image from URL:", filePath);
-                        resolve(false);
-                    };
+            img.onload = async () => {
+                log.info("Successfully loaded image from URL");
+                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                showInfoNotification("Image loaded from URL");
+                resolve(true);
+            };
+            img.onerror = () => {
+                log.warn("Failed to load image from URL:", filePath);
+                showErrorNotification(`Failed to load image from URL\nThe link might be incorrect or may not point to an image file.: ${filePath}`, 5000, true);
+                resolve(false);
+            };
                     img.src = filePath;
                 });
             } catch (error) {
@@ -326,6 +343,7 @@ export class ClipboardManager {
             img.onload = async () => {
                 log.info("Successfully loaded image from backend response");
                 await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                showInfoNotification("Image loaded from file path");
                 resolve(true);
             };
             img.onerror = () => {
@@ -366,6 +384,7 @@ export class ClipboardManager {
                             img.onload = async () => {
                                 log.info("Successfully loaded image from file picker");
                                 await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                                showInfoNotification("Image loaded from selected file");
                                 resolve(true);
                             };
                             img.onerror = () => {

@@ -1,5 +1,7 @@
 import { createModuleLogger } from "./LoggerUtils.js";
 const log = createModuleLogger('NotificationUtils');
+// Store active notifications for deduplication
+const activeNotifications = new Map();
 /**
  * Utility functions for showing notifications to the user
  */
@@ -8,10 +10,50 @@ const log = createModuleLogger('NotificationUtils');
  * @param message - The message to show
  * @param backgroundColor - Background color (default: #4a6cd4)
  * @param duration - Duration in milliseconds (default: 3000)
+ * @param type - Type of notification
+ * @param deduplicate - If true, will not show duplicate messages and will refresh existing ones (default: false)
  */
-export function showNotification(message, backgroundColor = "#4a6cd4", duration = 3000, type = "info") {
+export function showNotification(message, backgroundColor = "#4a6cd4", duration = 3000, type = "info", deduplicate = false) {
     // Remove any existing prefix to avoid double prefixing
     message = message.replace(/^\[Layer Forge\]\s*/, "");
+    // If deduplication is enabled, check if this message already exists
+    if (deduplicate) {
+        const existingNotification = activeNotifications.get(message);
+        if (existingNotification) {
+            log.debug(`Notification already exists, refreshing timer: ${message}`);
+            // Clear existing timeout
+            if (existingNotification.timeout !== null) {
+                clearTimeout(existingNotification.timeout);
+            }
+            // Find the progress bar and restart its animation
+            const progressBar = existingNotification.element.querySelector('div[style*="animation"]');
+            if (progressBar) {
+                // Reset animation
+                progressBar.style.animation = 'none';
+                // Force reflow
+                void progressBar.offsetHeight;
+                // Restart animation
+                progressBar.style.animation = `lf-progress ${duration / 1000}s linear`;
+            }
+            // Set new timeout
+            const newTimeout = window.setTimeout(() => {
+                const notification = existingNotification.element;
+                notification.style.animation = 'lf-fadeout 0.3s ease-out forwards';
+                notification.addEventListener('animationend', () => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                        activeNotifications.delete(message);
+                        const container = document.getElementById('lf-notification-container');
+                        if (container && container.children.length === 0) {
+                            container.remove();
+                        }
+                    }
+                });
+            }, duration);
+            existingNotification.timeout = newTimeout;
+            return; // Don't create a new notification
+        }
+    }
     // Type-specific config
     const config = {
         success: { icon: "✔️", title: "Success", bg: "#1fd18b" },
@@ -148,6 +190,10 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
     body.classList.add('notification-scrollbar');
     let dismissTimeout = null;
     const closeNotification = () => {
+        // Remove from active notifications map if deduplicate is enabled
+        if (deduplicate) {
+            activeNotifications.delete(message);
+        }
         notification.style.animation = 'lf-fadeout 0.3s ease-out forwards';
         notification.addEventListener('animationend', () => {
             if (notification.parentNode) {
@@ -171,40 +217,77 @@ export function showNotification(message, backgroundColor = "#4a6cd4", duration 
         progressBar.style.transform = computedStyle.transform;
         progressBar.style.animation = 'lf-progress-rewind 0.5s ease-out forwards';
     };
-    notification.addEventListener('mouseenter', pauseAndRewindTimer);
-    notification.addEventListener('mouseleave', startDismissTimer);
+    notification.addEventListener('mouseenter', () => {
+        pauseAndRewindTimer();
+        // Update stored timeout if deduplicate is enabled
+        if (deduplicate) {
+            const stored = activeNotifications.get(message);
+            if (stored) {
+                stored.timeout = null;
+            }
+        }
+    });
+    notification.addEventListener('mouseleave', () => {
+        startDismissTimer();
+        // Update stored timeout if deduplicate is enabled
+        if (deduplicate) {
+            const stored = activeNotifications.get(message);
+            if (stored) {
+                stored.timeout = dismissTimeout;
+            }
+        }
+    });
     startDismissTimer();
+    // Store notification if deduplicate is enabled
+    if (deduplicate) {
+        activeNotifications.set(message, { element: notification, timeout: dismissTimeout });
+    }
     log.debug(`Notification shown: [Layer Forge] ${message}`);
 }
 /**
  * Shows a success notification
+ * @param message - The message to show
+ * @param duration - Duration in milliseconds (default: 3000)
+ * @param deduplicate - If true, will not show duplicate messages (default: false)
  */
-export function showSuccessNotification(message, duration = 3000) {
-    showNotification(message, undefined, duration, "success");
+export function showSuccessNotification(message, duration = 3000, deduplicate = false) {
+    showNotification(message, undefined, duration, "success", deduplicate);
 }
 /**
  * Shows an error notification
+ * @param message - The message to show
+ * @param duration - Duration in milliseconds (default: 5000)
+ * @param deduplicate - If true, will not show duplicate messages (default: false)
  */
-export function showErrorNotification(message, duration = 5000) {
-    showNotification(message, undefined, duration, "error");
+export function showErrorNotification(message, duration = 5000, deduplicate = false) {
+    showNotification(message, undefined, duration, "error", deduplicate);
 }
 /**
  * Shows an info notification
+ * @param message - The message to show
+ * @param duration - Duration in milliseconds (default: 3000)
+ * @param deduplicate - If true, will not show duplicate messages (default: false)
  */
-export function showInfoNotification(message, duration = 3000) {
-    showNotification(message, undefined, duration, "info");
+export function showInfoNotification(message, duration = 3000, deduplicate = false) {
+    showNotification(message, undefined, duration, "info", deduplicate);
 }
 /**
  * Shows a warning notification
+ * @param message - The message to show
+ * @param duration - Duration in milliseconds (default: 3000)
+ * @param deduplicate - If true, will not show duplicate messages (default: false)
  */
-export function showWarningNotification(message, duration = 3000) {
-    showNotification(message, undefined, duration, "warning");
+export function showWarningNotification(message, duration = 3000, deduplicate = false) {
+    showNotification(message, undefined, duration, "warning", deduplicate);
 }
 /**
  * Shows an alert notification
+ * @param message - The message to show
+ * @param duration - Duration in milliseconds (default: 3000)
+ * @param deduplicate - If true, will not show duplicate messages (default: false)
  */
-export function showAlertNotification(message, duration = 3000) {
-    showNotification(message, undefined, duration, "alert");
+export function showAlertNotification(message, duration = 3000, deduplicate = false) {
+    showNotification(message, undefined, duration, "alert", deduplicate);
 }
 /**
  * Shows a sequence of all notification types for debugging purposes.
@@ -214,7 +297,7 @@ export function showAllNotificationTypes(message) {
     types.forEach((type, index) => {
         const notificationMessage = message || `This is a '${type}' notification.`;
         setTimeout(() => {
-            showNotification(notificationMessage, undefined, 3000, type);
+            showNotification(notificationMessage, undefined, 3000, type, false);
         }, index * 400); // Stagger the notifications
     });
 }
