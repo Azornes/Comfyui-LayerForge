@@ -200,6 +200,7 @@ export class CanvasState {
     _createLayerFromSrc(layerData, imageSrc, index, resolve) {
         if (typeof imageSrc === 'string') {
             const img = new Image();
+            img.crossOrigin = 'anonymous';
             img.onload = () => {
                 log.debug(`Layer ${index}: Image loaded successfully.`);
                 const newLayer = { ...layerData, image: img };
@@ -216,6 +217,7 @@ export class CanvasState {
             if (ctx) {
                 ctx.drawImage(imageSrc, 0, 0);
                 const img = new Image();
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     log.debug(`Layer ${index}: Image loaded successfully from ImageBitmap.`);
                     const newLayer = { ...layerData, image: img };
