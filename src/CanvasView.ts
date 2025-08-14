@@ -1490,8 +1490,8 @@ app.registerExtension({
                         callback: async () => {
                             try {
                                 log.info("Opening LayerForge canvas in MaskEditor");
-                                if ((self as any).canvasWidget && (self as any).canvasWidget.startMaskEditor) {
-                                    await (self as any).canvasWidget.startMaskEditor(null, true);
+                                if ((self as any).canvasWidget && (self as any).canvasWidget.canvas) {
+                                    await (self as any).canvasWidget.canvas.startMaskEditor(null, true);
                                 } else {
                                     log.error("Canvas widget not available");
                                     showErrorNotification("Canvas not ready. Please try again.");
@@ -1506,8 +1506,8 @@ app.registerExtension({
                         content: "Open Image",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
                                 if (!blob) return;
                                 const url = URL.createObjectURL(blob);
                                 window.open(url, '_blank');
@@ -1521,8 +1521,8 @@ app.registerExtension({
                         content: "Open Image with Mask Alpha",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
                                 if (!blob) return;
                                 const url = URL.createObjectURL(blob);
                                 window.open(url, '_blank');
@@ -1536,8 +1536,8 @@ app.registerExtension({
                         content: "Copy Image",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
                                 if (!blob) return;
                                 const item = new ClipboardItem({'image/png': blob});
                                 await navigator.clipboard.write([item]);
@@ -1552,8 +1552,8 @@ app.registerExtension({
                         content: "Copy Image with Mask Alpha",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
                                 if (!blob) return;
                                 const item = new ClipboardItem({'image/png': blob});
                                 await navigator.clipboard.write([item]);
@@ -1568,8 +1568,8 @@ app.registerExtension({
                         content: "Save Image",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
                                 if (!blob) return;
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
@@ -1588,8 +1588,8 @@ app.registerExtension({
                         content: "Save Image with Mask Alpha",
                         callback: async () => {
                             try {
-                                if (!(self as any).canvasWidget) return;
-                                const blob = await (self as any).canvasWidget.getFlattenedCanvasWithMaskAsBlob();
+                                if (!(self as any).canvasWidget || !(self as any).canvasWidget.canvas) return;
+                                const blob = await (self as any).canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
                                 if (!blob) return;
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
