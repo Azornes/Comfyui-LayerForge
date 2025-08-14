@@ -188,11 +188,22 @@ export class ClipboardManager {
             try {
                 const text = await navigator.clipboard.readText();
                 log.debug("Found text in clipboard:", text);
-                if (text && this.isValidImagePath(text)) {
-                    log.info("Found valid image path in clipboard:", text);
-                    const success = await this.loadImageFromPath(text, addMode);
-                    if (success) {
-                        return true;
+                if (text) {
+                    // Check if it's a data URI (base64 encoded image)
+                    if (this.isDataURI(text)) {
+                        log.info("Found data URI in clipboard");
+                        const success = await this.loadImageFromDataURI(text, addMode);
+                        if (success) {
+                            return true;
+                        }
+                    }
+                    // Check if it's a regular file path or URL
+                    else if (this.isValidImagePath(text)) {
+                        log.info("Found valid image path in clipboard:", text);
+                        const success = await this.loadImageFromPath(text, addMode);
+                        if (success) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -202,6 +213,48 @@ export class ClipboardManager {
         }
         log.debug("No images or valid image paths found in system clipboard");
         return false;
+    }
+    /**
+     * Checks if a text string is a data URI (base64 encoded image)
+     * @param {string} text - The text to check
+     * @returns {boolean} - True if the text is a data URI
+     */
+    isDataURI(text) {
+        if (!text || typeof text !== 'string') {
+            return false;
+        }
+        // Check if it starts with data:image
+        return text.trim().startsWith('data:image/');
+    }
+    /**
+     * Loads an image from a data URI (base64 encoded image)
+     * @param {string} dataURI - The data URI to load
+     * @param {AddMode} addMode - The mode for adding the layer
+     * @returns {Promise<boolean>} - True if successful, false otherwise
+     */
+    async loadImageFromDataURI(dataURI, addMode) {
+        return new Promise((resolve) => {
+            try {
+                const img = new Image();
+                img.onload = async () => {
+                    log.info("Successfully loaded image from data URI");
+                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                    showInfoNotification("Image pasted from clipboard (base64)");
+                    resolve(true);
+                };
+                img.onerror = () => {
+                    log.warn("Failed to load image from data URI");
+                    showErrorNotification("Failed to load base64 image from clipboard", 5000, true);
+                    resolve(false);
+                };
+                img.src = dataURI;
+            }
+            catch (error) {
+                log.error("Error loading data URI:", error);
+                showErrorNotification("Error processing base64 image from clipboard", 5000, true);
+                resolve(false);
+            }
+        });
     }
     /**
      * Validates if a text string is a valid image file path or URL
