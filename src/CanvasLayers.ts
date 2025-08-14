@@ -100,6 +100,7 @@ export class CanvasLayers {
                 });
 
                 const img = new Image();
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     if (!this.canvas.node.imgs) {
                         this.canvas.node.imgs = [];
@@ -402,6 +403,7 @@ export class CanvasLayers {
                     tempCtx.drawImage(maskCanvas, 0, 0);
     
                     const newImage = new Image();
+                    newImage.crossOrigin = 'anonymous';
                     newImage.src = tempCanvas.toDataURL();
                     layer.image = newImage;
                 }
@@ -1000,6 +1002,7 @@ export class CanvasLayers {
 
         // Convert canvas to image
         const processedImage = new Image();
+        processedImage.crossOrigin = 'anonymous';
         processedImage.src = processedCanvas.toDataURL();
         return processedImage;
     }
@@ -2020,6 +2023,7 @@ export class CanvasLayers {
             this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
 
             const fusedImage = new Image();
+            fusedImage.crossOrigin = 'anonymous';
             fusedImage.src = tempCanvas.toDataURL();
             await new Promise((resolve, reject) => {
                 fusedImage.onload = resolve;
