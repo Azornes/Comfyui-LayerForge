@@ -248,6 +248,11 @@ This project is licensed under the MIT License. Feel free to use, modify, and di
 
 ---
 
+## 💖 Support / Sponsorship
+
+If you’d like to support my work:  
+👉 [GitHub Sponsors](https://github.com/sponsors/Azornes)
+
 ## 🙏 Acknowledgments
 
 Based on the original [**Comfyui-Ycanvas**](https://github.com/yichengup/Comfyui-Ycanvas) by yichengup. This fork
