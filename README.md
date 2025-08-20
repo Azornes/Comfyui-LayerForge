@@ -52,10 +52,12 @@ https://github.com/user-attachments/assets/9c7ce1de-873b-4a3b-8579-0fc67642af3a
 - **Efficient Memory Management:** An automatic garbage collection system cleans up unused image data to keep the
   browser's storage footprint low.
 - **Inputs**
-    - **Image Input (default):** Accepts a single image.  
+    - **Image Input (optional):** Accepts a single image.  
     - **Multiple Images:** If you need to feed in more than one image, use the **core ComfyUI Batch Image node**.  
         - This lets you route multiple images into LayerForge.  
         - You can then stack, arrange, and edit them as separate layers inside the canvas.
+  - **Mask Input (optional):** Accepts a single external mask.  
+    - When provided, the mask is applied directly to the **output area** of the LayerForge canvas when `Run` is triggered in ComfyUI.  
 - **Outputs**
     - **Composite Image:** The final flattened result of your layer stack.  
     - **Combined Alpha Mask:** A merged mask representing all visible layers, ready for downstream nodes.  
