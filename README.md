@@ -51,9 +51,14 @@ https://github.com/user-attachments/assets/9c7ce1de-873b-4a3b-8579-0fc67642af3a
 - **AI-Powered Matting:** Optional background removal for any layer using the `BiRefNet` model.
 - **Efficient Memory Management:** An automatic garbage collection system cleans up unused image data to keep the
   browser's storage footprint low.
-- **Workflow Integration:** Outputs a final composite **image** and a combined alpha **mask**, ready for any other
-  ComfyUI node.
-
+- **Inputs**
+    - **Image Input (default):** Accepts a single image.  
+    - **Multiple Images:** If you need to feed in more than one image, use the **core ComfyUI Batch Image node**.  
+        - This lets you route multiple images into LayerForge.  
+        - You can then stack, arrange, and edit them as separate layers inside the canvas.
+- **Outputs**
+    - **Composite Image:** The final flattened result of your layer stack.  
+    - **Combined Alpha Mask:** A merged mask representing all visible layers, ready for downstream nodes.  
 ---
 
 ## 🚀 Installation
