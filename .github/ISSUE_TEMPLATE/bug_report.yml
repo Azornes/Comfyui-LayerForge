@@ -12,8 +12,9 @@ body:
         ### ✅ Before You Report:
         1. Make sure you have the **latest versions**:
            - [ComfyUI Github](https://github.com/comfyanonymous/ComfyUI/releases)
+           - [ComfyUI_frontend Github](https://github.com/Comfy-Org/ComfyUI_frontend/releases)
            - [LayerForge Github](https://github.com/Azornes/Comfyui-LayerForge/releases) or via [ComfyUI Node Manager](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
-        2. Gather the required logs:
+        2. (optional) Gather the required logs (this will help me identify what happened more quickly and easily):
         
         ### 🔍 Enable Debug Logs (for **full** logs):
         
@@ -50,8 +51,8 @@ body:
   - type: input
     id: environment
     attributes:
-      label: Environment (OS, ComfyUI version, LayerForge version)
-      placeholder: e.g. Windows 11, ComfyUI v0.3.43, LayerForge v1.2.4
+      label: Environment (OS, ComfyUI versions, LayerForge version)
+      placeholder: e.g. Windows 11, ComfyUI v0.3.5, ComfyUI_frontend v1.26.6, LayerForge v1.2.4
     validations:
       required: true
 
@@ -60,14 +61,6 @@ body:
     attributes:
       label: Browser & Version
       placeholder: e.g. Chrome 115.0.0, Firefox 120.1.0
-    validations:
-      required: true
-
-  - type: textarea
-    id: what_happened
-    attributes:
-      label: What Happened?
-      placeholder: Describe the issue you encountered
     validations:
       required: true
 
@@ -99,6 +92,15 @@ body:
       required: true
 
   - type: textarea
+    id: context
+    attributes:
+      label: Additional Context (Optional)
+      placeholder: |
+        (Optional) Add any other context that might help me investigate.
+    validations:
+      required: false
+
+  - type: textarea
     id: backend_logs
     attributes:
       label: ComfyUI (Backend) Logs
@@ -108,7 +110,7 @@ body:
         2. Reproduce the issue.
         3. Copy-paste the newest **TEXT** logs from the terminal/console here.
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: console_logs
@@ -129,7 +131,7 @@ body:
         3. Reproduce the issue.
         4. Copy-paste the **TEXT** logs here (no screenshots).
     validations:
-      required: true
+      required: false
 
   - type: markdown
     attributes:
