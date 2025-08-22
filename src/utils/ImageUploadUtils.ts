@@ -1,3 +1,4 @@
+// @ts-ignore
 import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "./LoggerUtils.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";

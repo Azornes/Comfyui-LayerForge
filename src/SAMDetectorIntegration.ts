@@ -1,3 +1,4 @@
+// @ts-ignore
 import { api } from "../../scripts/api.js";
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
