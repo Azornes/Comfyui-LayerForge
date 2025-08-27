@@ -1,21 +1,75 @@
 name: 🐞 Bug Report
-description: Report an error or unexpected behavior
+description: 'Report something that is not working correctly'
 title: "[BUG] "
 labels: [bug]
 body:
+  - type: checkboxes
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I am running the latest version of [ComfyUI](https://github.com/comfyanonymous/ComfyUI/releases)
+          required: true
+        - label: I am running the latest version of [ComfyUI_frontend](https://github.com/Comfy-Org/ComfyUI_frontend/releases)
+          required: true
+        - label: I am running the latest version of LayerForge [Github](https://github.com/Azornes/Comfyui-LayerForge/releases) | [Manager](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
+          required: true
+        - label: I have searched existing(open/closed) issues to make sure this isn't a duplicate
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug. Include screenshots or videos if helpful.
+      placeholder: |
+        Example: "When I connect a image to an Input, the connection line appears but the workflow fails to execute with an error message..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How can I reproduce this issue? Please attach your workflow (JSON or PNG) if needed.
+      placeholder: |
+        1. Connect Image to Input
+        2. Click Queue Prompt
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How is this affecting you?
+      options:
+        - Crashes ComfyUI completely
+        - Workflow won't execute
+        - Feature doesn't work as expected
+        - Visual/UI issue only
+        - Minor inconvenience
+    validations:
+      required: true
+    
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      description: Which browser are you using?
+      options:
+        - Chrome/Chromium
+        - Firefox
+        - Safari
+        - Edge
+        - Other
+    validations:
+      required: true
+
   - type: markdown
     attributes:
       value: |
-        **Thank you for reporting a bug!**  
-        Please follow these steps to capture all necessary information:
-
-        ### ✅ Before You Report:
-        1. Make sure you have the **latest versions**:
-           - [ComfyUI Github](https://github.com/comfyanonymous/ComfyUI/releases)
-           - [ComfyUI_frontend Github](https://github.com/Comfy-Org/ComfyUI_frontend/releases)
-           - [LayerForge Github](https://github.com/Azornes/Comfyui-LayerForge/releases) or via [ComfyUI Node Manager](https://registry.comfy.org/publishers/azornes/nodes/layerforge)
-        2. (optional) Gather the required logs (this will help me identify what happened more quickly and easily):
-        
+        ## Additional Information (Optional)
+        *The following fields help me debug complex issues but are not required for most bug reports.*
         ### 🔍 Enable Debug Logs (for **full** logs):
         
         #### 1. Edit `config.js` (Frontend Logs):
@@ -47,76 +101,13 @@ body:
         ```
 
         ➡️ **Restart ComfyUI** after applying these changes to activate full logging.
-
-  - type: input
-    id: environment
-    attributes:
-      label: Environment (OS, ComfyUI versions, LayerForge version)
-      placeholder: e.g. Windows 11, ComfyUI v0.3.5, ComfyUI_frontend v1.26.6, LayerForge v1.2.4
-    validations:
-      required: true
-
-  - type: input
-    id: browser
-    attributes:
-      label: Browser & Version
-      placeholder: e.g. Chrome 115.0.0, Firefox 120.1.0
-    validations:
-      required: true
-
   - type: textarea
-    id: steps
+    id: console-errors
     attributes:
-      label: Steps to Reproduce
-      placeholder: |
-        1. …
-        2. …
-        3. …
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected Behavior
-      placeholder: Describe what you expected to happen
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual Behavior
-      placeholder: Describe what happened instead
-    validations:
-      required: true
-
-  - type: textarea
-    id: context
-    attributes:
-      label: Additional Context (Optional)
-      placeholder: |
-        (Optional) Add any other context that might help me investigate.
-    validations:
-      required: false
-
-  - type: textarea
-    id: backend_logs
-    attributes:
-      label: ComfyUI (Backend) Logs
+      label: Console Errors
       description: |
-        After enabling DEBUG logs, please:
-        1. Restart ComfyUI.
-        2. Reproduce the issue.
-        3. Copy-paste the newest **TEXT** logs from the terminal/console here.
-    validations:
-      required: false
-
-  - type: textarea
-    id: console_logs
-    attributes:
-      label: Browser Console Logs
-      description: |
+        If you see red error messages in the browser console (F12), paste them here
+        More info:
         After enabling DEBUG logs:
         1. Open Developer Tools → Console.
           - Chrome/Edge (Win/Linux): `Ctrl+Shift+J`  
@@ -130,11 +121,25 @@ body:
            - Safari: 🗑 icon or `Cmd+K`.
         3. Reproduce the issue.
         4. Copy-paste the **TEXT** logs here (no screenshots).
-    validations:
-      required: false
+      render: javascript
 
-  - type: markdown
+  - type: textarea
+    id: logs
     attributes:
-      value: |
-        **Optional:** You can also **attach a screenshot or video** to demonstrate the issue visually.  
-        Simply drag & drop or paste image/video files into this issue form. GitHub supports common image formats and MP4/GIF files.
+      label: Logs
+      description: |
+        If relevant, paste any terminal/server logs here
+        More info:
+        After enabling DEBUG logs, please:
+        1. Restart ComfyUI.
+        2. Reproduce the issue.
+        3. Copy-paste the newest **TEXT** logs from the terminal/console here.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context, Environment (OS, ComfyUI versions, ResolutionMaster version)
+      description: Any other information that might help (OS, GPU, specific nodes involved, etc.)
+
+      
