@@ -6,8 +6,19 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Before suggesting a new feature, please make sure you are using the latest version of the project and that this functionality does not already exist.**
-        **I also recommend using an AI assistant to check if the feature already exists. You can simply copy and paste the entire README.md file and ask if your desired feature is already included.** This helps to avoid duplicate requests for features that are already available.
+        ## Before suggesting a new feature...
+        Please make sure of the following:
+
+        1. You are using the latest version of the project  
+        2. The functionality you want to propose does not already exist  
+
+        I also recommend using an AI assistant to check whether the feature is already included.  
+        To do this, simply:
+
+        - Copy and paste the entire **README.md** file  
+        - Ask if your desired feature is already covered  
+
+        This helps to avoid duplicate requests for features that are already available.
   - type: markdown
     attributes:
       value: |
