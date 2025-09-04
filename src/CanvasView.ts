@@ -418,13 +418,46 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         const button = (e.target as HTMLElement).closest('.matting-button') as HTMLButtonElement;
                         if (button.classList.contains('loading')) return;
 
-                        const spinner = $el("div.matting-spinner") as HTMLDivElement;
-                        button.appendChild(spinner);
-                        button.classList.add('loading');
-                        
-                        showInfoNotification("Starting background removal process...", 2000);
-
                         try {
+                            // First check if model is available
+                            const modelCheckResponse = await fetch("/matting/check-model");
+                            const modelStatus = await modelCheckResponse.json();
+                            
+                            if (!modelStatus.available) {
+                                switch (modelStatus.reason) {
+                                    case 'missing_dependency':
+                                        showErrorNotification(modelStatus.message, 8000);
+                                        return;
+                                    
+                                    case 'not_downloaded':
+                                        showWarningNotification("The matting model needs to be downloaded first. This will happen automatically when you proceed (requires internet connection).", 5000);
+                                        
+                                        // Ask user if they want to proceed with download
+                                        if (!confirm("The matting model needs to be downloaded (about 1GB). This is a one-time download. Do you want to proceed?")) {
+                                            return;
+                                        }
+                                        showInfoNotification("Downloading matting model... This may take a few minutes.", 10000);
+                                        break;
+                                    
+                                    case 'corrupted':
+                                        showErrorNotification(modelStatus.message, 8000);
+                                        return;
+                                    
+                                    case 'error':
+                                        showErrorNotification(`Error checking model: ${modelStatus.message}`, 5000);
+                                        return;
+                                }
+                            }
+
+                            // Proceed with matting
+                            const spinner = $el("div.matting-spinner") as HTMLDivElement;
+                            button.appendChild(spinner);
+                            button.classList.add('loading');
+                            
+                            if (modelStatus.available) {
+                                showInfoNotification("Starting background removal process...", 2000);
+                            }
+
                             if (canvas.canvasSelection.selectedLayers.length !== 1) {
                                 throw new Error("Please select exactly one image layer for matting.");
                             }
@@ -443,7 +476,18 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             if (!response.ok) {
                                 let errorMsg = `Server error: ${response.status} - ${response.statusText}`;
                                 if (result && result.error) {
-                                    errorMsg = `Error: ${result.error}. Details: ${result.details || 'Check console'}`;
+                                    // Handle specific error types
+                                    if (result.error === "Network Connection Error") {
+                                        showErrorNotification("Failed to download the matting model. Please check your internet connection and try again.", 8000);
+                                        return;
+                                    } else if (result.error === "Matting Model Error") {
+                                        showErrorNotification(result.details || "Model loading error. Please check the console for details.", 8000);
+                                        return;
+                                    } else if (result.error === "Dependency Not Found") {
+                                        showErrorNotification(result.details || "Missing required dependencies.", 8000);
+                                        return;
+                                    }
+                                    errorMsg = `${result.error}: ${result.details || 'Check console'}`;
                                 }
                                 throw new Error(errorMsg);
                             }
@@ -468,10 +512,15 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         } catch (error: any) {
                             log.error("Matting error:", error);
                             const errorMessage = error.message || "An unknown error occurred.";
-                            showErrorNotification(`Matting Failed: ${errorMessage}`);
+                            if (!errorMessage.includes("Network Connection Error") && 
+                                !errorMessage.includes("Matting Model Error") &&
+                                !errorMessage.includes("Dependency Not Found")) {
+                                showErrorNotification(`Matting Failed: ${errorMessage}`);
+                            }
                         } finally {
                             button.classList.remove('loading');
-                            if (button.contains(spinner)) {
+                            const spinner = button.querySelector('.matting-spinner');
+                            if (spinner && button.contains(spinner)) {
                                 button.removeChild(spinner);
                             }
                         }
