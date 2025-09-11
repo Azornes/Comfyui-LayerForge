@@ -139,7 +139,7 @@ body:
   - type: textarea
     id: additional
     attributes:
-      label: Additional Context, Environment (OS, ComfyUI versions, ResolutionMaster version)
+      label: Additional Context, Environment (OS, ComfyUI versions, Comfyui-LayerForge version)
       description: Any other information that might help (OS, GPU, specific nodes involved, etc.)
 
       
