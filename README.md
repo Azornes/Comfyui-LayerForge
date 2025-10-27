@@ -70,7 +70,7 @@ https://github.com/user-attachments/assets/9c7ce1de-873b-4a3b-8579-0fc67642af3a
 
 ### Manual Install
 1. Install [ComfyUi](https://github.com/comfyanonymous/ComfyUI).
-2. Clone this repo into `custom_modules`:
+2. Clone this repo into `custom_nodes`:
     ```bash
     cd ComfyUI/custom_nodes/
     git clone https://github.com/Azornes/Comfyui-LayerForge.git
