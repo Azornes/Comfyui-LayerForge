@@ -141,6 +141,10 @@ export class CanvasRenderer {
                 ctx.restore();
             }
         });
+        // Draw grab icons for selected layers when hovering
+        if (this.canvas.canvasInteractions.interaction.hoveringGrabIcon) {
+            this.drawGrabIcons(ctx);
+        }
         this.drawCanvasOutline(ctx);
         this.drawOutputAreaExtensionPreview(ctx); // Draw extension preview
         this.drawPendingGenerationAreas(ctx); // Draw snapshot outlines
@@ -832,6 +836,55 @@ export class CanvasRenderer {
         // Overlay canvas is positioned absolutely, so it doesn't need repositioning
         // Just ensure it's the right size
         this.updateOverlaySize();
+    }
+    /**
+     * Draw grab icons in the center of selected layers
+     */
+    drawGrabIcons(ctx) {
+        const selectedLayers = this.canvas.canvasSelection.selectedLayers;
+        if (selectedLayers.length === 0)
+            return;
+        const iconRadius = 20 / this.canvas.viewport.zoom;
+        const innerRadius = 12 / this.canvas.viewport.zoom;
+        selectedLayers.forEach((layer) => {
+            if (!layer.visible)
+                return;
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            ctx.save();
+            // Draw outer circle (background)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, iconRadius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 150, 255, 0.7)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 2 / this.canvas.viewport.zoom;
+            ctx.stroke();
+            // Draw hand/grab icon (simplified)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.lineWidth = 1.5 / this.canvas.viewport.zoom;
+            // Draw four dots representing grab points
+            const dotRadius = 2 / this.canvas.viewport.zoom;
+            const dotDistance = 6 / this.canvas.viewport.zoom;
+            // Top-left
+            ctx.beginPath();
+            ctx.arc(centerX - dotDistance, centerY - dotDistance, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+            // Top-right
+            ctx.beginPath();
+            ctx.arc(centerX + dotDistance, centerY - dotDistance, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+            // Bottom-left
+            ctx.beginPath();
+            ctx.arc(centerX - dotDistance, centerY + dotDistance, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+            // Bottom-right
+            ctx.beginPath();
+            ctx.arc(centerX + dotDistance, centerY + dotDistance, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
     }
     /**
      * Draw transform handles for output area when in transform mode

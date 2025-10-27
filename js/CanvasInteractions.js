@@ -41,6 +41,7 @@ export class CanvasInteractions {
             canvasMoveRect: null,
             outputAreaTransformHandle: null,
             outputAreaTransformAnchor: { x: 0, y: 0 },
+            hoveringGrabIcon: false,
         };
         this.originalLayerPositions = new Map();
     }
@@ -151,6 +152,29 @@ export class CanvasInteractions {
         }
         return false;
     }
+    /**
+     * Sprawdza czy punkt znajduje się w obszarze ikony "grab" (środek layera)
+     * Zwraca layer, jeśli kliknięto w ikonę grab
+     */
+    getGrabIconAtPosition(worldX, worldY) {
+        // Rozmiar ikony grab w pikselach światowych
+        const grabIconRadius = 20 / this.canvas.viewport.zoom;
+        for (const layer of this.canvas.canvasSelection.selectedLayers) {
+            if (!layer.visible)
+                continue;
+            const centerX = layer.x + layer.width / 2;
+            const centerY = layer.y + layer.height / 2;
+            // Sprawdź czy punkt jest w obszarze ikony grab (okrąg wokół środka)
+            const dx = worldX - centerX;
+            const dy = worldY - centerY;
+            const distanceSquared = dx * dx + dy * dy;
+            const radiusSquared = grabIconRadius * grabIconRadius;
+            if (distanceSquared <= radiusSquared) {
+                return layer;
+            }
+        }
+        return null;
+    }
     resetInteractionState() {
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
@@ -227,6 +251,14 @@ export class CanvasInteractions {
             this.startLayerTransform(transformTarget.layer, transformTarget.handle, coords.world);
             return;
         }
+        // Check if clicking on grab icon of a selected layer
+        const grabIconLayer = this.getGrabIconAtPosition(coords.world.x, coords.world.y);
+        if (grabIconLayer) {
+            // Start dragging the selected layer(s) without changing selection
+            this.interaction.mode = 'potential-drag';
+            this.interaction.dragStart = { ...coords.world };
+            return;
+        }
         const clickedLayerResult = this.canvas.canvasLayers.getLayerAtPosition(coords.world.x, coords.world.y);
         if (clickedLayerResult) {
             this.prepareForDrag(clickedLayerResult.layer, coords.world);
@@ -282,6 +314,13 @@ export class CanvasInteractions {
                 }
                 break;
             default:
+                // Check if hovering over grab icon
+                const wasHovering = this.interaction.hoveringGrabIcon;
+                this.interaction.hoveringGrabIcon = this.getGrabIconAtPosition(coords.world.x, coords.world.y) !== null;
+                // Re-render if hover state changed to show/hide grab icon
+                if (wasHovering !== this.interaction.hoveringGrabIcon) {
+                    this.canvas.render();
+                }
                 this.updateCursor(coords.world);
                 // Update brush cursor on overlay if mask tool is active
                 if (this.canvas.maskTool.isActive) {
@@ -615,6 +654,11 @@ export class CanvasInteractions {
         // If actively rotating, show grabbing cursor
         if (this.interaction.mode === 'rotating') {
             this.canvas.canvas.style.cursor = 'grabbing';
+            return;
+        }
+        // Check if hovering over grab icon
+        if (this.interaction.hoveringGrabIcon) {
+            this.canvas.canvas.style.cursor = 'grab';
             return;
         }
         const transformTarget = this.canvas.canvasLayers.getHandleAtPosition(worldCoords.x, worldCoords.y);
