@@ -263,7 +263,7 @@ optional feature and requires a model.
 > This is a known issue and not yet fixed.
 > Please follow the steps above if your output is black or broken.
 
-
+---
 
 ## 📜 License
 
