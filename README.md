@@ -23,6 +23,9 @@
   <strong>🔹 <a href="https://github.com/Azornes/Comfyui-LayerForge?tab=readme-ov-file#-installation">Quick Start</a></strong>
   &nbsp; | &nbsp;
   <strong>🧩 <a href="https://github.com/Azornes/Comfyui-LayerForge?tab=readme-ov-file#-workflow-example">Workflow Example</a></strong>
+  &nbsp; | &nbsp;
+  <strong>⚠️ <a href="https://github.com/Azornes/Comfyui-LayerForge?tab=readme-ov-file#%EF%B8%8F-known-issues--compatibility">Known Issues</a></strong>
+
 </p>
 
 ### Why LayerForge?
@@ -237,30 +240,30 @@ optional feature and requires a model.
 
 ---
 
-## 🔧 Troubleshooting
+## ⚠️ Known Issues / Compatibility
 
-### `node_id` not auto-filled → black output
+#### ○ Incompatibility with Modern Node Design (Vue Nodes)
+> This node is **not compatible** with the new Vue Nodes display system.  
+>  
+> 🔧 **How to fix:**  
+> Go to **Settings → (search) "Vue Nodes" → Disable "Modern Node Design (Vue Nodes)"**.
 
-In some cases, **ComfyUI doesn't auto-fill the `node_id`** when adding a node.
-As a result, the node may produce a **completely black image** or not work at all.
+---
 
-**Workaround:**
-
-* Search node ID in ComfyUI settings.
-* In NodesMap check "Enable node ID display"
-* Manually enter the correct `node_id` (match the ID Node "LayerForge" shown above the node, on the right side).
+#### ○ `node_id` not auto-filled → black output 
+> In some cases, **ComfyUI doesn’t auto-fill the `node_id`** when adding a node.  
+> This may cause the node to output a **completely black image** or fail to work.
+>
+> 🛠️ **Workaround:**  
+> - Open **Settings → NodesMap → Enable "Show node IDs"**  
+> - Find the correct ID for your node *(match the ID Node "LayerForge" shown above the node, on the right side)*.
+> - Manually enter the correct `node_id` in the LayerForge node
 
 > [!WARNING]  
 > This is a known issue and not yet fixed.
 > Please follow the steps above if your output is black or broken.
 
----
 
-## ⚠️ Known Issues / Compatibility
-
-- **Incompatibility with Modern Node Design (Vue Nodes)**  
-  This node is not compatible with the new Vue Nodes display system.  
-  To use this node, you must revert the settings: Settings → (search) Vue Nodes → Disable "Modern Node Design (Vue Nodes)".
 
 ## 📜 License
 
