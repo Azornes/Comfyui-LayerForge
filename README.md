@@ -19,6 +19,12 @@
   <img alt="JavaScript" src="https://img.shields.io/badge/-JavaScript-000000?logo=javascript&logoColor=F7DF1E&style=for-the-badge&logoWidth=20">
 </p>
 
+<p align="center">
+  <strong>🔹 <a href="https://github.com/Azornes/Comfyui-LayerForge?tab=readme-ov-file#-installation">Quick Start</a></strong>
+  &nbsp; | &nbsp;
+  <strong>🧩 <a href="https://github.com/Azornes/Comfyui-LayerForge?tab=readme-ov-file#-workflow-example">Workflow Example</a></strong>
+</p>
+
 ### Why LayerForge?
 
 - **Full Creative Control:** Move beyond simple image inputs. Composite, mask, and blend multiple elements without
@@ -66,10 +72,11 @@ https://github.com/user-attachments/assets/9c7ce1de-873b-4a3b-8579-0fc67642af3a
 ## 🚀 Installation
 
 ### Install via ComfyUI-Manager
-* Search `Comfyui-LayerForge` in ComfyUI-Manager and click `Install` button.
+1. Search `Comfyui-LayerForge` in ComfyUI-Manager and click `Install` button.
+2. Restart ComfyUI.
 
 ### Manual Install
-1. Install [ComfyUi](https://github.com/comfyanonymous/ComfyUI).
+1. Install [ComfyUi](https://github.com/comfyanonymous/ComfyUI). I use [portable](https://docs.comfy.org/installation/comfyui_portable_windows) version.
 2. Clone this repo into `custom_nodes`:
     ```bash
     cd ComfyUI/custom_nodes/
@@ -249,6 +256,12 @@ As a result, the node may produce a **completely black image** or not work at al
 
 ---
 
+## ⚠️ Known Issues / Compatibility
+
+- **Incompatibility with Modern Node Design (Vue Nodes)**  
+  This node is not compatible with the new Vue Nodes display system.  
+  To use this node, you must revert the settings: Settings → (search) Vue Nodes → Disable "Modern Node Design (Vue Nodes)".
+
 ## 📜 License
 
 This project is licensed under the MIT License. Feel free to use, modify, and distribute.
@@ -256,9 +269,12 @@ This project is licensed under the MIT License. Feel free to use, modify, and di
 ---
 
 ## 💖 Support / Sponsorship
-
-If you’d like to support my work:  
+• ⭐ Give a star — it means a lot to me!  
+• 🐛 Report a bug or suggest a feature  
+• 💖 If you’d like to support my work:  
 👉 [GitHub Sponsors](https://github.com/sponsors/Azornes)
+
+---
 
 ## 🙏 Acknowledgments
 
