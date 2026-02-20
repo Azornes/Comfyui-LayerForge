@@ -132,16 +132,16 @@ export class CanvasInteractions {
         const mouseBufferY = (worldCoords.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
 
         const newZoom = Math.max(0.1, Math.min(10, this.canvas.viewport.zoom * zoomFactor));
-        
+
         this.canvas.viewport.zoom = newZoom;
         this.canvas.viewport.x = worldCoords.x - (mouseBufferX / this.canvas.viewport.zoom);
         this.canvas.viewport.y = worldCoords.y - (mouseBufferY / this.canvas.viewport.zoom);
-        
+
         // Update stroke overlay if mask tool is drawing during zoom
         if (this.canvas.maskTool.isDrawing) {
             this.canvas.maskTool.handleViewportChange();
         }
-        
+
         this.canvas.onViewportChange?.();
     }
 
@@ -176,6 +176,9 @@ export class CanvasInteractions {
 
         document.addEventListener('paste', this.onPaste as unknown as EventListener);
 
+        // Intercept Ctrl+V during capture phase to handle layer paste before ComfyUI
+        document.addEventListener('keydown', this.onKeyDown as EventListener, { capture: true });
+
         this.canvas.canvas.addEventListener('mouseenter', this.onMouseEnter as EventListener);
         this.canvas.canvas.addEventListener('mouseleave', this.onMouseLeave as EventListener);
 
@@ -194,6 +197,9 @@ export class CanvasInteractions {
         this.canvas.canvas.removeEventListener('wheel', this.onWheel as EventListener);
         this.canvas.canvas.removeEventListener('keydown', this.onKeyDown as EventListener);
         this.canvas.canvas.removeEventListener('keyup', this.onKeyUp as EventListener);
+
+        // Remove document-level capture listener
+        document.removeEventListener('keydown', this.onKeyDown as EventListener, { capture: true });
 
         window.removeEventListener('blur', this.onBlur);
         document.removeEventListener('paste', this.onPaste as unknown as EventListener);
@@ -228,7 +234,7 @@ export class CanvasInteractions {
             const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
 
             // Sprawdź czy punkt jest wewnątrz prostokąta layera
-            if (Math.abs(rotatedX) <= layer.width / 2 && 
+            if (Math.abs(rotatedX) <= layer.width / 2 &&
                 Math.abs(rotatedY) <= layer.height / 2) {
                 return true;
             }
@@ -277,6 +283,14 @@ export class CanvasInteractions {
 
     handleMouseDown(e: MouseEvent): void {
         this.canvas.canvas.focus();
+
+        // Sync modifier states with actual event state to prevent "stuck" modifiers
+        // when focus moves between layers panel and canvas
+        this.interaction.isCtrlPressed = e.ctrlKey;
+        this.interaction.isMetaPressed = e.metaKey;
+        this.interaction.isShiftPressed = e.shiftKey;
+        this.interaction.isAltPressed = e.altKey;
+
         const coords = this.getMouseCoordinates(e);
         const mods = this.getModifierState(e);
 
@@ -325,11 +339,11 @@ export class CanvasInteractions {
             this.startCanvasResize(coords.world);
             return;
         }
-        
+
         // 2. Inne przyciski myszy
         if (e.button === 2) { // Prawy przycisk myszy
             this.preventEventDefaults(e);
-            
+
             // Sprawdź czy kliknięto w obszarze któregokolwiek z zaznaczonych layerów (niezależnie od przykrycia)
             if (this.isPointInSelectedLayers(coords.world.x, coords.world.y)) {
                 // Nowa logika przekazuje tylko współrzędne świata, menu pozycjonuje się samo
@@ -354,7 +368,7 @@ export class CanvasInteractions {
         if (grabIconLayer) {
             // Start dragging the selected layer(s) without changing selection
             this.interaction.mode = 'potential-drag';
-            this.interaction.dragStart = {...coords.world};
+            this.interaction.dragStart = { ...coords.world };
             return;
         }
 
@@ -363,7 +377,7 @@ export class CanvasInteractions {
             this.prepareForDrag(clickedLayerResult.layer, coords.world);
             return;
         }
-        
+
         // 4. Domyślna akcja na tle (lewy przycisk bez modyfikatorów)
         this.startPanning(e, true); // clearSelection = true
     }
@@ -371,7 +385,7 @@ export class CanvasInteractions {
     handleMouseMove(e: MouseEvent): void {
         const coords = this.getMouseCoordinates(e);
         this.canvas.lastMousePosition = coords.world; // Zawsze aktualizuj ostatnią pozycję myszy
-        
+
         // Sprawdź, czy rozpocząć przeciąganie
         if (this.interaction.mode === 'potential-drag') {
             const dx = coords.world.x - this.interaction.dragStart.x;
@@ -384,7 +398,7 @@ export class CanvasInteractions {
                 });
             }
         }
-        
+
         switch (this.interaction.mode) {
             case 'drawingMask':
                 this.canvas.maskTool.handleMouseMove(coords.world, coords.view);
@@ -419,12 +433,12 @@ export class CanvasInteractions {
                 // Check if hovering over grab icon
                 const wasHovering = this.interaction.hoveringGrabIcon;
                 this.interaction.hoveringGrabIcon = this.getGrabIconAtPosition(coords.world.x, coords.world.y) !== null;
-                
+
                 // Re-render if hover state changed to show/hide grab icon
                 if (wasHovering !== this.interaction.hoveringGrabIcon) {
                     this.canvas.render();
                 }
-                
+
                 this.updateCursor(coords.world);
                 // Update brush cursor on overlay if mask tool is active
                 if (this.canvas.maskTool.isActive) {
@@ -441,7 +455,7 @@ export class CanvasInteractions {
 
     handleMouseUp(e: MouseEvent): void {
         const coords = this.getMouseCoordinates(e);
-        
+
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseUp(coords.view);
             // Render only once after drawing is complete
@@ -470,7 +484,7 @@ export class CanvasInteractions {
         if (this.interaction.mode === 'resizing' && this.interaction.transformingLayer?.cropMode) {
             this.canvas.canvasLayers.handleCropBoundsTransformEnd(this.interaction.transformingLayer);
         }
-        
+
         // Handle end of scale transformation (normal transform mode) before resetting interaction state
         if (this.interaction.mode === 'resizing' && this.interaction.transformingLayer && !this.interaction.transformingLayer.cropMode) {
             this.canvas.canvasLayers.handleScaleTransformEnd(this.interaction.transformingLayer);
@@ -494,7 +508,7 @@ export class CanvasInteractions {
         log.info(`Mouse position: world(${coords.world.x.toFixed(1)}, ${coords.world.y.toFixed(1)}) view(${coords.view.x.toFixed(1)}, ${coords.view.y.toFixed(1)})`);
         log.info(`Output Area Bounds: x=${bounds.x}, y=${bounds.y}, w=${bounds.width}, h=${bounds.height}`);
         log.info(`Viewport: x=${this.canvas.viewport.x.toFixed(1)}, y=${this.canvas.viewport.y.toFixed(1)}, zoom=${this.canvas.viewport.zoom.toFixed(2)}`);
-        
+
         this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer, index: number) => {
             const relativeToOutput = {
                 x: layer.x - bounds.x,
@@ -541,7 +555,7 @@ export class CanvasInteractions {
     handleWheel(e: WheelEvent): void {
         this.preventEventDefaults(e);
         const coords = this.getMouseCoordinates(e);
-        
+
         if (this.canvas.maskTool.isActive || this.canvas.canvasSelection.selectedLayers.length === 0) {
             // Zoom operation for mask tool or when no layers selected
             const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
@@ -549,7 +563,7 @@ export class CanvasInteractions {
         } else {
             // Check if mouse is over any selected layer
             const isOverSelectedLayer = this.isPointInSelectedLayers(coords.world.x, coords.world.y);
-            
+
             if (isOverSelectedLayer) {
                 // Layer transformation when layers are selected and mouse is over selected layer
                 this.handleLayerWheelTransformation(e);
@@ -559,7 +573,7 @@ export class CanvasInteractions {
                 this.performZoomOperation(coords.world, zoomFactor);
             }
         }
-        
+
         this.canvas.render();
         if (!this.canvas.maskTool.isActive) {
             this.canvas.requestSaveState();
@@ -615,7 +629,7 @@ export class CanvasInteractions {
             layer.height *= scaleFactor;
             layer.x += (oldWidth - layer.width) / 2;
             layer.y += (oldHeight - layer.height) / 2;
-            
+
             // Handle wheel scaling end for layers with blend area
             this.canvas.canvasLayers.handleWheelScalingEnd(layer);
         }
@@ -631,11 +645,11 @@ export class CanvasInteractions {
         } else {
             targetHeight = (Math.ceil(oldHeight / gridSize) - 1) * gridSize;
         }
-        
+
         if (targetHeight < gridSize / 2) {
             targetHeight = gridSize / 2;
         }
-        
+
         if (Math.abs(oldHeight - targetHeight) < 1) {
             if (direction > 0) targetHeight += gridSize;
             else targetHeight -= gridSize;
@@ -646,11 +660,23 @@ export class CanvasInteractions {
     }
 
     handleKeyDown(e: KeyboardEvent): void {
+        // Always track modifier keys regardless of focus
         if (e.key === 'Control') this.interaction.isCtrlPressed = true;
         if (e.key === 'Meta') this.interaction.isMetaPressed = true;
         if (e.key === 'Shift') this.interaction.isShiftPressed = true;
+        if (e.key === 'Alt') this.interaction.isAltPressed = true;
+
+        // Check if canvas is focused before handling any shortcuts
+        const shouldHandle = this.canvas.isMouseOver ||
+            this.canvas.canvas.contains(document.activeElement) ||
+            document.activeElement === this.canvas.canvas;
+
+        if (!shouldHandle) {
+            return;
+        }
+
+        // Canvas-specific key handlers (only when focused)
         if (e.key === 'Alt') {
-            this.interaction.isAltPressed = true;
             e.preventDefault();
         }
         if (e.key.toLowerCase() === 's') {
@@ -664,7 +690,7 @@ export class CanvasInteractions {
             this.canvas.shapeTool.activate();
             return;
         }
-        
+
         // Globalne skróty (Undo/Redo/Copy/Paste)
         const mods = this.getModifierState(e);
         if (mods.ctrl || mods.meta) {
@@ -685,6 +711,17 @@ export class CanvasInteractions {
                         this.canvas.canvasLayers.copySelectedLayers();
                     }
                     break;
+                case 'v':
+                    // Only handle internal clipboard paste here.
+                    // If internal clipboard is empty, let the paste event bubble
+                    // so handlePasteEvent can access e.clipboardData for system images.
+                    if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+                        this.canvas.canvasLayers.pasteLayers();
+                    } else {
+                        // Don't preventDefault - let paste event fire for system clipboard
+                        handled = false;
+                    }
+                    break;
                 default:
                     handled = false;
                     break;
@@ -700,7 +737,7 @@ export class CanvasInteractions {
         if (this.canvas.canvasSelection.selectedLayers.length > 0) {
             const step = mods.shift ? 10 : 1;
             let needsRender = false;
-            
+
             // Używamy e.code dla spójności i niezależności od układu klawiatury
             const movementKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'BracketLeft', 'BracketRight'];
             if (movementKeys.includes(e.code)) {
@@ -724,7 +761,7 @@ export class CanvasInteractions {
                 this.canvas.canvasSelection.removeSelectedLayers();
                 return;
             }
-            
+
             if (needsRender) {
                 this.canvas.render();
             }
@@ -770,7 +807,7 @@ export class CanvasInteractions {
             this.canvas.saveState();
             this.canvas.canvasState.saveStateToDB();
         }
-        
+
         // Reset interaction mode if it's something that can get "stuck"
         if (this.interaction.mode !== 'none' && this.interaction.mode !== 'drawingMask') {
             this.resetInteractionState();
@@ -820,7 +857,7 @@ export class CanvasInteractions {
             originalHeight: layer.originalHeight,
             cropBounds: layer.cropBounds ? { ...layer.cropBounds } : undefined
         };
-        this.interaction.dragStart = {...worldCoords};
+        this.interaction.dragStart = { ...worldCoords };
 
         if (handle === 'rot') {
             this.interaction.mode = 'rotating';
@@ -844,19 +881,19 @@ export class CanvasInteractions {
         if (mods.ctrl || mods.meta) {
             const index = this.canvas.canvasSelection.selectedLayers.indexOf(layer);
             if (index === -1) {
+                // Ctrl-clicking unselected layer: add to selection
                 this.canvas.canvasSelection.updateSelection([...this.canvas.canvasSelection.selectedLayers, layer]);
-            } else {
-                const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l: Layer) => l !== layer);
-                this.canvas.canvasSelection.updateSelection(newSelection);
             }
+            // If already selected, do NOT deselect - allows dragging multiple layers with Ctrl held
+            // User can use right-click in layers panel to deselect individual layers
         } else {
             if (!this.canvas.canvasSelection.selectedLayers.includes(layer)) {
                 this.canvas.canvasSelection.updateSelection([layer]);
             }
         }
-        
+
         this.interaction.mode = 'potential-drag';
-        this.interaction.dragStart = {...worldCoords};
+        this.interaction.dragStart = { ...worldCoords };
     }
 
     startPanning(e: MouseEvent, clearSelection: boolean = true): void {
@@ -872,8 +909,8 @@ export class CanvasInteractions {
         this.interaction.mode = 'resizingCanvas';
         const startX = snapToGrid(worldCoords.x);
         const startY = snapToGrid(worldCoords.y);
-        this.interaction.canvasResizeStart = {x: startX, y: startY};
-        this.interaction.canvasResizeRect = {x: startX, y: startY, width: 0, height: 0};
+        this.interaction.canvasResizeStart = { x: startX, y: startY };
+        this.interaction.canvasResizeRect = { x: startX, y: startY, width: 0, height: 0 };
         this.canvas.render();
     }
 
@@ -887,7 +924,7 @@ export class CanvasInteractions {
     updateCanvasMove(worldCoords: Point): void {
         const dx = worldCoords.x - this.interaction.dragStart.x;
         const dy = worldCoords.y - this.interaction.dragStart.y;
-        
+
         // Po prostu przesuwamy outputAreaBounds
         const bounds = this.canvas.outputAreaBounds;
         this.interaction.canvasMoveRect = {
@@ -911,11 +948,11 @@ export class CanvasInteractions {
                 width: moveRect.width,
                 height: moveRect.height
             };
-            
+
             // Update mask canvas to ensure it covers the new output area position
             this.canvas.maskTool.updateMaskCanvasForOutputArea();
         }
-        
+
         this.canvas.render();
         this.canvas.saveState();
     }
@@ -925,13 +962,13 @@ export class CanvasInteractions {
         const dy = e.clientY - this.interaction.panStart.y;
         this.canvas.viewport.x -= dx / this.canvas.viewport.zoom;
         this.canvas.viewport.y -= dy / this.canvas.viewport.zoom;
-        this.interaction.panStart = {x: e.clientX, y: e.clientY};
-        
+        this.interaction.panStart = { x: e.clientX, y: e.clientY };
+
         // Update stroke overlay if mask tool is drawing during pan
         if (this.canvas.maskTool.isDrawing) {
             this.canvas.maskTool.handleViewportChange();
         }
-        
+
         this.canvas.render();
         this.canvas.onViewportChange?.();
     }
@@ -994,7 +1031,7 @@ export class CanvasInteractions {
 
         const o = this.interaction.transformOrigin;
         if (!o) return;
-        
+
         const handle = this.interaction.resizeHandle;
         const anchor = this.interaction.resizeAnchor;
         const rad = o.rotation * Math.PI / 180;
@@ -1012,7 +1049,7 @@ export class CanvasInteractions {
         // Determine sign based on handle
         const signX = handle?.includes('e') ? 1 : (handle?.includes('w') ? -1 : 0);
         const signY = handle?.includes('s') ? 1 : (handle?.includes('n') ? -1 : 0);
-        
+
         localVecX *= signX;
         localVecY *= signY;
 
@@ -1022,13 +1059,13 @@ export class CanvasInteractions {
 
         if (layer.cropMode && o.cropBounds && o.originalWidth && o.originalHeight) {
             // CROP MODE: Calculate delta based on mouse movement and apply to cropBounds.
-            
+
             // Calculate mouse movement since drag start, in the layer's local coordinate system.
             const dragStartX_local = this.interaction.dragStart.x - (o.centerX ?? 0);
             const dragStartY_local = this.interaction.dragStart.y - (o.centerY ?? 0);
             const mouseX_local = mouseX - (o.centerX ?? 0);
             const mouseY_local = mouseY - (o.centerY ?? 0);
-            
+
             // Rotate mouse delta into the layer's unrotated frame
             const deltaX_world = mouseX_local - dragStartX_local;
             const deltaY_world = mouseY_local - dragStartY_local;
@@ -1041,20 +1078,20 @@ export class CanvasInteractions {
             if (layer.flipV) {
                 mouseDeltaY_local *= -1;
             }
-            
+
             // Convert the on-screen mouse delta to an image-space delta.
             const screenToImageScaleX = o.originalWidth / o.width;
             const screenToImageScaleY = o.originalHeight / o.height;
-            
+
             const delta_image_x = mouseDeltaX_local * screenToImageScaleX;
             const delta_image_y = mouseDeltaY_local * screenToImageScaleY;
-            
+
             let newCropBounds = { ...o.cropBounds }; // Start with the bounds from the beginning of the drag
 
             // Apply the image-space delta to the appropriate edges of the crop bounds
             const isFlippedH = layer.flipH;
             const isFlippedV = layer.flipV;
-            
+
             if (handle?.includes('w')) {
                 if (isFlippedH) newCropBounds.width += delta_image_x;
                 else {
@@ -1081,10 +1118,10 @@ export class CanvasInteractions {
                     newCropBounds.height -= delta_image_y;
                 } else newCropBounds.height += delta_image_y;
             }
-			
-			// Clamp crop bounds to stay within the original image and maintain minimum size
+
+            // Clamp crop bounds to stay within the original image and maintain minimum size
             if (newCropBounds.width < 1) {
-                if (handle?.includes('w')) newCropBounds.x = o.cropBounds.x + o.cropBounds.width -1;
+                if (handle?.includes('w')) newCropBounds.x = o.cropBounds.x + o.cropBounds.width - 1;
                 newCropBounds.width = 1;
             }
             if (newCropBounds.height < 1) {
@@ -1112,7 +1149,7 @@ export class CanvasInteractions {
             // TRANSFORM MODE: Resize the layer's main transform frame
             let newWidth = localVecX;
             let newHeight = localVecY;
-            
+
             if (isShiftPressed) {
                 const originalAspectRatio = o.width / o.height;
                 if (Math.abs(newWidth) > Math.abs(newHeight) * originalAspectRatio) {
@@ -1124,10 +1161,10 @@ export class CanvasInteractions {
 
             if (newWidth < 10) newWidth = 10;
             if (newHeight < 10) newHeight = 10;
-            
+
             layer.width = newWidth;
             layer.height = newHeight;
-            
+
             // Update position to keep anchor point fixed
             const deltaW = layer.width - o.width;
             const deltaH = layer.height - o.height;
@@ -1193,7 +1230,7 @@ export class CanvasInteractions {
 
             this.canvas.updateOutputAreaSize(newWidth, newHeight);
         }
-        
+
         this.canvas.render();
         this.canvas.saveState();
     }
@@ -1291,7 +1328,7 @@ export class CanvasInteractions {
 
             // Store the original canvas size for extension calculations
             this.canvas.originalCanvasSize = { width: newWidth, height: newHeight };
-            
+
             // Store the original position where custom shape was drawn for extension calculations
             this.canvas.originalOutputAreaPosition = { x: newX, y: newY };
 
@@ -1300,10 +1337,10 @@ export class CanvasInteractions {
                 const ext = this.canvas.outputAreaExtensions;
                 const extendedWidth = newWidth + ext.left + ext.right;
                 const extendedHeight = newHeight + ext.top + ext.bottom;
-                
+
                 // Update canvas size with extensions
                 this.canvas.updateOutputAreaSize(extendedWidth, extendedHeight, false);
-                
+
                 // Set outputAreaBounds accounting for extensions
                 this.canvas.outputAreaBounds = {
                     x: newX - ext.left,  // Adjust position by left extension
@@ -1311,19 +1348,19 @@ export class CanvasInteractions {
                     width: extendedWidth,
                     height: extendedHeight
                 };
-                
+
                 log.info(`New custom shape with extensions: original(${newX}, ${newY}) extended(${newX - ext.left}, ${newY - ext.top}) size(${extendedWidth}x${extendedHeight})`);
             } else {
                 // No extensions - use original size and position
                 this.canvas.updateOutputAreaSize(newWidth, newHeight, false);
-                
+
                 this.canvas.outputAreaBounds = {
                     x: newX,
                     y: newY,
                     width: newWidth,
                     height: newHeight
                 };
-                
+
                 log.info(`New custom shape without extensions: position(${newX}, ${newY}) size(${newWidth}x${newHeight})`);
             }
 
@@ -1342,12 +1379,15 @@ export class CanvasInteractions {
     }
 
     async handlePasteEvent(e: ClipboardEvent): Promise<void> {
+        // Check if canvas is connected to DOM and visible
+        if (!this.canvas.canvas.isConnected || !document.body.contains(this.canvas.canvas)) {
+            return;
+        }
 
         const shouldHandle = this.canvas.isMouseOver ||
             this.canvas.canvas.contains(document.activeElement) ||
-            document.activeElement === this.canvas.canvas ||
-            document.activeElement === document.body;
-        
+            document.activeElement === this.canvas.canvas;
+
         if (!shouldHandle) {
             log.debug("Paste event ignored - not focused on canvas");
             return;
@@ -1356,7 +1396,7 @@ export class CanvasInteractions {
         log.info("Paste event detected, checking clipboard preference");
 
         const preference = this.canvas.canvasLayers.clipboardPreference;
-        
+
         if (preference === 'clipspace') {
 
             log.info("Clipboard preference is clipspace, delegating to ClipboardManager");
@@ -1400,7 +1440,7 @@ export class CanvasInteractions {
     public activateOutputAreaTransform(): void {
         // Clear any existing interaction state before starting transform
         this.resetInteractionState();
-        
+
         // Deactivate any active tools that might conflict
         if (this.canvas.shapeTool.isActive) {
             this.canvas.shapeTool.deactivate();
@@ -1408,10 +1448,10 @@ export class CanvasInteractions {
         if (this.canvas.maskTool.isActive) {
             this.canvas.maskTool.deactivate();
         }
-        
+
         // Clear selection to avoid confusion
         this.canvas.canvasSelection.updateSelection([]);
-        
+
         // Set transform mode
         this.interaction.mode = 'transformingOutputArea';
         this.canvas.render();
@@ -1420,7 +1460,7 @@ export class CanvasInteractions {
     private getOutputAreaHandle(worldCoords: Point): string | null {
         const bounds = this.canvas.outputAreaBounds;
         const threshold = 10 / this.canvas.viewport.zoom;
-        
+
         // Define handle positions
         const handles = {
             'nw': { x: bounds.x, y: bounds.y },
@@ -1447,7 +1487,7 @@ export class CanvasInteractions {
     private startOutputAreaTransform(handle: string, worldCoords: Point): void {
         this.interaction.outputAreaTransformHandle = handle;
         this.interaction.dragStart = { ...worldCoords };
-        
+
         const bounds = this.canvas.outputAreaBounds;
         this.interaction.transformOrigin = {
             x: bounds.x,
@@ -1470,17 +1510,17 @@ export class CanvasInteractions {
             'sw': { x: bounds.x + bounds.width, y: bounds.y },
             'w': { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 },
         };
-        
+
         this.interaction.outputAreaTransformAnchor = anchorMap[handle];
     }
 
     private resizeOutputAreaFromHandle(worldCoords: Point, isShiftPressed: boolean): void {
         const o = this.interaction.transformOrigin;
         if (!o) return;
-        
+
         const handle = this.interaction.outputAreaTransformHandle;
         const anchor = this.interaction.outputAreaTransformAnchor;
-        
+
         let newX = o.x;
         let newY = o.y;
         let newWidth = o.width;
@@ -1551,7 +1591,7 @@ export class CanvasInteractions {
 
     private updateOutputAreaTransformCursor(worldCoords: Point): void {
         const handle = this.getOutputAreaHandle(worldCoords);
-        
+
         if (handle) {
             const cursorMap: { [key: string]: string } = {
                 'n': 'ns-resize', 's': 'ns-resize',
@@ -1567,16 +1607,16 @@ export class CanvasInteractions {
 
     private finalizeOutputAreaTransform(): void {
         const bounds = this.canvas.outputAreaBounds;
-        
+
         // Update canvas size and mask tool
         this.canvas.updateOutputAreaSize(bounds.width, bounds.height);
-        
+
         // Update mask canvas for new output area
         this.canvas.maskTool.updateMaskCanvasForOutputArea();
-        
+
         // Save state
         this.canvas.saveState();
-        
+
         // Reset transform handle but keep transform mode active
         this.interaction.outputAreaTransformHandle = null;
     }

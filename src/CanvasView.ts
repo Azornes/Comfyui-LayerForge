@@ -1000,6 +1000,13 @@ $el("label.clipboard-switch.mask-switch", {
         resizeObserver.observe(controlsElement);
     }
 
+    // Watch the canvas container itself to detect size changes and fix canvas dimensions
+    const canvasContainerResizeObserver = new ResizeObserver(() => {
+        // Force re-read of canvas dimensions on next render
+        canvas.render();
+    });
+    canvasContainerResizeObserver.observe(canvasContainer);
+
     canvas.canvas.addEventListener('focus', () => {
         canvasContainer.classList.add('has-focus');
     });
@@ -1195,12 +1202,23 @@ app.registerExtension({
 
                 const sendPromises: Promise<any>[] = [];
                 for (const [nodeId, canvasWidget] of canvasNodeInstances.entries()) {
-                    if (app.graph.getNodeById(nodeId) && canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
-                        log.debug(`Sending data for canvas node ${nodeId}`);
-                        sendPromises.push(canvasWidget.canvas.canvasIO.sendDataViaWebSocket(nodeId));
-                    } else {
+                    const node = app.graph.getNodeById(nodeId);
+
+                    if (!node) {
                         log.warn(`Node ${nodeId} not found in graph, removing from instances map.`);
                         canvasNodeInstances.delete(nodeId);
+                        continue;
+                    }
+
+                    // Skip bypassed nodes
+                    if (node.mode === 4) {
+                        log.debug(`Node ${nodeId} is bypassed, skipping data send.`);
+                        continue;
+                    }
+
+                    if (canvasWidget.canvas && canvasWidget.canvas.canvasIO) {
+                        log.debug(`Sending data for canvas node ${nodeId}`);
+                        sendPromises.push(canvasWidget.canvas.canvasIO.sendDataViaWebSocket(nodeId));
                     }
                 }
 
@@ -1221,6 +1239,9 @@ app.registerExtension({
 
     async beforeRegisterNodeDef(nodeType: any, nodeData: any, app: ComfyApp) {
         if (nodeType.comfyClass === "LayerForgeNode") {
+            // Map to track pending copy sources across node ID changes
+            const pendingCopySources = new Map<number, number>();
+
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function (this: ComfyNode) {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");
@@ -1253,9 +1274,52 @@ app.registerExtension({
                 const canvasWidget = await createCanvasWidget(this, null, app);
                 canvasNodeInstances.set(this.id, canvasWidget);
                 log.info(`Registered CanvasNode instance for ID: ${this.id}`);
-                
+
                 // Store the canvas widget on the node
                 (this as any).canvasWidget = canvasWidget;
+
+                // Check if this node has a pending copy source (from onConfigure)
+                // Check both the current ID and -1 (temporary ID during paste)
+                let sourceNodeId = pendingCopySources.get(this.id);
+                if (!sourceNodeId) {
+                    sourceNodeId = pendingCopySources.get(-1);
+                    if (sourceNodeId) {
+                        // Transfer from -1 to the real ID and clear -1
+                        pendingCopySources.delete(-1);
+                    }
+                }
+
+                if (sourceNodeId && sourceNodeId !== this.id) {
+                    log.info(`Node ${this.id} will copy canvas state from node ${sourceNodeId}`);
+
+                    // Clear the flag
+                    pendingCopySources.delete(this.id);
+
+                    // Copy the canvas state now that the widget is initialized
+                    setTimeout(async () => {
+                        try {
+                            const { getCanvasState, setCanvasState } = await import('./db.js');
+                            let sourceState = await getCanvasState(String(sourceNodeId));
+
+                            // If source node doesn't exist (cross-workflow paste), try clipboard
+                            if (!sourceState) {
+                                log.debug(`No canvas state found for source node ${sourceNodeId}, checking clipboard`);
+                                sourceState = await getCanvasState('__clipboard__');
+                            }
+
+                            if (!sourceState) {
+                                log.debug(`No canvas state found in clipboard either`);
+                                return;
+                            }
+
+                            await setCanvasState(String(this.id), sourceState);
+                            await canvasWidget.canvas.loadInitialState();
+                            log.info(`Canvas state copied successfully to node ${this.id}`);
+                        } catch (error) {
+                            log.error(`Error copying canvas state:`, error);
+                        }
+                    }, 100);
+                }
 
                 // Check if there are already connected inputs
                 setTimeout(() => {
@@ -1438,6 +1502,52 @@ app.registerExtension({
                 }
 
                 return onRemoved?.apply(this, arguments as any);
+            };
+
+            // Handle copy/paste - save canvas state when copying
+            const originalSerialize = nodeType.prototype.serialize;
+            nodeType.prototype.serialize = function (this: ComfyNode) {
+                const data = originalSerialize ? originalSerialize.apply(this) : {};
+
+                // Store a reference to the source node ID so we can copy layer data
+                data.sourceNodeId = this.id;
+                log.debug(`Serializing node ${this.id} for copy`);
+
+                // Store canvas state in a clipboard entry for cross-workflow paste
+                // This happens async but that's fine since paste happens later
+                (async () => {
+                    try {
+                        const { getCanvasState, setCanvasState } = await import('./db.js');
+                        const sourceState = await getCanvasState(String(this.id));
+                        if (sourceState) {
+                            // Store in a special "clipboard" entry
+                            await setCanvasState('__clipboard__', sourceState);
+                            log.debug(`Stored canvas state in clipboard for node ${this.id}`);
+                        }
+                    } catch (error) {
+                        log.error('Error storing canvas state to clipboard:', error);
+                    }
+                })();
+
+                return data;
+            };
+
+            // Handle copy/paste - load canvas state from source node when pasting
+            const originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onConfigure = async function (this: ComfyNode, data: any) {
+                if (originalConfigure) {
+                    originalConfigure.apply(this, [data]);
+                }
+
+                // Store the source node ID in the map (persists across node ID changes)
+                // This will be picked up later in onAdded when the canvas widget is ready
+                if (data.sourceNodeId && data.sourceNodeId !== this.id) {
+                    const existingSource = pendingCopySources.get(this.id);
+                    if (!existingSource) {
+                        pendingCopySources.set(this.id, data.sourceNodeId);
+                        log.debug(`Stored pending copy source: ${data.sourceNodeId} for node ${this.id}`);
+                    }
+                }
             };
 
             const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;

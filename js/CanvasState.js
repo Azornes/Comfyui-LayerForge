@@ -88,10 +88,10 @@ export class CanvasState {
             log.debug(`Output Area resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
             const loadedLayers = await this._loadLayers(savedState.layers);
             this.canvas.layers = loadedLayers.filter((l) => l !== null);
-            log.info(`Loaded ${this.canvas.layers.length} layers.`);
-            if (this.canvas.layers.length === 0) {
-                log.warn("No valid layers loaded, state may be corrupted.");
-                return false;
+            log.info(`Loaded ${this.canvas.layers.length} layers from ${savedState.layers.length} saved layers.`);
+            if (this.canvas.layers.length === 0 && savedState.layers.length > 0) {
+                log.warn(`Failed to load any layers. Saved state had ${savedState.layers.length} layers but all failed to load. This may indicate corrupted IndexedDB data.`);
+                // Don't return false - allow empty canvas to be valid
             }
             this.canvas.updateSelectionAfterHistory();
             this.canvas.render();

@@ -1100,8 +1100,8 @@ export class CanvasLayers {
         this.canvas.width = width;
         this.canvas.height = height;
         this.canvas.maskTool.resize(width, height);
-        this.canvas.canvas.width = width;
-        this.canvas.canvas.height = height;
+        // Don't set canvas.width/height - the render loop will handle display size
+        // this.canvas.width/height are for OUTPUT AREA dimensions, not display canvas
         this.canvas.render();
         if (saveHistory) {
             this.canvas.canvasState.saveStateToDB();

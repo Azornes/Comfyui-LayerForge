@@ -197,6 +197,25 @@ export class CanvasIO {
     }
     async _renderOutputData() {
         log.info("=== RENDERING OUTPUT DATA FOR COMFYUI ===");
+        // Check if layers have valid images loaded, with retry logic
+        const maxRetries = 5;
+        const retryDelay = 200;
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const layersWithoutImages = this.canvas.layers.filter(layer => !layer.image || !layer.image.complete);
+            if (layersWithoutImages.length === 0) {
+                break; // All images loaded
+            }
+            if (attempt === 0) {
+                log.warn(`${layersWithoutImages.length} layer(s) have incomplete image data. Waiting for images to load...`);
+            }
+            if (attempt < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+            else {
+                // Last attempt failed
+                throw new Error(`Canvas not ready after ${maxRetries} attempts: ${layersWithoutImages.length} layer(s) still have incomplete image data. Try waiting a moment and running again.`);
+            }
+        }
         // Użyj zunifikowanych funkcji z CanvasLayers
         const imageBlob = await this.canvas.canvasLayers.getFlattenedCanvasAsBlob();
         const maskBlob = await this.canvas.canvasLayers.getFlattenedMaskAsBlob();

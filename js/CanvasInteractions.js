@@ -104,6 +104,8 @@ export class CanvasInteractions {
         // Add a blur event listener to the window to reset key states
         window.addEventListener('blur', this.onBlur);
         document.addEventListener('paste', this.onPaste);
+        // Intercept Ctrl+V during capture phase to handle layer paste before ComfyUI
+        document.addEventListener('keydown', this.onKeyDown, { capture: true });
         this.canvas.canvas.addEventListener('mouseenter', this.onMouseEnter);
         this.canvas.canvas.addEventListener('mouseleave', this.onMouseLeave);
         this.canvas.canvas.addEventListener('dragover', this.onDragOver);
@@ -119,6 +121,8 @@ export class CanvasInteractions {
         this.canvas.canvas.removeEventListener('wheel', this.onWheel);
         this.canvas.canvas.removeEventListener('keydown', this.onKeyDown);
         this.canvas.canvas.removeEventListener('keyup', this.onKeyUp);
+        // Remove document-level capture listener
+        document.removeEventListener('keydown', this.onKeyDown, { capture: true });
         window.removeEventListener('blur', this.onBlur);
         document.removeEventListener('paste', this.onPaste);
         this.canvas.canvas.removeEventListener('mouseenter', this.onMouseEnter);
@@ -188,6 +192,12 @@ export class CanvasInteractions {
     }
     handleMouseDown(e) {
         this.canvas.canvas.focus();
+        // Sync modifier states with actual event state to prevent "stuck" modifiers
+        // when focus moves between layers panel and canvas
+        this.interaction.isCtrlPressed = e.ctrlKey;
+        this.interaction.isMetaPressed = e.metaKey;
+        this.interaction.isShiftPressed = e.shiftKey;
+        this.interaction.isAltPressed = e.altKey;
         const coords = this.getMouseCoordinates(e);
         const mods = this.getModifierState(e);
         if (this.interaction.mode === 'drawingMask') {
@@ -519,14 +529,24 @@ export class CanvasInteractions {
         return targetHeight / oldHeight;
     }
     handleKeyDown(e) {
+        // Always track modifier keys regardless of focus
         if (e.key === 'Control')
             this.interaction.isCtrlPressed = true;
         if (e.key === 'Meta')
             this.interaction.isMetaPressed = true;
         if (e.key === 'Shift')
             this.interaction.isShiftPressed = true;
-        if (e.key === 'Alt') {
+        if (e.key === 'Alt')
             this.interaction.isAltPressed = true;
+        // Check if canvas is focused before handling any shortcuts
+        const shouldHandle = this.canvas.isMouseOver ||
+            this.canvas.canvas.contains(document.activeElement) ||
+            document.activeElement === this.canvas.canvas;
+        if (!shouldHandle) {
+            return;
+        }
+        // Canvas-specific key handlers (only when focused)
+        if (e.key === 'Alt') {
             e.preventDefault();
         }
         if (e.key.toLowerCase() === 's') {
@@ -558,6 +578,17 @@ export class CanvasInteractions {
                 case 'c':
                     if (this.canvas.canvasSelection.selectedLayers.length > 0) {
                         this.canvas.canvasLayers.copySelectedLayers();
+                    }
+                    break;
+                case 'v':
+                    // Only handle internal clipboard paste here.
+                    // If internal clipboard is empty, let the paste event bubble
+                    // so handlePasteEvent can access e.clipboardData for system images.
+                    if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+                        this.canvas.canvasLayers.pasteLayers();
+                    } else {
+                        // Don't preventDefault - let paste event fire for system clipboard
+                        handled = false;
                     }
                     break;
                 default:
@@ -713,12 +744,11 @@ export class CanvasInteractions {
         if (mods.ctrl || mods.meta) {
             const index = this.canvas.canvasSelection.selectedLayers.indexOf(layer);
             if (index === -1) {
+                // Ctrl-clicking unselected layer: add to selection
                 this.canvas.canvasSelection.updateSelection([...this.canvas.canvasSelection.selectedLayers, layer]);
             }
-            else {
-                const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l) => l !== layer);
-                this.canvas.canvasSelection.updateSelection(newSelection);
-            }
+            // If already selected, do NOT deselect - allows dragging multiple layers with Ctrl held
+            // User can use right-click in layers panel to deselect individual layers
         }
         else {
             if (!this.canvas.canvasSelection.selectedLayers.includes(layer)) {
@@ -1155,10 +1185,13 @@ export class CanvasInteractions {
         }
     }
     async handlePasteEvent(e) {
+        // Check if canvas is connected to DOM and visible
+        if (!this.canvas.canvas.isConnected || !document.body.contains(this.canvas.canvas)) {
+            return;
+        }
         const shouldHandle = this.canvas.isMouseOver ||
             this.canvas.canvas.contains(document.activeElement) ||
-            document.activeElement === this.canvas.canvas ||
-            document.activeElement === document.body;
+            document.activeElement === this.canvas.canvas;
         if (!shouldHandle) {
             log.debug("Paste event ignored - not focused on canvas");
             return;

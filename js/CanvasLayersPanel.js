@@ -123,6 +123,26 @@ export class CanvasLayersPanel {
                 e.preventDefault();
                 e.stopPropagation();
                 this.deleteSelectedLayers();
+                return;
+            }
+            // Handle Ctrl+C/V for layer copy/paste when panel has focus
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key.toLowerCase() === 'c') {
+                    if (this.canvas.canvasSelection.selectedLayers.length > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.canvas.canvasLayers.copySelectedLayers();
+                        log.info('Layers copied from panel');
+                    }
+                }
+                else if (e.key.toLowerCase() === 'v') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+                        this.canvas.canvasLayers.pasteLayers();
+                        log.info('Layers pasted from panel');
+                    }
+                }
             }
         });
         log.debug('Panel structure created');
@@ -329,6 +349,8 @@ export class CanvasLayersPanel {
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
         this.updateSelectionAppearance();
         this.updateButtonStates();
+        // Focus the canvas so keyboard shortcuts (like Ctrl+C/V) work for layer operations
+        this.canvas.canvas.focus();
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
     startEditingLayerName(nameElement, layer) {

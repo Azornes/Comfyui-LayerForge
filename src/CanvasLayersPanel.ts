@@ -133,7 +133,7 @@ export class CanvasLayersPanel {
         `;
 
         this.layersContainer = this.container.querySelector<HTMLElement>('#layers-container');
-        
+
         // Setup event listeners dla przycisków
         this.setupControlButtons();
         this.setupMasterVisibilityToggle();
@@ -144,6 +144,26 @@ export class CanvasLayersPanel {
                 e.preventDefault();
                 e.stopPropagation();
                 this.deleteSelectedLayers();
+                return;
+            }
+
+            // Handle Ctrl+C/V for layer copy/paste when panel has focus
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key.toLowerCase() === 'c') {
+                    if (this.canvas.canvasSelection.selectedLayers.length > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.canvas.canvasLayers.copySelectedLayers();
+                        log.info('Layers copied from panel');
+                    }
+                } else if (e.key.toLowerCase() === 'v') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (this.canvas.canvasLayers.internalClipboard.length > 0) {
+                        this.canvas.canvasLayers.pasteLayers();
+                        log.info('Layers pasted from panel');
+                    }
+                }
             }
         });
 
@@ -269,7 +289,7 @@ export class CanvasLayersPanel {
         layerRow.className = 'layer-row';
         layerRow.draggable = true;
         layerRow.dataset.layerIndex = String(index);
-        
+
         const isSelected = this.canvas.canvasSelection.selectedLayers.includes(layer);
         if (isSelected) {
             layerRow.classList.add('selected');
@@ -318,7 +338,7 @@ export class CanvasLayersPanel {
         const scale = Math.min(48 / layer.image.width, 48 / layer.image.height);
         const scaledWidth = layer.image.width * scale;
         const scaledHeight = layer.image.height * scale;
-        
+
         // Wycentruj obraz
         const x = (48 - scaledWidth) / 2;
         const y = (48 - scaledHeight) / 2;
@@ -383,10 +403,13 @@ export class CanvasLayersPanel {
         // Aktualizuj wewnętrzny stan zaznaczenia w obiekcie canvas
         // Ta funkcja NIE powinna już wywoływać onSelectionChanged w panelu.
         this.canvas.updateSelectionLogic(layer, isCtrlPressed, isShiftPressed, index);
-        
+
         // Aktualizuj tylko wygląd (klasy CSS), bez niszczenia DOM
         this.updateSelectionAppearance();
         this.updateButtonStates();
+
+        // Focus the canvas so keyboard shortcuts (like Ctrl+C/V) work for layer operations
+        this.canvas.canvas.focus();
 
         log.debug(`Layer clicked: ${layer.name}, selection count: ${this.canvas.canvasSelection.selectedLayers.length}`);
     }
@@ -394,15 +417,15 @@ export class CanvasLayersPanel {
     startEditingLayerName(nameElement: HTMLElement, layer: Layer): void {
         const currentName = layer.name;
         nameElement.classList.add('editing');
-        
+
         const input = document.createElement('input');
         input.type = 'text';
         input.value = currentName;
         input.style.width = '100%';
-        
+
         nameElement.innerHTML = '';
         nameElement.appendChild(input);
-        
+
         input.focus();
         input.select();
 
@@ -412,7 +435,7 @@ export class CanvasLayersPanel {
             layer.name = newName;
             nameElement.classList.remove('editing');
             nameElement.textContent = newName;
-            
+
             this.canvas.saveState();
             log.info(`Layer renamed to: ${newName}`);
         };
@@ -436,11 +459,11 @@ export class CanvasLayersPanel {
         if (!existingNames.includes(proposedName)) {
             return proposedName;
         }
-        
+
         // Sprawdź czy nazwa już ma numerację w nawiasach
         const match = proposedName.match(/^(.+?)\s*\((\d+)\)$/);
         let baseName, startNumber;
-        
+
         if (match) {
             baseName = match[1].trim();
             startNumber = parseInt(match[2]) + 1;
@@ -448,34 +471,34 @@ export class CanvasLayersPanel {
             baseName = proposedName;
             startNumber = 1;
         }
-        
+
         // Znajdź pierwszą dostępną numerację
         let counter = startNumber;
         let uniqueName;
-        
+
         do {
             uniqueName = `${baseName} (${counter})`;
             counter++;
         } while (existingNames.includes(uniqueName));
-        
+
         return uniqueName;
     }
 
     toggleLayerVisibility(layer: Layer): void {
         layer.visible = !layer.visible;
-        
+
         // If layer became invisible and is selected, deselect it
         if (!layer.visible && this.canvas.canvasSelection.selectedLayers.includes(layer)) {
             const newSelection = this.canvas.canvasSelection.selectedLayers.filter((l: Layer) => l !== layer);
             this.canvas.updateSelection(newSelection);
         }
-        
+
         this.canvas.render();
         this.canvas.requestSaveState();
-        
+
         // Update the eye icon in the panel
         this.renderLayers();
-        
+
         log.info(`Layer "${layer.name}" visibility toggled to: ${layer.visible}`);
     }
 
@@ -535,7 +558,7 @@ export class CanvasLayersPanel {
 
         const line = document.createElement('div');
         line.className = 'drag-insertion-line';
-        
+
         if (isUpperHalf) {
             line.style.top = '-1px';
         } else {
@@ -563,7 +586,7 @@ export class CanvasLayersPanel {
         const rect = e.currentTarget.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         const isUpperHalf = e.clientY < midpoint;
-        
+
         // Oblicz docelowy indeks
         let insertIndex = targetIndex;
         if (!isUpperHalf) {
@@ -572,7 +595,7 @@ export class CanvasLayersPanel {
 
         // Użyj nowej, centralnej funkcji do przesuwania warstw
         this.canvas.canvasLayers.moveLayers(this.draggedElements, { toIndex: insertIndex });
-        
+
         log.info(`Dropped ${this.draggedElements.length} layers at position ${insertIndex}`);
     }
 
@@ -610,17 +633,17 @@ export class CanvasLayersPanel {
      */
     updateButtonStates(): void {
         if (!this.container) return;
-        
+
         const deleteBtn = this.container.querySelector('#delete-layer-btn') as HTMLButtonElement;
         const hasSelectedLayers = this.canvas.canvasSelection.selectedLayers.length > 0;
-        
+
         if (deleteBtn) {
             deleteBtn.disabled = !hasSelectedLayers;
-            deleteBtn.title = hasSelectedLayers 
+            deleteBtn.title = hasSelectedLayers
                 ? `Delete ${this.canvas.canvasSelection.selectedLayers.length} selected layer(s)`
                 : 'No layers selected';
         }
-        
+
         log.debug(`Button states updated - delete button ${hasSelectedLayers ? 'enabled' : 'disabled'}`);
     }
 
@@ -641,7 +664,7 @@ export class CanvasLayersPanel {
         this.layersContainer = null;
         this.draggedElements = [];
         this.removeDragInsertionLine();
-        
+
         log.info('CanvasLayersPanel destroyed');
     }
 }
