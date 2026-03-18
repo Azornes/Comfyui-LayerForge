@@ -1,6 +1,8 @@
 // @ts-ignore
 import { app } from "../../scripts/app.js";
 // @ts-ignore
+import { ChangeTracker } from "../../scripts/changeTracker.js";
+// @ts-ignore
 import { $el } from "../../scripts/ui.js";
 import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js";
 import { Canvas } from "./Canvas.js";
@@ -12,6 +14,52 @@ import { showErrorNotification, showSuccessNotification, showInfoNotification, s
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
+const LAYERFORGE_CHANGE_TRACKER_PATCH_FLAG = '__layerForgeUndoRedoPatched';
+const LAYERFORGE_SHORTCUT_ACTIVE_ATTR = 'data-layerforge-shortcuts-active';
+const isLayerForgeEditableElement = (target) => {
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+    if (target.isContentEditable) {
+        return true;
+    }
+    return !!target.closest('.painterMainContainer input, .painterMainContainer textarea, .painterMainContainer select, .painterMainContainer [contenteditable="true"]');
+};
+const isLayerForgeShortcutContextElement = (target) => {
+    return target instanceof HTMLElement && !!target.closest('.painterMainContainer');
+};
+const isLayerForgeShortcutContextActive = (event) => {
+    if (event && isLayerForgeShortcutContextElement(event.target)) {
+        return true;
+    }
+    if (isLayerForgeShortcutContextElement(document.activeElement)) {
+        return true;
+    }
+    return !!document.querySelector(`.painterMainContainer[${LAYERFORGE_SHORTCUT_ACTIVE_ATTR}="true"]`);
+};
+const isLayerForgeEditableFocused = () => {
+    return isLayerForgeEditableElement(document.activeElement);
+};
+const patchLayerForgeChangeTrackerUndoRedo = () => {
+    const prototype = ChangeTracker?.prototype;
+    if (!prototype || prototype[LAYERFORGE_CHANGE_TRACKER_PATCH_FLAG] || typeof prototype.undoRedo !== 'function') {
+        return;
+    }
+    const originalUndoRedo = prototype.undoRedo;
+    prototype.undoRedo = async function (event) {
+        if (isLayerForgeShortcutContextActive(event)) {
+            return false;
+        }
+        return await originalUndoRedo.call(this, event);
+    };
+    Object.defineProperty(prototype, LAYERFORGE_CHANGE_TRACKER_PATCH_FLAG, {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false
+    });
+};
+patchLayerForgeChangeTrackerUndoRedo();
 async function createCanvasWidget(node, widget, app) {
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
@@ -906,6 +954,70 @@ async function createCanvasWidget(node, widget, app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer, layersPanelContainer]);
+    const stopEditableClipboardLeak = (event) => {
+        if (isLayerForgeEditableElement(event.target) || isLayerForgeEditableFocused()) {
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }
+    };
+    mainContainer.addEventListener('copy', stopEditableClipboardLeak);
+    mainContainer.addEventListener('cut', stopEditableClipboardLeak);
+    mainContainer.addEventListener('paste', stopEditableClipboardLeak);
+    const setShortcutContextActive = (active) => {
+        if (active) {
+            mainContainer.setAttribute(LAYERFORGE_SHORTCUT_ACTIVE_ATTR, 'true');
+        }
+        else {
+            mainContainer.removeAttribute(LAYERFORGE_SHORTCUT_ACTIVE_ATTR);
+        }
+    };
+    const handleShortcutContextFocusIn = () => {
+        setShortcutContextActive(true);
+    };
+    const handleShortcutContextFocusOut = () => {
+        requestAnimationFrame(() => {
+            if (!mainContainer.contains(document.activeElement)) {
+                setShortcutContextActive(false);
+            }
+        });
+    };
+    const handleShortcutContextPointerEnter = () => {
+        setShortcutContextActive(true);
+    };
+    const handleShortcutContextPointerLeave = () => {
+        if (!mainContainer.contains(document.activeElement)) {
+            setShortcutContextActive(false);
+        }
+    };
+    const handleRootUndoRedo = (event) => {
+        if (isLayerForgeEditableElement(event.target)) {
+            return;
+        }
+        const isPrimaryModifier = (event.ctrlKey || event.metaKey) && !event.altKey;
+        if (!isPrimaryModifier) {
+            return;
+        }
+        const key = event.key.toLowerCase();
+        const isUndo = key === 'z' && !event.shiftKey;
+        const isRedo = key === 'y' || (key === 'z' && event.shiftKey);
+        if (!isUndo && !isRedo) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        if (isRedo) {
+            canvas.redo();
+        }
+        else {
+            canvas.undo();
+        }
+    };
+    mainContainer.addEventListener('focusin', handleShortcutContextFocusIn);
+    mainContainer.addEventListener('focusout', handleShortcutContextFocusOut);
+    mainContainer.addEventListener('pointerenter', handleShortcutContextPointerEnter);
+    mainContainer.addEventListener('pointerleave', handleShortcutContextPointerLeave);
+    mainContainer.addEventListener('keydown', handleRootUndoRedo, true);
     if (node.addDOMWidget) {
         node.addDOMWidget("mainContainer", "widget", mainContainer);
     }
@@ -1029,7 +1141,18 @@ async function createCanvasWidget(node, widget, app) {
     }
     return {
         canvas: canvas,
-        panel: controlPanel
+        panel: controlPanel,
+        destroy: () => {
+            mainContainer.removeEventListener('copy', stopEditableClipboardLeak);
+            mainContainer.removeEventListener('cut', stopEditableClipboardLeak);
+            mainContainer.removeEventListener('paste', stopEditableClipboardLeak);
+            mainContainer.removeEventListener('focusin', handleShortcutContextFocusIn);
+            mainContainer.removeEventListener('focusout', handleShortcutContextFocusOut);
+            mainContainer.removeEventListener('pointerenter', handleShortcutContextPointerEnter);
+            mainContainer.removeEventListener('pointerleave', handleShortcutContextPointerLeave);
+            mainContainer.removeEventListener('keydown', handleRootUndoRedo, true);
+            mainContainer.removeAttribute(LAYERFORGE_SHORTCUT_ACTIVE_ATTR);
+        }
     };
 }
 const canvasNodeInstances = new Map();

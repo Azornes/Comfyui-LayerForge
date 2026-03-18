@@ -94,6 +94,16 @@ export class CanvasInteractions {
             this.canvas.canvas.style.border = '';
         }
     }
+    isEditableElement(target) {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+        if (target.isContentEditable) {
+            return true;
+        }
+        const editableSelector = 'input, textarea, select, [contenteditable="true"]';
+        return !!target.closest(editableSelector);
+    }
     setupEventListeners() {
         this.canvas.canvas.addEventListener('mousedown', this.onMouseDown);
         this.canvas.canvas.addEventListener('mousemove', this.onMouseMove);
@@ -538,6 +548,9 @@ export class CanvasInteractions {
             this.interaction.isShiftPressed = true;
         if (e.key === 'Alt')
             this.interaction.isAltPressed = true;
+        if (this.isEditableElement(e.target) || this.isEditableElement(document.activeElement)) {
+            return;
+        }
         // Check if canvas is focused before handling any shortcuts
         const shouldHandle = this.canvas.isMouseOver ||
             this.canvas.canvas.contains(document.activeElement) ||
