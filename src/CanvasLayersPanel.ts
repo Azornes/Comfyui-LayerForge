@@ -139,7 +139,23 @@ export class CanvasLayersPanel {
         this.setupMasterVisibilityToggle();
 
         // Dodaj listener dla klawiatury, aby usuwanie działało z panelu
+        const isEditableTarget = (target: EventTarget | null): boolean => {
+            if (!(target instanceof HTMLElement)) {
+                return false;
+            }
+
+            if (target.isContentEditable) {
+                return true;
+            }
+
+            return !!target.closest('input, textarea, select, [contenteditable="true"]');
+        };
+
         this.container.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (isEditableTarget(e.target)) {
+                return;
+            }
+
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 e.stopPropagation();

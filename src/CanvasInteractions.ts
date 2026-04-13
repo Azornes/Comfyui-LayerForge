@@ -163,6 +163,19 @@ export class CanvasInteractions {
         }
     }
 
+    private isEditableElement(target: EventTarget | null): boolean {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+
+        if (target.isContentEditable) {
+            return true;
+        }
+
+        const editableSelector = 'input, textarea, select, [contenteditable="true"]';
+        return !!target.closest(editableSelector);
+    }
+
     setupEventListeners(): void {
         this.canvas.canvas.addEventListener('mousedown', this.onMouseDown as EventListener);
         this.canvas.canvas.addEventListener('mousemove', this.onMouseMove as EventListener);
@@ -665,6 +678,10 @@ export class CanvasInteractions {
         if (e.key === 'Meta') this.interaction.isMetaPressed = true;
         if (e.key === 'Shift') this.interaction.isShiftPressed = true;
         if (e.key === 'Alt') this.interaction.isAltPressed = true;
+
+        if (this.isEditableElement(e.target) || this.isEditableElement(document.activeElement)) {
+            return;
+        }
 
         // Check if canvas is focused before handling any shortcuts
         const shouldHandle = this.canvas.isMouseOver ||
