@@ -168,5 +168,6 @@ class WebSocketManager {
     }
 }
 
-const wsUrl = `ws://${window.location.host}/layerforge/canvas_ws`;
+const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+const wsUrl = `${protocol}//${location.host}/layerforge/canvas_ws`;
 export const webSocketManager = new WebSocketManager(wsUrl);
