@@ -599,7 +599,8 @@ export class CanvasInteractions {
                     // so handlePasteEvent can access e.clipboardData for system images.
                     if (this.canvas.canvasLayers.internalClipboard.length > 0) {
                         this.canvas.canvasLayers.pasteLayers();
-                    } else {
+                    }
+                    else {
                         // Don't preventDefault - let paste event fire for system clipboard
                         handled = false;
                     }
