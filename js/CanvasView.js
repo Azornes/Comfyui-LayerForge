@@ -23,10 +23,10 @@ const isLayerForgeEditableElement = (target) => {
     if (target.isContentEditable) {
         return true;
     }
-    return !!target.closest('.painterMainContainer input, .painterMainContainer textarea, .painterMainContainer select, .painterMainContainer [contenteditable="true"]');
+    return !!target.closest('.lf-painter-main-container input, .lf-painter-main-container textarea, .lf-painter-main-container select, .lf-painter-main-container [contenteditable="true"]');
 };
 const isLayerForgeShortcutContextElement = (target) => {
-    return target instanceof HTMLElement && !!target.closest('.painterMainContainer');
+    return target instanceof HTMLElement && !!target.closest('.lf-painter-main-container');
 };
 const isLayerForgeShortcutContextActive = (event) => {
     if (event && isLayerForgeShortcutContextElement(event.target)) {
@@ -35,7 +35,7 @@ const isLayerForgeShortcutContextActive = (event) => {
     if (isLayerForgeShortcutContextElement(document.activeElement)) {
         return true;
     }
-    return !!document.querySelector(`.painterMainContainer[${LAYERFORGE_SHORTCUT_ACTIVE_ATTR}="true"]`);
+    return !!document.querySelector(`.lf-painter-main-container[${LAYERFORGE_SHORTCUT_ACTIVE_ATTR}="true"]`);
 };
 const isLayerForgeEditableFocused = () => {
     return isLayerForgeEditableElement(document.activeElement);
@@ -91,7 +91,7 @@ async function createCanvasWidget(node, widget, app) {
             knobIconEl.textContent = fallbackText;
         }
     };
-    const helpTooltip = $el("div.painter-tooltip", {
+    const helpTooltip = $el("div.lf-painter-tooltip", {
         id: `painter-help-tooltip-${node.id}`,
     });
     const [standardShortcuts, maskShortcuts, systemClipboardTooltip, clipspaceClipboardTooltip] = await Promise.all([
@@ -129,7 +129,7 @@ async function createCanvasWidget(node, widget, app) {
         helpTooltip.style.display = 'none';
     };
     const controlPanel = $el("div.painterControlPanel", {}, [
-        $el("div.controls.painter-controls", {
+        $el("div.controls.lf-painter-controls", {
             style: {
                 position: "absolute",
                 top: "0",
@@ -138,13 +138,13 @@ async function createCanvasWidget(node, widget, app) {
                 zIndex: "10",
             },
         }, [
-            $el("div.painter-button-group", {}, [
-                $el("button.painter-button.icon-button", {
+            $el("div.lf-painter-button-group", {}, [
+                $el("button.lf-painter-button.lf-icon-button", {
                     id: `open-editor-btn-${node.id}`,
                     textContent: "⛶",
                     title: "Open in Editor",
                 }),
-                $el("button.painter-button.icon-button", {
+                $el("button.lf-painter-button.lf-icon-button", {
                     textContent: "?",
                     onmouseenter: (e) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
@@ -152,7 +152,7 @@ async function createCanvasWidget(node, widget, app) {
                     },
                     onmouseleave: hideTooltip
                 }),
-                $el("button.painter-button.primary", {
+                $el("button.lf-painter-button.lf-primary", {
                     textContent: "Add Image",
                     title: "Add image from file",
                     onclick: () => {
@@ -183,13 +183,13 @@ async function createCanvasWidget(node, widget, app) {
                         input.click();
                     }
                 }),
-                $el("button.painter-button.primary", {
+                $el("button.lf-painter-button.lf-primary", {
                     textContent: "Import Input",
                     title: "Import image from another node",
                     onclick: () => canvas.canvasIO.importLatestImage()
                 }),
-                $el("div.painter-clipboard-group", {}, [
-                    $el("button.painter-button.primary", {
+                $el("div.lf-painter-clipboard-group", {}, [
+                    $el("button.lf-painter-button.lf-primary", {
                         textContent: "Paste Image",
                         title: "Paste image from clipboard",
                         onclick: () => {
@@ -203,7 +203,7 @@ async function createCanvasWidget(node, widget, app) {
                         // Initial state: checked = clipspace, unchecked = system
                         const isClipspace = canvas.canvasLayers.clipboardPreference === 'clipspace';
                         const switchId = `clipboard-switch-${node.id}`;
-                        const switchEl = $el("label.clipboard-switch", { id: switchId }, [
+                        const switchEl = $el("label.lf-clipboard-switch", { id: switchId }, [
                             $el("input", {
                                 type: "checkbox",
                                 checked: isClipspace,
@@ -215,13 +215,13 @@ async function createCanvasWidget(node, widget, app) {
                                     log.info(`Clipboard preference toggled to: ${canvas.canvasLayers.clipboardPreference}`);
                                 }
                             }),
-                            $el("span.switch-track"),
-                            $el("span.switch-labels", {}, [
-                                $el("span.text-clipspace", {}, ["Clipspace"]),
-                                $el("span.text-system", {}, ["System"])
+                            $el("span.lf-switch-track"),
+                            $el("span.lf-switch-labels", {}, [
+                                $el("span.lf-text-clipspace", {}, ["Clipspace"]),
+                                $el("span.lf-text-system", {}, ["System"])
                             ]),
-                            $el("span.switch-knob", {}, [
-                                $el("span.switch-icon")
+                            $el("span.lf-switch-knob", {}, [
+                                $el("span.lf-switch-icon")
                             ])
                         ]);
                         // Helper function to get current tooltip content based on switch state
@@ -245,7 +245,7 @@ async function createCanvasWidget(node, widget, app) {
                         switchEl.addEventListener("mouseleave", hideTooltip);
                         // Dynamic icon update on toggle
                         const input = switchEl.querySelector('input[type="checkbox"]');
-                        const knobIcon = switchEl.querySelector('.switch-knob .switch-icon');
+                        const knobIcon = switchEl.querySelector('.lf-switch-knob .lf-switch-icon');
                         input.addEventListener('change', () => {
                             updateSwitchIcon(knobIcon, input.checked, LAYERFORGE_TOOLS.CLIPSPACE, LAYERFORGE_TOOLS.SYSTEM_CLIPBOARD, "🗂️", "📋");
                             // Update tooltip content immediately after state change
@@ -259,9 +259,9 @@ async function createCanvasWidget(node, widget, app) {
                     })()
                 ]),
             ]),
-            $el("div.painter-separator"),
-            $el("div.painter-button-group", {}, [
-                $el("button.painter-button.requires-selection", {
+            $el("div.lf-painter-separator"),
+            $el("div.lf-painter-button-group", {}, [
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Auto Adjust Output",
                     title: "Automatically adjust output area to fit selected layers",
                     onclick: () => {
@@ -280,7 +280,7 @@ async function createCanvasWidget(node, widget, app) {
                         }
                     }
                 }),
-                $el("button.painter-button", {
+                $el("button.lf-painter-button", {
                     textContent: "Output Area Size",
                     title: "Transform output area - drag handles to resize",
                     onclick: () => {
@@ -289,31 +289,31 @@ async function createCanvasWidget(node, widget, app) {
                         showInfoNotification("Click and drag the handles to resize the output area. Click anywhere else to exit.", 3000);
                     }
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Remove Layer",
                     title: "Remove selected layer(s)",
                     onclick: () => canvas.removeSelectedLayers()
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Layer Up",
                     title: "Move selected layer(s) up",
                     onclick: () => canvas.canvasLayers.moveLayerUp()
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Layer Down",
                     title: "Move selected layer(s) down",
                     onclick: () => canvas.canvasLayers.moveLayerDown()
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Fuse",
                     title: "Flatten and merge selected layers into a single layer",
                     onclick: () => canvas.canvasLayers.fuseLayers()
                 }),
             ]),
-            $el("div.painter-separator"),
-            $el("div.painter-button-group", {}, [
+            $el("div.lf-painter-separator"),
+            $el("div.lf-painter-button-group", {}, [
                 (() => {
-                    const switchEl = $el("label.clipboard-switch.requires-selection", {
+                    const switchEl = $el("label.lf-clipboard-switch.requires-selection", {
                         id: `crop-transform-switch-${node.id}`,
                         title: "Toggle between Transform and Crop mode for selected layer(s)"
                     }, [
@@ -335,17 +335,17 @@ async function createCanvasWidget(node, widget, app) {
                                 canvas.render();
                             }
                         }),
-                        $el("span.switch-track"),
-                        $el("span.switch-labels", { style: { fontSize: "11px" } }, [
-                            $el("span.text-clipspace", {}, ["Crop"]),
-                            $el("span.text-system", {}, ["Transform"])
+                        $el("span.lf-switch-track"),
+                        $el("span.lf-switch-labels", { style: { fontSize: "11px" } }, [
+                            $el("span.lf-text-clipspace", {}, ["Crop"]),
+                            $el("span.lf-text-system", {}, ["Transform"])
                         ]),
-                        $el("span.switch-knob", {}, [
-                            $el("span.switch-icon", { id: `crop-transform-icon-${node.id}` })
+                        $el("span.lf-switch-knob", {}, [
+                            $el("span.lf-switch-icon", { id: `crop-transform-icon-${node.id}` })
                         ])
                     ]);
                     const input = switchEl.querySelector('input[type="checkbox"]');
-                    const knobIcon = switchEl.querySelector('.switch-icon');
+                    const knobIcon = switchEl.querySelector('.lf-switch-icon');
                     input.addEventListener('change', () => {
                         updateSwitchIcon(knobIcon, input.checked, LAYERFORGE_TOOLS.CROP, LAYERFORGE_TOOLS.TRANSFORM, "✂️", "✥");
                     });
@@ -356,40 +356,40 @@ async function createCanvasWidget(node, widget, app) {
                     });
                     return switchEl;
                 })(),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Rotate +90°",
                     title: "Rotate selected layer(s) by +90 degrees",
                     onclick: () => canvas.canvasLayers.rotateLayer(90)
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Scale +5%",
                     title: "Increase size of selected layer(s) by 5%",
                     onclick: () => canvas.canvasLayers.resizeLayer(1.05)
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Scale -5%",
                     title: "Decrease size of selected layer(s) by 5%",
                     onclick: () => canvas.canvasLayers.resizeLayer(0.95)
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Mirror H",
                     title: "Mirror selected layer(s) horizontally",
                     onclick: () => canvas.canvasLayers.mirrorHorizontal()
                 }),
-                $el("button.painter-button.requires-selection", {
+                $el("button.lf-painter-button.requires-selection", {
                     textContent: "Mirror V",
                     title: "Mirror selected layer(s) vertically",
                     onclick: () => canvas.canvasLayers.mirrorVertical()
                 }),
             ]),
-            $el("div.painter-separator"),
-            $el("div.painter-button-group", {}, [
-                $el("button.painter-button.requires-selection.matting-button", {
+            $el("div.lf-painter-separator"),
+            $el("div.lf-painter-button-group", {}, [
+                $el("button.lf-painter-button.requires-selection.lf-matting-button", {
                     textContent: "Matting",
                     title: "Perform background removal on the selected layer",
                     onclick: async (e) => {
-                        const button = e.target.closest('.matting-button');
-                        if (button.classList.contains('loading'))
+                        const button = e.target.closest('.lf-matting-button');
+                        if (button.classList.contains('lf-loading'))
                             return;
                         try {
                             // First check if model is available
@@ -417,9 +417,9 @@ async function createCanvasWidget(node, widget, app) {
                                 }
                             }
                             // Proceed with matting
-                            const spinner = $el("div.matting-spinner");
+                            const spinner = $el("div.lf-matting-spinner");
                             button.appendChild(spinner);
-                            button.classList.add('loading');
+                            button.classList.add('lf-loading');
                             if (modelStatus.available) {
                                 showInfoNotification("Starting background removal process...", 2000);
                             }
@@ -478,22 +478,22 @@ async function createCanvasWidget(node, widget, app) {
                             }
                         }
                         finally {
-                            button.classList.remove('loading');
-                            const spinner = button.querySelector('.matting-spinner');
+                            button.classList.remove('lf-loading');
+                            const spinner = button.querySelector('.lf-matting-spinner');
                             if (spinner && button.contains(spinner)) {
                                 button.removeChild(spinner);
                             }
                         }
                     }
                 }),
-                $el("button.painter-button", {
+                $el("button.lf-painter-button", {
                     id: `undo-button-${node.id}`,
                     textContent: "Undo",
                     title: "Undo last action",
                     disabled: true,
                     onclick: () => canvas.undo()
                 }),
-                $el("button.painter-button", {
+                $el("button.lf-painter-button", {
                     id: `redo-button-${node.id}`,
                     textContent: "Redo",
                     title: "Redo last undone action",
@@ -501,9 +501,9 @@ async function createCanvasWidget(node, widget, app) {
                     onclick: () => canvas.redo()
                 }),
             ]),
-            $el("div.painter-separator"),
-            $el("div.painter-button-group", { id: "mask-controls" }, [
-                $el("label.clipboard-switch.mask-switch", {
+            $el("div.lf-painter-separator"),
+            $el("div.lf-painter-button-group", { id: "mask-controls" }, [
+                $el("label.lf-clipboard-switch.lf-mask-switch", {
                     id: `toggle-mask-switch-${node.id}`,
                     style: { minWidth: "56px", maxWidth: "56px", width: "56px", paddingLeft: "0", paddingRight: "0" },
                     title: "Toggle mask overlay visibility on canvas (mask still affects output when disabled)"
@@ -517,16 +517,16 @@ async function createCanvasWidget(node, widget, app) {
                             canvas.render();
                         }
                     }),
-                    $el("span.switch-track"),
-                    $el("span.switch-labels", { style: { fontSize: "11px" } }, [
-                        $el("span.text-clipspace", { style: { paddingRight: "22px" } }, ["On"]),
-                        $el("span.text-system", { style: { paddingLeft: "20px" } }, ["Off"])
+                    $el("span.lf-switch-track"),
+                    $el("span.lf-switch-labels", { style: { fontSize: "11px" } }, [
+                        $el("span.lf-text-clipspace", { style: { paddingRight: "22px" } }, ["On"]),
+                        $el("span.lf-text-system", { style: { paddingLeft: "20px" } }, ["Off"])
                     ]),
-                    $el("span.switch-knob", {}, [
+                    $el("span.lf-switch-knob", {}, [
                         (() => {
                             // Ikona maski (SVG lub obrazek)
                             const iconContainer = document.createElement('span');
-                            iconContainer.className = 'switch-icon';
+                            iconContainer.className = 'lf-switch-icon';
                             iconContainer.style.display = 'flex';
                             iconContainer.style.alignItems = 'center';
                             iconContainer.style.justifyContent = 'center';
@@ -564,14 +564,14 @@ async function createCanvasWidget(node, widget, app) {
                         })()
                     ])
                 ]),
-                $el("button.painter-button", {
+                $el("button.lf-painter-button", {
                     textContent: "Edit Mask",
                     title: "Open the current canvas view in the mask editor",
                     onclick: () => {
                         canvas.startMaskEditor(null, true);
                     }
                 }),
-                $el("button.painter-button", {
+                $el("button.lf-painter-button", {
                     id: "mask-mode-btn",
                     textContent: "Draw Mask",
                     title: "Toggle mask drawing mode",
@@ -580,18 +580,18 @@ async function createCanvasWidget(node, widget, app) {
                         const maskControls = controlPanel.querySelector('#mask-controls');
                         if (canvas.maskTool.isActive) {
                             canvas.maskTool.deactivate();
-                            maskBtn.classList.remove('primary');
+                            maskBtn.classList.remove('lf-primary');
                             maskControls.querySelectorAll('.mask-control').forEach((c) => c.style.display = 'none');
                         }
                         else {
                             canvas.maskTool.activate();
-                            maskBtn.classList.add('primary');
+                            maskBtn.classList.add('lf-primary');
                             maskControls.querySelectorAll('.mask-control').forEach((c) => c.style.display = 'flex');
                         }
                         setTimeout(() => canvas.render(), 0);
                     }
                 }),
-                $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                $el("div.lf-painter-slider-container.mask-control", { style: { display: 'none' } }, [
                     $el("label", { for: "preview-opacity-slider", textContent: "Mask Opacity:" }),
                     $el("input", {
                         id: "preview-opacity-slider",
@@ -608,9 +608,9 @@ async function createCanvasWidget(node, widget, app) {
                                 valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
                         }
                     }),
-                    $el("div.slider-value", { id: "preview-opacity-value" }, ["50%"])
+                    $el("div.lf-slider-value", { id: "preview-opacity-value" }, ["50%"])
                 ]),
-                $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                $el("div.lf-painter-slider-container.mask-control", { style: { display: 'none' } }, [
                     $el("label", { for: "brush-size-slider", textContent: "Size:" }),
                     $el("input", {
                         id: "brush-size-slider",
@@ -626,9 +626,9 @@ async function createCanvasWidget(node, widget, app) {
                                 valueEl.textContent = `${value}px`;
                         }
                     }),
-                    $el("div.slider-value", { id: "brush-size-value" }, ["20px"])
+                    $el("div.lf-slider-value", { id: "brush-size-value" }, ["20px"])
                 ]),
-                $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                $el("div.lf-painter-slider-container.mask-control", { style: { display: 'none' } }, [
                     $el("label", { for: "brush-strength-slider", textContent: "Strength:" }),
                     $el("input", {
                         id: "brush-strength-slider",
@@ -645,9 +645,9 @@ async function createCanvasWidget(node, widget, app) {
                                 valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
                         }
                     }),
-                    $el("div.slider-value", { id: "brush-strength-value" }, ["50%"])
+                    $el("div.lf-slider-value", { id: "brush-strength-value" }, ["50%"])
                 ]),
-                $el("div.painter-slider-container.mask-control", { style: { display: 'none' } }, [
+                $el("div.lf-painter-slider-container.mask-control", { style: { display: 'none' } }, [
                     $el("label", { for: "brush-hardness-slider", textContent: "Hardness:" }),
                     $el("input", {
                         id: "brush-hardness-slider",
@@ -664,9 +664,9 @@ async function createCanvasWidget(node, widget, app) {
                                 valueEl.textContent = `${Math.round(parseFloat(value) * 100)}%`;
                         }
                     }),
-                    $el("div.slider-value", { id: "brush-hardness-value" }, ["50%"])
+                    $el("div.lf-slider-value", { id: "brush-hardness-value" }, ["50%"])
                 ]),
-                $el("button.painter-button.mask-control", {
+                $el("button.lf-painter-button.mask-control", {
                     textContent: "Clear Mask",
                     title: "Clear the entire mask",
                     style: { display: 'none' },
@@ -678,9 +678,9 @@ async function createCanvasWidget(node, widget, app) {
                     }
                 })
             ]),
-            $el("div.painter-separator"),
-            $el("div.painter-button-group", {}, [
-                $el("button.painter-button.success", {
+            $el("div.lf-painter-separator"),
+            $el("div.lf-painter-button-group", {}, [
+                $el("button.lf-painter-button.lf-success", {
                     textContent: "Run GC",
                     title: "Run Garbage Collection to clean unused images",
                     onclick: async () => {
@@ -698,7 +698,7 @@ async function createCanvasWidget(node, widget, app) {
                         }
                     }
                 }),
-                $el("button.painter-button.danger", {
+                $el("button.lf-painter-button.lf-danger", {
                     textContent: "Clear Cache",
                     title: "Clear all saved canvas states from browser storage",
                     onclick: async () => {
@@ -716,7 +716,7 @@ async function createCanvasWidget(node, widget, app) {
                 })
             ])
         ]),
-        $el("div.painter-separator")
+        $el("div.lf-painter-separator")
     ]);
     // Function to create mask icon
     const createMaskIcon = () => {
@@ -770,17 +770,17 @@ async function createCanvasWidget(node, widget, app) {
                 }
             }
         });
-        const mattingBtn = controlPanel.querySelector('.matting-button');
-        if (mattingBtn && !mattingBtn.classList.contains('loading')) {
+        const mattingBtn = controlPanel.querySelector('.lf-matting-button');
+        if (mattingBtn && !mattingBtn.classList.contains('lf-loading')) {
             mattingBtn.disabled = selectionCount !== 1;
         }
         // --- Handle Crop/Transform Switch ---
         const switchEl = controlPanel.querySelector(`#crop-transform-switch-${node.id}`);
         if (switchEl) {
             const input = switchEl.querySelector('input');
-            const knobIcon = switchEl.querySelector('.switch-icon');
+            const knobIcon = switchEl.querySelector('.lf-switch-icon');
             const isDisabled = !hasSelection;
-            switchEl.classList.toggle('disabled', isDisabled);
+            switchEl.classList.toggle('lf-disabled', isDisabled);
             input.disabled = isDisabled;
             if (!isDisabled) {
                 const isCropMode = canvas.canvasSelection.selectedLayers[0].cropMode || false;
@@ -815,11 +815,11 @@ async function createCanvasWidget(node, widget, app) {
                 toggleMaskBtn.appendChild(maskIcon);
                 // Set initial state based on mask visibility
                 if (canvas.maskTool.isOverlayVisible) {
-                    toggleMaskBtn.classList.add('primary');
+                    toggleMaskBtn.classList.add('lf-primary');
                     maskIcon.style.opacity = '1';
                 }
                 else {
-                    toggleMaskBtn.classList.remove('primary');
+                    toggleMaskBtn.classList.remove('lf-primary');
                     maskIcon.style.opacity = '0.5';
                 }
             }
@@ -901,7 +901,7 @@ async function createCanvasWidget(node, widget, app) {
     }
     const tempFileTracker = window.layerForgeTempFileTracker;
     const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
-    const canvasContainer = $el("div.painterCanvasContainer.painter-container", {
+    const canvasContainer = $el("div.lf-painter-canvas-container.lf-painter-container", {
         style: {
             position: "absolute",
             top: "60px",
@@ -939,15 +939,15 @@ async function createCanvasWidget(node, widget, app) {
     });
     canvasContainerResizeObserver.observe(canvasContainer);
     canvas.canvas.addEventListener('focus', () => {
-        canvasContainer.classList.add('has-focus');
+        canvasContainer.classList.add('lf-has-focus');
     });
     canvas.canvas.addEventListener('blur', () => {
-        canvasContainer.classList.remove('has-focus');
+        canvasContainer.classList.remove('lf-has-focus');
     });
     node.onResize = function () {
         canvas.render();
     };
-    const mainContainer = $el("div.painterMainContainer", {
+    const mainContainer = $el("div.lf-painter-main-container", {
         style: {
             position: "relative",
             width: "100%",
@@ -1088,8 +1088,8 @@ async function createCanvasWidget(node, widget, app) {
             log.error("Could not find original parent of the canvas container!");
             return;
         }
-        backdrop = $el("div.painter-modal-backdrop");
-        const modalContent = $el("div.painter-modal-content");
+        backdrop = $el("div.lf-painter-modal-backdrop");
+        const modalContent = $el("div.lf-painter-modal-content");
         modalContent.appendChild(mainContainer);
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
@@ -1423,7 +1423,7 @@ app.registerExtension({
                 if (tooltip) {
                     tooltip.remove();
                 }
-                const backdrop = document.querySelector('.painter-modal-backdrop');
+                const backdrop = document.querySelector('.lf-painter-modal-backdrop');
                 if (backdrop && this.canvasWidget && backdrop.contains(this.canvasWidget.canvas.canvas)) {
                     document.body.removeChild(backdrop);
                 }

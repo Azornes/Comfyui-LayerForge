@@ -1,5 +1,5 @@
 /* Layers Panel Styles */
-.layers-panel {
+.lf-layers-panel {
     background: #2a2a2a;
     border: 1px solid #3a3a3a;
     border-radius: 4px;
@@ -14,7 +14,7 @@
     flex-direction: column;
 }
 
-.layers-panel-header {
+.lf-layers-panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -23,7 +23,7 @@
     margin-bottom: 8px;
 }
 
-.checkbox-container {
+.lf-checkbox-container {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -34,11 +34,11 @@
     position: relative;
 }
 
-.checkbox-container:hover {
+.lf-checkbox-container:hover {
     background-color: #4a4a4a;
 }
 
-.checkbox-container input[type="checkbox"] {
+.lf-checkbox-container input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     cursor: pointer;
@@ -46,7 +46,7 @@
     width: 0;
 }
 
-.checkbox-container .custom-checkbox {
+.lf-checkbox-container .lf-custom-checkbox {
     height: 16px;
     width: 16px;
     background-color: #2a2a2a;
@@ -57,12 +57,12 @@
     flex-shrink: 0;
 }
 
-.checkbox-container input:checked ~ .custom-checkbox {
+.lf-checkbox-container input:checked ~ .lf-custom-checkbox {
     background-color: #3a76d6;
     border-color: #3a76d6;
 }
 
-.checkbox-container .custom-checkbox::after {
+.lf-checkbox-container .lf-custom-checkbox::after {
     content: "";
     position: absolute;
     display: none;
@@ -75,16 +75,16 @@
     transform: rotate(45deg);
 }
 
-.checkbox-container input:checked ~ .custom-checkbox::after {
+.lf-checkbox-container input:checked ~ .lf-custom-checkbox::after {
     display: block;
 }
 
-.checkbox-container input:indeterminate ~ .custom-checkbox {
+.lf-checkbox-container input:indeterminate ~ .lf-custom-checkbox {
     background-color: #3a76d6;
     border-color: #3a76d6;
 }
 
-.checkbox-container input:indeterminate ~ .custom-checkbox::after {
+.lf-checkbox-container input:indeterminate ~ .lf-custom-checkbox::after {
     display: block;
     content: "";
     position: absolute;
@@ -98,21 +98,21 @@
     box-shadow: none;
 }
 
-.checkbox-container:hover {
+.lf-checkbox-container:hover {
     background-color: #4a4a4a;
 }
 
-.layers-panel-title {
+.lf-layers-panel-title {
     font-weight: bold;
     color: #ffffff;
 }
 
-.layers-panel-controls {
+.lf-layers-panel-controls {
     display: flex;
     gap: 4px;
 }
 
-.layers-btn {
+.lf-layers-btn {
     background: #3a3a3a;
     border: 1px solid #4a4a4a;
     color: #ffffff;
@@ -122,32 +122,32 @@
     font-size: 11px;
 }
 
-.layers-btn:hover {
+.lf-layers-btn:hover {
     background: #4a4a4a;
 }
 
-.layers-btn:active {
+.lf-layers-btn:active {
     background: #5a5a5a;
 }
 
-.layers-btn:disabled {
+.lf-layers-btn:disabled {
     background: #2a2a2a;
     color: #666666;
     cursor: not-allowed;
     opacity: 0.5;
 }
 
-.layers-btn:disabled:hover {
+.lf-layers-btn:disabled:hover {
     background: #2a2a2a;
 }
 
-.layers-container {
+.lf-layers-container {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
-.layer-row {
+.lf-layer-row {
     display: flex;
     align-items: center;
     padding: 6px 4px;
@@ -159,20 +159,20 @@
     gap: 6px;
 }
 
-.layer-row:hover {
+.lf-layer-row:hover {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.layer-row.selected {
+.lf-layer-row.lf-selected {
     background: #2d5aa0 !important;
     box-shadow: inset 0 0 0 1px #4a7bc8;
 }
 
-.layer-row.dragging {
+.lf-layer-row.lf-dragging {
     opacity: 0.6;
 }
 
-.layer-thumbnail {
+.lf-layer-thumbnail {
     width: 48px;
     height: 48px;
     border: 1px solid #4a4a4a;
@@ -183,13 +183,13 @@
     overflow: hidden;
 }
 
-.layer-thumbnail canvas {
+.lf-layer-thumbnail canvas {
     width: 100%;
     height: 100%;
     display: block;
 }
 
-.layer-thumbnail::before {
+.lf-layer-thumbnail::before {
     content: '';
     position: absolute;
     top: 0;
@@ -206,12 +206,12 @@
     z-index: 1;
 }
 
-.layer-thumbnail canvas {
+.lf-layer-thumbnail canvas {
     position: relative;
     z-index: 2;
 }
 
-.layer-name {
+.lf-layer-name {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -222,14 +222,14 @@
     color: #ffffff;
 }
 
-.layer-name.editing {
+.lf-layer-name.lf-editing {
     background: #4a4a4a;
     border: 1px solid #6a6a6a;
     outline: none;
     color: #ffffff;
 }
 
-.layer-name input {
+.lf-layer-name input {
     background: transparent;
     border: none;
     color: #ffffff;
@@ -238,7 +238,7 @@
     outline: none;
 }
 
-.drag-insertion-line {
+.lf-drag-insertion-line {
     position: absolute;
     left: 0;
     right: 0;
@@ -249,24 +249,24 @@
     box-shadow: 0 0 4px rgba(74, 123, 200, 0.6);
 }
 
-.layers-container::-webkit-scrollbar {
+.lf-layers-container::-webkit-scrollbar {
     width: 6px;
 }
 
-.layers-container::-webkit-scrollbar-track {
+.lf-layers-container::-webkit-scrollbar-track {
     background: #2a2a2a;
 }
 
-.layers-container::-webkit-scrollbar-thumb {
+.lf-layers-container::-webkit-scrollbar-thumb {
     background: #4a4a4a;
     border-radius: 3px;
 }
 
-.layers-container::-webkit-scrollbar-thumb:hover {
+.lf-layers-container::-webkit-scrollbar-thumb:hover {
     background: #5a5a5a;
 }
 
-.layer-visibility-toggle {
+.lf-layer-visibility-toggle {
     width: 20px;
     height: 20px;
     display: flex;
@@ -279,31 +279,31 @@
     transition: background-color 0.15s ease;
 }
 
-.layer-visibility-toggle:hover {
+.lf-layer-visibility-toggle:hover {
     background: rgba(255, 255, 255, 0.1);
 }
 
 /* Icon container styles */
-.layers-panel .icon-container {
+.lf-layers-panel .lf-icon-container {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.layers-panel .icon-container img {
+.lf-layers-panel .lf-icon-container img {
     filter: brightness(0) invert(1);
 }
 
-.layers-panel .icon-container.visibility-hidden {
+.lf-layers-panel .lf-icon-container.lf-visibility-hidden {
     opacity: 0.5;
 }
 
-.layers-panel .icon-container.visibility-hidden img {
+.lf-layers-panel .lf-icon-container.lf-visibility-hidden img {
     filter: brightness(0) invert(1);
     opacity: 0.3;
 }
 
-.layers-panel .icon-container.fallback-text {
+.lf-layers-panel .lf-icon-container.lf-fallback-text {
     font-size: 10px;
     color: #888888;
 }

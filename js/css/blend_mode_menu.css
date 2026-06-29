@@ -1,5 +1,5 @@
 /* Blend Mode Menu Styles */
-#blend-mode-menu {
+#lf-blend-mode-menu {
     position: absolute;
     top: 0;
     left: 0;
@@ -11,7 +11,7 @@
     min-width: 200px;
 }
 
-#blend-mode-menu .blend-menu-title-bar {
+#lf-blend-mode-menu .lf-blend-menu-title-bar {
     background: #3a3a3a;
     color: white;
     padding: 8px 10px;
@@ -26,7 +26,7 @@
     align-items: center;
 }
 
-#blend-mode-menu .blend-menu-title-text {
+#lf-blend-mode-menu .lf-blend-menu-title-text {
     flex: 1;
     cursor: move;
     white-space: nowrap;
@@ -34,7 +34,7 @@
     text-overflow: ellipsis;
 }
 
-#blend-mode-menu .blend-menu-close-button {
+#lf-blend-mode-menu .lf-blend-menu-close-button {
     background: none;
     border: none;
     color: white;
@@ -51,31 +51,31 @@
     transition: background-color 0.2s;
 }
 
-#blend-mode-menu .blend-menu-close-button:hover {
+#lf-blend-mode-menu .lf-blend-menu-close-button:hover {
     background-color: #4a4a4a;
 }
 
-#blend-mode-menu .blend-menu-close-button:focus {
+#lf-blend-mode-menu .lf-blend-menu-close-button:focus {
     background-color: transparent;
 }
 
-#blend-mode-menu .blend-menu-content {
+#lf-blend-mode-menu .lf-blend-menu-content {
     padding: 5px;
 }
 
-#blend-mode-menu .blend-area-container {
+#lf-blend-mode-menu .lf-blend-area-container {
     padding: 5px 10px;
     border-bottom: 1px solid #4a4a4a;
 }
 
-#blend-mode-menu .blend-area-label {
+#lf-blend-mode-menu .lf-blend-area-label {
     color: white;
     display: block;
     margin-bottom: 5px;
     font-size: 12px;
 }
 
-#blend-mode-menu .blend-area-slider {
+#lf-blend-mode-menu .lf-blend-area-slider {
     width: 100%;
     margin: 5px 0;
     -webkit-appearance: none;
@@ -85,7 +85,7 @@
     outline: none;
 }
 
-#blend-mode-menu .blend-area-slider::-webkit-slider-thumb {
+#lf-blend-mode-menu .lf-blend-area-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 14px;
@@ -97,11 +97,11 @@
     transition: background 0.2s;
 }
 
-#blend-mode-menu .blend-area-slider::-webkit-slider-thumb:hover {
+#lf-blend-mode-menu .lf-blend-area-slider::-webkit-slider-thumb:hover {
     background: #fff;
 }
 
-#blend-mode-menu .blend-area-slider::-moz-range-thumb {
+#lf-blend-mode-menu .lf-blend-area-slider::-moz-range-thumb {
     width: 14px;
     height: 14px;
     background: #e0e0e0;
@@ -110,26 +110,26 @@
     border: 2px solid #555;
 }
 
-#blend-mode-menu .blend-mode-container {
+#lf-blend-mode-menu .lf-blend-mode-container {
     margin-bottom: 5px;
 }
 
-#blend-mode-menu .blend-mode-option {
+#lf-blend-mode-menu .lf-blend-mode-option {
     padding: 5px 10px;
     color: white;
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
-#blend-mode-menu .blend-mode-option:hover {
+#lf-blend-mode-menu .lf-blend-mode-option:hover {
     background-color: #3a3a3a;
 }
 
-#blend-mode-menu .blend-mode-option.active {
+#lf-blend-mode-menu .lf-blend-mode-option.lf-active {
     background-color: #3a3a3a;
 }
 
-#blend-mode-menu .blend-opacity-slider {
+#lf-blend-mode-menu .lf-blend-opacity-slider {
     width: 100%;
     margin: 5px 0;
     display: none;
@@ -140,11 +140,11 @@
     outline: none;
 }
 
-#blend-mode-menu .blend-mode-container.active .blend-opacity-slider {
+#lf-blend-mode-menu .lf-blend-mode-container.lf-active .lf-blend-opacity-slider {
     display: block;
 }
 
-#blend-mode-menu .blend-opacity-slider::-webkit-slider-thumb {
+#lf-blend-mode-menu .lf-blend-opacity-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 14px;
@@ -156,11 +156,11 @@
     transition: background 0.2s;
 }
 
-#blend-mode-menu .blend-opacity-slider::-webkit-slider-thumb:hover {
+#lf-blend-mode-menu .lf-blend-opacity-slider::-webkit-slider-thumb:hover {
     background: #fff;
 }
 
-#blend-mode-menu .blend-opacity-slider::-moz-range-thumb {
+#lf-blend-mode-menu .lf-blend-opacity-slider::-moz-range-thumb {
     width: 14px;
     height: 14px;
     background: #e0e0e0;

@@ -129,8 +129,8 @@ export class BatchPreviewManager {
                 if (checkbox) {
                     checkbox.checked = false;
                 }
-                toggleSwitch.classList.remove('primary');
-                const iconContainer = toggleSwitch.querySelector('.switch-icon');
+                toggleSwitch.classList.remove('lf-primary');
+                const iconContainer = toggleSwitch.querySelector('.lf-switch-icon');
                 if (iconContainer) {
                     iconContainer.style.opacity = '0.5';
                 }
@@ -175,8 +175,8 @@ export class BatchPreviewManager {
                 if (checkbox) {
                     checkbox.checked = true;
                 }
-                toggleSwitch.classList.add('primary');
-                const iconContainer = toggleSwitch.querySelector('.switch-icon');
+                toggleSwitch.classList.add('lf-primary');
+                const iconContainer = toggleSwitch.querySelector('.lf-switch-icon');
                 if (iconContainer) {
                     iconContainer.style.opacity = '1';
                 }
