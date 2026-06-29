@@ -12,7 +12,7 @@ import {$el} from "../../scripts/ui.js";
 import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js";
 
 import {Canvas} from "./Canvas.js";
-import {clearAllCanvasStates} from "./db.js";
+import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import {createModuleLogger} from "./utils/LoggerUtils.js";
@@ -1446,7 +1446,6 @@ app.registerExtension({
                     // Copy the canvas state now that the widget is initialized
                     setTimeout(async () => {
                         try {
-                            const { getCanvasState, setCanvasState } = await import('./db.js');
                             let sourceState = await getCanvasState(String(sourceNodeId));
 
                             // If source node doesn't exist (cross-workflow paste), try clipboard
@@ -1665,7 +1664,6 @@ app.registerExtension({
                 // This happens async but that's fine since paste happens later
                 (async () => {
                     try {
-                        const { getCanvasState, setCanvasState } = await import('./db.js');
                         const sourceState = await getCanvasState(String(this.id));
                         if (sourceState) {
                             // Store in a special "clipboard" entry

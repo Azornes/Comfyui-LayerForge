@@ -3,7 +3,7 @@ import { createModuleLogger } from "./LoggerUtils.js";
 const log = createModuleLogger('NotificationUtils');
 
 // Store active notifications for deduplication
-const activeNotifications = new Map<string, { element: HTMLDivElement, timeout: number | null }>();
+const activeNotifications = new Map<string, { element: HTMLDivElement, timeout: number | null, animationFrame: number | null }>();
 
 /**
  * Utility functions for showing notifications to the user
@@ -37,16 +37,26 @@ export function showNotification(
             if (existingNotification.timeout !== null) {
                 clearTimeout(existingNotification.timeout);
             }
+            if (existingNotification.animationFrame !== null) {
+                cancelAnimationFrame(existingNotification.animationFrame);
+                existingNotification.animationFrame = null;
+            }
             
             // Find the progress bar and restart its animation
-            const progressBar = existingNotification.element.querySelector('div[style*="animation"]') as HTMLDivElement;
+            const progressBar = existingNotification.element.querySelector('div[style*="lf-progress"], div[style*="scaleX"]') as HTMLDivElement;
             if (progressBar) {
-                // Reset animation
                 progressBar.style.animation = 'none';
-                // Force reflow
-                void progressBar.offsetHeight;
-                // Restart animation
-                progressBar.style.animation = `lf-progress ${duration / 1000}s linear`;
+                progressBar.style.transition = 'none';
+                progressBar.style.transform = 'scaleX(1)';
+                const startedAt = performance.now();
+                const updateProgress = (now: number) => {
+                    const progress = Math.max(0, 1 - ((now - startedAt) / duration));
+                    progressBar.style.transform = `scaleX(${progress})`;
+                    if (progress > 0) {
+                        existingNotification.animationFrame = requestAnimationFrame(updateProgress);
+                    }
+                };
+                existingNotification.animationFrame = requestAnimationFrame(updateProgress);
             }
             
             // Set new timeout
@@ -56,6 +66,10 @@ export function showNotification(
                 notification.addEventListener('animationend', () => {
                     if (notification.parentNode) {
                         notification.parentNode.removeChild(notification);
+                        const stored = activeNotifications.get(message);
+                        if (stored?.animationFrame !== null && stored?.animationFrame !== undefined) {
+                            cancelAnimationFrame(stored.animationFrame);
+                        }
                         activeNotifications.delete(message);
                         const container = document.getElementById('lf-notification-container');
                         if (container && container.children.length === 0) {
@@ -172,7 +186,7 @@ export function showNotification(
 
     // --- Progress Bar ---
     const progressBar = document.createElement('div');
-    progressBar.style.cssText = `height: 4px; width: 100%; background: ${config.bg}; box-shadow: 0 0 12px ${config.bg}; transform-origin: left; animation: lf-progress ${duration / 1000}s linear; flex-shrink: 0;`;
+    progressBar.style.cssText = `height: 4px; width: 100%; background: ${config.bg}; box-shadow: 0 0 12px ${config.bg}; transform-origin: left; transform: scaleX(1); transition: none; flex-shrink: 0;`;
 
     // --- Assemble Notification ---
     notification.appendChild(leftBar);
@@ -220,7 +234,16 @@ export function showNotification(
     body.classList.add('notification-scrollbar');
 
     let dismissTimeout: number | null = null;
+    let progressAnimationFrame: number | null = null;
     const closeNotification = () => {
+        if (dismissTimeout !== null) {
+            clearTimeout(dismissTimeout);
+            dismissTimeout = null;
+        }
+        if (progressAnimationFrame !== null) {
+            cancelAnimationFrame(progressAnimationFrame);
+            progressAnimationFrame = null;
+        }
         // Remove from active notifications map if deduplicate is enabled
         if (deduplicate) {
             activeNotifications.delete(message);
@@ -240,16 +263,36 @@ export function showNotification(
     closeBtn.onclick = closeNotification;
 
     const startDismissTimer = () => {
+        if (dismissTimeout !== null) clearTimeout(dismissTimeout);
+        if (progressAnimationFrame !== null) cancelAnimationFrame(progressAnimationFrame);
+
         dismissTimeout = window.setTimeout(closeNotification, duration);
-        progressBar.style.animation = `lf-progress ${duration / 1000}s linear`;
+        progressBar.style.animation = 'none';
+        progressBar.style.transition = 'none';
+        progressBar.style.transform = 'scaleX(1)';
+
+        const startedAt = performance.now();
+        const updateProgress = (now: number) => {
+            const progress = Math.max(0, 1 - ((now - startedAt) / duration));
+            progressBar.style.transform = `scaleX(${progress})`;
+            if (progress > 0) {
+                progressAnimationFrame = requestAnimationFrame(updateProgress);
+            }
+        };
+        progressAnimationFrame = requestAnimationFrame(updateProgress);
     };
 
     const pauseAndRewindTimer = () => {
         if (dismissTimeout !== null) clearTimeout(dismissTimeout);
         dismissTimeout = null;
+        if (progressAnimationFrame !== null) cancelAnimationFrame(progressAnimationFrame);
+        progressAnimationFrame = null;
         const computedStyle = window.getComputedStyle(progressBar);
+        progressBar.style.transition = 'none';
         progressBar.style.transform = computedStyle.transform;
-        progressBar.style.animation = 'lf-progress-rewind 0.5s ease-out forwards';
+        void progressBar.offsetHeight;
+        progressBar.style.transition = 'transform 0.5s ease-out';
+        progressBar.style.transform = 'scaleX(1)';
     };
 
     notification.addEventListener('mouseenter', () => {
@@ -259,6 +302,7 @@ export function showNotification(
             const stored = activeNotifications.get(message);
             if (stored) {
                 stored.timeout = null;
+                stored.animationFrame = null;
             }
         }
     });
@@ -270,6 +314,7 @@ export function showNotification(
             const stored = activeNotifications.get(message);
             if (stored) {
                 stored.timeout = dismissTimeout;
+                stored.animationFrame = progressAnimationFrame;
             }
         }
     });
@@ -278,7 +323,7 @@ export function showNotification(
     
     // Store notification if deduplicate is enabled
     if (deduplicate) {
-        activeNotifications.set(message, { element: notification, timeout: dismissTimeout });
+        activeNotifications.set(message, { element: notification, timeout: dismissTimeout, animationFrame: progressAnimationFrame });
     }
     
     log.debug(`Notification shown: [Layer Forge] ${message}`);
