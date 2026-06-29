@@ -1,4 +1,4 @@
-.painter-button {
+.lf-painter-button {
     background-color: #444;
     border: 1px solid #555;
     border-radius: 5px;
@@ -15,21 +15,21 @@
     text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
-.painter-button:hover {
+.lf-painter-button:hover {
     background-color: #555;
     border-color: #666;
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
     transform: translateY(-1px);
 }
 
-.painter-button:active {
+.lf-painter-button:active {
     background-color: #3a3a3a;
     transform: translateY(0);
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
 }
 
-.painter-button:disabled,
-.painter-button:disabled:hover {
+.lf-painter-button:disabled,
+.lf-painter-button:disabled:hover {
     background-color: #3a3a3a;
     color: #777;
     cursor: not-allowed;
@@ -39,69 +39,69 @@
     opacity: 0.6;
 }
 
-.painter-button.primary {
+.lf-painter-button.lf-primary {
     background-color: #3a76d6;
     border-color: #2a6ac4;
     color: #fff;
     text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
-.painter-button.primary:hover {
+.lf-painter-button.lf-primary:hover {
     background-color: #4a86e4;
     border-color: #3a76d6;
 }
 
 /* Crop mode button styling */
-.painter-button#crop-mode-btn {
+.lf-painter-button#lf-crop-mode-btn {
     background-color: #444;
     border-color: #555;
     color: #fff;
     transition: all 0.2s ease-in-out;
 }
 
-.painter-button#crop-mode-btn.primary {
+.lf-painter-button#lf-crop-mode-btn.lf-primary {
     background-color: #0080ff;
     border-color: #0070e0;
     color: #fff;
     box-shadow: 0 0 8px rgba(0, 128, 255, 0.3);
 }
 
-.painter-button#crop-mode-btn.primary:hover {
+.lf-painter-button#lf-crop-mode-btn.lf-primary:hover {
     background-color: #1090ff;
     border-color: #0080ff;
     box-shadow: 0 0 12px rgba(0, 128, 255, 0.4);
 }
 
-.painter-button#crop-mode-btn:hover {
+.lf-painter-button#lf-crop-mode-btn:hover {
     background-color: #555;
     border-color: #666;
 }
 
-.painter-button.success {
+.lf-painter-button.lf-success {
     border-color: #4ae27a;
     background-color: #444;
     color: #fff;
     box-shadow: 0 0 0 1.5px #4ae27a88;
 }
-.painter-button.success:hover {
+.lf-painter-button.lf-success:hover {
     border-color: #6aff9a;
     box-shadow: 0 0 0 2.5px #6aff9a88;
     background-color: #555;
 }
 
-.painter-button.danger {
+.lf-painter-button.lf-danger {
     border-color: #e24a4a;
     background-color: #444;
     color: #fff;
     box-shadow: 0 0 0 1.5px #e24a4a88;
 }
-.painter-button.danger:hover {
+.lf-painter-button.lf-danger:hover {
     border-color: #ff6a6a;
     box-shadow: 0 0 0 2.5px #ff6a6a88;
     background-color: #555;
 }
 
-.painter-button.icon-button {
+.lf-painter-button.lf-icon-button {
     width: 30px;
     height: 30px;
     min-width: 30px;
@@ -113,7 +113,7 @@
     justify-content: center;
 }
 
-.painter-controls {
+.lf-painter-controls {
     background-color: #2f2f2f;
     border-bottom: 1px solid #202020;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -125,7 +125,7 @@
     justify-content: flex-start;
 }
 
-.painter-slider-container {
+.lf-painter-slider-container {
    display: flex;
    flex-direction: column;
    align-items: center;
@@ -135,7 +135,7 @@
    min-width: 100px;
 }
 
-.painter-slider-container input[type="range"] {
+.lf-painter-slider-container input[type="range"] {
    -webkit-appearance: none;
    width: 80px;
    height: 4px;
@@ -146,7 +146,7 @@
    margin: 0;
 }
 
-.painter-slider-container input[type="range"]::-webkit-slider-thumb {
+.lf-painter-slider-container input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -158,11 +158,11 @@
   transition: background 0.2s;
 }
 
-.painter-slider-container input[type="range"]::-webkit-slider-thumb:hover {
+.lf-painter-slider-container input[type="range"]::-webkit-slider-thumb:hover {
   background: #fff;
 }
 
-.painter-slider-container input[type="range"]::-moz-range-thumb {
+.lf-painter-slider-container input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
   background: #e0e0e0;
@@ -171,7 +171,7 @@
   border: 2px solid #555;
 }
 
-.slider-value {
+.lf-slider-value {
     font-size: 11px;
     color: #bbb;
     margin-top: 2px;
@@ -179,7 +179,7 @@
     text-align: center;
 }
 
-.painter-button-group {
+.lf-painter-button-group {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -188,13 +188,13 @@
     border-radius: 6px;
 }
 
-.painter-clipboard-group {
+.lf-painter-clipboard-group {
     display: flex;
     align-items: center;
     gap: 4px;
 }
 
-.painter-clipboard-group .painter-button {
+.lf-painter-clipboard-group .lf-painter-button {
     margin: 1px;
     height: 30px; /* Match switch height */
     box-sizing: border-box;
@@ -204,7 +204,7 @@
 }
 
 /* --- Clipboard Switch Modern --- */
-.clipboard-switch {
+.lf-clipboard-switch {
     position: relative;
     width: 90px;
     height: 30px;
@@ -220,7 +220,7 @@
     font-size: 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
-.clipboard-switch:hover {
+.lf-clipboard-switch:hover {
     background: linear-gradient(to right, #6a6a6a 30%, #4a86e4);
     border-color: #666;
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
@@ -228,25 +228,25 @@
 }
 
 /* Mask switch: szaro-czarny gradient tylko dla maski */
-.clipboard-switch.mask-switch {
+.lf-clipboard-switch.lf-mask-switch {
     background: linear-gradient(to right, #5a5a5a 30%, #e53935);
 }
-.clipboard-switch.mask-switch:hover {
+.lf-clipboard-switch.lf-mask-switch:hover {
     background: linear-gradient(to right, #6a6a6a 30%, #ff5252);
 }
-.clipboard-switch:active {
+.lf-clipboard-switch:active {
     background: linear-gradient(135deg, #3a76d6, #3a3a3a);
 }
 
-.clipboard-switch input[type="checkbox"] {
+.lf-clipboard-switch input[type="checkbox"] {
     display: none;
 }
 
-.clipboard-switch .switch-track {
+.lf-clipboard-switch .lf-switch-track {
     display: none;
 }
 
-.clipboard-switch .switch-knob {
+.lf-clipboard-switch .lf-switch-knob {
     position: absolute;
     top: 2px;
     left: 2px;
@@ -262,15 +262,15 @@
     z-index: 2;
 }
 
-.clipboard-switch:hover .switch-knob {
+.lf-clipboard-switch:hover .lf-switch-knob {
     background-color: #6a6a6a;
 }
 
-.clipboard-switch:hover .switch-knob {
+.lf-clipboard-switch:hover .lf-switch-knob {
     background-color: #6a6a6a;
 }
 
-.clipboard-switch .switch-labels {
+.lf-clipboard-switch .lf-switch-labels {
     position: absolute;
     top: 0;
     left: 0;
@@ -286,15 +286,15 @@
     transition: opacity 0.3s ease-in-out;
     text-shadow: 0 1px 2px rgb(0, 0, 0);
 }
-.clipboard-switch .switch-labels .text-clipspace,
-.clipboard-switch .switch-labels .text-system {
+.lf-clipboard-switch .lf-switch-labels .lf-text-clipspace,
+.lf-clipboard-switch .lf-switch-labels .lf-text-system {
     position: absolute;
     transition: opacity 0.2s ease-in-out;
 }
-.clipboard-switch .switch-labels .text-clipspace { opacity: 0; }
-.clipboard-switch .switch-labels .text-system { opacity: 1; padding-left: 20px; }
+.lf-clipboard-switch .lf-switch-labels .lf-text-clipspace { opacity: 0; }
+.lf-clipboard-switch .lf-switch-labels .lf-text-system { opacity: 1; padding-left: 20px; }
 
-.clipboard-switch .switch-knob .switch-icon {
+.lf-clipboard-switch .lf-switch-knob .lf-switch-icon {
     width: 20px;
     height: 20px;
     display: flex;
@@ -302,38 +302,38 @@
     justify-content: center;
 }
 
-.clipboard-switch .switch-knob .switch-icon img {
+.lf-clipboard-switch .lf-switch-knob .lf-switch-icon img {
     width: 100%;
     height: 100%;
 }
 
 /* Checked state */
-.clipboard-switch:has(input:checked) {
+.lf-clipboard-switch:has(input:checked) {
     background: linear-gradient(to right, #3a76d6, #5a5a5a 70%);
     border-color: #2a6ac4;
 }
-.clipboard-switch:has(input:checked):hover {
+.lf-clipboard-switch:has(input:checked):hover {
     background: linear-gradient(to right, #4a86e4, #6a6a6a 70%);
     border-color: #3a76d6;
 }
 
-.clipboard-switch input:checked ~ .switch-knob {
+.lf-clipboard-switch input:checked ~ .lf-switch-knob {
     left: calc(100% - 26px);
 }
-.clipboard-switch input:checked ~ .switch-knob .switch-icon img {
+.lf-clipboard-switch input:checked ~ .lf-switch-knob .lf-switch-icon img {
     filter: none;
 }
-.clipboard-switch input:checked ~ .switch-labels .text-clipspace {
+.lf-clipboard-switch input:checked ~ .lf-switch-labels .lf-text-clipspace {
     opacity: 1;
     color: #fff;
     padding-right: 20px;
 }
-.clipboard-switch input:checked ~ .switch-labels .text-system {
+.lf-clipboard-switch input:checked ~ .lf-switch-labels .lf-text-system {
     opacity: 0;
 }
 
 /* Disabled state for switch */
-.clipboard-switch.disabled {
+.lf-clipboard-switch.lf-disabled {
     cursor: not-allowed;
     opacity: 0.6;
     background: #3a3a3a !important; /* Override gradient */
@@ -342,24 +342,24 @@
     box-shadow: none !important;
 }
 
-.clipboard-switch.disabled .switch-knob {
+.lf-clipboard-switch.lf-disabled .lf-switch-knob {
     background-color: #4a4a4a !important;
 }
 
-.clipboard-switch.disabled .switch-labels {
+.lf-clipboard-switch.lf-disabled .lf-switch-labels {
     color: #777 !important;
 }
 
 
 
-.painter-separator {
+.lf-painter-separator {
     width: 1px;
     height: 24px;
     background-color: #444;
     margin: 0 8px;
 }
 
-.painter-container {
+.lf-painter-container {
     background: #607080;  /* 带蓝色的灰色背景 */
     border: 1px solid #4a5a6a;
     border-radius: 6px;
@@ -367,12 +367,12 @@
     transition: border-color 0.3s ease; /* Dodano dla płynnej zmiany ramki */
 }
 
-.painter-container.drag-over {
+.lf-painter-container.lf-drag-over {
     border-color: #00ff00; /* Zielona ramka podczas przeciągania */
     border-style: dashed;
 }
 
-.painter-dialog {
+.lf-painter-dialog {
     background: #404040;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -380,7 +380,7 @@
     color: #ffffff;
 }
 
-.painter-dialog input {
+.lf-painter-dialog input {
     background: #303030;
     border: 1px solid #505050;
     border-radius: 4px;
@@ -390,7 +390,7 @@
     width: 80px;
 }
 
-.painter-dialog button {
+.lf-painter-dialog button {
     background: #505050;
     border: 1px solid #606060;
     border-radius: 4px;
@@ -400,35 +400,35 @@
     cursor: pointer;
 }
 
-.painter-dialog button:hover {
+.lf-painter-dialog button:hover {
     background: #606060;
 }
 
-.blend-opacity-slider {
+.lf-blend-opacity-slider {
     width: 100%;
     margin: 5px 0;
     display: none;
 }
 
-.blend-mode-active .blend-opacity-slider {
+.lf-blend-mode-active .lf-blend-opacity-slider {
     display: block;
 }
 
-.blend-mode-item {
+.lf-blend-mode-item {
     padding: 5px;
     cursor: pointer;
     position: relative;
 }
 
-.blend-mode-item.active {
+.lf-blend-mode-item.lf-active {
     background-color: rgba(0,0,0,0.1);
 }
 
-.blend-mode-item.active {
+.lf-blend-mode-item.lf-active {
     background-color: rgba(0,0,0,0.1);
 }
 
-.painter-tooltip {
+.lf-painter-tooltip {
     position: fixed;
     display: none;
     background: #2B2B2B;
@@ -449,64 +449,64 @@
     will-change: transform;
 }
 
-.painter-tooltip.scale-down {
+.lf-painter-tooltip.lf-scale-down {
     transform: scale(0.9);
     transform-origin: top;
 }
 
-.painter-tooltip.scale-down-more {
+.lf-painter-tooltip.lf-scale-down-more {
     transform: scale(0.8);
     transform-origin: top;
 }
 
-.painter-tooltip table {
+.lf-painter-tooltip table {
     width: 100%;
     border-collapse: collapse;
     margin: 8px 0;
 }
 
-.painter-tooltip table td {
+.lf-painter-tooltip table td {
     padding: 4px 8px;
     vertical-align: middle;
     transition: background-color 0.2s;
 }
 
-.painter-tooltip table td:first-child {
+.lf-painter-tooltip table td:first-child {
     width: auto;
     white-space: nowrap;
     min-width: fit-content;
 }
 
-.painter-tooltip table td:last-child {
+.lf-painter-tooltip table td:last-child {
     width: auto;
 }
 
-.painter-tooltip table tr:nth-child(odd) td {
+.lf-painter-tooltip table tr:nth-child(odd) td {
     background-color: rgba(255, 255, 255, 0.02);
 }
-.painter-tooltip table tr:hover td {
+.lf-painter-tooltip table tr:hover td {
     background-color: rgba(74, 144, 226, 0.15);
 }
 
 @media (max-width: 600px) {
-    .painter-tooltip {
+    .lf-painter-tooltip {
         font-size: 11px;
         padding: 8px 12px;
     }
-    .painter-tooltip table td {
+    .lf-painter-tooltip table td {
         padding: 2px 4px;
     }
-    .painter-tooltip kbd {
+    .lf-painter-tooltip kbd {
         padding: 1px 4px;
         font-size: 10px;
     }
-    .painter-tooltip table td:first-child {
+    .lf-painter-tooltip table td:first-child {
         width: 40%;
     }
-    .painter-tooltip table td:last-child {
+    .lf-painter-tooltip table td:last-child {
         width: 60%;
     }
-    .painter-tooltip h4 {
+    .lf-painter-tooltip h4 {
         font-size: 12px;
         margin-top: 8px;
         margin-bottom: 4px;
@@ -514,49 +514,49 @@
 }
 
 @media (max-width: 400px) {
-    .painter-tooltip {
+    .lf-painter-tooltip {
         font-size: 10px;
         padding: 6px 8px;
     }
-    .painter-tooltip table td {
+    .lf-painter-tooltip table td {
         padding: 1px 3px;
     }
-    .painter-tooltip kbd {
+    .lf-painter-tooltip kbd {
         padding: 0px 3px;
         font-size: 9px;
     }
-    .painter-tooltip table td:first-child {
+    .lf-painter-tooltip table td:first-child {
         width: 35%;
     }
-    .painter-tooltip table td:last-child {
+    .lf-painter-tooltip table td:last-child {
         width: 65%;
     }
-    .painter-tooltip h4 {
+    .lf-painter-tooltip h4 {
         font-size: 11px;
         margin-top: 6px;
         margin-bottom: 3px;
     }
 }
 
-.painter-tooltip::-webkit-scrollbar {
+.lf-painter-tooltip::-webkit-scrollbar {
     width: 8px;
 }
 
-.painter-tooltip::-webkit-scrollbar-track {
+.lf-painter-tooltip::-webkit-scrollbar-track {
     background: #2a2a2a;
     border-radius: 4px;
 }
 
-.painter-tooltip::-webkit-scrollbar-thumb {
+.lf-painter-tooltip::-webkit-scrollbar-thumb {
     background: #555;
     border-radius: 4px;
 }
 
-.painter-tooltip::-webkit-scrollbar-thumb:hover {
+.lf-painter-tooltip::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
 
-.painter-tooltip h4 {
+.lf-painter-tooltip h4 {
     margin-top: 10px;
     margin-bottom: 6px;
     color: #4a90e2;
@@ -565,17 +565,17 @@
     font-size: 14px;
     font-weight: 600;
 }
-.painter-tooltip h4:first-child {
+.lf-painter-tooltip h4:first-child {
     margin-top: 0;
 }
 
-.painter-tooltip ul {
+.lf-painter-tooltip ul {
     list-style: none;
     padding-left: 10px;
     margin: 0;
 }
 
-.painter-tooltip kbd {
+.lf-painter-tooltip kbd {
     background-color: #444;
     border: 1px solid #555;
     border-bottom-width: 2px;
@@ -590,7 +590,7 @@
     vertical-align: middle;
 }
 
-.painter-container.has-focus {
+.lf-painter-container.lf-has-focus {
     /* Używamy box-shadow, aby stworzyć efekt zewnętrznej ramki,
        która nie wpłynie na rozmiar ani pozycję elementu. */
     box-shadow: 0 0 0 2px white;
@@ -598,17 +598,17 @@
     /* border-color: white; */
 }
 
-.painter-button.matting-button {
+.lf-painter-button.lf-matting-button {
     position: relative;
     transition: all 0.3s ease;
 }
 
-.painter-button.matting-button.loading {
+.lf-painter-button.lf-matting-button.lf-loading {
     padding-right: 36px; /* Make space for spinner */
     cursor: wait;
 }
 
-.painter-button.matting-button .matting-spinner {
+.lf-painter-button.lf-matting-button .lf-matting-spinner {
     display: none;
     position: absolute;
     right: 10px;
@@ -622,7 +622,7 @@
     animation: matting-spin 1s linear infinite;
 }
 
-.painter-button.matting-button.loading .matting-spinner {
+.lf-painter-button.lf-matting-button.lf-loading .lf-matting-spinner {
     display: block;
 }
 
@@ -631,7 +631,7 @@
         transform: translateY(-50%) rotate(360deg);
     }
 }
-.painter-modal-backdrop {
+.lf-painter-modal-backdrop {
     position: fixed;
     top: 0;
     left: 0;
@@ -644,7 +644,7 @@
     justify-content: center;
 }
 
-.painter-modal-content {
+.lf-painter-modal-content {
     width: 90vw;
     height: 90vh;
     background-color: #353535;
@@ -656,14 +656,14 @@
     position: relative;
 }
 
-.painterMainContainer {
+.lf-painter-main-container {
     display: flex;
     flex-direction: column;
     height: 100%;
     flex-grow: 1;
 }
 
-.painterCanvasContainer {
+.lf-painter-canvas-container {
     flex-grow: 1;
     position: relative;
 }

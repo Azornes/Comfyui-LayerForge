@@ -51,7 +51,7 @@ export class CanvasLayersPanel {
 
     private createIconElement(toolName: string, size: number = 16): HTMLElement {
         const iconContainer = document.createElement('div');
-        iconContainer.className = 'icon-container';
+        iconContainer.className = 'lf-icon-container';
         iconContainer.style.width = `${size}px`;
         iconContainer.style.height = `${size}px`;
 
@@ -71,7 +71,7 @@ export class CanvasLayersPanel {
             }
         } else {
             // Fallback text
-            iconContainer.classList.add('fallback-text');
+            iconContainer.classList.add('lf-fallback-text');
             iconContainer.textContent = toolName.charAt(0).toUpperCase();
             iconContainer.style.fontSize = `${size * 0.6}px`;
         }
@@ -85,7 +85,7 @@ export class CanvasLayersPanel {
         } else {
             // Create a "hidden" version of the visibility icon
             const iconContainer = document.createElement('div');
-            iconContainer.className = 'icon-container visibility-hidden';
+            iconContainer.className = 'lf-icon-container lf-visibility-hidden';
             iconContainer.style.width = '16px';
             iconContainer.style.height = '16px';
 
@@ -106,7 +106,7 @@ export class CanvasLayersPanel {
                 }
             } else {
                 // Fallback
-                iconContainer.classList.add('fallback-text');
+                iconContainer.classList.add('lf-fallback-text');
                 iconContainer.textContent = 'H';
                 iconContainer.style.fontSize = '10px';
             }
@@ -117,22 +117,22 @@ export class CanvasLayersPanel {
 
     createPanelStructure(): HTMLElement {
         this.container = document.createElement('div');
-        this.container.className = 'layers-panel';
+        this.container.className = 'lf-layers-panel';
         this.container.tabIndex = 0; // Umożliwia fokus na panelu
         this.container.innerHTML = `
-            <div class="layers-panel-header">
-                <div class="master-visibility-toggle" title="Toggle all layers visibility"></div>
-                <span class="layers-panel-title">Layers</span>
-                <div class="layers-panel-controls">
-                    <button class="layers-btn" id="delete-layer-btn" title="Delete layer"></button>
+            <div class="lf-layers-panel-header">
+                <div class="lf-master-visibility-toggle" title="Toggle all layers visibility"></div>
+                <span class="lf-layers-panel-title">Layers</span>
+                <div class="lf-layers-panel-controls">
+                    <button class="lf-layers-btn" id="lf-delete-layer-btn" title="Delete layer"></button>
                 </div>
             </div>
-            <div class="layers-container" id="layers-container">
+            <div class="lf-layers-container" id="lf-layers-container">
                 <!-- Lista warstw będzie renderowana tutaj -->
             </div>
         `;
 
-        this.layersContainer = this.container.querySelector<HTMLElement>('#layers-container');
+        this.layersContainer = this.container.querySelector<HTMLElement>('#lf-layers-container');
 
         // Setup event listeners dla przycisków
         this.setupControlButtons();
@@ -190,7 +190,7 @@ export class CanvasLayersPanel {
 
     setupControlButtons(): void {
         if (!this.container) return;
-        const deleteBtn = this.container.querySelector('#delete-layer-btn') as HTMLButtonElement;
+        const deleteBtn = this.container.querySelector('#lf-delete-layer-btn') as HTMLButtonElement;
 
         // Add delete icon to button
         if (deleteBtn) {
@@ -209,7 +209,7 @@ export class CanvasLayersPanel {
 
     setupMasterVisibilityToggle(): void {
         if (!this.container) return;
-        const toggleContainer = this.container.querySelector('.master-visibility-toggle') as HTMLElement;
+        const toggleContainer = this.container.querySelector('.lf-master-visibility-toggle') as HTMLElement;
         if (!toggleContainer) return;
 
         const updateToggleState = () => {
@@ -218,14 +218,14 @@ export class CanvasLayersPanel {
             toggleContainer.innerHTML = '';
 
             const checkboxContainer = document.createElement('div');
-            checkboxContainer.className = 'checkbox-container';
+            checkboxContainer.className = 'lf-checkbox-container';
 
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
-            checkbox.id = 'master-visibility-checkbox';
+            checkbox.id = 'lf-master-visibility-checkbox';
 
             const customCheckbox = document.createElement('span');
-            customCheckbox.className = 'custom-checkbox';
+            customCheckbox.className = 'lf-custom-checkbox';
 
             checkboxContainer.appendChild(checkbox);
             checkboxContainer.appendChild(customCheckbox);
@@ -302,13 +302,13 @@ export class CanvasLayersPanel {
 
     createLayerElement(layer: Layer, index: number): HTMLElement {
         const layerRow = document.createElement('div');
-        layerRow.className = 'layer-row';
+        layerRow.className = 'lf-layer-row';
         layerRow.draggable = true;
         layerRow.dataset.layerIndex = String(index);
 
         const isSelected = this.canvas.canvasSelection.selectedLayers.includes(layer);
         if (isSelected) {
-            layerRow.classList.add('selected');
+            layerRow.classList.add('lf-selected');
         }
 
         // Ustawienie domyślnych właściwości jeśli nie istnieją
@@ -320,19 +320,19 @@ export class CanvasLayersPanel {
         }
 
         layerRow.innerHTML = `
-            <div class="layer-visibility-toggle" data-layer-index="${index}" title="Toggle layer visibility"></div>
-            <div class="layer-thumbnail" data-layer-index="${index}"></div>
-            <span class="layer-name" data-layer-index="${index}">${layer.name}</span>
+            <div class="lf-layer-visibility-toggle" data-layer-index="${index}" title="Toggle layer visibility"></div>
+            <div class="lf-layer-thumbnail" data-layer-index="${index}"></div>
+            <span class="lf-layer-name" data-layer-index="${index}">${layer.name}</span>
         `;
 
         // Add visibility icon
-        const visibilityToggle = layerRow.querySelector<HTMLElement>('.layer-visibility-toggle');
+        const visibilityToggle = layerRow.querySelector<HTMLElement>('.lf-layer-visibility-toggle');
         if (visibilityToggle) {
             const visibilityIcon = this.createVisibilityIcon(layer.visible);
             visibilityToggle.appendChild(visibilityIcon);
         }
 
-        const thumbnailContainer = layerRow.querySelector<HTMLElement>('.layer-thumbnail');
+        const thumbnailContainer = layerRow.querySelector<HTMLElement>('.lf-layer-thumbnail');
         if (thumbnailContainer) {
             this.generateThumbnail(layer, thumbnailContainer);
         }
@@ -368,8 +368,8 @@ export class CanvasLayersPanel {
 
     setupLayerEventListeners(layerRow: HTMLElement, layer: Layer, index: number): void {
         layerRow.addEventListener('mousedown', (e: MouseEvent) => {
-            const nameElement = layerRow.querySelector<HTMLElement>('.layer-name');
-            if (nameElement && nameElement.classList.contains('editing')) {
+            const nameElement = layerRow.querySelector<HTMLElement>('.lf-layer-name');
+            if (nameElement && nameElement.classList.contains('lf-editing')) {
                 return;
             }
             this.handleLayerClick(e, layer, index);
@@ -390,14 +390,14 @@ export class CanvasLayersPanel {
         layerRow.addEventListener('dblclick', (e: MouseEvent) => {
             e.preventDefault();
             e.stopPropagation();
-            const nameElement = layerRow.querySelector<HTMLElement>('.layer-name');
+            const nameElement = layerRow.querySelector<HTMLElement>('.lf-layer-name');
             if (nameElement) {
                 this.startEditingLayerName(nameElement, layer);
             }
         });
 
         // Add visibility toggle event listener
-        const visibilityToggle = layerRow.querySelector<HTMLElement>('.layer-visibility-toggle');
+        const visibilityToggle = layerRow.querySelector<HTMLElement>('.lf-layer-visibility-toggle');
         if (visibilityToggle) {
             visibilityToggle.addEventListener('click', (e: MouseEvent) => {
                 e.preventDefault();
@@ -432,7 +432,7 @@ export class CanvasLayersPanel {
 
     startEditingLayerName(nameElement: HTMLElement, layer: Layer): void {
         const currentName = layer.name;
-        nameElement.classList.add('editing');
+        nameElement.classList.add('lf-editing');
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -449,7 +449,7 @@ export class CanvasLayersPanel {
             let newName = input.value.trim() || `Layer ${layer.zIndex + 1}`;
             newName = this.ensureUniqueName(newName, layer);
             layer.name = newName;
-            nameElement.classList.remove('editing');
+            nameElement.classList.remove('lf-editing');
             nameElement.textContent = newName;
 
             this.canvas.saveState();
@@ -461,7 +461,7 @@ export class CanvasLayersPanel {
             if (e.key === 'Enter') {
                 finishEditing();
             } else if (e.key === 'Escape') {
-                nameElement.classList.remove('editing');
+                nameElement.classList.remove('lf-editing');
                 nameElement.textContent = currentName;
             }
         });
@@ -531,7 +531,7 @@ export class CanvasLayersPanel {
 
     handleDragStart(e: DragEvent, layer: Layer, index: number): void {
         if (!this.layersContainer || !e.dataTransfer) return;
-        const editingElement = this.layersContainer.querySelector('.layer-name.editing');
+        const editingElement = this.layersContainer.querySelector('.lf-layer-name.lf-editing');
         if (editingElement) {
             e.preventDefault();
             return;
@@ -547,10 +547,10 @@ export class CanvasLayersPanel {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', '');
 
-        this.layersContainer.querySelectorAll('.layer-row').forEach((row: Element, idx: number) => {
+        this.layersContainer.querySelectorAll('.lf-layer-row').forEach((row: Element, idx: number) => {
             const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
             if (this.draggedElements.includes(sortedLayers[idx])) {
-                row.classList.add('dragging');
+                row.classList.add('lf-dragging');
             }
         });
 
@@ -573,7 +573,7 @@ export class CanvasLayersPanel {
         this.removeDragInsertionLine();
 
         const line = document.createElement('div');
-        line.className = 'drag-insertion-line';
+        line.className = 'lf-drag-insertion-line';
 
         if (isUpperHalf) {
             line.style.top = '-1px';
@@ -618,8 +618,8 @@ export class CanvasLayersPanel {
     handleDragEnd(e: DragEvent): void {
         this.removeDragInsertionLine();
         if (!this.layersContainer) return;
-        this.layersContainer.querySelectorAll('.layer-row').forEach((row: Element) => {
-            row.classList.remove('dragging');
+        this.layersContainer.querySelectorAll('.lf-layer-row').forEach((row: Element) => {
+            row.classList.remove('lf-dragging');
         });
 
         this.draggedElements = [];
@@ -632,14 +632,14 @@ export class CanvasLayersPanel {
     updateSelectionAppearance(): void {
         if (!this.layersContainer) return;
         const sortedLayers = [...this.canvas.layers].sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
-        const layerRows = this.layersContainer.querySelectorAll('.layer-row');
+        const layerRows = this.layersContainer.querySelectorAll('.lf-layer-row');
 
         layerRows.forEach((row: Element, index: number) => {
             const layer = sortedLayers[index];
             if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
-                row.classList.add('selected');
+                row.classList.add('lf-selected');
             } else {
-                row.classList.remove('selected');
+                row.classList.remove('lf-selected');
             }
         });
     }
@@ -650,7 +650,7 @@ export class CanvasLayersPanel {
     updateButtonStates(): void {
         if (!this.container) return;
 
-        const deleteBtn = this.container.querySelector('#delete-layer-btn') as HTMLButtonElement;
+        const deleteBtn = this.container.querySelector('#lf-delete-layer-btn') as HTMLButtonElement;
         const hasSelectedLayers = this.canvas.canvasSelection.selectedLayers.length > 0;
 
         if (deleteBtn) {

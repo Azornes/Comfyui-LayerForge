@@ -1470,18 +1470,18 @@ export class CanvasLayers {
 
         const menu = document.createElement('div');
         this.blendMenuElement = menu;
-        menu.id = 'blend-mode-menu';
+        menu.id = 'lf-blend-mode-menu';
 
         const titleBar = document.createElement('div');
-        titleBar.className = 'blend-menu-title-bar';
+        titleBar.className = 'lf-blend-menu-title-bar';
         
         const titleText = document.createElement('span');
         titleText.textContent = `Blend Mode: ${selectedLayer.name}`;
-        titleText.className = 'blend-menu-title-text';
+        titleText.className = 'lf-blend-menu-title-text';
         
         const closeButton = document.createElement('button');
         closeButton.textContent = '×';
-        closeButton.className = 'blend-menu-close-button';
+        closeButton.className = 'lf-blend-menu-close-button';
         
         closeButton.onclick = (e: MouseEvent) => {
             e.stopPropagation();
@@ -1492,23 +1492,23 @@ export class CanvasLayers {
         titleBar.appendChild(closeButton);
 
         const content = document.createElement('div');
-        content.className = 'blend-menu-content';
+        content.className = 'lf-blend-menu-content';
 
         menu.appendChild(titleBar);
         menu.appendChild(content);
 
         const blendAreaContainer = document.createElement('div');
-        blendAreaContainer.className = 'blend-area-container';
+        blendAreaContainer.className = 'lf-blend-area-container';
     
         const blendAreaLabel = document.createElement('label');
         blendAreaLabel.textContent = 'Blend Area';
-        blendAreaLabel.className = 'blend-area-label';
+        blendAreaLabel.className = 'lf-blend-area-label';
         
         const blendAreaSlider = document.createElement('input');
         blendAreaSlider.type = 'range';
         blendAreaSlider.min = '0';
         blendAreaSlider.max = '100';
-        blendAreaSlider.className = 'blend-area-slider';
+        blendAreaSlider.className = 'lf-blend-area-slider';
         
         blendAreaSlider.value = selectedLayer?.blendArea?.toString() ?? '0';
         
@@ -1588,23 +1588,23 @@ export class CanvasLayers {
 
         this.blendModes.forEach((mode: BlendMode) => {
             const container = document.createElement('div');
-            container.className = 'blend-mode-container';
+            container.className = 'lf-blend-mode-container';
 
             const option = document.createElement('div');
-            option.className = 'blend-mode-option';
+            option.className = 'lf-blend-mode-option';
             option.textContent = `${mode.label} (${mode.name})`;
 
             const slider = document.createElement('input');
             slider.type = 'range';
             slider.min = '0';
             slider.max = '100';
-            slider.className = 'blend-opacity-slider';
+            slider.className = 'lf-blend-opacity-slider';
             const selectedLayer = this.canvas.canvasSelection.selectedLayers[0];
             slider.value = selectedLayer ? String(Math.round(selectedLayer.opacity * 100)) : '100';
 
             if (selectedLayer && selectedLayer.blendMode === mode.name) {
-                container.classList.add('active');
-                option.classList.add('active');
+                container.classList.add('lf-active');
+                option.classList.add('lf-active');
             }
 
             option.onclick = () => {
@@ -1615,17 +1615,17 @@ export class CanvasLayers {
                 }
                 
                 // Remove active class from all containers and options
-                content.querySelectorAll<HTMLDivElement>('.blend-mode-container').forEach(c => {
-                    c.classList.remove('active');
-                    const optionDiv = c.querySelector<HTMLDivElement>('.blend-mode-option');
+                content.querySelectorAll<HTMLDivElement>('.lf-blend-mode-container').forEach(c => {
+                    c.classList.remove('lf-active');
+                    const optionDiv = c.querySelector<HTMLDivElement>('.lf-blend-mode-option');
                     if (optionDiv) {
-                        optionDiv.classList.remove('active');
+                        optionDiv.classList.remove('lf-active');
                     }
                 });
 
                 // Add active class to current container and option
-                container.classList.add('active');
-                option.classList.add('active');
+                container.classList.add('lf-active');
+                option.classList.add('lf-active');
 
                 currentSelectedLayer.blendMode = mode.name;
                 this.canvas.render();

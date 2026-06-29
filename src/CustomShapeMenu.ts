@@ -67,11 +67,11 @@ export class CustomShapeMenu {
         addStylesheet(getUrl('./css/custom_shape_menu.css'));
         
         this.element = document.createElement('div');
-        this.element.id = 'layerforge-custom-shape-menu';
+        this.element.id = 'lf-custom-shape-menu';
 
         // --- MINIMIZED BAR ---
         const minimizedBar = document.createElement('div');
-        minimizedBar.className = 'custom-shape-minimized-bar';
+        minimizedBar.className = 'lf-custom-shape-minimized-bar';
         minimizedBar.textContent = "Custom Output Area Active";
         minimizedBar.style.display = 'none';
         minimizedBar.style.cursor = 'pointer';
@@ -83,13 +83,13 @@ export class CustomShapeMenu {
 
         // --- FULL MENU ---
         const fullMenu = document.createElement('div');
-        fullMenu.className = 'custom-shape-full-menu';
+        fullMenu.className = 'lf-custom-shape-full-menu';
 
         // Minimize button (top right)
         const minimizeBtn = document.createElement('button');
         minimizeBtn.innerHTML = "–";
         minimizeBtn.title = "Minimize menu";
-        minimizeBtn.className = 'custom-shape-minimize-btn';
+        minimizeBtn.className = 'lf-custom-shape-minimize-btn';
         minimizeBtn.style.position = 'absolute';
         minimizeBtn.style.top = '4px';
         minimizeBtn.style.right = '4px';
@@ -115,18 +115,18 @@ export class CustomShapeMenu {
         lines.forEach(line => {
             const lineElement = document.createElement('div');
             lineElement.textContent = line;
-            lineElement.className = 'menu-line';
+            lineElement.className = 'lf-menu-line';
             fullMenu.appendChild(lineElement);
         });
 
         // Create a container for the entire shape mask feature set
         const featureContainer = document.createElement('div');
-        featureContainer.id = 'shape-mask-feature-container';
-        featureContainer.className = 'feature-container';
+        featureContainer.id = 'lf-shape-mask-feature-container';
+        featureContainer.className = 'lf-feature-container';
 
         // Add main auto-apply checkbox to the new container
         const checkboxContainer = this._createCheckbox(
-            'auto-apply-checkbox',
+            'lf-auto-apply-checkbox',
             () => this.canvas.autoApplyShapeMask,
             'Auto-apply shape mask',
             (e) => {
@@ -149,7 +149,7 @@ export class CustomShapeMenu {
         
         // Add expansion checkbox
         const expansionContainer = this._createCheckbox(
-            'expansion-checkbox',
+            'lf-expansion-checkbox',
             () => this.canvas.shapeMaskExpansion,
             'Expand/Contract mask',
             (e) => {
@@ -167,12 +167,12 @@ export class CustomShapeMenu {
 
         // Add expansion slider container
         const expansionSliderContainer = document.createElement('div');
-        expansionSliderContainer.id = 'expansion-slider-container';
-        expansionSliderContainer.className = 'slider-container';
+        expansionSliderContainer.id = 'lf-expansion-slider-container';
+        expansionSliderContainer.className = 'lf-slider-container';
 
         const expansionSliderLabel = document.createElement('div');
         expansionSliderLabel.textContent = 'Expansion amount:';
-        expansionSliderLabel.className = 'slider-label';
+        expansionSliderLabel.className = 'lf-slider-label';
 
         const expansionSlider = document.createElement('input');
         expansionSlider.type = 'range';
@@ -181,7 +181,7 @@ export class CustomShapeMenu {
         expansionSlider.value = String(this.canvas.shapeMaskExpansionValue);
 
         const expansionValueDisplay = document.createElement('div');
-        expansionValueDisplay.className = 'slider-value-display';
+        expansionValueDisplay.className = 'lf-slider-value-display';
 
         let expansionValueBeforeDrag = this.canvas.shapeMaskExpansionValue;
 
@@ -242,7 +242,7 @@ export class CustomShapeMenu {
 
         // Add feather checkbox
         const featherContainer = this._createCheckbox(
-            'feather-checkbox',
+            'lf-feather-checkbox',
             () => this.canvas.shapeMaskFeather,
             'Feather edges',
             (e) => {
@@ -260,12 +260,12 @@ export class CustomShapeMenu {
 
         // Add feather slider container
         const featherSliderContainer = document.createElement('div');
-        featherSliderContainer.id = 'feather-slider-container';
-        featherSliderContainer.className = 'slider-container';
+        featherSliderContainer.id = 'lf-feather-slider-container';
+        featherSliderContainer.className = 'lf-slider-container';
 
         const featherSliderLabel = document.createElement('div');
         featherSliderLabel.textContent = 'Feather amount:';
-        featherSliderLabel.className = 'slider-label';
+        featherSliderLabel.className = 'lf-slider-label';
 
         const featherSlider = document.createElement('input');
         featherSlider.type = 'range';
@@ -274,7 +274,7 @@ export class CustomShapeMenu {
         featherSlider.value = String(this.canvas.shapeMaskFeatherValue);
 
         const featherValueDisplay = document.createElement('div');
-        featherValueDisplay.className = 'slider-value-display';
+        featherValueDisplay.className = 'lf-slider-value-display';
 
         const updateFeatherSliderDisplay = () => {
             const value = parseInt(featherSlider.value);
@@ -321,7 +321,7 @@ export class CustomShapeMenu {
         // Create output area extension container
         const extensionContainer = document.createElement('div');
         extensionContainer.id = 'output-area-extension-container';
-        extensionContainer.className = 'feature-container';
+        extensionContainer.className = 'lf-feature-container';
 
         // Add main extension checkbox
         const extensionCheckboxContainer = this._createCheckbox(
@@ -348,16 +348,16 @@ export class CustomShapeMenu {
         // Create sliders container
         const slidersContainer = document.createElement('div');
         slidersContainer.id = 'extension-sliders-container';
-        slidersContainer.className = 'slider-container';
+        slidersContainer.className = 'lf-slider-container';
 
         // Helper function to create a slider with preview system
         const createExtensionSlider = (label: string, direction: 'top' | 'bottom' | 'left' | 'right') => {
             const sliderContainer = document.createElement('div');
-            sliderContainer.className = 'extension-slider-container';
+            sliderContainer.className = 'lf-extension-slider-container';
 
             const sliderLabel = document.createElement('div');
             sliderLabel.textContent = label;
-            sliderLabel.className = 'slider-label';
+            sliderLabel.className = 'lf-slider-label';
 
             const slider = document.createElement('input');
             slider.type = 'range';
@@ -366,7 +366,7 @@ export class CustomShapeMenu {
             slider.value = String(this.canvas.outputAreaExtensions[direction]);
 
             const valueDisplay = document.createElement('div');
-            valueDisplay.className = 'slider-value-display';
+            valueDisplay.className = 'lf-slider-value-display';
 
             const updateDisplay = () => {
                 const value = parseInt(slider.value);
@@ -461,7 +461,7 @@ export class CustomShapeMenu {
         tooltipText?: string
     ): HTMLLabelElement {
         const container = document.createElement('label');
-        container.className = 'checkbox-container';
+        container.className = 'lf-checkbox-container';
         container.htmlFor = id;
 
         const input = document.createElement('input');
@@ -470,7 +470,7 @@ export class CustomShapeMenu {
         input.checked = getChecked();
         
         const customCheckbox = document.createElement('div');
-        customCheckbox.className = 'custom-checkbox';
+        customCheckbox.className = 'lf-custom-checkbox';
 
         const labelText = document.createElement('span');
         labelText.textContent = text;
@@ -499,7 +499,7 @@ export class CustomShapeMenu {
         if (!this.element) return;
 
         // Always update only the full menu part
-        const fullMenu = this.element.querySelector('.custom-shape-full-menu') as HTMLElement;
+        const fullMenu = this.element.querySelector('.lf-custom-shape-full-menu') as HTMLElement;
         if (!fullMenu) return;
 
         const setChecked = (id: string, checked: boolean) => {
@@ -507,27 +507,27 @@ export class CustomShapeMenu {
             if (input) input.checked = checked;
         };
 
-        setChecked('auto-apply-checkbox', this.canvas.autoApplyShapeMask);
-        setChecked('expansion-checkbox', this.canvas.shapeMaskExpansion);
-        setChecked('feather-checkbox', this.canvas.shapeMaskFeather);
+        setChecked('lf-auto-apply-checkbox', this.canvas.autoApplyShapeMask);
+        setChecked('lf-expansion-checkbox', this.canvas.shapeMaskExpansion);
+        setChecked('lf-feather-checkbox', this.canvas.shapeMaskFeather);
         setChecked('extension-checkbox', this.canvas.outputAreaExtensionEnabled);
 
-        const expansionCheckbox = fullMenu.querySelector('#expansion-checkbox')?.parentElement as HTMLElement;
+        const expansionCheckbox = fullMenu.querySelector('#lf-expansion-checkbox')?.parentElement as HTMLElement;
         if (expansionCheckbox) {
             expansionCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
         
-        const featherCheckbox = fullMenu.querySelector('#feather-checkbox')?.parentElement as HTMLElement;
+        const featherCheckbox = fullMenu.querySelector('#lf-feather-checkbox')?.parentElement as HTMLElement;
         if (featherCheckbox) {
             featherCheckbox.style.display = this.canvas.autoApplyShapeMask ? 'flex' : 'none';
         }
 
-        const expansionSliderContainer = fullMenu.querySelector('#expansion-slider-container') as HTMLElement;
+        const expansionSliderContainer = fullMenu.querySelector('#lf-expansion-slider-container') as HTMLElement;
         if (expansionSliderContainer) {
             expansionSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskExpansion) ? 'block' : 'none';
         }
 
-        const featherSliderContainer = fullMenu.querySelector('#feather-slider-container') as HTMLElement;
+        const featherSliderContainer = fullMenu.querySelector('#lf-feather-slider-container') as HTMLElement;
         if (featherSliderContainer) {
             featherSliderContainer.style.display = (this.canvas.autoApplyShapeMask && this.canvas.shapeMaskFeather) ? 'block' : 'none';
         }
@@ -535,8 +535,8 @@ export class CustomShapeMenu {
 
     private _updateMinimizedState(): void {
         if (!this.element) return;
-        const minimizedBar = this.element.querySelector('.custom-shape-minimized-bar') as HTMLElement;
-        const fullMenu = this.element.querySelector('.custom-shape-full-menu') as HTMLElement;
+        const minimizedBar = this.element.querySelector('.lf-custom-shape-minimized-bar') as HTMLElement;
+        const fullMenu = this.element.querySelector('.lf-custom-shape-full-menu') as HTMLElement;
         if (this.isMinimized) {
             minimizedBar.style.display = 'block';
             fullMenu.style.display = 'none';
@@ -640,7 +640,7 @@ export class CustomShapeMenu {
 
         this.tooltip = document.createElement('div');
         this.tooltip.textContent = text;
-        this.tooltip.className = 'layerforge-tooltip';
+        this.tooltip.className = 'lf-layerforge-tooltip';
 
         document.body.appendChild(this.tooltip);
         this.updateTooltipPosition(event);
