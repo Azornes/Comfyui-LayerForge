@@ -5,6 +5,7 @@ LayerForge uses TypeScript for its frontend source and compiles it to JavaScript
 ## Requirements
 
 - [Node.js](https://nodejs.org/), which includes npm
+- Python checks are documented in [TESTING.md](TESTING.md).
 
 ## Install dependencies
 

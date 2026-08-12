@@ -1,13 +1,13 @@
 import logging
+import importlib
 import sys
 
 import pytest
 
-from python.logger import (
+from python.log_system.log_funcs import error, exception
+from python.log_system.logger import (
     ColoredFormatter,
     LogLevel,
-    error,
-    exception,
     logger,
     set_debug,
     set_file_logging,
@@ -20,13 +20,13 @@ def reset_logger_state():
     original_module_settings = logger.config["module_settings"].copy()
     original_enabled = logger.enabled
 
+    logger.reset_loggers()
     logger.set_enabled(True)
     logger.config["module_settings"] = {}
     logger.config["log_to_file"] = False
-    logger.loggers = {}
     yield
 
-    logger.loggers = {}
+    logger.reset_loggers()
     logger.config.clear()
     logger.config.update(original_config)
     logger.config["module_settings"] = original_module_settings
@@ -63,7 +63,7 @@ def test_colored_formatter_contains_timestamp_module_and_level():
 
     formatted = formatter.format(record)
 
-    assert "[layerforge.test]" in formatted
+    assert "[layerforge]" in formatted
     assert "[INFO]" in formatted
     assert "hello world" in formatted
 
@@ -85,18 +85,18 @@ def test_colored_formatter_includes_exception_details_and_color():
     formatter = ColoredFormatter(datefmt="%H:%M:%S", use_colors=True)
     formatted = formatter.format(record)
 
-    assert "\x1b[1m" in formatted
+    assert "\x1b[1;97;" in formatted
     assert "ValueError: boom" in formatted
 
 
 def test_environment_configuration_parses_valid_and_invalid_values(monkeypatch, tmp_path):
-    monkeypatch.setenv("LAYERFORGE_LOG_LEVEL", "DEBUG")
-    monkeypatch.setenv("LAYERFORGE_MODULE_LEVELS", '{"canvas": "ERROR", "ignored": "unknown"}')
-    monkeypatch.setenv("LAYERFORGE_USE_COLORS", "false")
-    monkeypatch.setenv("LAYERFORGE_LOG_TO_FILE", "true")
-    monkeypatch.setenv("LAYERFORGE_LOG_DIR", str(tmp_path / "logs"))
-    monkeypatch.setenv("LAYERFORGE_MAX_FILE_SIZE_MB", "2")
-    monkeypatch.setenv("LAYERFORGE_BACKUP_COUNT", "3")
+    monkeypatch.setenv("AZLOGS_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("AZLOGS_MODULE_LEVELS", '{"canvas": "ERROR", "ignored": "unknown"}')
+    monkeypatch.setenv("AZLOGS_USE_COLORS", "false")
+    monkeypatch.setenv("AZLOGS_LOG_TO_FILE", "true")
+    monkeypatch.setenv("AZLOGS_LOG_DIR", str(tmp_path / "logs"))
+    monkeypatch.setenv("AZLOGS_MAX_FILE_SIZE_MB", "2")
+    monkeypatch.setenv("AZLOGS_BACKUP_COUNT", "3")
 
     logger._load_config_from_env()
 
@@ -107,9 +107,9 @@ def test_environment_configuration_parses_valid_and_invalid_values(monkeypatch, 
     assert logger.config["max_file_size_mb"] == 2
     assert logger.config["backup_count"] == 3
 
-    monkeypatch.setenv("LAYERFORGE_MODULE_LEVELS", "not-json")
-    monkeypatch.setenv("LAYERFORGE_MAX_FILE_SIZE_MB", "not-an-int")
-    monkeypatch.setenv("LAYERFORGE_BACKUP_COUNT", "not-an-int")
+    monkeypatch.setenv("AZLOGS_MODULE_LEVELS", "not-json")
+    monkeypatch.setenv("AZLOGS_MAX_FILE_SIZE_MB", "not-an-int")
+    monkeypatch.setenv("AZLOGS_BACKUP_COUNT", "not-an-int")
     logger._load_config_from_env()
 
     assert logger.config["module_settings"]["canvas"] == LogLevel.ERROR
@@ -119,8 +119,9 @@ def test_configure_disables_file_logging_when_directory_creation_fails(monkeypat
     def raise_os_error(*args, **kwargs):
         raise OSError("access denied")
 
-    monkeypatch.setattr("python.logger.os.makedirs", raise_os_error)
-    monkeypatch.setattr("python.logger.traceback.print_exc", lambda: None)
+    logger_module = importlib.import_module("python.log_system.logger")
+    monkeypatch.setattr(logger_module.os, "makedirs", raise_os_error)
+    monkeypatch.setattr(logger_module.traceback, "print_exc", lambda: None)
 
     logger.configure({"log_to_file": True, "log_dir": "blocked"})
 
@@ -135,7 +136,7 @@ def test_file_logging_writes_to_configured_directory(tmp_path):
     logger.info("file-test", "message")
     logger.info("file-test", "second message")
 
-    log_files = list(log_directory.glob("layerforge_*.log"))
+    log_files = list(log_directory.glob("azlogs_*.log"))
     assert len(log_files) == 1
     assert "message" in log_files[0].read_text(encoding="utf-8")
 

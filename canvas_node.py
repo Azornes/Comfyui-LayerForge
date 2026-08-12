@@ -27,21 +27,14 @@ import sys
 import os
 
 try:
-    from python.logger import logger, LogLevel, debug, info, warn, error, exception
-    from python.config import LOG_LEVEL
+    from python.log_system import create_module_logger
 
-    logger.set_module_level('canvas_node', LogLevel[LOG_LEVEL])
-
-    logger.configure({
-        'log_to_file': True,
-        'log_dir': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
-    })
-
-    log_debug = lambda *args, **kwargs: debug('canvas_node', *args, **kwargs)
-    log_info = lambda *args, **kwargs: info('canvas_node', *args, **kwargs)
-    log_warn = lambda *args, **kwargs: warn('canvas_node', *args, **kwargs)
-    log_error = lambda *args, **kwargs: error('canvas_node', *args, **kwargs)
-    log_exception = lambda *args: exception('canvas_node', *args)
+    _module_logger = create_module_logger(__name__)
+    log_debug = _module_logger.debug
+    log_info = _module_logger.info
+    log_warn = _module_logger.warning
+    log_error = _module_logger.error
+    log_exception = _module_logger.exception
     
     log_info("Logger initialized for canvas_node")
 except ImportError as e:
