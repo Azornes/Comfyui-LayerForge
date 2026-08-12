@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 const log = createModuleLogger('ImageCache');
 export class ImageCache {
     constructor() {

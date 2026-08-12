@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { snapToGrid, getSnapAdjustment } from "./utils/CommonUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Point } from './types';

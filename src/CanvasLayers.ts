@@ -1,5 +1,5 @@
 import {saveImage, removeImage} from "./db.js";
-import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./log_system/log_funcs.js";
 import {generateUUID, generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 import {showErrorNotification, showSuccessNotification} from "./utils/NotificationUtils.js";

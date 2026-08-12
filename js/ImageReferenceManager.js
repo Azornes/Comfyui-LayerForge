@@ -1,5 +1,5 @@
 import { removeImage, getAllImageIds } from "./db.js";
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 const log = createModuleLogger('ImageReferenceManager');
 export class ImageReferenceManager {
     constructor(canvas) {

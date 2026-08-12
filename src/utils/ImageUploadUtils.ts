@@ -1,6 +1,6 @@
 // @ts-ignore
 import { api } from "../../../scripts/api.js";
-import { createModuleLogger } from "./LoggerUtils.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('ImageUploadUtils');

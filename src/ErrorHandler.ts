@@ -3,7 +3,7 @@
  * Eliminuje powtarzalne wzorce obsługi błędów w całym projekcie
  */
 
-import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./log_system/log_funcs.js";
 
 const log = createModuleLogger('ErrorHandler');
 

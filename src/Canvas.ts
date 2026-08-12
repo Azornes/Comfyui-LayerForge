@@ -17,7 +17,7 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {BatchPreviewManager} from "./BatchPreviewManager.js";
-import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./log_system/log_funcs.js";
 import { debounce, createCanvas } from "./utils/CommonUtils.js";
 import {MaskEditorIntegration} from "./MaskEditorIntegration.js";
 import {CanvasSelection} from "./CanvasSelection.js";

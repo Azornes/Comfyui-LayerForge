@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./LoggerUtils.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
 // @ts-ignore
 import { ComfyApp } from "../../../scripts/app.js";
 

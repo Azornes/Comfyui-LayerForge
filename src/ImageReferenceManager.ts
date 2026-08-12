@@ -1,5 +1,5 @@
 import {removeImage, getAllImageIds} from "./db.js";
-import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./log_system/log_funcs.js";
 import type { Canvas } from './Canvas';
 import type { Layer, CanvasState } from './types';
 

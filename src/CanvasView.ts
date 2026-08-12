@@ -15,7 +15,7 @@ import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
 import {ImageCache} from "./ImageCache.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
-import {createModuleLogger} from "./utils/LoggerUtils.js";
+import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";

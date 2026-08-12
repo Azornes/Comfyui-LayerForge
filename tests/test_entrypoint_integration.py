@@ -78,7 +78,7 @@ def _install_runtime_stubs(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "tqdm", tqdm)
 
     # Avoid creating project log files while the entry point is imported.
-    from python.logger import logger
+    from python.log_system import logger
 
     monkeypatch.setattr(logger, "configure", lambda config: logger)
 

@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import type { Canvas } from './Canvas.js';
 import type { Point, Layer } from './types.js';
 

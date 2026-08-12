@@ -1,5 +1,5 @@
 import { getCanvasState, setCanvasState, saveImage, getImage } from "./db.js";
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showAlertNotification } from "./utils/NotificationUtils.js";
 import { generateUUID, cloneLayers, getStateSignature, debounce, createCanvas } from "./utils/CommonUtils.js";
 const log = createModuleLogger('CanvasState');

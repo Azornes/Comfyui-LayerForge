@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
 const log = createModuleLogger('CustomShapeMenu');
 export class CustomShapeMenu {

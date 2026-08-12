@@ -1,6 +1,6 @@
 // @ts-ignore
 import { ComfyApp } from "../../scripts/app.js";
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showInfoNotification, showSuccessNotification, showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
 import { processImageToMask } from "./utils/MaskProcessingUtils.js";

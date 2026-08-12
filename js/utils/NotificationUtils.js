@@ -8,7 +8,7 @@ description: Notification Utilities (Toast System)
 // 1. IMPORTS & DEPENDENCIES
 // ==========================================
 // Comment out or adjust this import if copying to a project that does not use AzLogs
-import { createModuleLogger } from "./LoggerUtils.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
 const CONFIG = {
     // Project display name (used in notifications tag and message prefix cleaning)
     PROJECT_NAME: "Layer Forge",

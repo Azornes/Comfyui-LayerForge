@@ -4,7 +4,7 @@ import {app} from "../../scripts/app.js";
 import {ComfyApp} from "../../scripts/app.js";
 // @ts-ignore
 import {api} from "../../scripts/api.js";
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
 import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessingUtils.js";

@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { Logger, LogLevel } from '../js/log_system/logger.js';
+import { Logger, LogLevel, logger as sharedLogger } from '../js/log_system/logger.js';
 import { createModuleLogger, withErrorLogging } from '../js/log_system/log_funcs.js';
-import * as legacyLogger from '../js/logger.js';
 
 
 function silenceConsole() {
@@ -20,7 +19,7 @@ function silenceConsole() {
 }
 
 
-test('canonical logger handles levels, retention, callsites, and compatibility exports', () => {
+test('canonical logger handles levels, retention, and callsites', () => {
   const restoreConsole = silenceConsole();
   try {
     const logger = new Logger();
@@ -52,7 +51,7 @@ test('canonical logger handles levels, retention, callsites, and compatibility e
     logger.setEnabled(false);
     assert.equal(logger.isLevelEnabled('LayerForge.test', LogLevel.ERROR), false);
 
-    assert.equal(legacyLogger.Logger, Logger);
+    assert.equal(sharedLogger.constructor, Logger);
     assert.equal(typeof createModuleLogger('LayerForge.test').error, 'function');
   } finally {
     restoreConsole();

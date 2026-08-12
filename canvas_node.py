@@ -29,25 +29,35 @@ import os
 try:
     from python.log_system import create_module_logger
 
-    _module_logger = create_module_logger(__name__)
-    log_debug = _module_logger.debug
-    log_info = _module_logger.info
-    log_warn = _module_logger.warning
-    log_error = _module_logger.error
-    log_exception = _module_logger.exception
-    
-    log_info("Logger initialized for canvas_node")
+    log = create_module_logger(__name__)
+
+    log.info("Logger initialized for canvas_node")
 except ImportError as e:
 
     print(f"Warning: Logger module not available: {e}")
 
-    def log_debug(*args): print("[DEBUG]", *args)
-    def log_info(*args): print("[INFO]", *args)
-    def log_warn(*args): print("[WARN]", *args)
-    def log_error(*args): print("[ERROR]", *args)
-    def log_exception(*args):
-        print("[ERROR]", *args)
-        traceback.print_exc()
+    class _FallbackLogger:
+        @staticmethod
+        def debug(*args, **kwargs): print("[DEBUG]", *args)
+
+        @staticmethod
+        def info(*args, **kwargs): print("[INFO]", *args)
+
+        @staticmethod
+        def warning(*args, **kwargs): print("[WARN]", *args)
+
+        @staticmethod
+        def error(*args, **kwargs): print("[ERROR]", *args)
+
+        @staticmethod
+        def exception(*args, **kwargs):
+            print("[ERROR]", *args)
+            traceback.print_exc()
+
+        @staticmethod
+        def fatal(*args, **kwargs): print("[FATAL]", *args)
+
+    log = _FallbackLogger()
 
 torch.set_float32_matmul_precision('high')
 
@@ -115,7 +125,7 @@ class LayerForgeNode:
             current_execution = self.get_execution_id()
 
             if current_execution != self.__class__._canvas_cache['last_execution_id']:
-                log_info(f"New execution detected: {current_execution}")
+                log.info(f"New execution detected: {current_execution}")
                 self.__class__._canvas_cache['image'] = None
                 self.__class__._canvas_cache['mask'] = None
                 self.__class__._canvas_cache['last_execution_id'] = current_execution
@@ -123,12 +133,12 @@ class LayerForgeNode:
 
                 if persistent.get('image') is not None:
                     self.__class__._canvas_cache['image'] = persistent['image']
-                    log_info("Restored image from persistent cache")
+                    log.info("Restored image from persistent cache")
                 if persistent.get('mask') is not None:
                     self.__class__._canvas_cache['mask'] = persistent['mask']
-                    log_info("Restored mask from persistent cache")
+                    log.info("Restored mask from persistent cache")
         except Exception as e:
-            log_error(f"Error restoring cache: {str(e)}")
+            log.error(f"Error restoring cache: {str(e)}")
 
     def get_execution_id(self):
 
@@ -136,7 +146,7 @@ class LayerForgeNode:
 
             return str(int(time.time() * 1000))
         except Exception as e:
-            log_error(f"Error getting execution ID: {str(e)}")
+            log.error(f"Error getting execution ID: {str(e)}")
             return None
 
     def update_persistent_cache(self):
@@ -146,9 +156,9 @@ class LayerForgeNode:
                 'image': self.__class__._canvas_cache['image'],
                 'mask': self.__class__._canvas_cache['mask']
             }
-            log_debug("Updated persistent cache")
+            log.debug("Updated persistent cache")
         except Exception as e:
-            log_error(f"Error updating persistent cache: {str(e)}")
+            log.error(f"Error updating persistent cache: {str(e)}")
 
     def track_data_flow(self, stage, status, data_info=None):
 
@@ -158,9 +168,9 @@ class LayerForgeNode:
             'status': status,
             'data_info': data_info
         }
-        log_debug(f"Data Flow [{self.flow_id}] - Stage: {stage}, Status: {status}")
+        log.debug(f"Data Flow [{self.flow_id}] - Stage: {stage}, Status: {status}")
         if data_info:
-            log_debug(f"Data Info: {data_info}")
+            log.debug(f"Data Info: {data_info}")
 
         self.__class__._canvas_cache['data_flow_status'][self.flow_id] = flow_status
 
@@ -205,7 +215,7 @@ class LayerForgeNode:
             return input_image
 
         except Exception as e:
-            log_error(f"Error in add_image_to_canvas: {str(e)}")
+            log.error(f"Error in add_image_to_canvas: {str(e)}")
             return None
 
     def add_mask_to_canvas(self, input_mask, input_image):
@@ -233,7 +243,7 @@ class LayerForgeNode:
             return input_mask
 
         except Exception as e:
-            log_error(f"Error in add_mask_to_canvas: {str(e)}")
+            log.error(f"Error in add_mask_to_canvas: {str(e)}")
             return None
 
     _processing_lock = threading.Lock()
@@ -243,14 +253,14 @@ class LayerForgeNode:
         try:
 
             if not self.__class__._processing_lock.acquire(blocking=False):
-                log_warn(f"Process already in progress for node {node_id}, skipping...")
+                log.warning(f"Process already in progress for node {node_id}, skipping...")
 
                 return self.get_cached_data()
 
-            log_info(f"Lock acquired. Starting process_canvas_image for node_id: {node_id} (fallback unique_id: {unique_id})")
+            log.info(f"Lock acquired. Starting process_canvas_image for node_id: {node_id} (fallback unique_id: {unique_id})")
 
             # Always store fresh input data, even if None, to clear stale data
-            log_info(f"Storing input data for node {node_id} - Image: {input_image is not None}, Mask: {input_mask is not None}")
+            log.info(f"Storing input data for node {node_id} - Image: {input_image is not None}, Mask: {input_mask is not None}")
             
             with self.__class__._storage_lock:
                 input_data = {}
@@ -263,7 +273,7 @@ class LayerForgeNode:
                             input_image = input_image.unsqueeze(0)
                         
                         batch_size = input_image.shape[0]
-                        log_info(f"Processing batch of {batch_size} image(s)")
+                        log.info(f"Processing batch of {batch_size} image(s)")
                         
                         if batch_size == 1:
                             # Single image - keep backward compatibility
@@ -277,7 +287,7 @@ class LayerForgeNode:
                             input_data['input_image'] = f"data:image/png;base64,{img_str}"
                             input_data['input_image_width'] = pil_img.width
                             input_data['input_image_height'] = pil_img.height
-                            log_debug(f"Stored single input image: {pil_img.width}x{pil_img.height}")
+                            log.debug(f"Stored single input image: {pil_img.width}x{pil_img.height}")
                         else:
                             # Multiple images - store as array
                             images_array = []
@@ -294,10 +304,10 @@ class LayerForgeNode:
                                     'width': pil_img.width,
                                     'height': pil_img.height
                                 })
-                                log_debug(f"Stored batch image {i+1}/{batch_size}: {pil_img.width}x{pil_img.height}")
+                                log.debug(f"Stored batch image {i+1}/{batch_size}: {pil_img.width}x{pil_img.height}")
                             
                             input_data['input_images_batch'] = images_array
-                            log_info(f"Stored batch of {batch_size} images")
+                            log.info(f"Stored batch of {batch_size} images")
                 
                 if input_mask is not None:
                     # Convert mask tensor to base64
@@ -317,7 +327,7 @@ class LayerForgeNode:
                         pil_mask.save(mask_buffered, format="PNG")
                         mask_str = base64.b64encode(mask_buffered.getvalue()).decode()
                         input_data['input_mask'] = f"data:image/png;base64,{mask_str}"
-                        log_debug(f"Stored input mask: {pil_mask.width}x{pil_mask.height}")
+                        log.debug(f"Stored input mask: {pil_mask.width}x{pil_mask.height}")
                 
                 input_data['fit_on_add'] = fit_on_add
                 
@@ -333,14 +343,14 @@ class LayerForgeNode:
                 canvas_data = self.__class__._canvas_data_storage.pop(storage_key, None)
 
             if canvas_data:
-                log_info(f"Canvas data found for node {storage_key} from WebSocket")
+                log.info(f"Canvas data found for node {storage_key} from WebSocket")
                 if canvas_data.get('image'):
                     image_data = canvas_data['image'].split(',')[1]
                     image_bytes = base64.b64decode(image_data)
                     pil_image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
                     image_array = np.array(pil_image).astype(np.float32) / 255.0
                     processed_image = torch.from_numpy(image_array)[None,]
-                    log_debug(f"Image loaded from WebSocket, shape: {processed_image.shape}")
+                    log.debug(f"Image loaded from WebSocket, shape: {processed_image.shape}")
 
                 if canvas_data.get('mask'):
                     mask_data = canvas_data['mask'].split(',')[1]
@@ -348,33 +358,33 @@ class LayerForgeNode:
                     pil_mask = Image.open(io.BytesIO(mask_bytes)).convert('L')
                     mask_array = np.array(pil_mask).astype(np.float32) / 255.0
                     processed_mask = torch.from_numpy(mask_array)[None,]
-                    log_debug(f"Mask loaded from WebSocket, shape: {processed_mask.shape}")
+                    log.debug(f"Mask loaded from WebSocket, shape: {processed_mask.shape}")
             else:
-                log_warn(f"No canvas data found for node {storage_key} in WebSocket cache.")
+                log.warning(f"No canvas data found for node {storage_key} in WebSocket cache.")
 
             if processed_image is None:
-                log_warn(f"Processed image is still None, creating default blank image.")
+                log.warning(f"Processed image is still None, creating default blank image.")
                 processed_image = torch.zeros((1, 512, 512, 3), dtype=torch.float32)
             if processed_mask is None:
-                log_warn(f"Processed mask is still None, creating default blank mask.")
+                log.warning(f"Processed mask is still None, creating default blank mask.")
                 processed_mask = torch.zeros((1, 512, 512), dtype=torch.float32)
 
-            log_debug(f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
+            log.debug(f"About to return output - Image shape: {processed_image.shape}, Mask shape: {processed_mask.shape}")
             
             self.update_persistent_cache()
             
-            log_info(f"Successfully returning processed image and mask")
+            log.info(f"Successfully returning processed image and mask")
             return (processed_image, processed_mask)
 
         except Exception as e:
-            log_exception(f"Error in process_canvas_image: {str(e)}")
+            log.exception(f"Error in process_canvas_image: {str(e)}")
             return (None, None)
             
         finally:
 
             if self.__class__._processing_lock.locked():
                 self.__class__._processing_lock.release()
-                log_debug(f"Process completed for node {node_id}, lock released")
+                log.debug(f"Process completed for node {node_id}, lock released")
 
     def get_cached_data(self):
         return {
@@ -454,13 +464,13 @@ class LayerForgeNode:
             
             for node_id in nodes_to_remove:
                 del cls._websocket_data[node_id]
-                log_debug(f"Cleaned up old WebSocket data for node {node_id}")
+                log.debug(f"Cleaned up old WebSocket data for node {node_id}")
             
             if nodes_to_remove:
-                log_info(f"Cleaned up {len(nodes_to_remove)} old WebSocket entries")
+                log.info(f"Cleaned up {len(nodes_to_remove)} old WebSocket entries")
                 
         except Exception as e:
-            log_error(f"Error during WebSocket cleanup: {str(e)}")
+            log.error(f"Error during WebSocket cleanup: {str(e)}")
 
     @classmethod
     def setup_routes(cls):
@@ -488,7 +498,7 @@ class LayerForgeNode:
                                 'timestamp': time.time()
                             }
                         
-                        log_info(f"Received canvas data for node {node_id} via WebSocket")
+                        log.info(f"Received canvas data for node {node_id} via WebSocket")
 
                         ack_payload = {
                             'type': 'ack',
@@ -496,43 +506,43 @@ class LayerForgeNode:
                             'status': 'success'
                         }
                         await ws.send_json(ack_payload)
-                        log_debug(f"Sent ACK for node {node_id}")
+                        log.debug(f"Sent ACK for node {node_id}")
                         
                     except Exception as e:
-                        log_error(f"Error processing WebSocket message: {e}")
+                        log.error(f"Error processing WebSocket message: {e}")
                         await ws.send_json({'status': 'error', 'message': str(e)})
                 elif msg.type == web.WSMsgType.ERROR:
-                    log_error(f"WebSocket connection closed with exception {ws.exception()}")
+                    log.error(f"WebSocket connection closed with exception {ws.exception()}")
 
-            log_info("WebSocket connection closed")
+            log.info("WebSocket connection closed")
             return ws
 
         @PromptServer.instance.routes.get("/layerforge/get_input_data/{node_id}")
         async def get_input_data(request):
             try:
                 node_id = request.match_info["node_id"]
-                log_debug(f"Checking for input data for node: {node_id}")
+                log.debug(f"Checking for input data for node: {node_id}")
                 
                 with cls._storage_lock:
                     input_key = f"{node_id}_input"
                     input_data = cls._canvas_data_storage.get(input_key, None)
                 
                 if input_data:
-                    log_info(f"Input data found for node {node_id}, sending to frontend")
+                    log.info(f"Input data found for node {node_id}, sending to frontend")
                     return web.json_response({
                         'success': True,
                         'has_input': True,
                         'data': input_data
                     })
                 else:
-                    log_debug(f"No input data found for node {node_id}")
+                    log.debug(f"No input data found for node {node_id}")
                     return web.json_response({
                         'success': True,
                         'has_input': False
                     })
                     
             except Exception as e:
-                log_error(f"Error in get_input_data: {str(e)}")
+                log.error(f"Error in get_input_data: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -542,15 +552,15 @@ class LayerForgeNode:
         async def clear_input_data(request):
             try:
                 node_id = request.match_info["node_id"]
-                log_info(f"Clearing input data for node: {node_id}")
+                log.info(f"Clearing input data for node: {node_id}")
                 
                 with cls._storage_lock:
                     input_key = f"{node_id}_input"
                     if input_key in cls._canvas_data_storage:
                         del cls._canvas_data_storage[input_key]
-                        log_info(f"Input data cleared for node {node_id}")
+                        log.info(f"Input data cleared for node {node_id}")
                     else:
-                        log_debug(f"No input data to clear for node {node_id}")
+                        log.debug(f"No input data to clear for node {node_id}")
                 
                 return web.json_response({
                     'success': True,
@@ -558,7 +568,7 @@ class LayerForgeNode:
                 })
                     
             except Exception as e:
-                log_error(f"Error in clear_input_data: {str(e)}")
+                log.error(f"Error in clear_input_data: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -568,11 +578,11 @@ class LayerForgeNode:
         async def get_canvas_data(request):
             try:
                 node_id = request.match_info["node_id"]
-                log_debug(f"Received request for node: {node_id}")
+                log.debug(f"Received request for node: {node_id}")
 
                 cache_data = cls._canvas_cache
-                log_debug(f"Cache content: {cache_data}")
-                log_debug(f"Image in cache: {cache_data['image'] is not None}")
+                log.debug(f"Cache content: {cache_data}")
+                log.debug(f"Image in cache: {cache_data['image'] is not None}")
 
                 response_data = {
                     'success': True,
@@ -599,7 +609,7 @@ class LayerForgeNode:
                 return web.json_response(response_data)
 
             except Exception as e:
-                log_error(f"Error in get_canvas_data: {str(e)}")
+                log.error(f"Error in get_canvas_data: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -623,7 +633,7 @@ class LayerForgeNode:
                     'images': images_data
                 })
             except Exception as e:
-                log_error(f"Error in get_latest_images_route: {str(e)}")
+                log.error(f"Error in get_latest_images_route: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -663,11 +673,11 @@ class LayerForgeNode:
                         'error': 'file_path is required'
                     }, status=400)
                 
-                log_info(f"Attempting to load image from path: {file_path}")
+                log.info(f"Attempting to load image from path: {file_path}")
                 
                 # Check if file exists and is accessible
                 if not os.path.exists(file_path):
-                    log_warn(f"File not found: {file_path}")
+                    log.warning(f"File not found: {file_path}")
                     return web.json_response({
                         'success': False,
                         'error': f'File not found: {file_path}'
@@ -693,7 +703,7 @@ class LayerForgeNode:
                         img.save(buffered, format="PNG")
                         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                         
-                        log_info(f"Successfully loaded image from path: {file_path}")
+                        log.info(f"Successfully loaded image from path: {file_path}")
                         return web.json_response({
                             'success': True,
                             'image_data': f"data:image/png;base64,{img_str}",
@@ -702,14 +712,14 @@ class LayerForgeNode:
                         })
                         
                 except Exception as img_error:
-                    log_error(f"Error processing image file {file_path}: {str(img_error)}")
+                    log.error(f"Error processing image file {file_path}: {str(img_error)}")
                     return web.json_response({
                         'success': False,
                         'error': f'Error processing image file: {str(img_error)}'
                     }, status=500)
                     
             except Exception as e:
-                log_error(f"Error in load_image_from_path_route: {str(e)}")
+                log.error(f"Error in load_image_from_path_route: {str(e)}")
                 return web.json_response({
                     'success': False,
                     'error': str(e)
@@ -828,7 +838,7 @@ class BiRefNetMatting:
                 cache_dir = self.base_paths[0] if self.base_paths else None
 
                 if local_model_path:
-                    log_info(f"Loading BiRefNet model from local path {local_model_path}...")
+                    log.info(f"Loading BiRefNet model from local path {local_model_path}...")
                     try:
                         self.model = AutoModelForImageSegmentation.from_pretrained(
                             local_model_path,
@@ -838,14 +848,14 @@ class BiRefNetMatting:
                         if torch.cuda.is_available():
                             self.model = self.model.cuda()
                         self.model_cache[model_path] = self.model
-                        log_info("Model loaded successfully from local disk")
+                        log.info("Model loaded successfully from local disk")
                         return
                     except Exception as local_error:
-                        log_warn(f"Failed to load local BiRefNet model from {local_model_path}: {str(local_error)}")
-                        log_info("Falling back to Hugging Face model loading")
+                        log.warning(f"Failed to load local BiRefNet model from {local_model_path}: {str(local_error)}")
+                        log.info("Falling back to Hugging Face model loading")
 
                 full_model_path = cache_dir or "BiRefNet"
-                log_info(f"Loading BiRefNet model from Hugging Face cache {full_model_path}...")
+                log.info(f"Loading BiRefNet model from Hugging Face cache {full_model_path}...")
                 try:
                     # Try loading with additional configuration to handle compatibility issues
                     self.model = AutoModelForImageSegmentation.from_pretrained(
@@ -861,11 +871,11 @@ class BiRefNetMatting:
                     if torch.cuda.is_available():
                         self.model = self.model.cuda()
                     self.model_cache[model_path] = self.model
-                    log_info("Model loaded successfully from Hugging Face")
+                    log.info("Model loaded successfully from Hugging Face")
                 except AttributeError as e:
                     if "'Config' object has no attribute 'is_encoder_decoder'" in str(e):
-                        log_error("Compatibility issue detected with transformers library. This has been fixed in the code.")
-                        log_error("If you're still seeing this error, please clear the model cache and try again.")
+                        log.error("Compatibility issue detected with transformers library. This has been fixed in the code.")
+                        log.error("If you're still seeing this error, please clear the model cache and try again.")
                         raise RuntimeError(
                             "Model configuration compatibility issue detected. "
                             f"Please delete the model cache directory '{full_model_path}' and restart ComfyUI. "
@@ -874,14 +884,14 @@ class BiRefNetMatting:
                     else:
                         raise e
                 except JSONDecodeError as e:                    
-                    log_error(f"JSONDecodeError: Failed to load model from {full_model_path}. The model's config.json may be corrupted.")
+                    log.error(f"JSONDecodeError: Failed to load model from {full_model_path}. The model's config.json may be corrupted.")
                     raise RuntimeError(
                         "The matting model's configuration file (config.json) appears to be corrupted. "
                         f"Please manually delete the directory '{full_model_path}' and try again. "
                         "This will force a fresh download of the model."
                     ) from e
                 except Exception as e:
-                    log_error(f"Failed to load model from Hugging Face: {str(e)}")
+                    log.error(f"Failed to load model from Hugging Face: {str(e)}")
                     # Re-raise with a more informative message
                     raise RuntimeError(
                         "Failed to download or load the matting model. "
@@ -891,12 +901,12 @@ class BiRefNetMatting:
                     ) from e
             else:
                 self.model = self.model_cache[model_path]
-                log_debug("Using cached model")
+                log.debug("Using cached model")
 
         except Exception as e:
             # Catch the re-raised exception or any other error
-            log_error(f"Error loading model: {str(e)}")
-            log_exception("Model loading failed")
+            log.error(f"Error loading model: {str(e)}")
+            log.exception("Model loading failed")
             raise  # Re-raise the exception to be caught by the execute method
 
     def preprocess_image(self, image):
@@ -922,7 +932,7 @@ class BiRefNetMatting:
 
             return image_tensor
         except Exception as e:
-            log_error(f"Error preprocessing image: {str(e)}")
+            log.error(f"Error preprocessing image: {str(e)}")
             return None
 
     def execute(self, image, model_path, threshold=0.5, refinement=1):
@@ -936,25 +946,25 @@ class BiRefNetMatting:
             else:
                 original_size = image.size[::-1]
 
-            log_debug(f"Original size: {original_size}")
+            log.debug(f"Original size: {original_size}")
 
             processed_image = self.preprocess_image(image)
             if processed_image is None:
                 raise Exception("Failed to preprocess image")
 
-            log_debug(f"Processed image shape: {processed_image.shape}")
+            log.debug(f"Processed image shape: {processed_image.shape}")
 
             with torch.no_grad():
                 outputs = self.model(processed_image)
                 result = outputs[-1].sigmoid().cpu()
-                log_debug(f"Model output shape: {result.shape}")
+                log.debug(f"Model output shape: {result.shape}")
 
                 if result.dim() == 3:
                     result = result.unsqueeze(1)  # 添加通道维度
                 elif result.dim() == 2:
                     result = result.unsqueeze(0).unsqueeze(0)  # 添加batch和通道维度
 
-                log_debug(f"Reshaped result shape: {result.shape}")
+                log.debug(f"Reshaped result shape: {result.shape}")
 
                 result = F.interpolate(
                     result,
@@ -962,7 +972,7 @@ class BiRefNetMatting:
                     mode='bilinear',
                     align_corners=True
                 )
-                log_debug(f"Resized result shape: {result.shape}")
+                log.debug(f"Resized result shape: {result.shape}")
 
                 result = result.squeeze()  # 移除多余的维度
                 ma = torch.max(result)
@@ -1018,7 +1028,7 @@ async def check_matting_model(request):
 
         if local_model_path:
             # Model files exist, assume it's ready
-            log_info(f"BiRefNet model files detected at {local_model_path}")
+            log.info(f"BiRefNet model files detected at {local_model_path}")
             return web.json_response({
                 "available": True,
                 "reason": "ready",
@@ -1027,7 +1037,7 @@ async def check_matting_model(request):
             })
         else:
             searched_paths = _get_birefnet_base_paths()
-            log_info(f"BiRefNet model not found in any of: {searched_paths}")
+            log.info(f"BiRefNet model not found in any of: {searched_paths}")
             return web.json_response({
                 "available": False,
                 "reason": "not_downloaded",
@@ -1036,7 +1046,7 @@ async def check_matting_model(request):
             })
             
     except Exception as e:
-        log_error(f"Error checking matting model: {str(e)}")
+        log.error(f"Error checking matting model: {str(e)}")
         return web.json_response({
             "available": False,
             "reason": "error",
@@ -1048,14 +1058,14 @@ async def matting(request):
     global _matting_lock
 
     if not TRANSFORMERS_AVAILABLE:
-        log_error("Matting request failed: 'transformers' library is not installed.")
+        log.error("Matting request failed: 'transformers' library is not installed.")
         return web.json_response({
             "error": "Dependency Not Found",
             "details": "The 'transformers' library is required for the matting feature. Please install it by running: pip install transformers"
         }, status=400)
 
     if _matting_lock is not None:
-        log_warn("Matting already in progress, rejecting request")
+        log.warning("Matting already in progress, rejecting request")
         return web.json_response({
             "error": "Another matting operation is in progress",
             "details": "Please wait for the current operation to complete"
@@ -1063,13 +1073,13 @@ async def matting(request):
 
     _matting_lock = True
     try:
-        log_info("Received matting request")
+        log.info("Received matting request")
         data = await request.json()
 
         matting_instance = BiRefNetMatting()
 
         image_tensor, original_alpha = convert_base64_to_tensor(data["image"])
-        log_debug(f"Input image shape: {image_tensor.shape}")
+        log.debug(f"Input image shape: {image_tensor.shape}")
 
         matted_image, alpha_mask = matting_instance.execute(
             image_tensor,
@@ -1087,19 +1097,19 @@ async def matting(request):
         })
 
     except RequestsConnectionError as e:
-        log_error(f"Connection error during matting model download: {e}")
+        log.error(f"Connection error during matting model download: {e}")
         return web.json_response({
             "error": "Network Connection Error",
             "details": "Failed to download the matting model from Hugging Face. Please check your internet connection."
         }, status=400)
     except RuntimeError as e:
-        log_error(f"Runtime error during matting: {e}")
+        log.error(f"Runtime error during matting: {e}")
         return web.json_response({
             "error": "Matting Model Error",
             "details": str(e)
         }, status=500)
     except Exception as e:
-        log_exception(f"Error in matting endpoint: {e}")
+        log.exception(f"Error in matting endpoint: {e}")
         # Check for offline error message from Hugging Face
         if "Offline mode is enabled" in str(e) or "Can't load 'ZhengPeng7/BiRefNet' offline" in str(e):
             return web.json_response({
@@ -1113,7 +1123,7 @@ async def matting(request):
         }, status=500)
     finally:
         _matting_lock = None
-        log_debug("Matting lock released")
+        log.debug("Matting lock released")
 
 
 def convert_base64_to_tensor(base64_str):
@@ -1146,7 +1156,7 @@ def convert_base64_to_tensor(base64_str):
         return img_tensor, None
 
     except Exception as e:
-        log_error(f"Error in convert_base64_to_tensor: {str(e)}")
+        log.error(f"Error in convert_base64_to_tensor: {str(e)}")
         raise
 
 
@@ -1193,6 +1203,6 @@ def convert_tensor_to_base64(tensor, alpha_mask=None, original_alpha=None):
         return f"data:image/png;base64,{img_str}"
 
     except Exception as e:
-        log_error(f"Error in convert_tensor_to_base64: {str(e)}")
-        log_debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
+        log.error(f"Error in convert_tensor_to_base64: {str(e)}")
+        log.debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")
         raise

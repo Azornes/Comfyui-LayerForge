@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { createModuleLogger } from "./log_system/log_funcs.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { createCanvas } from "./utils/CommonUtils.js";
 import { addStylesheet, getUrl } from "./utils/ResourceManager.js";

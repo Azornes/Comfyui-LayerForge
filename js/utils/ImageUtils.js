@@ -1,4 +1,4 @@
-import { createModuleLogger } from "./LoggerUtils.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import { createCanvas } from "./CommonUtils.js";
 const log = createModuleLogger('ImageUtils');
