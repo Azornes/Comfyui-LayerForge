@@ -1,6 +1,6 @@
 torch
 torchvision
-transformers
+huggingface_hub
 aiohttp
 numpy
 tqdm

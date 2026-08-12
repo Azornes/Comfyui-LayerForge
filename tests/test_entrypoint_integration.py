@@ -63,16 +63,6 @@ def _install_runtime_stubs(monkeypatch, tmp_path):
     torchvision.transforms = SimpleNamespace(ToTensor=ToTensor)
     monkeypatch.setitem(sys.modules, "torchvision", torchvision)
 
-    transformers = ModuleType("transformers")
-
-    class PretrainedConfig:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-
-    transformers.PretrainedConfig = PretrainedConfig
-    transformers.AutoModelForImageSegmentation = SimpleNamespace()
-    monkeypatch.setitem(sys.modules, "transformers", transformers)
-
     tqdm = ModuleType("tqdm")
     tqdm.tqdm = lambda iterable, *args, **kwargs: iterable
     monkeypatch.setitem(sys.modules, "tqdm", tqdm)
@@ -204,6 +194,43 @@ def test_base64_image_conversion_preserves_rgb_and_alpha(layerforge_runtime):
     )
     roundtrip = node_module.convert_tensor_to_base64(rgb_tensor)
     assert roundtrip.startswith("data:image/png;base64,")
+
+
+def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, monkeypatch):
+    import torch
+
+    node_module = layerforge_runtime.canvas_node
+    calls = {}
+
+    class NativeBiRefNet:
+        def encode_image(self, image):
+            calls["shape"] = tuple(image.shape)
+            calls["dtype"] = image.dtype
+            return torch.full((image.shape[0], image.shape[1], image.shape[2]), 0.75)
+
+    monkeypatch.setattr(
+        node_module,
+        "_get_comfy_birefnet_loader",
+        lambda: lambda path: NativeBiRefNet(),
+    )
+    monkeypatch.setattr(
+        node_module,
+        "_ensure_birefnet_checkpoint",
+        lambda: "native-birefnet.safetensors",
+    )
+    node_module.BiRefNetMatting._model_cache.clear()
+
+    image = torch.rand((1, 3, 2, 4), dtype=torch.float32)
+    matted_image, alpha_mask = node_module.BiRefNetMatting().execute(
+        image,
+        model_path=None,
+        threshold=0,
+        refinement=1,
+    )
+
+    assert calls == {"shape": (1, 2, 4, 3), "dtype": torch.float32}
+    assert tuple(matted_image.shape) == (1, 3, 2, 4)
+    assert tuple(alpha_mask.shape) == (1, 1, 2, 4)
 
 
 def test_empty_execution_returns_comfyui_compatible_fallback_tensors(layerforge_runtime):

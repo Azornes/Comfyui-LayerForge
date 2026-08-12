@@ -400,13 +400,16 @@ async function createCanvasWidget(node, widget, app) {
                                     case 'missing_dependency':
                                         showErrorNotification(modelStatus.message, 8000);
                                         return;
+                                    case 'unsupported_comfyui':
+                                        showErrorNotification(modelStatus.message, 8000);
+                                        return;
                                     case 'not_downloaded':
-                                        showWarningNotification("The matting model needs to be downloaded first. This will happen automatically when you proceed (requires internet connection).", 5000);
+                                        showWarningNotification("The BiRefNet model will be downloaded automatically (requires internet connection).", 5000);
                                         // Ask user if they want to proceed with download
-                                        if (!confirm("The matting model needs to be downloaded (about 1GB). This is a one-time download. Do you want to proceed?")) {
+                                        if (!confirm("The BiRefNet model needs to be downloaded (about 450 MB). This is a one-time download. Do you want to proceed?")) {
                                             return;
                                         }
-                                        showInfoNotification("Downloading matting model... This may take a few minutes.", 10000);
+                                        showInfoNotification("Downloading BiRefNet model... This may take a few minutes.", 10000);
                                         break;
                                     case 'corrupted':
                                         showErrorNotification(modelStatus.message, 8000);

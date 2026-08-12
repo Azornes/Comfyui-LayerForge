@@ -10,12 +10,6 @@ import threading
 import os
 from tqdm import tqdm
 from torchvision import transforms
-try:
-    from transformers import AutoModelForImageSegmentation, PretrainedConfig
-    from requests.exceptions import ConnectionError as RequestsConnectionError
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    TRANSFORMERS_AVAILABLE = False
 import torch.nn.functional as F
 import traceback
 import uuid
@@ -62,37 +56,15 @@ except ImportError as e:
 torch.set_float32_matmul_precision('high')
 
 
-class BiRefNetConfig(PretrainedConfig):
-    model_type = "BiRefNet"
+def _get_comfy_birefnet_loader():
+    """Return ComfyUI's native BiRefNet loader when it is available."""
+    try:
+        from comfy.bg_removal_model import load
 
-    def __init__(self, bb_pretrained=False, **kwargs):
-        self.bb_pretrained = bb_pretrained
-        # Add the missing is_encoder_decoder attribute for compatibility with newer transformers
-        self.is_encoder_decoder = False
-        super().__init__(**kwargs)
-
-
-class BiRefNet(torch.nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.encoder = torch.nn.Sequential(
-            torch.nn.Conv2d(3, 64, kernel_size=3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            torch.nn.ReLU(inplace=True)
-        )
-
-        self.decoder = torch.nn.Sequential(
-            torch.nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(32, 1, kernel_size=1)
-        )
-
-    def forward(self, x):
-        features = self.encoder(x)
-        output = self.decoder(features)
-        return [output]
+        return load
+    except Exception as error:
+        log.debug(f"Native ComfyUI BiRefNet loader is unavailable: {error}")
+        return None
 
 
 class LayerForgeNode:
@@ -744,24 +716,37 @@ class LayerForgeNode:
         return None
 
 
+_BIREFNET_REPOSITORY = "ZhengPeng7/BiRefNet"
+_BIREFNET_FILENAME = "model.safetensors"
+_BIREFNET_REQUIRED_KEYS = {
+    "bb.layers.1.blocks.0.attn.relative_position_index",
+    "bb.layers.2.blocks.17.attn.qkv.weight",
+}
+
+
 def _get_birefnet_base_paths():
+    """Return native ComfyUI and legacy locations that may contain BiRefNet."""
     paths = []
+
+    get_folder_paths = getattr(folder_paths, "get_folder_paths", None)
+    if callable(get_folder_paths):
+        try:
+            paths.extend(get_folder_paths("background_removal"))
+        except (KeyError, TypeError):
+            pass
 
     comfy_models_dir = getattr(folder_paths, "models_dir", None)
     if comfy_models_dir:
-        paths.append(os.path.join(comfy_models_dir, "BiRefNet"))
-
-    legacy_models_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "models",
-        "BiRefNet"
-    )
-    paths.append(legacy_models_dir)
+        paths.extend([
+            os.path.join(comfy_models_dir, "background_removal"),
+            os.path.join(comfy_models_dir, "RMBG", "BiRefNet"),
+            os.path.join(comfy_models_dir, "BiRefNet"),
+        ])
 
     unique_paths = []
     seen = set()
     for path in paths:
-        normalized = os.path.normpath(path)
+        normalized = os.path.normcase(os.path.normpath(path))
         if normalized not in seen:
             seen.add(normalized)
             unique_paths.append(path)
@@ -769,236 +754,217 @@ def _get_birefnet_base_paths():
     return unique_paths
 
 
-def _is_valid_birefnet_model_dir(path):
-    if not os.path.isdir(path):
+def _is_native_birefnet_checkpoint(path):
+    """Check the checkpoint signature without loading all weights into memory."""
+    if not os.path.isfile(path) or not path.lower().endswith(".safetensors"):
         return False
 
     try:
-        files = os.listdir(path)
-    except OSError:
+        from safetensors import safe_open
+
+        with safe_open(path, framework="pt") as checkpoint:
+            keys = checkpoint.keys()
+            return _BIREFNET_REQUIRED_KEYS.issubset(keys)
+    except Exception as error:
+        log.debug(f"Unable to inspect BiRefNet checkpoint {path}: {error}")
         return False
 
-    has_config = "config.json" in files
-    has_model = "model.safetensors" in files or "pytorch_model.bin" in files
-    has_backbone = "backbone_swin.pth" in files or "swin_base_patch4_window12_384_22kto1k.pth" in files
-    has_birefnet = "birefnet.pth" in files or any(f.endswith(".pth") for f in files)
 
-    return has_config and (has_model or has_backbone or has_birefnet)
-
-
-def _find_local_birefnet_model():
+def _iter_birefnet_checkpoint_paths():
+    """Yield candidate checkpoints from native and legacy model directories."""
     for base_path in _get_birefnet_base_paths():
         if not os.path.isdir(base_path):
             continue
 
-        if _is_valid_birefnet_model_dir(base_path):
-            return base_path
+        for root, directories, files in os.walk(base_path):
+            directories[:] = [
+                directory for directory in directories
+                if directory not in {".git", ".no_exist", "__pycache__"}
+            ]
+            for filename in sorted(files):
+                if filename.lower().endswith(".safetensors"):
+                    yield os.path.join(root, filename)
 
-        try:
-            existing_items = os.listdir(base_path)
-        except OSError:
+
+def _find_local_birefnet_model():
+    """Find a full BiRefNet checkpoint accepted by ComfyUI's native loader."""
+    candidates = []
+    seen = set()
+    for path in _iter_birefnet_checkpoint_paths():
+        normalized = os.path.normcase(os.path.normpath(path))
+        if normalized in seen:
             continue
+        seen.add(normalized)
+        if _is_native_birefnet_checkpoint(path):
+            candidates.append(path)
 
-        model_subdirs = [
-            d for d in existing_items
-            if os.path.isdir(os.path.join(base_path, d)) and
-            (d.startswith("models--") or d == "ZhengPeng7--BiRefNet")
-        ]
+    if not candidates:
+        return None
 
-        for subdir in model_subdirs:
-            snapshots_path = os.path.join(base_path, subdir, "snapshots")
-            if not os.path.isdir(snapshots_path):
-                continue
+    priority = {
+        "birefnet.safetensors": 0,
+        "model.safetensors": 1,
+        "birefnet-general.safetensors": 2,
+        "birefnet-hr.safetensors": 3,
+    }
+    return min(
+        candidates,
+        key=lambda path: (priority.get(os.path.basename(path).lower(), 10), path.lower()),
+    )
 
-            try:
-                snapshot_dirs = os.listdir(snapshots_path)
-            except OSError:
-                continue
 
-            for snapshot in snapshot_dirs:
-                snapshot_path = os.path.join(snapshots_path, snapshot)
-                if _is_valid_birefnet_model_dir(snapshot_path):
-                    return snapshot_path
+def _get_birefnet_download_dir():
+    paths = _get_birefnet_base_paths()
+    if not paths:
+        raise RuntimeError("ComfyUI did not expose a background_removal model directory")
 
-    return None
+    download_dir = paths[0]
+    os.makedirs(download_dir, exist_ok=True)
+    return download_dir
+
+
+def _download_birefnet_checkpoint():
+    """Download the standard full BiRefNet checkpoint into ComfyUI's model path."""
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as error:
+        raise RuntimeError(
+            "Automatic BiRefNet download requires the 'huggingface_hub' package. "
+            "Install the LayerForge requirements or place a compatible checkpoint in "
+            "ComfyUI/models/background_removal/."
+        ) from error
+
+    download_dir = _get_birefnet_download_dir()
+    log.info(f"Downloading BiRefNet from Hugging Face into {download_dir}...")
+
+    try:
+        downloaded_path = hf_hub_download(
+            repo_id=_BIREFNET_REPOSITORY,
+            filename=_BIREFNET_FILENAME,
+            local_dir=download_dir,
+            local_dir_use_symlinks=False,
+        )
+    except TypeError:
+        # Older huggingface_hub versions do not accept local_dir_use_symlinks.
+        downloaded_path = hf_hub_download(
+            repo_id=_BIREFNET_REPOSITORY,
+            filename=_BIREFNET_FILENAME,
+            local_dir=download_dir,
+        )
+
+    if not _is_native_birefnet_checkpoint(downloaded_path):
+        raise RuntimeError(
+            f"Downloaded file is not a ComfyUI-compatible BiRefNet checkpoint: {downloaded_path}"
+        )
+
+    log.info(f"BiRefNet checkpoint is ready at {downloaded_path}")
+    return downloaded_path
+
+
+def _ensure_birefnet_checkpoint():
+    return _find_local_birefnet_model() or _download_birefnet_checkpoint()
 
 
 class BiRefNetMatting:
+    _model_cache = {}
+    _model_cache_lock = threading.Lock()
+
     def __init__(self):
         self.model = None
         self.model_path = None
-        self.model_cache = {}
-        self.base_paths = _get_birefnet_base_paths()
 
-    def load_model(self, model_path):
-        from json.decoder import JSONDecodeError
-        try:
-            if model_path not in self.model_cache:
-                local_model_path = _find_local_birefnet_model()
-                cache_dir = self.base_paths[0] if self.base_paths else None
+    def load_model(self, model_path=None):
+        del model_path  # The native loader resolves the actual checkpoint path below.
+        loader = _get_comfy_birefnet_loader()
+        if loader is None:
+            raise RuntimeError(
+                "This ComfyUI version does not provide the native BiRefNet background-removal loader."
+            )
 
-                if local_model_path:
-                    log.info(f"Loading BiRefNet model from local path {local_model_path}...")
-                    try:
-                        self.model = AutoModelForImageSegmentation.from_pretrained(
-                            local_model_path,
-                            trust_remote_code=True
-                        )
-                        self.model.eval()
-                        if torch.cuda.is_available():
-                            self.model = self.model.cuda()
-                        self.model_cache[model_path] = self.model
-                        log.info("Model loaded successfully from local disk")
-                        return
-                    except Exception as local_error:
-                        log.warning(f"Failed to load local BiRefNet model from {local_model_path}: {str(local_error)}")
-                        log.info("Falling back to Hugging Face model loading")
-
-                full_model_path = cache_dir or "BiRefNet"
-                log.info(f"Loading BiRefNet model from Hugging Face cache {full_model_path}...")
-                try:
-                    # Try loading with additional configuration to handle compatibility issues
-                    self.model = AutoModelForImageSegmentation.from_pretrained(
-                        "ZhengPeng7/BiRefNet",
-                        trust_remote_code=True,
-                        cache_dir=cache_dir,
-                        # Add force_download=False to use cached version if available
-                        force_download=False,
-                        # Add local_files_only=False to allow downloading if needed
-                        local_files_only=False
+        checkpoint_path = _ensure_birefnet_checkpoint()
+        with self._model_cache_lock:
+            if checkpoint_path not in self._model_cache:
+                log.info(f"Loading BiRefNet with ComfyUI's native loader from {checkpoint_path}")
+                model = loader(checkpoint_path)
+                if model is None:
+                    raise RuntimeError(
+                        f"ComfyUI did not recognize the BiRefNet checkpoint: {checkpoint_path}"
                     )
-                    self.model.eval()
-                    if torch.cuda.is_available():
-                        self.model = self.model.cuda()
-                    self.model_cache[model_path] = self.model
-                    log.info("Model loaded successfully from Hugging Face")
-                except AttributeError as e:
-                    if "'Config' object has no attribute 'is_encoder_decoder'" in str(e):
-                        log.error("Compatibility issue detected with transformers library. This has been fixed in the code.")
-                        log.error("If you're still seeing this error, please clear the model cache and try again.")
-                        raise RuntimeError(
-                            "Model configuration compatibility issue detected. "
-                            f"Please delete the model cache directory '{full_model_path}' and restart ComfyUI. "
-                            "This will download a fresh copy of the model with the updated configuration."
-                        ) from e
-                    else:
-                        raise e
-                except JSONDecodeError as e:                    
-                    log.error(f"JSONDecodeError: Failed to load model from {full_model_path}. The model's config.json may be corrupted.")
-                    raise RuntimeError(
-                        "The matting model's configuration file (config.json) appears to be corrupted. "
-                        f"Please manually delete the directory '{full_model_path}' and try again. "
-                        "This will force a fresh download of the model."
-                    ) from e
-                except Exception as e:
-                    log.error(f"Failed to load model from Hugging Face: {str(e)}")
-                    # Re-raise with a more informative message
-                    raise RuntimeError(
-                        "Failed to download or load the matting model. "
-                        "This could be due to a network issue, file permissions, or a corrupted model cache. "
-                        f"Please check your internet connection and the model cache path: {full_model_path}. "
-                        f"Original error: {str(e)}"
-                    ) from e
+                self._model_cache[checkpoint_path] = model
             else:
-                self.model = self.model_cache[model_path]
-                log.debug("Using cached model")
+                log.debug(f"Using cached native BiRefNet model from {checkpoint_path}")
 
-        except Exception as e:
-            # Catch the re-raised exception or any other error
-            log.error(f"Error loading model: {str(e)}")
-            log.exception("Model loading failed")
-            raise  # Re-raise the exception to be caught by the execute method
+            self.model = self._model_cache[checkpoint_path]
+            self.model_path = checkpoint_path
+
+        return self.model
 
     def preprocess_image(self, image):
+        if not isinstance(image, torch.Tensor):
+            image = transforms.ToTensor()(image).unsqueeze(0)
 
-        try:
+        if image.dim() == 3:
+            if image.shape[0] in (1, 3, 4):
+                image = image.movedim(0, -1).unsqueeze(0)
+            else:
+                image = image.unsqueeze(0)
+        elif image.dim() == 4 and image.shape[1] in (1, 3, 4):
+            image = image.movedim(1, -1)
 
-            if isinstance(image, torch.Tensor):
-                if image.dim() == 4:
-                    image = image.squeeze(0)
-                if image.dim() == 3:
-                    image = transforms.ToPILImage()(image)
+        if image.dim() != 4 or image.shape[-1] not in (1, 3, 4):
+            raise ValueError(f"Expected an image tensor in BCHW or BHWC format, got {tuple(image.shape)}")
 
-            transform_image = transforms.Compose([
-                transforms.Resize((1024, 1024)),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
+        if image.shape[-1] == 1:
+            image = image.expand(-1, -1, -1, 3)
+        elif image.shape[-1] == 4:
+            image = image[..., :3]
 
-            image_tensor = transform_image(image).unsqueeze(0)
-
-            if torch.cuda.is_available():
-                image_tensor = image_tensor.cuda()
-
-            return image_tensor
-        except Exception as e:
-            log.error(f"Error preprocessing image: {str(e)}")
-            return None
+        return image.to(dtype=torch.float32).contiguous()
 
     def execute(self, image, model_path, threshold=0.5, refinement=1):
         try:
             PromptServer.instance.send_sync("matting_status", {"status": "processing"})
 
-            self.load_model(model_path)
-
-            if isinstance(image, torch.Tensor):
-                original_size = image.shape[-2:] if image.dim() == 4 else image.shape[-2:]
-            else:
-                original_size = image.size[::-1]
-
+            del refinement
+            image_tensor = self.preprocess_image(image)
+            original_size = (image_tensor.shape[1], image_tensor.shape[2])
             log.debug(f"Original size: {original_size}")
-
-            processed_image = self.preprocess_image(image)
-            if processed_image is None:
-                raise Exception("Failed to preprocess image")
-
-            log.debug(f"Processed image shape: {processed_image.shape}")
+            self.load_model(model_path)
+            log.debug(f"Processed image shape: {image_tensor.shape}, dtype: {image_tensor.dtype}")
 
             with torch.no_grad():
-                outputs = self.model(processed_image)
-                result = outputs[-1].sigmoid().cpu()
-                log.debug(f"Model output shape: {result.shape}")
-
+                result = self.model.encode_image(image_tensor)
                 if result.dim() == 3:
-                    result = result.unsqueeze(1)  # 添加通道维度
+                    result = result.unsqueeze(1)
                 elif result.dim() == 2:
-                    result = result.unsqueeze(0).unsqueeze(0)  # 添加batch和通道维度
+                    result = result.unsqueeze(0).unsqueeze(0)
+                else:
+                    raise ValueError(f"Unexpected BiRefNet output shape: {tuple(result.shape)}")
 
-                log.debug(f"Reshaped result shape: {result.shape}")
-
-                result = F.interpolate(
-                    result,
-                    size=(original_size[0], original_size[1]),  # 明确指定高度和宽度
-                    mode='bilinear',
-                    align_corners=True
-                )
-                log.debug(f"Resized result shape: {result.shape}")
-
-                result = result.squeeze()  # 移除多余的维度
-                ma = torch.max(result)
-                mi = torch.min(result)
-                result = (result - mi) / (ma - mi)
+                result = result.to(device=image_tensor.device, dtype=torch.float32)
+                if result.shape[-2:] != original_size:
+                    result = F.interpolate(
+                        result,
+                        size=original_size,
+                        mode="bilinear",
+                        align_corners=False,
+                    )
+                result = result.clamp(0.0, 1.0)
+                log.debug(f"Native BiRefNet output shape: {result.shape}, dtype: {result.dtype}")
 
                 if threshold > 0:
-                    result = (result > threshold).float()
+                    result = (result > threshold).to(dtype=torch.float32)
 
-                alpha_mask = result.unsqueeze(0).unsqueeze(0)  # 确保mask是 [1, 1, H, W]
-                if isinstance(image, torch.Tensor):
-                    if image.dim() == 3:
-                        image = image.unsqueeze(0)
-                    masked_image = image * alpha_mask
-                else:
-                    image_tensor = transforms.ToTensor()(image).unsqueeze(0)
-                    masked_image = image_tensor * alpha_mask
+                alpha_mask = result
+                masked_image = image_tensor.movedim(-1, 1) * alpha_mask
 
                 PromptServer.instance.send_sync("matting_status", {"status": "completed"})
 
                 return (masked_image, alpha_mask)
 
-        except Exception as e:
-
+        except Exception:
             PromptServer.instance.send_sync("matting_status", {"status": "error"})
-            raise e
+            raise
 
     @classmethod
     def IS_CHANGED(cls, image, model_path, threshold, refinement):
@@ -1010,24 +976,23 @@ class BiRefNetMatting:
         m.update(str(refinement).encode())
         return m.hexdigest()
 
+
 _matting_lock = None
 
 @PromptServer.instance.routes.get("/matting/check-model")
 async def check_matting_model(request):
     """Check if the matting model is available and ready to use"""
     try:
-        if not TRANSFORMERS_AVAILABLE:
+        if _get_comfy_birefnet_loader() is None:
             return web.json_response({
                 "available": False,
-                "reason": "missing_dependency",
-                "message": "The 'transformers' library is required for the matting feature. Please install it by running: pip install transformers"
+                "reason": "unsupported_comfyui",
+                "message": "This ComfyUI version does not provide the native BiRefNet background-removal loader."
             })
-        
-        # Check if model exists in cache
+
         local_model_path = _find_local_birefnet_model()
 
         if local_model_path:
-            # Model files exist, assume it's ready
             log.info(f"BiRefNet model files detected at {local_model_path}")
             return web.json_response({
                 "available": True,
@@ -1035,16 +1000,16 @@ async def check_matting_model(request):
                 "message": "Model is ready to use",
                 "model_path": local_model_path
             })
-        else:
-            searched_paths = _get_birefnet_base_paths()
-            log.info(f"BiRefNet model not found in any of: {searched_paths}")
-            return web.json_response({
-                "available": False,
-                "reason": "not_downloaded",
-                "message": "The matting model needs to be downloaded. This will happen automatically when you first use the matting feature (requires internet connection).",
-                "model_path": searched_paths[0] if searched_paths else None
-            })
-            
+
+        searched_paths = _get_birefnet_base_paths()
+        log.info(f"BiRefNet model not found in any of: {searched_paths}")
+        return web.json_response({
+            "available": False,
+            "reason": "not_downloaded",
+            "message": "The BiRefNet checkpoint will be downloaded automatically on first use (requires internet connection).",
+            "model_path": searched_paths[0] if searched_paths else None
+        })
+
     except Exception as e:
         log.error(f"Error checking matting model: {str(e)}")
         return web.json_response({
@@ -1056,13 +1021,6 @@ async def check_matting_model(request):
 @PromptServer.instance.routes.post("/matting")
 async def matting(request):
     global _matting_lock
-
-    if not TRANSFORMERS_AVAILABLE:
-        log.error("Matting request failed: 'transformers' library is not installed.")
-        return web.json_response({
-            "error": "Dependency Not Found",
-            "details": "The 'transformers' library is required for the matting feature. Please install it by running: pip install transformers"
-        }, status=400)
 
     if _matting_lock is not None:
         log.warning("Matting already in progress, rejecting request")
@@ -1096,12 +1054,6 @@ async def matting(request):
             "alpha_mask": result_mask
         })
 
-    except RequestsConnectionError as e:
-        log.error(f"Connection error during matting model download: {e}")
-        return web.json_response({
-            "error": "Network Connection Error",
-            "details": "Failed to download the matting model from Hugging Face. Please check your internet connection."
-        }, status=400)
     except RuntimeError as e:
         log.error(f"Runtime error during matting: {e}")
         return web.json_response({
@@ -1110,11 +1062,14 @@ async def matting(request):
         }, status=500)
     except Exception as e:
         log.exception(f"Error in matting endpoint: {e}")
-        # Check for offline error message from Hugging Face
-        if "Offline mode is enabled" in str(e) or "Can't load 'ZhengPeng7/BiRefNet' offline" in str(e):
+        error_text = str(e).lower()
+        if any(
+            marker in error_text
+            for marker in ("offline", "connection", "timed out", "huggingface", "localentrynotfound")
+        ):
             return web.json_response({
                 "error": "Network Connection Error",
-                "details": "Failed to download the matting model from Hugging Face. Please check your internet connection and ensure you are not in offline mode."
+                "details": "Failed to download the BiRefNet model from Hugging Face. Please check your internet connection."
             }, status=400)
 
         return web.json_response({

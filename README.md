@@ -231,7 +231,9 @@ optional feature and requires a model.
     >
 - [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet/tree/main) (Recommended)
 - [Google Drive](https://drive.google.com/drive/folders/1BCLInCLH89fmTpYoP8Sgs_Eqww28f_wq?usp=sharing)
-> - **Installation Path**: Place the model file in `ComfyUI/models/BiRefNet/`.
+> - **Installation Path**: Place a full BiRefNet checkpoint in `ComfyUI/models/background_removal/`.
+> - **Automatic download**: If no compatible checkpoint is found, LayerForge downloads the standard full BiRefNet checkpoint automatically on first use.
+> - **Compatibility**: LayerForge uses ComfyUI's native BiRefNet loader, so the checkpoint must use the full BiRefNet architecture. The `lite-*` variants are not compatible with this native loader.
 
 ---
 
