@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "es6",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./js",
+    "rootDir": "./src",
+    "moduleResolution": "node",
+    "lib": ["es2020", "dom", "dom.iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "../../scripts/app.js": ["./__mocks__/app.js"],
+      "../../scripts/api.js": ["./__mocks__/api.js"],
+      "../../scripts/ui.js": ["./__mocks__/ui.js"],
+      "./*.js": ["./src/*.ts"],
+      "./utils/*.js": ["./src/utils/*.ts"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

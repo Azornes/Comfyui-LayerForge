@@ -3,12 +3,68 @@ name = "layerforge"
 description = "Photoshop-like layered canvas editor to your ComfyUI workflow. This node is perfect for complex compositing, inpainting, and outpainting, featuring multi-layer support, masking, blend modes, and precise transformations. Includes optional AI-powered background removal for streamlined image editing."
 version = "1.5.13"
 license = { text = "MIT License" }
+requires-python = ">=3.10"
 dependencies = ["torch", "torchvision", "transformers", "aiohttp", "numpy", "tqdm", "Pillow"]
 
 [project.urls]
 Repository = "https://github.com/Azornes/Comfyui-LayerForge"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-cov>=5.0,<8.0",
+    "coverage>=7.0,<8.0",
+    "ruff>=0.9,<1.0",
+]
+
 [tool.comfy]
 PublisherId = "azornes"
 DisplayName = "Comfyui-LayerForge"
 Icon = ""
+
+# ---------------------------------------------------------------------------
+# Ruff – static analysis for Python
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "SIM", "UP", "RUF"]
+ignore = [
+    "E501",     # Existing ComfyUI-facing messages and route declarations are intentionally long.
+    "E402",     # The ComfyUI entry point requires its import order.
+    "W293",     # Preserve existing CRLF/whitespace formatting in legacy files.
+    "B023",     # Callback closures intentionally capture loop variables in existing code.
+    "SIM105",   # Explicit exception handling is clearer in some runtime paths.
+    "SIM108",   # Readability preference for existing conditionals.
+    "UP006",    # Keep typing syntax compatible with the current runtime.
+    "UP035",    # Deprecated typing imports are retained for compatibility.
+    "RUF013",   # Existing APIs use implicit optional values.
+    "UP045",    # Existing APIs use Optional-style annotations.
+    "UP038",    # Existing isinstance tuple patterns are intentional.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402", "F811", "I001"]
+"canvas_node.py" = ["F401", "F811", "F541", "E731", "I001", "RUF010", "RUF012", "RUF034", "SIM102", "W291"]
+"python/logger.py" = ["F401", "I001", "SIM910", "UP008", "UP032"]
+"tests/*" = ["B011", "I001", "SIM300"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["python"]
+
+# ---------------------------------------------------------------------------
+# Coverage – developer-only test reporting
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["python"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

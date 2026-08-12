@@ -1,0 +1,90 @@
+# systemowe
+.DS_Store
+Thumbs.db
+
+# edytory
+.vscode/
+.idea/
+*.code-workspace
+
+# system node-based (jeśli generuje cache)
+cache/
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# obrazy tymczasowe
+*.jpeg
+
+# build / temp
+dist/
+build/
+temp/
+tmp/
+
+# logs
+*.log
+
+# zapisane sesje przeglądarki / debug
+*.bak
+*.swp
+*.tmp
+
+*.txt
+Zbierz
+.gitignore
+*~
+*.zip
+.qodo
+venv
+venv/*
+.venv/
+tsconfig.json
+src_web
+src_web/*
+Media
+Media/*
+config.json
+js/config.js
+python/config.py
+node_modules/
+
+
+# Pliki lock (opcjonalnie, jeśli nie chcesz commitować lockfile, ale często warto go trzymać w repo)
+package-lock.json
+package.json
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+.eslintrc.json
+eslint.config.mjs
+scripts/
+build.bat
+# memory-bank/
+.VSCODECounter
+AGENTS.md
+
+# Test reports and local test caches
+.coverage
+coverage*.xml
+coverage/
+htmlcov/
+.nyc_output/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.nox/
+*.tsbuildinfo
+
+# Development and test tooling is part of the repository contract.
+!requirements.txt
+!package.json
+!package-lock.json
+!tsconfig.json
+src/tsconfig.json
+!eslint.config.mjs
+!build.bat
+!.gitignore

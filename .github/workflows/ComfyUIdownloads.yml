@@ -1,143 +1,365 @@
-name: LayerForge Top Downloads Badge
+# Reusable workflow
+#
+# Project metadata is read from pyproject.toml and the Comfy Registry API.
+# No project-specific repository variables need to be configured manually.
+# The workflow creates and maintains this internal repository variable automatically:
+#   COMFY_DOWNLOADS_GIST_ID
+#
+# Required repository secret:
+#   SECRET_TOKEN   Fine-grained personal access token with access to this repository:
+#                  Repository permissions:
+#                    Variables: Read and write
+#                  Account permissions:
+#                    Gists: Read and write
+
+name: ComfyUI Top Downloads Badge
 
 on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: badge-updates-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  COMFY_DOWNLOADS_GIST_ID: ${{ vars.COMFY_DOWNLOADS_GIST_ID }}
+  BADGE_DOC: badges/DOWNLOADS.md
+  DATA_FILE: comfyui_downloads.json
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v7
 
-      - name: gh login
-        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
-
-      - name: Query LayerForge API 20 times and find top download
+      - name: Read project metadata and validate authentication
+        id: project
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
-          max_downloads=0
-          top_node_json="{}"
-          
-          for i in {1..3}; do
-            echo "Pobieranie danych z próby $i..."
-            curl -s https://api.comfy.org/nodes/layerforge > tmp_$i.json
-            
-            if [ ! -s tmp_$i.json ] || ! jq empty tmp_$i.json 2>/dev/null; then
-              echo "Błąd: Nieprawidłowy JSON dla próby $i"
-              continue
-            fi
-            
-            if jq -e 'type == "array"' tmp_$i.json >/dev/null; then
-              # Przeszukanie wszystkich węzłów w tablicy
-              node_count=$(jq 'length' tmp_$i.json)
-              echo "Znaleziono $node_count węzłów w próbie $i"
-              
-              for j in $(seq 0 $((node_count - 1))); do
-                downloads=$(jq -r ".[$j].downloads // 0" tmp_$i.json)
-                name=$(jq -r ".[$j].name // \"\"" tmp_$i.json)
-                
-                if [ "$downloads" -gt "$max_downloads" ]; then
-                  max_downloads=$downloads
-                  top_node_json=$(jq ".[$j]" tmp_$i.json)
-                  echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
-                fi
-              done
-            else
-              downloads=$(jq -r '.downloads // 0' tmp_$i.json)
-              name=$(jq -r '.name // ""' tmp_$i.json)
-              
-              if [ "$downloads" -gt "$max_downloads" ]; then
-                max_downloads=$downloads
-                top_node_json=$(cat tmp_$i.json)
-                echo "Nowe maksimum znalezione: $downloads (węzeł: $name)"
-              fi
-            fi
-            
-            rm -f tmp_$i.json
-          done
-          
-          if [ "$max_downloads" -gt 0 ]; then
-            echo "$top_node_json" > top_layerforge.json
-            echo "Najwyższa liczba pobrań: $max_downloads"
-            echo "Szczegóły węzła:"
-            jq . top_layerforge.json
-          else
-            echo "Błąd: Nie znaleziono żadnych prawidłowych danych"
-            # Utworzenie domyślnego JSON-a
-            echo '{"name": "No data", "downloads": 0}' > top_layerforge.json
-          fi
-
-      - name: create or update gist with top download
-        id: set_id
-        run: |
-          if gh secret list | grep -q "LAYERFORGE_GIST_ID"
-          then
-              echo "GIST_ID found"
-              echo "GIST=${{ secrets.LAYERFORGE_GIST_ID }}" >> $GITHUB_OUTPUT
-              
-              # Sprawdzenie czy gist istnieje
-              if gh gist view ${{ secrets.LAYERFORGE_GIST_ID }} &>/dev/null; then
-                echo "Gist istnieje, będzie zaktualizowany"
-              else
-                echo "Gist nie istnieje, tworzenie nowego"
-                gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
-                echo $gist_id | gh secret set LAYERFORGE_GIST_ID
-                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-              fi
-          else
-              echo "Tworzenie nowego gist"
-              gist_id=$(gh gist create top_layerforge.json | awk -F / '{print $NF}')
-              echo $gist_id | gh secret set LAYERFORGE_GIST_ID
-              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-          fi
-
-      - name: create badge if needed
-        run: |
-          COUNT=$(jq '.downloads' top_layerforge.json)
-          NAME=$(jq -r '.name' top_layerforge.json)
-          if [ ! -f LAYERFORGE.md ]; then
-            shields="https://img.shields.io/badge/dynamic/json?color=informational&label=TopLayerForge&query=downloads&url="
-            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/top_layerforge.json"
-            repo="https://comfy.org"
-            echo ''> LAYERFORGE.md
-            echo '
-            **Markdown**
-
-            ```markdown' >> LAYERFORGE.md
-            echo "[![Top LayerForge Node]($shields$url)]($repo)" >> LAYERFORGE.md
-            echo '
-            ```
-
-            **HTML**
-            ```html' >> LAYERFORGE.md
-            echo "<a href='$repo'><img alt='Top LayerForge Node' src='$shields$url'></a>" >> LAYERFORGE.md
-            echo '```' >> LAYERFORGE.md
-
-            git add LAYERFORGE.md
-            git config --global user.name "GitHub Action"
-            git config --global user.email "action@github.com"
-            git commit -m "Create LayerForge badge"
-          fi
-
-      - name: Update Gist
-        run: |
-          # Upewnienie się, że JSON jest poprawny
-          if jq empty top_layerforge.json 2>/dev/null; then
-            content=$(jq -c . top_layerforge.json)
-            echo "{\"description\": \"Top LayerForge Node\", \"files\": {\"top_layerforge.json\": {\"content\": $(jq -Rs . <<< "$content")}}}" > patch.json
-            
-            curl -s -X PATCH \
-              --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d @patch.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }}
-          else
-            echo "Błąd: Nieprawidłowy JSON w top_layerforge.json"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=Missing SECRET_TOKEN::Add a fine-grained PAT with Variables: Read and write and Gists: Read and write."
             exit 1
           fi
 
-      - name: Push
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          gh auth status
+
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from pathlib import Path
+          import tomllib
+
+          path = Path("pyproject.toml")
+          if not path.is_file():
+              raise SystemExit("pyproject.toml was not found")
+
+          with path.open("rb") as file:
+              config = tomllib.load(file)
+
+          node_id = str(config.get("project", {}).get("name", "")).strip()
+          if not node_id:
+              raise SystemExit("[project].name is missing in pyproject.toml")
+
+          print(f"node_id={node_id}")
+          PY
+
+      - name: Query Comfy Registry API and find top download
+        env:
+          COMFY_NODE_ID: ${{ steps.project.outputs.node_id }}
+        run: |
+          max_downloads=0
+          found_valid_data=false
+          top_node_json="{}"
+
+          for i in {1..3}; do
+            echo "Fetching data for attempt $i..."
+            response_file="registry_response_$i.json"
+
+            if ! curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+              -H "Accept: application/json" \
+              "https://api.comfy.org/nodes/${COMFY_NODE_ID}" > "$response_file"; then
+              echo "Error: request failed for attempt $i"
+              rm -f "$response_file"
+              continue
+            fi
+
+            if [ ! -s "$response_file" ] || ! jq empty "$response_file" 2>/dev/null; then
+              echo "Error: invalid JSON for attempt $i"
+              rm -f "$response_file"
+              continue
+            fi
+
+            if jq -e 'type == "array"' "$response_file" >/dev/null; then
+              node_count=$(jq 'length' "$response_file")
+              echo "Found $node_count nodes in attempt $i"
+
+              while IFS= read -r node_json; do
+                downloads=$(jq -r '.downloads // 0' <<< "$node_json")
+                name=$(jq -r '.name // ""' <<< "$node_json")
+
+                if ! [[ "$downloads" =~ ^[0-9]+$ ]]; then
+                  downloads=0
+                fi
+
+                if [ "$found_valid_data" = false ] || [ "$downloads" -gt "$max_downloads" ]; then
+                  found_valid_data=true
+                  max_downloads=$downloads
+                  top_node_json=$node_json
+                  echo "New maximum found: $downloads (node: $name)"
+                fi
+              done < <(jq -c '.[]' "$response_file")
+            else
+              downloads=$(jq -r '.downloads // 0' "$response_file")
+              name=$(jq -r '.name // ""' "$response_file")
+
+              if ! [[ "$downloads" =~ ^[0-9]+$ ]]; then
+                downloads=0
+              fi
+
+              if [ "$found_valid_data" = false ] || [ "$downloads" -gt "$max_downloads" ]; then
+                found_valid_data=true
+                max_downloads=$downloads
+                top_node_json=$(jq -c . "$response_file")
+                echo "New maximum found: $downloads (node: $name)"
+              fi
+            fi
+
+            rm -f "$response_file"
+          done
+
+          if [ "$found_valid_data" = false ]; then
+            echo "Error: no valid data found"
+            exit 1
+          fi
+
+          jq . <<< "$top_node_json" > "$DATA_FILE"
+          echo "Highest download count: $max_downloads"
+          jq . "$DATA_FILE"
+
+          display_name=$(jq -r '.name // .id // empty' "$DATA_FILE")
+          publisher_id=$(jq -r '.publisher.id // empty' "$DATA_FILE")
+          node_slug=$(jq -r '(.id // empty) | ascii_downcase' "$DATA_FILE")
+
+          if [ -z "$display_name" ] || [ -z "$publisher_id" ] || [ -z "$node_slug" ]; then
+            echo "::error title=Incomplete Registry response::The node name, publisher ID, or node ID is missing."
+            exit 1
+          fi
+
+          {
+            echo "COMFY_NODE_DISPLAY_NAME=$display_name"
+            echo "COMFY_PUBLISHER_ID=$publisher_id"
+            echo "COMFY_NODE_SLUG=$node_slug"
+          } >> "$GITHUB_ENV"
+
+      - name: Create or reuse downloads Gist
+        id: gist
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+        run: |
+          gist_id="$COMFY_DOWNLOADS_GIST_ID"
+          expected_description="${GITHUB_REPOSITORY} ComfyUI download statistics"
+          authenticated_user=$(gh api user --jq '.login')
+          save_gist_id=false
+          valid_gist=false
+
+          if [ -z "$gist_id" ]; then
+            gist_id=$(python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          pattern = re.compile(
+              r"query=downloads.*?url=https://gist\.githubusercontent\.com/[^/]+/([0-9a-f]+)",
+              re.IGNORECASE,
+          )
+
+          for filename in (os.environ["BADGE_DOC"], "README.md"):
+              path = Path(filename)
+              if not path.is_file():
+                  continue
+              match = pattern.search(path.read_text(encoding="utf-8"))
+              if match:
+                  print(match.group(1))
+                  break
+          PY
+            )
+
+            if [ -n "$gist_id" ]; then
+              echo "Found an existing downloads Gist in the badge documentation: $gist_id"
+              save_gist_id=true
+            fi
+          fi
+
+          if [ -n "$gist_id" ] && gh gist view "$gist_id" >/dev/null 2>&1; then
+            gist_filename=$(gh api "gists/$gist_id" --jq '
+              .files
+              | keys
+              | if index("comfyui_downloads.json") then
+                  "comfyui_downloads.json"
+                else
+                  (map(select(endswith(".json"))) | first // "comfyui_downloads.json")
+                end
+            ')
+            gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
+            gist_description=$(gh api "gists/$gist_id" --jq '.description // ""')
+            gist_node_slug=$(
+              gh api "gists/$gist_id" |
+                jq -r --arg filename "$gist_filename" '
+                  .files[$filename].content // ""
+                  | fromjson?
+                  | ((.id // empty) | ascii_downcase)
+                '
+            )
+
+            if [ "$gist_owner" = "$authenticated_user" ] &&
+              { [ "$gist_description" = "$expected_description" ] ||
+                [ "$gist_node_slug" = "$COMFY_NODE_SLUG" ]; }; then
+              valid_gist=true
+            else
+              echo "The detected Gist belongs to another repository, token owner, or ComfyUI node."
+            fi
+          fi
+
+          if [ "$valid_gist" = true ]; then
+            echo "Using existing Gist: $gist_id"
+          else
+            if [ -n "$gist_id" ]; then
+              echo "Configured Gist does not exist or is inaccessible; creating a new one."
+            else
+              echo "No Gist is configured; creating one."
+            fi
+
+            gist_url=$(gh gist create "$DATA_FILE" \
+              --desc "$expected_description")
+            gist_id="${gist_url##*/}"
+            save_gist_id=true
+          fi
+
+          if [ "$save_gist_id" = true ]; then
+            if ! gh variable set COMFY_DOWNLOADS_GIST_ID --body "$gist_id"; then
+              echo "::error title=Cannot save Gist ID::Grant SECRET_TOKEN repository Actions variables write access."
+              exit 1
+            fi
+
+            echo "Saved COMFY_DOWNLOADS_GIST_ID=$gist_id"
+          fi
+
+          gist_filename=$(gh api "gists/$gist_id" --jq '
+            .files
+            | keys
+            | if index("comfyui_downloads.json") then
+                "comfyui_downloads.json"
+              else
+                (map(select(endswith(".json"))) | first // "comfyui_downloads.json")
+              end
+          ')
+          gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
+          echo "id=$gist_id" >> "$GITHUB_OUTPUT"
+          echo "filename=$gist_filename" >> "$GITHUB_OUTPUT"
+          echo "owner=$gist_owner" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update badge document
+        id: badge
+        env:
+          GIST_ID: ${{ steps.gist.outputs.id }}
+          GIST_FILENAME: ${{ steps.gist.outputs.filename }}
+          GIST_OWNER: ${{ steps.gist.outputs.owner }}
+        run: |
+          mkdir -p "$(dirname "$BADGE_DOC")"
+
+          badge_label=$(jq -rn --arg value "$COMFY_NODE_DISPLAY_NAME" '$value | @uri')
+          registry_url="https://registry.comfy.org/publishers/${COMFY_PUBLISHER_ID}/nodes/${COMFY_NODE_SLUG}"
+          gist_url="https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw/${GIST_FILENAME}"
+          shields="https://img.shields.io/badge/dynamic/json?color=informational&label=${badge_label}&query=downloads&url="
+          shields_for_the_badge="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=${badge_label}&query=downloads&url="
+          comfy_badge="https://img.shields.io/badge/ComfyUI-1a1a1a?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAASFBMVEVHcEwYLtsYLtkXLtkXLdkYLtkWLdcFIdoAD95uerfI1XLR3mq3xIP8/yj0/zvw/0FSYMP5/zKMmKQtPNOuuozj8FOhrZW7x4FMWFFbAAAABnRSTlMAUrPX87KxijklAAAA00lEQVR4AX3SBw6DMAxA0UzbrIzO+9+02GkEpoWP9hPZZs06Hw75aI3k4W/+wkQtnGZNhF1I34BzalQcxkmasY0b9raklNcvLYU1GNiiOeVWauOa/XS526gRyzpV/7HeUOG9Jp6vcsvUrCPeKg/3KBKBQhoTD1dQggPWzPVfFOIgo85/kR4y6oB/8SlIEh7wvmTuKd3wgLVW1sTfRBoR7oWVqy/U2NcrWDYMINE7NUuJuoV+2fhaWmnbjzcOWnRv7XbiLh/Y9dNUqk2y0QcNwTu7wgf+/BhsPUhf4QAAAABJRU5ErkJggg=="
+          combined_downloads="https://img.shields.io/badge/dynamic/json?color=%230D2A4A&label=&query=downloads&url="
+
+          {
+            echo "**Markdown**"
+            echo
+            echo '```markdown'
+            echo "[![${COMFY_NODE_DISPLAY_NAME}](${shields}${gist_url})](${registry_url})"
+            echo '```'
+            echo
+            echo "[![${COMFY_NODE_DISPLAY_NAME}](${shields}${gist_url})](${registry_url})"
+            echo
+            echo "**HTML**"
+            echo
+            echo '```html'
+            echo "<a href='${registry_url}'><img alt='${COMFY_NODE_DISPLAY_NAME}' src='${shields}${gist_url}'></a>"
+            echo '```'
+            echo
+            echo "<a href='${registry_url}'><img alt='${COMFY_NODE_DISPLAY_NAME}' src='${shields}${gist_url}'></a>"
+            echo
+            echo "**HTML (for-the-badge)**"
+            echo
+            echo '```html'
+            echo "<a href='${registry_url}'><img alt='${COMFY_NODE_DISPLAY_NAME}' src='${shields_for_the_badge}${gist_url}&style=for-the-badge'></a>"
+            echo '```'
+            echo
+            echo "<a href='${registry_url}'><img alt='${COMFY_NODE_DISPLAY_NAME}' src='${shields_for_the_badge}${gist_url}&style=for-the-badge'></a>"
+            echo
+            echo "**Combined Markdown (for-the-badge)**"
+            echo
+            echo '```markdown'
+            echo "[![ComfyUI](${comfy_badge})![Downloads](${combined_downloads}${gist_url}&style=for-the-badge)](${registry_url})"
+            echo '```'
+            echo
+            echo "[![ComfyUI](${comfy_badge})![Downloads](${combined_downloads}${gist_url}&style=for-the-badge)](${registry_url})"
+            echo
+            echo "**Combined HTML (for-the-badge)**"
+            echo
+            echo '```html'
+            echo "<a href='${registry_url}'><img alt='ComfyUI' src='${comfy_badge}'><img alt='Downloads' src='${combined_downloads}${gist_url}&style=for-the-badge'></a>"
+            echo '```'
+            echo
+            echo "<a href='${registry_url}'><img alt='ComfyUI' src='${comfy_badge}'><img alt='Downloads' src='${combined_downloads}${gist_url}&style=for-the-badge'></a>"
+          } > "$BADGE_DOC"
+
+          if [ -n "$(git status --porcelain -- "$BADGE_DOC")" ]; then
+            git add "$BADGE_DOC"
+            git config user.name "GitHub Action"
+            git config user.email "action@github.com"
+            git commit -m "Create or update ComfyUI downloads badge"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Badge document is already up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Gist
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+          GIST_ID: ${{ steps.gist.outputs.id }}
+          GIST_FILENAME: ${{ steps.gist.outputs.filename }}
+        run: |
+          if ! jq empty "$DATA_FILE" 2>/dev/null; then
+            echo "Error: invalid JSON in $DATA_FILE"
+            exit 1
+          fi
+
+          content=$(jq -c . "$DATA_FILE")
+          jq -n \
+            --arg description "${GITHUB_REPOSITORY} ComfyUI download statistics" \
+            --arg filename "$GIST_FILENAME" \
+            --arg content "$content" \
+            '{
+              description: $description,
+              files: {
+                ($filename): {
+                  content: $content
+                }
+              }
+            }' > gist_patch.json
+
+          gh api --method PATCH "gists/${GIST_ID}" --input gist_patch.json >/dev/null
+
+      - name: Push badge document
+        if: steps.badge.outputs.changed == 'true'
+        run: git push

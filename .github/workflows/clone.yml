@@ -1,90 +1,286 @@
-name: GitHub Clone Count Update Everyday
+# Reusable workflow
+#
+# No project-specific repository variables need to be configured manually.
+# The workflow creates and maintains this internal repository variable automatically:
+#   COMFY_CLONES_GIST_ID
+#
+# Required repository secret:
+#   SECRET_TOKEN   Fine-grained personal access token with access to this repository:
+#                  Repository permissions:
+#                    Administration: Read
+#                    Variables: Read and write
+#                  Account permissions:
+#                    Gists: Read and write
+
+name: Update GitHub Clone Count Badge
 
 on:
   schedule:
-    - cron: "0 */24 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: badge-updates-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  BADGE_DOC: badges/CLONE.md
+  CLONE_GIST_ID: ${{ vars.COMFY_CLONES_GIST_ID }}
+  DATA_FILE: clone.json
+  PREVIOUS_DATA_FILE: clone_before.json
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: gh login
-        run: echo "${{ secrets.SECRET_TOKEN }}" | gh auth login --with-token
+      - name: Check out code
+        uses: actions/checkout@v7
 
-      - name: parse latest clone count
+      - name: Validate authentication
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
-          curl --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/traffic/clones \
-            > clone.json
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=Missing SECRET_TOKEN::Add a fine-grained PAT with Administration: Read, Variables: Read and write, and Gists: Read and write."
+            exit 1
+          fi
 
-      - name: create gist and download previous count
-        id: set_id
+          gh auth status
+
+      - name: Fetch latest clone traffic
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
-          if gh secret list | grep -q "GIST_ID"
-          then
-              echo "GIST_ID found"
-              echo "GIST=${{ secrets.GIST_ID }}" >> $GITHUB_OUTPUT
-              curl https://gist.githubusercontent.com/${{ github.actor }}/${{ secrets.GIST_ID }}/raw/clone.json > clone_before.json
-              if cat clone_before.json | grep '404: Not Found'; then
-                echo "GIST_ID not valid anymore. Creating another gist..."
-                gist_id=$(gh gist create clone.json | awk -F / '{print $NF}')
-                echo $gist_id | gh secret set GIST_ID
-                echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-                cp clone.json clone_before.json
-                git rm --ignore-unmatch  CLONE.md
-              fi
+          if ! gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/traffic/clones" > "$DATA_FILE"; then
+            echo "::error title=Cannot read clone traffic::SECRET_TOKEN needs Administration: Read access to this repository."
+            exit 1
+          fi
+
+          if ! jq -e '
+            type == "object" and
+            (.clones | type == "array")
+          ' "$DATA_FILE" >/dev/null; then
+            echo "::error title=Invalid traffic response::GitHub did not return clone traffic data."
+            exit 1
+          fi
+
+      - name: Create or reuse clone statistics Gist
+        id: gist
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+        run: |
+          gist_id="$CLONE_GIST_ID"
+          expected_description="${GITHUB_REPOSITORY} clone statistics"
+          authenticated_user=$(gh api user --jq '.login')
+          save_gist_id=false
+          valid_gist=false
+
+          if [ -z "$gist_id" ]; then
+            gist_id=$(python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          pattern = re.compile(
+              r"query=count.*?url=https://gist\.githubusercontent\.com/[^/]+/([0-9a-f]+)",
+              re.IGNORECASE,
+          )
+
+          for filename in (os.environ["BADGE_DOC"], "README.md"):
+              path = Path(filename)
+              if not path.is_file():
+                  continue
+              match = pattern.search(path.read_text(encoding="utf-8"))
+              if match:
+                  print(match.group(1))
+                  break
+          PY
+            )
+
+            if [ -n "$gist_id" ]; then
+              echo "Found an existing clone statistics Gist in the badge documentation: $gist_id"
+              save_gist_id=true
+            fi
+          fi
+
+          if [ -n "$gist_id" ] && gh gist view "$gist_id" >/dev/null 2>&1; then
+            gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
+            gist_description=$(gh api "gists/$gist_id" --jq '.description // ""')
+
+            if [ "$gist_owner" = "$authenticated_user" ] &&
+              [ "$gist_description" = "$expected_description" ]; then
+              valid_gist=true
+            else
+              echo "The detected Gist belongs to another repository or token owner."
+            fi
+          fi
+
+          if [ "$valid_gist" = true ]; then
+            echo "Using existing Gist: $gist_id"
           else
-              echo "GIST_ID not found. Creating a gist..."
-              gist_id=$(gh gist create clone.json | awk -F / '{print $NF}')
-              echo $gist_id | gh secret set GIST_ID
-              echo "GIST=$gist_id" >> $GITHUB_OUTPUT
-              cp clone.json clone_before.json
+            if [ -n "$gist_id" ]; then
+              echo "Configured Gist does not exist or is inaccessible; creating a new one."
+            else
+              echo "No clone statistics Gist is configured; creating one."
+            fi
+
+            gist_url=$(gh gist create "$DATA_FILE" --desc "$expected_description")
+            gist_id="${gist_url##*/}"
+            save_gist_id=true
           fi
 
-      - name: update clone.json
-        run: |
-          curl https://raw.githubusercontent.com/MShawon/github-clone-count-badge/master/main.py > main.py
-          python3 main.py
+          if [ "$save_gist_id" = true ]; then
+            if ! gh variable set COMFY_CLONES_GIST_ID --body "$gist_id"; then
+              echo "::error title=Cannot save Gist ID::Grant SECRET_TOKEN repository Actions variables write access."
+              exit 1
+            fi
 
-      - name: Update gist with latest count
-        run: |
-          content=$(sed -e 's/\\/\\\\/g' -e 's/\t/\\t/g' -e 's/\"/\\"/g' -e 's/\r//g' "clone.json" | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')
-          echo '{"description": "${{ github.repository }} clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
-          curl -s -X PATCH \
-            --user "${{ github.actor }}:${{ secrets.SECRET_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d @post_clone.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }} > /dev/null 2>&1
-
-          if [ ! -f CLONE.md ]; then
-            shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
-            url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/clone.json"
-            repo="https://github.com/MShawon/github-clone-count-badge"
-            echo ''> CLONE.md
-            echo '
-            **Markdown**
-
-            ```markdown' >> CLONE.md
-            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
-            echo '
-            ```
-
-            **HTML**
-            ```html' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
-            echo '```' >> CLONE.md
-            
-            git add CLONE.md
-            git config --global user.name "GitHub Action"
-            git config --global user.email "action@github.com"
-            git commit -m "create clone count badge"
+            echo "Saved COMFY_CLONES_GIST_ID=$gist_id"
           fi
 
-      - name: Push
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          if ! gh api "gists/$gist_id" \
+            --jq '.files["clone.json"].content // empty' > "$PREVIOUS_DATA_FILE"; then
+            cp "$DATA_FILE" "$PREVIOUS_DATA_FILE"
+          fi
+
+          if ! jq -e '
+            type == "object" and
+            (.clones | type == "array")
+          ' "$PREVIOUS_DATA_FILE" >/dev/null 2>&1; then
+            echo "The Gist has no valid clone history yet; starting with the current data."
+            cp "$DATA_FILE" "$PREVIOUS_DATA_FILE"
+          fi
+
+          gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
+          echo "id=$gist_id" >> "$GITHUB_OUTPUT"
+          echo "owner=$gist_owner" >> "$GITHUB_OUTPUT"
+
+      - name: Merge clone history
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          current_path = Path(os.environ["DATA_FILE"])
+          previous_path = Path(os.environ["PREVIOUS_DATA_FILE"])
+
+          current = json.loads(current_path.read_text(encoding="utf-8"))
+          previous = json.loads(previous_path.read_text(encoding="utf-8"))
+
+          by_timestamp = {}
+          for entry in previous.get("clones", []) + current.get("clones", []):
+              timestamp = str(entry.get("timestamp", "")).strip()
+              if timestamp:
+                  by_timestamp[timestamp] = {
+                      "timestamp": timestamp,
+                      "count": int(entry.get("count", 0)),
+                      "uniques": int(entry.get("uniques", 0)),
+                  }
+
+          clones = [by_timestamp[key] for key in sorted(by_timestamp)]
+
+          if len(clones) > 100:
+              older = clones[:-35]
+              recent = clones[-35:]
+              monthly = {}
+
+              for entry in older:
+                  month = entry["timestamp"][:7]
+                  aggregate = monthly.setdefault(
+                      month,
+                      {"timestamp": month, "count": 0, "uniques": 0},
+                  )
+                  aggregate["count"] += entry["count"]
+                  aggregate["uniques"] += entry["uniques"]
+
+              clones = [monthly[key] for key in sorted(monthly)] + recent
+
+          merged = dict(current)
+          merged["clones"] = clones
+          merged["count"] = sum(entry["count"] for entry in clones)
+          merged["uniques"] = sum(entry["uniques"] for entry in clones)
+
+          current_path.write_text(
+              json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          jq . "$DATA_FILE"
+
+      - name: Update Gist and badge document
+        id: badge
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
+          GIST_ID: ${{ steps.gist.outputs.id }}
+          GIST_OWNER: ${{ steps.gist.outputs.owner }}
+        run: |
+          content=$(jq -c . "$DATA_FILE")
+          jq -n \
+            --arg description "${GITHUB_REPOSITORY} clone statistics" \
+            --arg content "$content" \
+            '{
+              description: $description,
+              files: {
+                "clone.json": {
+                  content: $content
+                }
+              }
+            }' > gist_patch.json
+
+          gh api --method PATCH "gists/${GIST_ID}" --input gist_patch.json >/dev/null
+
+          mkdir -p "$(dirname "$BADGE_DOC")"
+
+          gist_url="https://gist.githubusercontent.com/${GIST_OWNER}/${GIST_ID}/raw/clone.json"
+          repo_url="https://github.com/${GITHUB_REPOSITORY}"
+          shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
+          shields_for_the_badge="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=Clone&query=count&url="
+
+          {
+            echo "**Markdown**"
+            echo
+            echo '```markdown'
+            echo "[![GitHub Clones](${shields}${gist_url}&logo=github)](${repo_url})"
+            echo '```'
+            echo
+            echo "[![GitHub Clones](${shields}${gist_url}&logo=github)](${repo_url})"
+            echo
+            echo "**HTML**"
+            echo
+            echo '```html'
+            echo "<a href='${repo_url}'><img alt='GitHub Clones' src='${shields}${gist_url}&logo=github'></a>"
+            echo '```'
+            echo
+            echo "<a href='${repo_url}'><img alt='GitHub Clones' src='${shields}${gist_url}&logo=github'></a>"
+            echo
+            echo "**HTML (for-the-badge)**"
+            echo
+            echo '```html'
+            echo "<a href='${repo_url}'><img alt='GitHub Clones' src='${shields_for_the_badge}${gist_url}&logo=github&style=for-the-badge'></a>"
+            echo '```'
+            echo
+            echo "<a href='${repo_url}'><img alt='GitHub Clones' src='${shields_for_the_badge}${gist_url}&logo=github&style=for-the-badge'></a>"
+          } > "$BADGE_DOC"
+
+          if [ -n "$(git status --porcelain -- "$BADGE_DOC")" ]; then
+            git add "$BADGE_DOC"
+            git config user.name "GitHub Action"
+            git config user.email "action@github.com"
+            git commit -m "Create or update GitHub clone count badge"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Badge document is already up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push badge document
+        if: steps.badge.outputs.changed == 'true'
+        run: git push

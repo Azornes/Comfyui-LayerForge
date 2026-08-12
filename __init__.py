@@ -4,9 +4,15 @@ import os
 # Add the custom node's directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from .canvas_node import LayerForgeNode
+# ComfyUI loads this file as a package. Pytest also sees the repository-level
+# __init__.py while discovering tests, where relative imports have no package
+# context and the ComfyUI runtime is not available. Keep that discovery path
+# inert while preserving the normal package bootstrap.
+LayerForgeNode = None
+if __package__:
+    from .canvas_node import LayerForgeNode
 
-LayerForgeNode.setup_routes()
+    LayerForgeNode.setup_routes()
 
 NODE_CLASS_MAPPINGS = {
     "LayerForgeNode": LayerForgeNode

@@ -1,0 +1,52 @@
+{
+  "name": "comfyui-layerforge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "<h1 align=\"center\">LayerForge – Advanced Canvas Editor for ComfyUI 🎨</h1>",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test tests/*.mjs",
+    "test:coverage": "node --experimental-test-coverage --test tests/*.mjs",
+    "lint": "eslint js/ tests/",
+    "lint:fix": "eslint js/ tests/ --fix",
+    "watch": ".\\node_modules\\.bin\\tsc.cmd --watch",
+    "watch:build": "nodemon --watch src --ext ts,css,html --exec .\\build.bat"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Azornes/Comfyui-LayerForge.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Azornes/Comfyui-LayerForge/issues"
+  },
+  "homepage": "https://github.com/Azornes/Comfyui-LayerForge#readme",
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@babel/preset-env": "^7.28.0",
+    "@babel/preset-typescript": "^7.27.1",
+    "@eslint/js": "^9.30.1",
+    "@testing-library/dom": "^10.4.0",
+    "@types/jest": "^30.0.0",
+    "babel-jest": "^30.0.4",
+    "babel-plugin-transform-import-meta": "^2.3.3",
+    "eslint": "^9.30.1",
+    "eslint-plugin-unused-imports": "^4.1.4",
+    "globals": "^16.3.0",
+    "identity-obj-proxy": "^3.0.0",
+    "jest": "^30.0.4",
+    "jest-environment-jsdom": "^30.0.4",
+    "nodemon": "^3.1.10",
+    "ts-jest": "^29.4.0",
+    "ts-jest-mock-import-meta": "^1.3.0",
+    "ts-migrate": "^0.1.35",
+    "ttypescript": "^1.5.15",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "npx": "^10.2.2"
+  }
+}
