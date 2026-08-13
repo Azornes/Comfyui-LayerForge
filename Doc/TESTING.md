@@ -14,8 +14,8 @@ $ComfyPython = "..\..\..\python_embeded\python.exe"
 
 & $ComfyPython -m pytest -q
 & $ComfyPython -m pytest -q --cov=python --cov-report=term-missing
-& $ComfyPython -m ruff check __init__.py canvas_node.py python tests
-& $ComfyPython -m compileall -q __init__.py canvas_node.py python tests
+& $ComfyPython -m ruff check __init__.py python tests
+& $ComfyPython -m compileall -q __init__.py python tests
 ```
 
 The explicit interpreter path is intentional: it keeps tests aligned with the

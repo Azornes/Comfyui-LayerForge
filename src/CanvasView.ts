@@ -35,6 +35,8 @@ interface MattingModelOption {
     path: string;
     label: string;
     description?: string;
+    url?: string;
+    project_url?: string;
     source?: 'local' | 'remote';
     downloaded?: boolean;
 }
@@ -356,6 +358,55 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             : 'auto';
         modelSelect.value = selectedModel;
 
+        const modelDetails = document.createElement('div');
+        modelDetails.className = 'lf-matting-model-details';
+
+        const modelDescription = document.createElement('p');
+        modelDescription.className = 'lf-matting-model-description';
+
+        const modelLinks = document.createElement('div');
+        modelLinks.className = 'lf-matting-model-links';
+
+        const createModelLink = (label: string, url: string): HTMLAnchorElement => {
+            const link = document.createElement('a');
+            link.className = 'lf-matting-model-link';
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = label;
+            return link;
+        };
+
+        const updateModelDetails = (): void => {
+            modelLinks.replaceChildren();
+            const selectedOption = modelOptions.find((option) => option.path === modelSelect.value);
+
+            if (modelSelect.value === 'auto') {
+                modelDescription.textContent = 'LayerForge selects the best compatible installed checkpoint. If none is available, the standard General model is downloaded.';
+                modelDetails.hidden = false;
+                return;
+            }
+
+            if (!selectedOption) {
+                modelDescription.textContent = 'The selected checkpoint is not currently available.';
+                modelDetails.hidden = false;
+                return;
+            }
+
+            modelDescription.textContent = selectedOption.description || 'Installed checkpoint validated by ComfyUI\'s native BiRefNet loader.';
+            if (selectedOption.url) {
+                modelLinks.appendChild(createModelLink('Model page', selectedOption.url));
+            }
+            if (selectedOption.project_url) {
+                modelLinks.appendChild(createModelLink('BiRefNet project', selectedOption.project_url));
+            }
+            modelDetails.hidden = false;
+        };
+
+        modelSelect.onchange = updateModelDetails;
+        modelDetails.append(modelDescription, modelLinks);
+        updateModelDetails();
+
         const modeSelect = document.createElement('select');
         modeSelect.className = 'lf-matting-settings-select';
         (['remove_background', 'remove_foreground', 'mask_only'] as MattingMode[]).forEach((mode) => {
@@ -398,6 +449,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
         body.append(
             createRow('Model', modelSelect, 'Only checkpoints accepted by the native ComfyUI BiRefNet loader are listed.'),
+            modelDetails,
             createRow('Processing mode', modeSelect, 'The selected mode controls what the Matting button creates from the detected mask.'),
             createRow('Mask threshold', thresholdContainer, 'Set to 0 for a soft alpha mask; higher values create a harder cutout.'),
             modelStatus,

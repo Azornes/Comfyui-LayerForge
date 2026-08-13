@@ -47,8 +47,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "E402", "F811", "I001"]
-"canvas_node.py" = ["F401", "F811", "F541", "E731", "I001", "RUF010", "RUF012", "RUF034", "SIM102", "W291"]
-"python/logger.py" = ["F401", "I001", "SIM910", "UP008", "UP032"]
 "tests/*" = ["B011", "I001", "SIM300"]
 
 [tool.ruff.lint.isort]

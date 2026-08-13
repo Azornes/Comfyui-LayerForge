@@ -91,7 +91,9 @@ def _import_layerforge(monkeypatch, tmp_path):
 
     return SimpleNamespace(
         entrypoint=package,
-        canvas_node=sys.modules[f"{package_name}.canvas_node"],
+        node=sys.modules[f"{package_name}.python.node"],
+        image_utils=sys.modules[f"{package_name}.python.image_utils"],
+        matting=sys.modules[f"{package_name}.python.matting"],
         routes=routes,
         package_name=package_name,
     )
@@ -154,7 +156,7 @@ def test_entrypoint_registers_backend_route_contract(layerforge_runtime):
 def test_tensor_input_normalization_preserves_comfyui_shapes(layerforge_runtime):
     import torch
 
-    node_class = layerforge_runtime.canvas_node.LayerForgeNode
+    node_class = layerforge_runtime.node.LayerForgeNode
     node_class._canvas_cache["persistent_cache"] = {}
     node = node_class()
 
@@ -171,7 +173,7 @@ def test_base64_image_conversion_preserves_rgb_and_alpha(layerforge_runtime):
     import torch
     from PIL import Image
 
-    node_module = layerforge_runtime.canvas_node
+    node_module = layerforge_runtime.image_utils
     image = Image.new("RGBA", (2, 1), (255, 0, 0, 128))
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
@@ -199,7 +201,7 @@ def test_base64_image_conversion_preserves_rgb_and_alpha(layerforge_runtime):
 def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, monkeypatch):
     import torch
 
-    node_module = layerforge_runtime.canvas_node
+    node_module = layerforge_runtime.matting
     calls = {}
 
     class NativeBiRefNet:
@@ -236,7 +238,7 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
 def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtime, monkeypatch):
     import torch
 
-    node_module = layerforge_runtime.canvas_node
+    node_module = layerforge_runtime.matting
 
     class NativeBiRefNet:
         def encode_image(self, image):
@@ -279,7 +281,7 @@ def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtim
 
 
 def test_matting_model_options_include_downloadable_official_variants(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.canvas_node
+    node_module = layerforge_runtime.matting
 
     monkeypatch.setattr(node_module, "_iter_birefnet_checkpoint_paths", lambda: iter(()))
 
@@ -289,11 +291,16 @@ def test_matting_model_options_include_downloadable_official_variants(layerforge
     assert remote_options
     assert all(option["path"].startswith("remote:") for option in remote_options)
     assert all(option["downloaded"] is False for option in remote_options)
+    assert all(option["description"] for option in remote_options)
+    assert all(option["url"].startswith("https://huggingface.co/") for option in remote_options)
+    assert all(option["project_url"] == "https://github.com/ZhengPeng7/BiRefNet" for option in remote_options)
     assert any(option["path"] == "remote:portrait" for option in remote_options)
+    portrait = next(option for option in node_module._BIREFNET_MODEL_CATALOG if option["id"] == "portrait")
+    assert portrait["local_filename"] == "BiRefNet-portrait.safetensors"
 
 
 def test_selected_remote_matting_model_is_sent_to_downloader(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.canvas_node
+    node_module = layerforge_runtime.matting
     selected_model = next(
         model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait"
     )
@@ -313,8 +320,29 @@ def test_selected_remote_matting_model_is_sent_to_downloader(layerforge_runtime,
     assert downloaded["model"] is selected_model
 
 
+def test_legacy_automatic_checkpoint_gets_friendly_filename(layerforge_runtime, monkeypatch, tmp_path):
+    node_module = layerforge_runtime.matting
+    model_dir = Path(tmp_path) / "models" / "background_removal"
+    model_dir.mkdir(parents=True)
+    legacy_path = model_dir / "model.safetensors"
+    legacy_path.write_bytes(b"legacy checkpoint")
+
+    monkeypatch.setattr(
+        node_module,
+        "_is_native_birefnet_checkpoint",
+        lambda path: Path(path).resolve() == legacy_path.resolve(),
+    )
+
+    result = node_module._find_existing_birefnet_default_checkpoint()
+    friendly_path = model_dir / "BiRefNet-general.safetensors"
+
+    assert Path(result) == friendly_path
+    assert friendly_path.exists()
+    assert not legacy_path.exists()
+
+
 def test_empty_execution_returns_comfyui_compatible_fallback_tensors(layerforge_runtime):
-    node_class = layerforge_runtime.canvas_node.LayerForgeNode
+    node_class = layerforge_runtime.node.LayerForgeNode
     node_class._canvas_data_storage.clear()
     node_class._canvas_cache["persistent_cache"] = {}
     node = node_class()

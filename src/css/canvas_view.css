@@ -740,6 +740,41 @@
     line-height: 1.4;
 }
 
+.lf-matting-model-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: -7px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid #4b4b4b;
+    border-radius: 4px;
+}
+
+.lf-matting-model-description {
+    margin: 0;
+    color: #d2d2d2;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.lf-matting-model-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.lf-matting-model-link {
+    color: #76adff;
+    font-size: 11px;
+    text-decoration: none;
+}
+
+.lf-matting-model-link:hover {
+    color: #a9ccff;
+    text-decoration: underline;
+}
+
 .lf-matting-settings-threshold {
     display: flex;
     align-items: center;

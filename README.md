@@ -241,7 +241,26 @@ Click the gear button next to **Matting** to configure its behavior. Settings ar
 - **Processing mode**: remove the background, remove the detected foreground, or apply the generated mask to LayerForge's Draw Mask output-area mask.
 - **Mask threshold**: use `0` for a soft alpha mask or a higher value for a harder cutout.
 
-The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored in separate subdirectories under `ComfyUI/models/background_removal/` and are validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture.
+The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored in separate subdirectories under `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`, then validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
+
+### BiRefNet model guide
+
+The specialized models are fine-tuned for different tasks. For general photos, start with **General**; choose a specialized variant when its training domain matches the image content.
+
+| Variant | Recommended use | Official page |
+|---|---|---|
+| [General](https://huggingface.co/ZhengPeng7/BiRefNet) | Everyday images and general background removal | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet) |
+| [High Resolution](https://huggingface.co/ZhengPeng7/BiRefNet_HR) | Large images and detailed edges; higher memory use | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet_HR) |
+| [Portrait](https://huggingface.co/ZhengPeng7/BiRefNet-portrait) | People, portraits, hair, and portrait cutouts | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet-portrait) |
+| [Matting](https://huggingface.co/ZhengPeng7/BiRefNet-matting) | Soft alpha edges and semi-transparent details | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet-matting) |
+| [High Resolution Matting](https://huggingface.co/ZhengPeng7/BiRefNet_HR-matting) | Fine matting details on larger images | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet_HR-matting) |
+| [Dynamic](https://huggingface.co/ZhengPeng7/BiRefNet_dynamic) | Varying aspect ratios and input resolutions | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet_dynamic) |
+| [Dynamic Matting](https://huggingface.co/ZhengPeng7/BiRefNet_dynamic-matting) | Arbitrary-size images with soft matting edges | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet_dynamic-matting) |
+| [HRSOD](https://huggingface.co/ZhengPeng7/BiRefNet-HRSOD) | High-resolution salient-object detection | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet-HRSOD) |
+| [DIS5K](https://huggingface.co/ZhengPeng7/BiRefNet-DIS5K) | Dichotomous foreground/background separation | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet-DIS5K) |
+| [COD](https://huggingface.co/ZhengPeng7/BiRefNet-COD) | Camouflaged objects that blend into the background | [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet-COD) |
+
+All links point to the official model repositories. See the [BiRefNet project](https://github.com/ZhengPeng7/BiRefNet) for the implementation, research details, and the complete model collection.
 
 ---
 
