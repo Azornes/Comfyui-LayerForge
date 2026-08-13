@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  getBoundsFromPoints,
+  getLayerWorldBounds,
+  getLayerWorldCorners,
+  isPointInRotatedLayer,
+  localToWorld,
+  worldToLocal,
+} from '../js/utils/CommonUtils.js';
+
+function assertAlmostEqual(actual, expected, epsilon = 1e-9) {
+  assert.ok(
+    Math.abs(actual - expected) <= epsilon,
+    `expected ${actual} to be within ${epsilon} of ${expected}`
+  );
+}
+
+function assertPointAlmostEqual(actual, expected, epsilon = 1e-9) {
+  assertAlmostEqual(actual.x, expected.x, epsilon);
+  assertAlmostEqual(actual.y, expected.y, epsilon);
+}
+
+test('rotated layer hit-test coordinates preserve current boundary behavior', () => {
+  const layer = {
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 50,
+    rotation: 45,
+  };
+  const transform = {
+    centerX: layer.x + layer.width / 2,
+    centerY: layer.y + layer.height / 2,
+    rotation: layer.rotation,
+  };
+
+  const insideWorld = localToWorld(layer.width / 2, 0, transform);
+  const insideLocal = worldToLocal(insideWorld.x, insideWorld.y, transform);
+  assertPointAlmostEqual(insideLocal, { x: layer.width / 2, y: 0 });
+  assert.equal(isPointInRotatedLayer(insideWorld.x, insideWorld.y, layer), true);
+
+  const outsideWorld = localToWorld(layer.width / 2 + 0.001, 0, transform);
+  const outsideLocal = worldToLocal(outsideWorld.x, outsideWorld.y, transform);
+  assert.ok(Math.abs(outsideLocal.x) > layer.width / 2);
+  assert.equal(isPointInRotatedLayer(outsideWorld.x, outsideWorld.y, layer), false);
+});
+
+test('rotated full-layer bounds preserve current dimensions', () => {
+  const layer = {
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 50,
+    rotation: 45,
+  };
+  const corners = getLayerWorldCorners(layer);
+  const bounds = getBoundsFromPoints(corners);
+  const layerBounds = getLayerWorldBounds(layer);
+
+  assertAlmostEqual(bounds.x, 6.966991411008934);
+  assertAlmostEqual(bounds.x + bounds.width, 113.03300858899107);
+  assertAlmostEqual(bounds.y, -8.033008588991066);
+  assertAlmostEqual(bounds.y + bounds.height, 98.03300858899107);
+  assert.deepEqual(layerBounds, bounds);
+  assert.equal(Math.ceil(bounds.width), 107);
+  assert.equal(Math.ceil(bounds.height), 107);
+});
+
+test('crop bounds preserve flip-aware layer-local coordinates', () => {
+  const layer = {
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 100,
+    rotation: 0,
+    cropMode: true,
+    originalWidth: 400,
+    originalHeight: 200,
+    flipH: true,
+    flipV: false,
+    cropBounds: { x: 50, y: 20, width: 100, height: 60 },
+  };
+  assert.deepEqual(getLayerWorldCorners(layer, { cropAware: true }), [
+    { x: 125, y: 10 },
+    { x: 175, y: 10 },
+    { x: 175, y: 40 },
+    { x: 125, y: 40 },
+  ]);
+  assert.deepEqual(getLayerWorldBounds(layer, { cropAware: true }), {
+    x: 125,
+    y: 10,
+    width: 50,
+    height: 30,
+  });
+});

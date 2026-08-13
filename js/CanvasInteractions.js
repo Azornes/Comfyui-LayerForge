@@ -1,5 +1,5 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
-import { snapToGrid, getSnapAdjustment } from "./utils/CommonUtils.js";
+import { snapToGrid, getSnapAdjustment, isPointInRotatedLayer } from "./utils/CommonUtils.js";
 const log = createModuleLogger('CanvasInteractions');
 export class CanvasInteractions {
     constructor(canvas) {
@@ -150,17 +150,7 @@ export class CanvasInteractions {
         for (const layer of this.canvas.canvasSelection.selectedLayers) {
             if (!layer.visible)
                 continue;
-            const centerX = layer.x + layer.width / 2;
-            const centerY = layer.y + layer.height / 2;
-            // Przekształć punkt do lokalnego układu współrzędnych layera
-            const dx = worldX - centerX;
-            const dy = worldY - centerY;
-            const rad = -layer.rotation * Math.PI / 180;
-            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
-            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
-            // Sprawdź czy punkt jest wewnątrz prostokąta layera
-            if (Math.abs(rotatedX) <= layer.width / 2 &&
-                Math.abs(rotatedY) <= layer.height / 2) {
+            if (isPointInRotatedLayer(worldX, worldY, layer)) {
                 return true;
             }
         }

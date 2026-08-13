@@ -1,6 +1,15 @@
 import {saveImage, removeImage} from "./db.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
-import {generateUUID, generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
+import {
+    generateUUID,
+    generateUniqueFileName,
+    createCanvas,
+    getBoundsFromPoints,
+    getLayerWorldCorners,
+    isPointInLayerLocalBounds,
+    isPointInRotatedLayer,
+    worldToLayerLocal
+} from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
 import {showErrorNotification, showSuccessNotification} from "./utils/NotificationUtils.js";
 import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
@@ -146,91 +155,14 @@ export class CanvasLayers {
             return false;
         }
         
-        // Calculate bounding box of selected layers
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        
-        selectedLayers.forEach((layer: Layer) => {
-            // For crop mode layers, use the visible crop bounds
-            if (layer.cropMode && layer.cropBounds && layer.originalWidth && layer.originalHeight) {
-                const layerScaleX = layer.width / layer.originalWidth;
-                const layerScaleY = layer.height / layer.originalHeight;
-                
-                const cropWidth = layer.cropBounds.width * layerScaleX;
-                const cropHeight = layer.cropBounds.height * layerScaleY;
-                
-                const effectiveCropX = layer.flipH 
-                    ? layer.originalWidth - (layer.cropBounds.x + layer.cropBounds.width) 
-                    : layer.cropBounds.x;
-                const effectiveCropY = layer.flipV 
-                    ? layer.originalHeight - (layer.cropBounds.y + layer.cropBounds.height) 
-                    : layer.cropBounds.y;
-                
-                const cropOffsetX = effectiveCropX * layerScaleX;
-                const cropOffsetY = effectiveCropY * layerScaleY;
-                
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                
-                const rad = layer.rotation * Math.PI / 180;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                
-                // Calculate corners of the crop rectangle
-                const corners = [
-                    { x: cropOffsetX, y: cropOffsetY },
-                    { x: cropOffsetX + cropWidth, y: cropOffsetY },
-                    { x: cropOffsetX + cropWidth, y: cropOffsetY + cropHeight },
-                    { x: cropOffsetX, y: cropOffsetY + cropHeight }
-                ];
-                
-                corners.forEach(p => {
-                    // Transform to layer space (centered)
-                    const localX = p.x - layer.width / 2;
-                    const localY = p.y - layer.height / 2;
-                    
-                    // Apply rotation
-                    const worldX = centerX + (localX * cos - localY * sin);
-                    const worldY = centerY + (localX * sin + localY * cos);
-                    
-                    minX = Math.min(minX, worldX);
-                    minY = Math.min(minY, worldY);
-                    maxX = Math.max(maxX, worldX);
-                    maxY = Math.max(maxY, worldY);
-                });
-            } else {
-                // For normal layers, use the full layer bounds
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                
-                const rad = layer.rotation * Math.PI / 180;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                
-                const halfW = layer.width / 2;
-                const halfH = layer.height / 2;
-                
-                const corners = [
-                    { x: -halfW, y: -halfH },
-                    { x: halfW, y: -halfH },
-                    { x: halfW, y: halfH },
-                    { x: -halfW, y: halfH }
-                ];
-                
-                corners.forEach(p => {
-                    const worldX = centerX + (p.x * cos - p.y * sin);
-                    const worldY = centerY + (p.x * sin + p.y * cos);
-                    
-                    minX = Math.min(minX, worldX);
-                    minY = Math.min(minY, worldY);
-                    maxX = Math.max(maxX, worldX);
-                    maxY = Math.max(maxY, worldY);
-                });
-            }
-        });
+        const bounds = getBoundsFromPoints(
+            selectedLayers.flatMap((layer: Layer) => getLayerWorldCorners(layer, { cropAware: true }))
+        );
+        const { x: minX, y: minY, width: rawWidth, height: rawHeight } = bounds;
         
         // Calculate new dimensions without padding for precise fit
-        const newWidth = Math.ceil(maxX - minX);
-        const newHeight = Math.ceil(maxY - minY);
+        const newWidth = Math.ceil(rawWidth);
+        const newHeight = Math.ceil(rawHeight);
         
         if (newWidth <= 0 || newHeight <= 0) {
             log.error("Cannot calculate valid output area dimensions");
@@ -542,21 +474,12 @@ export class CanvasLayers {
             // Skip invisible layers
             if (!layer.visible) continue;
 
-            const centerX = layer.x + layer.width / 2;
-            const centerY = layer.y + layer.height / 2;
-
-            const dx = worldX - centerX;
-            const dy = worldY - centerY;
-
-            const rad = -layer.rotation * Math.PI / 180;
-            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
-            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
-
-            if (Math.abs(rotatedX) <= layer.width / 2 && Math.abs(rotatedY) <= layer.height / 2) {
+            const localPoint = worldToLayerLocal(worldX, worldY, layer);
+            if (isPointInLayerLocalBounds(localPoint, layer.width, layer.height)) {
                 return {
                     layer: layer,
-                    localX: rotatedX + layer.width / 2,
-                    localY: rotatedY + layer.height / 2
+                    localX: localPoint.x + layer.width / 2,
+                    localY: localPoint.y + layer.height / 2
                 };
             }
         }
@@ -1420,22 +1343,8 @@ export class CanvasLayers {
         const sortedLayers = visibleSelectedLayers.sort((a: Layer, b: Layer) => b.zIndex - a.zIndex);
         
         for (const layer of sortedLayers) {
-            const centerX = layer.x + layer.width / 2;
-            const centerY = layer.y + layer.height / 2;
-            
-            // Transform click point to layer's local coordinates
-            const dx = worldX - centerX;
-            const dy = worldY - centerY;
-            
-            const rad = -layer.rotation * Math.PI / 180;
-            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
-            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
-            
-            const withinX = Math.abs(rotatedX) <= layer.width / 2;
-            const withinY = Math.abs(rotatedY) <= layer.height / 2;
-            
             // Check if click is within layer bounds
-            if (withinX && withinY) {
+            if (isPointInRotatedLayer(worldX, worldY, layer)) {
                 selectedLayer = layer;
                 break;
             }
@@ -1749,45 +1658,18 @@ export class CanvasLayers {
             } else if (useOutputBounds) {
                 bounds = this.canvas.outputAreaBounds;
             } else {
-                // Oblicz bounding box dla wybranych warstw
-                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                layers.forEach((layer: Layer) => {
-                    const centerX = layer.x + layer.width / 2;
-                    const centerY = layer.y + layer.height / 2;
-                    const rad = layer.rotation * Math.PI / 180;
-                    const cos = Math.cos(rad);
-                    const sin = Math.sin(rad);
-
-                    const halfW = layer.width / 2;
-                    const halfH = layer.height / 2;
-
-                    const corners = [
-                        { x: -halfW, y: -halfH },
-                        { x: halfW, y: -halfH },
-                        { x: halfW, y: halfH },
-                        { x: -halfW, y: halfH }
-                    ];
-
-                    corners.forEach(p => {
-                        const worldX = centerX + (p.x * cos - p.y * sin);
-                        const worldY = centerY + (p.x * sin + p.y * cos);
-
-                        minX = Math.min(minX, worldX);
-                        minY = Math.min(minY, worldY);
-                        maxX = Math.max(maxX, worldX);
-                        maxY = Math.max(maxY, worldY);
-                    });
-                });
-
-                const newWidth = Math.ceil(maxX - minX);
-                const newHeight = Math.ceil(maxY - minY);
+                const layerBounds = getBoundsFromPoints(
+                    layers.flatMap((layer: Layer) => getLayerWorldCorners(layer))
+                );
+                const newWidth = Math.ceil(layerBounds.width);
+                const newHeight = Math.ceil(layerBounds.height);
 
                 if (newWidth <= 0 || newHeight <= 0) {
                     resolve(null);
                     return;
                 }
 
-                bounds = { x: minX, y: minY, width: newWidth, height: newHeight };
+                bounds = { x: layerBounds.x, y: layerBounds.y, width: newWidth, height: newHeight };
             }
 
             const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
@@ -1978,36 +1860,11 @@ export class CanvasLayers {
         try {
             this.canvas.saveState();
 
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            this.canvas.canvasSelection.selectedLayers.forEach((layer: Layer) => {
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                const rad = layer.rotation * Math.PI / 180;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-
-                const halfW = layer.width / 2;
-                const halfH = layer.height / 2;
-
-                const corners = [
-                    { x: -halfW, y: -halfH },
-                    { x: halfW, y: -halfH },
-                    { x: halfW, y: halfH },
-                    { x: -halfW, y: halfH }
-                ];
-
-                corners.forEach(p => {
-                    const worldX = centerX + (p.x * cos - p.y * sin);
-                    const worldY = centerY + (p.x * sin + p.y * cos);
-                    minX = Math.min(minX, worldX);
-                    minY = Math.min(minY, worldY);
-                    maxX = Math.max(maxX, worldX);
-                    maxY = Math.max(maxY, worldY);
-                });
-            });
-
-            const fusedWidth = Math.ceil(maxX - minX);
-            const fusedHeight = Math.ceil(maxY - minY);
+            const bounds = getBoundsFromPoints(
+                this.canvas.canvasSelection.selectedLayers.flatMap((layer: Layer) => getLayerWorldCorners(layer))
+            );
+            const fusedWidth = Math.ceil(bounds.width);
+            const fusedHeight = Math.ceil(bounds.height);
 
             if (fusedWidth <= 0 || fusedHeight <= 0) {
                 log.warn("Calculated fused layer dimensions are invalid");
@@ -2018,7 +1875,7 @@ export class CanvasLayers {
             const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(fusedWidth, fusedHeight, '2d', { willReadFrequently: true });
             if (!tempCtx) throw new Error("Could not create canvas context");
 
-            tempCtx.translate(-minX, -minY);
+            tempCtx.translate(-bounds.x, -bounds.y);
 
             this._drawLayers(tempCtx, this.canvas.canvasSelection.selectedLayers);
 
@@ -2040,8 +1897,8 @@ export class CanvasLayers {
                 image: fusedImage,
                 imageId: imageId,
                 name: 'Fused Layer',
-                x: minX,
-                y: minY,
+                x: bounds.x,
+                y: bounds.y,
                 width: fusedWidth,
                 height: fusedHeight,
                 originalWidth: fusedWidth,
@@ -2071,7 +1928,7 @@ export class CanvasLayers {
             log.info("Layers fused successfully", {
                 originalLayerCount: this.canvas.canvasSelection.selectedLayers.length,
                 fusedDimensions: { width: fusedWidth, height: fusedHeight },
-                fusedPosition: { x: minX, y: minY }
+                fusedPosition: { x: bounds.x, y: bounds.y }
             });
 
         } catch (error: any) {

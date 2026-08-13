@@ -1,4 +1,5 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
+import { getLayerWorldBounds, isPointInRotatedLayer } from "./utils/CommonUtils.js";
 const log = createModuleLogger('CanvasRenderer');
 export class CanvasRenderer {
     constructor(canvas) {
@@ -226,32 +227,10 @@ export class CanvasRenderer {
                 if (layer.originalWidth && layer.originalHeight) {
                     text += `\nOriginal: ${layer.originalWidth}x${layer.originalHeight}`;
                 }
-                const centerX = layer.x + layer.width / 2;
-                const centerY = layer.y + layer.height / 2;
-                const rad = layer.rotation * Math.PI / 180;
-                const cos = Math.cos(rad);
-                const sin = Math.sin(rad);
-                const halfW = layer.width / 2;
-                const halfH = layer.height / 2;
-                const localCorners = [
-                    { x: -halfW, y: -halfH },
-                    { x: halfW, y: -halfH },
-                    { x: halfW, y: halfH },
-                    { x: -halfW, y: halfH }
-                ];
-                const worldCorners = localCorners.map(p => ({
-                    x: centerX + p.x * cos - p.y * sin,
-                    y: centerY + p.x * sin + p.y * cos
-                }));
-                let minX = Infinity, maxX = -Infinity, maxY = -Infinity;
-                worldCorners.forEach(p => {
-                    minX = Math.min(minX, p.x);
-                    maxX = Math.max(maxX, p.x);
-                    maxY = Math.max(maxY, p.y);
-                });
+                const bounds = getLayerWorldBounds(layer);
                 const padding = 20 / this.canvas.viewport.zoom;
-                const textWorldX = (minX + maxX) / 2;
-                const textWorldY = maxY + padding;
+                const textWorldX = bounds.x + bounds.width / 2;
+                const textWorldY = bounds.y + bounds.height + padding;
                 this.drawTextWithBackground(ctx, text, textWorldX, textWorldY);
             });
         }
@@ -361,18 +340,7 @@ export class CanvasRenderer {
         // Znajdź warstwy o wyższym zIndex niż aktualny layer
         const higherLayers = this.canvas.layers.filter((l) => l.zIndex > currentLayer.zIndex && l.visible && l !== currentLayer);
         for (const higherLayer of higherLayers) {
-            // Sprawdź czy punkt jest wewnątrz tego layera
-            const centerX = higherLayer.x + higherLayer.width / 2;
-            const centerY = higherLayer.y + higherLayer.height / 2;
-            // Przekształć punkt do lokalnego układu współrzędnych layera
-            const dx = worldX - centerX;
-            const dy = worldY - centerY;
-            const rad = -higherLayer.rotation * Math.PI / 180;
-            const rotatedX = dx * Math.cos(rad) - dy * Math.sin(rad);
-            const rotatedY = dx * Math.sin(rad) + dy * Math.cos(rad);
-            // Sprawdź czy punkt jest wewnątrz prostokąta layera
-            if (Math.abs(rotatedX) <= higherLayer.width / 2 &&
-                Math.abs(rotatedY) <= higherLayer.height / 2) {
+            if (isPointInRotatedLayer(worldX, worldY, higherLayer)) {
                 // Sprawdź przezroczystość layera - jeśli ma znaczącą nieprzezroczystość, uznaj za przykryty
                 if (higherLayer.opacity > 0.1) {
                     return true;

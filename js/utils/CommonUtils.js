@@ -88,6 +88,99 @@ export function localToWorld(localX, localY, layerProps) {
     };
 }
 /**
+ * Konwertuje współrzędne świata na wyśrodkowane współrzędne lokalne warstwy.
+ */
+export function worldToLayerLocal(worldX, worldY, layer) {
+    return worldToLocal(worldX, worldY, {
+        centerX: layer.x + layer.width / 2,
+        centerY: layer.y + layer.height / 2,
+        rotation: layer.rotation
+    });
+}
+/**
+ * Sprawdza punkt w lokalnych, wyśrodkowanych współrzędnych prostokątnej warstwy.
+ */
+export function isPointInLayerLocalBounds(localPoint, width, height) {
+    return Math.abs(localPoint.x) <= width / 2 && Math.abs(localPoint.y) <= height / 2;
+}
+/**
+ * Sprawdza, czy punkt świata znajduje się w obróconej warstwie.
+ */
+export function isPointInRotatedLayer(worldX, worldY, layer) {
+    return isPointInLayerLocalBounds(worldToLayerLocal(worldX, worldY, layer), layer.width, layer.height);
+}
+/**
+ * Zwraca narożniki warstwy w światowym układzie współrzędnych.
+ * W trybie crop-aware używa widocznego fragmentu crop bounds, zachowując
+ * istniejącą obsługę flipH i flipV.
+ */
+export function getLayerWorldCorners(layer, options = {}) {
+    const center = {
+        centerX: layer.x + layer.width / 2,
+        centerY: layer.y + layer.height / 2,
+        rotation: layer.rotation
+    };
+    let localCorners;
+    if (options.cropAware && layer.cropMode && layer.cropBounds && layer.originalWidth && layer.originalHeight) {
+        const layerScaleX = layer.width / layer.originalWidth;
+        const layerScaleY = layer.height / layer.originalHeight;
+        const cropWidth = layer.cropBounds.width * layerScaleX;
+        const cropHeight = layer.cropBounds.height * layerScaleY;
+        const effectiveCropX = layer.flipH
+            ? layer.originalWidth - (layer.cropBounds.x + layer.cropBounds.width)
+            : layer.cropBounds.x;
+        const effectiveCropY = layer.flipV
+            ? layer.originalHeight - (layer.cropBounds.y + layer.cropBounds.height)
+            : layer.cropBounds.y;
+        const cropOffsetX = effectiveCropX * layerScaleX;
+        const cropOffsetY = effectiveCropY * layerScaleY;
+        localCorners = [
+            { x: cropOffsetX, y: cropOffsetY },
+            { x: cropOffsetX + cropWidth, y: cropOffsetY },
+            { x: cropOffsetX + cropWidth, y: cropOffsetY + cropHeight },
+            { x: cropOffsetX, y: cropOffsetY + cropHeight }
+        ].map(point => ({
+            x: point.x - layer.width / 2,
+            y: point.y - layer.height / 2
+        }));
+    }
+    else {
+        const halfW = layer.width / 2;
+        const halfH = layer.height / 2;
+        localCorners = [
+            { x: -halfW, y: -halfH },
+            { x: halfW, y: -halfH },
+            { x: halfW, y: halfH },
+            { x: -halfW, y: halfH }
+        ];
+    }
+    return localCorners.map(point => localToWorld(point.x, point.y, center));
+}
+/**
+ * Oblicza prostokąt obejmujący podane punkty.
+ */
+export function getBoundsFromPoints(points) {
+    if (points.length === 0) {
+        return { x: 0, y: 0, width: 0, height: 0 };
+    }
+    const minX = Math.min(...points.map(point => point.x));
+    const minY = Math.min(...points.map(point => point.y));
+    const maxX = Math.max(...points.map(point => point.x));
+    const maxY = Math.max(...points.map(point => point.y));
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY
+    };
+}
+/**
+ * Oblicza światowy bounding box warstwy.
+ */
+export function getLayerWorldBounds(layer, options = {}) {
+    return getBoundsFromPoints(getLayerWorldCorners(layer, options));
+}
+/**
  * Klonuje warstwy (bez klonowania obiektów Image dla oszczędności pamięci)
  * @param {Layer[]} layers - Tablica warstw do sklonowania
  * @returns {Layer[]} Sklonowane warstwy
