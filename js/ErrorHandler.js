@@ -197,6 +197,14 @@ export class ErrorHandler {
     }
 }
 const errorHandler = new ErrorHandler();
+async function runWithErrorHandling(operation, context, additionalInfo) {
+    try {
+        return await operation();
+    }
+    catch (error) {
+        throw errorHandler.handle(error, context, additionalInfo);
+    }
+}
 /**
  * Wrapper funkcji z automatyczną obsługą błędów
  * @param {Function} fn - Funkcja do opakowania
@@ -204,17 +212,11 @@ const errorHandler = new ErrorHandler();
  * @returns {Function} Opakowana funkcja
  */
 export function withErrorHandling(fn, context) {
-    return async function (...args) {
-        try {
-            return await fn.apply(this, args);
-        }
-        catch (error) {
-            const handledError = errorHandler.handle(error, context, {
-                functionName: fn.name,
-                arguments: args.length
-            });
-            throw handledError;
-        }
+    return function (...args) {
+        return runWithErrorHandling(() => fn.apply(this, args), context, {
+            functionName: fn.name,
+            arguments: args.length
+        });
     };
 }
 /**
@@ -224,18 +226,12 @@ export function withErrorHandling(fn, context) {
 export function handleErrors(context) {
     return function (target, propertyKey, descriptor) {
         const originalMethod = descriptor.value;
-        descriptor.value = async function (...args) {
-            try {
-                return await originalMethod.apply(this, args);
-            }
-            catch (error) {
-                const handledError = errorHandler.handle(error, `${context}.${propertyKey}`, {
-                    className: target.constructor.name,
-                    methodName: propertyKey,
-                    arguments: args.length
-                });
-                throw handledError;
-            }
+        descriptor.value = function (...args) {
+            return runWithErrorHandling(() => originalMethod.apply(this, args), `${context}.${propertyKey}`, {
+                className: target.constructor.name,
+                methodName: propertyKey,
+                arguments: args.length
+            });
         };
         return descriptor;
     };

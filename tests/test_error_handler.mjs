@@ -5,6 +5,7 @@ import {
   AppError,
   ErrorHandler,
   ErrorTypes,
+  handleErrors,
   retryWithBackoff,
   safeExecute,
   withErrorHandling,
@@ -36,6 +37,37 @@ test('error wrappers preserve failures and provide fallback values', async () =>
     error => error instanceof AppError && error.type === ErrorTypes.VALIDATION
   );
   assert.equal(await safeExecute(async () => { throw new Error('failed'); }, 'fallback'), 'fallback');
+});
+
+test('handleErrors normalizes failures with method context', async () => {
+  class TestService {}
+
+  const target = TestService.prototype;
+  const descriptor = {
+    value: async function (first, second) {
+      void first;
+      void second;
+      throw new Error('invalid image format');
+    },
+  };
+
+  const decoratedDescriptor = handleErrors('image-service')(target, 'loadImage', descriptor);
+
+  assert.equal(decoratedDescriptor, descriptor);
+  await assert.rejects(
+    () => descriptor.value.call(new TestService(), 'first', 'second'),
+    error => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.type, ErrorTypes.VALIDATION);
+      assert.deepEqual(error.details, {
+        context: 'image-service.loadImage',
+        className: 'TestService',
+        methodName: 'loadImage',
+        arguments: 2,
+      });
+      return true;
+    }
+  );
 });
 
 test('retryWithBackoff retries transient operations and succeeds', async () => {

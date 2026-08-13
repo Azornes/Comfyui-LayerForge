@@ -255,6 +255,20 @@ export class ErrorHandler {
 
 const errorHandler = new ErrorHandler();
 
+type ErrorOperation<T> = () => T | PromiseLike<T>;
+
+async function runWithErrorHandling<T>(
+    operation: ErrorOperation<T>,
+    context: string,
+    additionalInfo: object
+): Promise<T> {
+    try {
+        return await operation();
+    } catch (error) {
+        throw errorHandler.handle(error as Error, context, additionalInfo);
+    }
+}
+
 /**
  * Wrapper funkcji z automatyczną obsługą błędów
  * @param {Function} fn - Funkcja do opakowania
@@ -265,16 +279,15 @@ export function withErrorHandling<T extends (...args: any[]) => any>(
     fn: T, 
     context: string
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
-    return async function(this: any, ...args: Parameters<T>): Promise<ReturnType<T>> {
-        try {
-            return await fn.apply(this, args);
-        } catch (error) {
-            const handledError = errorHandler.handle(error as Error, context, {
+    return function(this: any, ...args: Parameters<T>): Promise<ReturnType<T>> {
+        return runWithErrorHandling(
+            () => fn.apply(this, args),
+            context,
+            {
                 functionName: fn.name,
                 arguments: args.length
-            });
-            throw handledError;
-        }
+            }
+        );
     };
 }
 
@@ -286,17 +299,16 @@ export function handleErrors(context: string) {
     return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
         const originalMethod = descriptor.value;
 
-        descriptor.value = async function (...args: any[]) {
-            try {
-                return await originalMethod.apply(this, args);
-            } catch (error) {
-                const handledError = errorHandler.handle(error as Error, `${context}.${propertyKey}`, {
+        descriptor.value = function (...args: any[]) {
+            return runWithErrorHandling(
+                () => originalMethod.apply(this, args),
+                `${context}.${propertyKey}`,
+                {
                     className: target.constructor.name,
                     methodName: propertyKey,
                     arguments: args.length
-                });
-                throw handledError;
-            }
+                }
+            );
         };
 
         return descriptor;
