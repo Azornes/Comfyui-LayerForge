@@ -1108,8 +1108,7 @@ async function createCanvasWidget(node, widget, app) {
                     }
                 })
             ])
-        ]),
-        $el("div.lf-painter-separator")
+        ])
     ]);
     const mattingButton = controlPanel.querySelector('.lf-matting-button');
     const mattingProgressTrack = document.createElement('span');

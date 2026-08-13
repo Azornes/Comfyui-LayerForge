@@ -93,7 +93,14 @@ export class CanvasRenderer {
             this.canvas.offscreenCanvas.height = newHeight;
         }
         const ctx = this.canvas.offscreenCtx;
-        ctx.fillStyle = '#606060';
+        // Keep the canvas readable while allowing the node's native color to
+        // tint the editor underneath it. Clear first so alpha does not build
+        // up on every render frame.
+        ctx.clearRect(0, 0, this.canvas.offscreenCanvas.width, this.canvas.offscreenCanvas.height);
+        const canvasFill = typeof getComputedStyle === 'function'
+            ? getComputedStyle(this.canvas.canvas).getPropertyValue('--lf-canvas-fill').trim()
+            : '';
+        ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
         ctx.fillRect(0, 0, this.canvas.offscreenCanvas.width, this.canvas.offscreenCanvas.height);
         ctx.save();
         ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
@@ -168,6 +175,7 @@ export class CanvasRenderer {
             this.canvas.canvas.width = this.canvas.offscreenCanvas.width;
             this.canvas.canvas.height = this.canvas.offscreenCanvas.height;
         }
+        this.canvas.ctx.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
         this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
         // Ensure overlay canvases are in DOM and properly sized
         this.addOverlayToDOM();

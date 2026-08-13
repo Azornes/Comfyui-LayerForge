@@ -1,6 +1,6 @@
 .lf-painter-button {
-    background-color: #444;
-    border: 1px solid #555;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 5px;
     color: #fff;
     padding: 6px 14px;
@@ -11,94 +11,94 @@
     min-width: 80px;
     text-align: center;
     margin: 2px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.16);
     text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .lf-painter-button:hover {
-    background-color: #555;
-    border-color: #666;
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.28);
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
     transform: translateY(-1px);
 }
 
 .lf-painter-button:active {
-    background-color: #3a3a3a;
+    background-color: rgba(0, 0, 0, 0.18);
     transform: translateY(0);
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
 }
 
 .lf-painter-button:disabled,
 .lf-painter-button:disabled:hover {
-    background-color: #3a3a3a;
+    background-color: rgba(0, 0, 0, 0.12);
     color: #777;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
-    border-color: #4a4a4a;
+    border-color: rgba(255, 255, 255, 0.1);
     opacity: 0.6;
 }
 
 .lf-painter-button.lf-primary {
-    background-color: #3a76d6;
-    border-color: #2a6ac4;
+    background-color: rgba(58, 118, 214, 0.7);
+    border-color: rgba(90, 170, 255, 0.65);
     color: #fff;
     text-shadow: 0 1px 2px rgb(0,0,0);
 }
 
 .lf-painter-button.lf-primary:hover {
-    background-color: #4a86e4;
-    border-color: #3a76d6;
+    background-color: rgba(74, 134, 228, 0.78);
+    border-color: rgba(124, 204, 255, 0.8);
 }
 
 /* Crop mode button styling */
 .lf-painter-button#lf-crop-mode-btn {
-    background-color: #444;
-    border-color: #555;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
     color: #fff;
     transition: all 0.2s ease-in-out;
 }
 
 .lf-painter-button#lf-crop-mode-btn.lf-primary {
-    background-color: #0080ff;
-    border-color: #0070e0;
+    background-color: rgba(0, 128, 255, 0.72);
+    border-color: rgba(90, 170, 255, 0.75);
     color: #fff;
     box-shadow: 0 0 8px rgba(0, 128, 255, 0.3);
 }
 
 .lf-painter-button#lf-crop-mode-btn.lf-primary:hover {
-    background-color: #1090ff;
-    border-color: #0080ff;
+    background-color: rgba(16, 144, 255, 0.8);
+    border-color: rgba(124, 204, 255, 0.9);
     box-shadow: 0 0 12px rgba(0, 128, 255, 0.4);
 }
 
 .lf-painter-button#lf-crop-mode-btn:hover {
-    background-color: #555;
-    border-color: #666;
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.28);
 }
 
 .lf-painter-button.lf-success {
     border-color: #4ae27a;
-    background-color: #444;
+    background-color: rgba(255, 255, 255, 0.08);
     color: #fff;
     box-shadow: 0 0 0 1.5px #4ae27a88;
 }
 .lf-painter-button.lf-success:hover {
     border-color: #6aff9a;
     box-shadow: 0 0 0 2.5px #6aff9a88;
-    background-color: #555;
+    background-color: rgba(255, 255, 255, 0.14);
 }
 
 .lf-painter-button.lf-danger {
     border-color: #e24a4a;
-    background-color: #444;
+    background-color: rgba(255, 255, 255, 0.08);
     color: #fff;
     box-shadow: 0 0 0 1.5px #e24a4a88;
 }
 .lf-painter-button.lf-danger:hover {
     border-color: #ff6a6a;
     box-shadow: 0 0 0 2.5px #ff6a6a88;
-    background-color: #555;
+    background-color: rgba(255, 255, 255, 0.14);
 }
 
 .lf-painter-button.lf-icon-button {
@@ -114,9 +114,9 @@
 }
 
 .lf-painter-controls {
-    background-color: #2f2f2f;
-    border-bottom: 1px solid #202020;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    background-color: var(--lf-controls-surface, rgba(47, 47, 47, 0.84));
+    border-bottom: 1px solid var(--lf-surface-border, rgba(255, 255, 255, 0.14));
+    box-shadow: 0 1px 3px var(--lf-surface-shadow, rgba(0, 0, 0, 0.18));
     padding: 10px;
     display: flex;
     gap: 8px;
@@ -139,7 +139,7 @@
    -webkit-appearance: none;
    width: 80px;
    height: 4px;
-   background: #555;
+   background: rgba(0, 0, 0, 0.22);
    border-radius: 2px;
    outline: none;
    padding: 0;
@@ -151,24 +151,24 @@
   appearance: none;
   width: 14px;
   height: 14px;
-  background: #e0e0e0;
+  background: rgba(255, 255, 255, 0.78);
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid #555;
+  border: 2px solid rgba(0, 0, 0, 0.3);
   transition: background 0.2s;
 }
 
 .lf-painter-slider-container input[type="range"]::-webkit-slider-thumb:hover {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .lf-painter-slider-container input[type="range"]::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  background: #e0e0e0;
+  background: rgba(255, 255, 255, 0.78);
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid #555;
+  border: 2px solid rgba(0, 0, 0, 0.3);
 }
 
 .lf-slider-value {
@@ -209,7 +209,7 @@
     width: 90px;
     height: 30px;
     box-sizing: border-box;
-    background: linear-gradient(to right, #5a5a5a 30%, #3a76d6);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.08) 30%, rgba(58, 118, 214, 0.65));
     border-radius: 5px;
     border: 1px solid #555;
     cursor: pointer;
@@ -221,21 +221,21 @@
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
 .lf-clipboard-switch:hover {
-    background: linear-gradient(to right, #6a6a6a 30%, #4a86e4);
-    border-color: #666;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.14) 30%, rgba(74, 134, 228, 0.75));
+    border-color: rgba(255, 255, 255, 0.28);
     box-shadow: 0 2px 4px rgba(0,0,0,0.15);
     transform: translateY(-1px);
 }
 
 /* Mask switch: szaro-czarny gradient tylko dla maski */
 .lf-clipboard-switch.lf-mask-switch {
-    background: linear-gradient(to right, #5a5a5a 30%, #e53935);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.08) 30%, rgba(229, 57, 53, 0.65));
 }
 .lf-clipboard-switch.lf-mask-switch:hover {
-    background: linear-gradient(to right, #6a6a6a 30%, #ff5252);
+    background: linear-gradient(to right, rgba(255, 255, 255, 0.14) 30%, rgba(255, 82, 82, 0.75));
 }
 .lf-clipboard-switch:active {
-    background: linear-gradient(135deg, #3a76d6, #3a3a3a);
+    background: linear-gradient(135deg, rgba(58, 118, 214, 0.72), rgba(0, 0, 0, 0.18));
 }
 
 .lf-clipboard-switch input[type="checkbox"] {
@@ -255,7 +255,7 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    background-color: #5a5a5a;
+    background-color: rgba(255, 255, 255, 0.14);
     border-radius: 4px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -263,11 +263,11 @@
 }
 
 .lf-clipboard-switch:hover .lf-switch-knob {
-    background-color: #6a6a6a;
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
 .lf-clipboard-switch:hover .lf-switch-knob {
-    background-color: #6a6a6a;
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
 .lf-clipboard-switch .lf-switch-labels {
@@ -309,12 +309,12 @@
 
 /* Checked state */
 .lf-clipboard-switch:has(input:checked) {
-    background: linear-gradient(to right, #3a76d6, #5a5a5a 70%);
-    border-color: #2a6ac4;
+    background: linear-gradient(to right, rgba(58, 118, 214, 0.72), rgba(255, 255, 255, 0.08) 70%);
+    border-color: rgba(90, 170, 255, 0.7);
 }
 .lf-clipboard-switch:has(input:checked):hover {
-    background: linear-gradient(to right, #4a86e4, #6a6a6a 70%);
-    border-color: #3a76d6;
+    background: linear-gradient(to right, rgba(74, 134, 228, 0.8), rgba(255, 255, 255, 0.14) 70%);
+    border-color: rgba(124, 204, 255, 0.85);
 }
 
 .lf-clipboard-switch input:checked ~ .lf-switch-knob {
@@ -336,14 +336,14 @@
 .lf-clipboard-switch.lf-disabled {
     cursor: not-allowed;
     opacity: 0.6;
-    background: #3a3a3a !important; /* Override gradient */
-    border-color: #4a4a4a !important;
+    background: rgba(0, 0, 0, 0.18) !important; /* Override gradient */
+    border-color: rgba(255, 255, 255, 0.1) !important;
     transform: none !important;
     box-shadow: none !important;
 }
 
 .lf-clipboard-switch.lf-disabled .lf-switch-knob {
-    background-color: #4a4a4a !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .lf-clipboard-switch.lf-disabled .lf-switch-labels {
@@ -355,15 +355,15 @@
 .lf-painter-separator {
     width: 1px;
     height: 24px;
-    background-color: #444;
+    background-color: rgba(255, 255, 255, 0.16);
     margin: 0 8px;
 }
 
 .lf-painter-container {
-    background: #607080;  /* 带蓝色的灰色背景 */
-    border: 1px solid #4a5a6a;
+    background: transparent;
+    border: 1px solid var(--lf-surface-border, rgba(255, 255, 255, 0.14));
     border-radius: 6px;
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    box-shadow: inset 0 0 10px var(--lf-surface-shadow, rgba(0, 0, 0, 0.12));
     transition: border-color 0.3s ease; /* Dodano dla płynnej zmiany ramki */
 }
 
@@ -679,7 +679,7 @@
     overflow: auto;
     color: #f2f2f2;
     background: #303030;
-    border: 1px solid #555;
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 9px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
@@ -952,6 +952,12 @@
 }
 
 .lf-painter-main-container {
+    --lf-controls-surface: rgba(0, 0, 0, 0.2);
+    --lf-layers-surface: rgba(0, 0, 0, 0.2);
+    --lf-canvas-fill: rgba(96, 96, 96, 0.72);
+    --lf-surface-border: rgba(255, 255, 255, 0.18);
+    --lf-surface-shadow: rgba(0, 0, 0, 0.12);
+    background: transparent;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -959,6 +965,7 @@
 }
 
 .lf-painter-canvas-container {
+    background: transparent;
     flex-grow: 1;
     position: relative;
 }

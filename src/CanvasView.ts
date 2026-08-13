@@ -1311,8 +1311,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                     }
                 })
             ])
-        ]),
-        $el("div.lf-painter-separator")
+        ])
     ]);
 
     const mattingButton = controlPanel.querySelector('.lf-matting-button') as HTMLButtonElement | null;

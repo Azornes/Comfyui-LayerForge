@@ -436,9 +436,9 @@ export class Canvas {
     initCanvas() {
         // Don't set canvas.width/height here - let the render loop handle it based on clientWidth/clientHeight
         // this.width and this.height are for the OUTPUT AREA, not the display canvas
-        this.canvas.style.border = '1px solid black';
+        this.canvas.style.border = '1px solid rgba(255, 255, 255, 0.18)';
         this.canvas.style.maxWidth = '100%';
-        this.canvas.style.backgroundColor = '#606060';
+        this.canvas.style.backgroundColor = 'transparent';
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
         this.canvas.tabIndex = 0;
