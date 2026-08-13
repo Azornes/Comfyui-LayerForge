@@ -599,15 +599,34 @@ class BiRefNetMatting:
 _matting_lock = None
 
 
+def _matting_status_response(
+    available,
+    reason,
+    message,
+    *,
+    status=200,
+    **details,
+):
+    return web.json_response(
+        {
+            "available": available,
+            "reason": reason,
+            "message": message,
+            **details,
+        },
+        status=status,
+    )
+
+
 async def check_matting_model(request):
     """Report whether the selected native BiRefNet checkpoint is ready."""
     try:
         if _get_comfy_birefnet_loader() is None:
-            return web.json_response({
-                "available": False,
-                "reason": "unsupported_comfyui",
-                "message": "This ComfyUI version does not provide the native BiRefNet background-removal loader.",
-            })
+            return _matting_status_response(
+                False,
+                "unsupported_comfyui",
+                "This ComfyUI version does not provide the native BiRefNet background-removal loader.",
+            )
 
         model_options = _get_birefnet_model_options()
         requested_model = request.query.get("model_path") or "auto"
@@ -617,73 +636,74 @@ async def check_matting_model(request):
             local_model_path = _find_existing_birefnet_remote_checkpoint(remote_model)
             if local_model_path:
                 log.info(f"Selected BiRefNet model is ready at {local_model_path}")
-                return web.json_response({
-                    "available": True,
-                    "reason": "ready",
-                    "message": "Selected model is ready to use",
-                    "model_path": local_model_path,
-                    "selected_model": remote_model["label"],
-                    "models": model_options,
-                })
+                return _matting_status_response(
+                    True,
+                    "ready",
+                    "Selected model is ready to use",
+                    model_path=local_model_path,
+                    selected_model=remote_model["label"],
+                    models=model_options,
+                )
 
             log.info(f"Selected BiRefNet model is not downloaded: {remote_model['label']}")
-            return web.json_response({
-                "available": False,
-                "reason": "not_downloaded",
-                "message": f"{remote_model['label']} will be downloaded automatically on first use.",
-                "model_path": requested_model,
-                "selected_model": remote_model["label"],
-                "models": model_options,
-            })
+            return _matting_status_response(
+                False,
+                "not_downloaded",
+                f"{remote_model['label']} will be downloaded automatically on first use.",
+                model_path=requested_model,
+                selected_model=remote_model["label"],
+                models=model_options,
+            )
 
         if requested_model != "auto":
             local_model_path = _find_local_birefnet_model(requested_model)
             if local_model_path:
                 log.info(f"Selected BiRefNet model is ready at {local_model_path}")
-                return web.json_response({
-                    "available": True,
-                    "reason": "ready",
-                    "message": "Selected model is ready to use",
-                    "model_path": local_model_path,
-                    "selected_model": local_model_path,
-                    "models": model_options,
-                })
+                return _matting_status_response(
+                    True,
+                    "ready",
+                    "Selected model is ready to use",
+                    model_path=local_model_path,
+                    selected_model=local_model_path,
+                    models=model_options,
+                )
 
-            return web.json_response({
-                "available": False,
-                "reason": "selected_model_unavailable",
-                "message": "The selected BiRefNet checkpoint is not available or is not compatible with ComfyUI.",
-                "model_path": requested_model,
-                "models": model_options,
-            })
+            return _matting_status_response(
+                False,
+                "selected_model_unavailable",
+                "The selected BiRefNet checkpoint is not available or is not compatible with ComfyUI.",
+                model_path=requested_model,
+                models=model_options,
+            )
 
         local_model_path = _find_local_birefnet_model()
         if local_model_path:
             log.info(f"BiRefNet model files detected at {local_model_path}")
-            return web.json_response({
-                "available": True,
-                "reason": "ready",
-                "message": "Model is ready to use",
-                "model_path": local_model_path,
-                "models": model_options,
-            })
+            return _matting_status_response(
+                True,
+                "ready",
+                "Model is ready to use",
+                model_path=local_model_path,
+                models=model_options,
+            )
 
         searched_paths = _get_birefnet_base_paths()
         log.info(f"BiRefNet model not found in any of: {searched_paths}")
-        return web.json_response({
-            "available": False,
-            "reason": "not_downloaded",
-            "message": "The BiRefNet checkpoint will be downloaded automatically on first use (requires internet connection).",
-            "model_path": searched_paths[0] if searched_paths else None,
-            "models": model_options,
-        })
+        return _matting_status_response(
+            False,
+            "not_downloaded",
+            "The BiRefNet checkpoint will be downloaded automatically on first use (requires internet connection).",
+            model_path=searched_paths[0] if searched_paths else None,
+            models=model_options,
+        )
     except Exception as error:
         log.error(f"Error checking matting model: {error}")
-        return web.json_response({
-            "available": False,
-            "reason": "error",
-            "message": f"Error checking model status: {error}",
-        }, status=500)
+        return _matting_status_response(
+            False,
+            "error",
+            f"Error checking model status: {error}",
+            status=500,
+        )
 
 
 async def matting(request):

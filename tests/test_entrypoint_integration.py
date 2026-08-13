@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import importlib.util
 import io
@@ -9,6 +10,24 @@ import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _record_matting_responses(monkeypatch, node_module):
+    responses = []
+
+    def json_response(payload, **kwargs):
+        response = SimpleNamespace(payload=payload, status=kwargs.get("status", 200))
+        responses.append(response)
+        return response
+
+    monkeypatch.setattr(node_module.web, "json_response", json_response, raising=False)
+    return responses
+
+
+def _run_matting_model_check(node_module, model_path=None):
+    query = {} if model_path is None else {"model_path": model_path}
+    request = SimpleNamespace(query=query)
+    return asyncio.run(node_module.check_matting_model(request))
 
 
 class RecordingRoutes:
@@ -346,6 +365,152 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
     assert calls == {"shape": (1, 2, 4, 3), "dtype": torch.float32}
     assert tuple(matted_image.shape) == (1, 3, 2, 4)
     assert tuple(alpha_mask.shape) == (1, 1, 2, 4)
+
+
+def test_matting_model_status_preserves_unsupported_and_error_responses(layerforge_runtime, monkeypatch):
+    node_module = layerforge_runtime.matting
+    responses = _record_matting_responses(monkeypatch, node_module)
+
+    monkeypatch.setattr(node_module, "_get_comfy_birefnet_loader", lambda: None)
+    unsupported = _run_matting_model_check(node_module)
+
+    assert unsupported.payload == {
+        "available": False,
+        "reason": "unsupported_comfyui",
+        "message": "This ComfyUI version does not provide the native BiRefNet background-removal loader.",
+    }
+    assert unsupported.status == 200
+
+    monkeypatch.setattr(node_module, "_get_comfy_birefnet_loader", lambda: object())
+
+    def fail_to_read_options():
+        raise RuntimeError("catalog unavailable")
+
+    monkeypatch.setattr(node_module, "_get_birefnet_model_options", fail_to_read_options)
+    failed = _run_matting_model_check(node_module)
+
+    assert failed.payload == {
+        "available": False,
+        "reason": "error",
+        "message": "Error checking model status: catalog unavailable",
+    }
+    assert failed.status == 500
+    assert len(responses) == 2
+
+
+def test_matting_model_status_preserves_remote_model_responses(layerforge_runtime, monkeypatch):
+    node_module = layerforge_runtime.matting
+    responses = _record_matting_responses(monkeypatch, node_module)
+    model_options = [{"path": "remote:portrait", "label": "Portrait"}]
+    remote_model = {"label": "Portrait"}
+
+    monkeypatch.setattr(node_module, "_get_comfy_birefnet_loader", lambda: object())
+    monkeypatch.setattr(node_module, "_get_birefnet_model_options", lambda: model_options)
+    monkeypatch.setattr(node_module, "_get_birefnet_remote_model", lambda path: remote_model)
+    monkeypatch.setattr(
+        node_module,
+        "_find_existing_birefnet_remote_checkpoint",
+        lambda model: "/models/portrait.safetensors",
+    )
+
+    ready = _run_matting_model_check(node_module, "remote:portrait")
+
+    assert ready.payload == {
+        "available": True,
+        "reason": "ready",
+        "message": "Selected model is ready to use",
+        "model_path": "/models/portrait.safetensors",
+        "selected_model": "Portrait",
+        "models": model_options,
+    }
+    assert ready.status == 200
+
+    monkeypatch.setattr(node_module, "_find_existing_birefnet_remote_checkpoint", lambda model: None)
+    missing = _run_matting_model_check(node_module, "remote:portrait")
+
+    assert missing.payload == {
+        "available": False,
+        "reason": "not_downloaded",
+        "message": "Portrait will be downloaded automatically on first use.",
+        "model_path": "remote:portrait",
+        "selected_model": "Portrait",
+        "models": model_options,
+    }
+    assert missing.status == 200
+    assert len(responses) == 2
+
+
+def test_matting_model_status_preserves_local_and_automatic_responses(layerforge_runtime, monkeypatch):
+    node_module = layerforge_runtime.matting
+    responses = _record_matting_responses(monkeypatch, node_module)
+    model_options = [{"path": "/models/custom.safetensors", "label": "custom.safetensors"}]
+
+    monkeypatch.setattr(node_module, "_get_comfy_birefnet_loader", lambda: object())
+    monkeypatch.setattr(node_module, "_get_birefnet_model_options", lambda: model_options)
+    monkeypatch.setattr(node_module, "_get_birefnet_remote_model", lambda path: None)
+    monkeypatch.setattr(
+        node_module,
+        "_find_local_birefnet_model",
+        lambda model_path=None: "/models/custom.safetensors",
+    )
+
+    selected = _run_matting_model_check(node_module, "/models/custom.safetensors")
+
+    assert selected.payload == {
+        "available": True,
+        "reason": "ready",
+        "message": "Selected model is ready to use",
+        "model_path": "/models/custom.safetensors",
+        "selected_model": "/models/custom.safetensors",
+        "models": model_options,
+    }
+    assert selected.status == 200
+
+    monkeypatch.setattr(node_module, "_find_local_birefnet_model", lambda model_path=None: None)
+    unavailable = _run_matting_model_check(node_module, "/models/missing.safetensors")
+
+    assert unavailable.payload == {
+        "available": False,
+        "reason": "selected_model_unavailable",
+        "message": "The selected BiRefNet checkpoint is not available or is not compatible with ComfyUI.",
+        "model_path": "/models/missing.safetensors",
+        "models": model_options,
+    }
+    assert unavailable.status == 200
+
+    monkeypatch.setattr(
+        node_module,
+        "_find_local_birefnet_model",
+        lambda model_path=None: "/models/automatic.safetensors",
+    )
+    automatic = _run_matting_model_check(node_module)
+
+    assert automatic.payload == {
+        "available": True,
+        "reason": "ready",
+        "message": "Model is ready to use",
+        "model_path": "/models/automatic.safetensors",
+        "models": model_options,
+    }
+    assert automatic.status == 200
+
+    monkeypatch.setattr(node_module, "_find_local_birefnet_model", lambda model_path=None: None)
+    monkeypatch.setattr(
+        node_module,
+        "_get_birefnet_base_paths",
+        lambda: ["/models/background_removal"],
+    )
+    not_downloaded = _run_matting_model_check(node_module)
+
+    assert not_downloaded.payload == {
+        "available": False,
+        "reason": "not_downloaded",
+        "message": "The BiRefNet checkpoint will be downloaded automatically on first use (requires internet connection).",
+        "model_path": "/models/background_removal",
+        "models": model_options,
+    }
+    assert not_downloaded.status == 200
+    assert len(responses) == 4
 
 
 def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtime, monkeypatch):
