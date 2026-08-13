@@ -726,7 +726,37 @@
     border-radius: 4px;
 }
 
+.lf-matting-settings-input {
+    width: 100%;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 6px 9px;
+    color: #f4f4f4;
+    background: #252525;
+    border: 1px solid #5a5a5a;
+    border-radius: 4px;
+}
+
+.lf-matting-settings-token {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lf-matting-settings-token-clear {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #bdbdbd;
+    font-size: 11px;
+}
+
+.lf-matting-settings-token-clear input {
+    margin: 0;
+}
+
 .lf-matting-settings-select:focus,
+.lf-matting-settings-input:focus,
 .lf-matting-settings-threshold input:focus {
     outline: 2px solid #4b8fe8;
     outline-offset: 1px;

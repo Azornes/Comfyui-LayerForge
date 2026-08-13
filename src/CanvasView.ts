@@ -22,7 +22,13 @@ import { exportCanvasImage, type CanvasExportAction } from "./utils/CanvasExport
 import { getFlattenedCanvasBlob, type CanvasBlobVariant } from "./utils/CanvasBlobUtils.js";
 import { loadPreviewImage } from "./utils/PreviewUtils.js";
 import { getImageAddMode } from "./utils/CanvasInputUtils.js";
-import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
+import {
+    fetchMattingModelStatus,
+    fetchMattingSettings,
+    saveMattingSettings as saveMattingSettingsToServer,
+    type MattingServerSettings,
+    type MattingSettingsUpdate,
+} from "./utils/MattingUtils.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
 
@@ -34,6 +40,7 @@ interface MattingSettings {
     modelPath: string;
     mode: MattingMode;
     threshold: number;
+    hfTokenConfigured: boolean;
 }
 
 interface MattingModelOption {
@@ -47,39 +54,66 @@ interface MattingModelOption {
     downloaded?: boolean;
 }
 
-const MATTING_SETTINGS_STORAGE_KEY = 'layerforge.matting.settings';
 const DEFAULT_MATTING_SETTINGS: MattingSettings = {
     modelPath: '',
     mode: 'remove_background',
     threshold: 0.5,
+    hfTokenConfigured: false,
 };
 
 const isMattingMode = (value: unknown): value is MattingMode => {
     return value === 'remove_background' || value === 'remove_foreground' || value === 'mask_only';
 };
 
-const loadMattingSettings = (): MattingSettings => {
-    try {
-        const stored = JSON.parse(localStorage.getItem(MATTING_SETTINGS_STORAGE_KEY) || '{}') as Partial<MattingSettings>;
-        const threshold = Number(stored.threshold);
-
-        return {
-            modelPath: typeof stored.modelPath === 'string' ? stored.modelPath : DEFAULT_MATTING_SETTINGS.modelPath,
-            mode: isMattingMode(stored.mode) ? stored.mode : DEFAULT_MATTING_SETTINGS.mode,
-            threshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : DEFAULT_MATTING_SETTINGS.threshold,
-        };
-    } catch (error) {
-        log.warn('Unable to load Matting settings:', error);
-        return { ...DEFAULT_MATTING_SETTINGS };
-    }
+const normalizeMattingSettings = (settings: Partial<MattingSettings>): MattingSettings => {
+    const threshold = Number(settings.threshold);
+    return {
+        modelPath: typeof settings.modelPath === 'string' ? settings.modelPath : DEFAULT_MATTING_SETTINGS.modelPath,
+        mode: isMattingMode(settings.mode) ? settings.mode : DEFAULT_MATTING_SETTINGS.mode,
+        threshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : DEFAULT_MATTING_SETTINGS.threshold,
+        hfTokenConfigured: settings.hfTokenConfigured === true,
+    };
 };
 
-const saveMattingSettings = (settings: MattingSettings): void => {
+const fromServerMattingSettings = (settings: MattingServerSettings): MattingSettings => normalizeMattingSettings({
+    modelPath: settings.model_path,
+    mode: settings.mode as MattingMode,
+    threshold: settings.threshold,
+    hfTokenConfigured: settings.hf_token_configured,
+});
+
+const loadMattingSettings = async (): Promise<MattingSettings> => {
     try {
-        localStorage.setItem(MATTING_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+        const response = await fetchMattingSettings();
+        if (response.ok && response.data.settings) {
+            return fromServerMattingSettings(response.data.settings);
+        }
     } catch (error) {
-        log.warn('Unable to save Matting settings:', error);
+        log.warn('Unable to load Matting settings from ComfyUI:', error);
     }
+
+    return { ...DEFAULT_MATTING_SETTINGS };
+};
+
+const persistMattingSettings = async (
+    settings: MattingSettings,
+    token: string,
+    clearToken: boolean,
+): Promise<MattingSettings> => {
+    const payload: MattingSettingsUpdate = {
+        model_path: settings.modelPath,
+        mode: settings.mode,
+        threshold: settings.threshold,
+    };
+    if (token.trim()) payload.hf_token = token.trim();
+    if (clearToken) payload.clear_hf_token = true;
+
+    const response = await saveMattingSettingsToServer(payload);
+    if (!response.ok || !response.data.settings) {
+        throw new Error(response.data.error || 'Unable to save Matting settings on the ComfyUI server.');
+    }
+
+    return fromServerMattingSettings(response.data.settings);
 };
 
 const getMattingModeLabel = (mode: MattingMode): string => {
@@ -260,7 +294,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     const openMattingSettings = async (): Promise<void> => {
         if (mattingSettingsBackdrop) return;
 
-        const settings = loadMattingSettings();
+        const settings = await loadMattingSettings();
         let modelOptions: MattingModelOption[] = [];
         let modelStatusMessage = 'Model options are loaded from ComfyUI background-removal storage.';
 
@@ -448,6 +482,31 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
         thresholdContainer.append(thresholdInput, thresholdValue);
 
+        const tokenContainer = document.createElement('div');
+        tokenContainer.className = 'lf-matting-settings-token';
+
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'password';
+        tokenInput.className = 'lf-matting-settings-input';
+        tokenInput.autocomplete = 'off';
+        tokenInput.placeholder = settings.hfTokenConfigured
+            ? 'Token saved — leave blank to keep it'
+            : 'Paste a Hugging Face read token';
+        tokenInput.spellcheck = false;
+
+        const clearTokenLabel = document.createElement('label');
+        clearTokenLabel.className = 'lf-matting-settings-token-clear';
+        const clearTokenInput = document.createElement('input');
+        clearTokenInput.type = 'checkbox';
+        clearTokenInput.disabled = !settings.hfTokenConfigured;
+        const clearTokenText = document.createElement('span');
+        clearTokenText.textContent = 'Clear saved token';
+        clearTokenLabel.append(clearTokenInput, clearTokenText);
+        tokenInput.oninput = () => {
+            if (tokenInput.value.trim()) clearTokenInput.checked = false;
+        };
+        tokenContainer.append(tokenInput, clearTokenLabel);
+
         const modelStatus = document.createElement('p');
         modelStatus.className = 'lf-matting-settings-status';
         const localCount = localModelOptions.length;
@@ -463,6 +522,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             modelDetails,
             createRow('Processing mode', modeSelect, 'The selected mode controls what the Matting button creates from the detected mask.'),
             createRow('Mask threshold', thresholdContainer, 'Set to 0 for a soft alpha mask; higher values create a harder cutout.'),
+            createRow('Hugging Face token', tokenContainer, 'Optional read token for gated models such as BRIA RMBG 2.0. It is stored only in the ComfyUI custom node settings file.'),
             modelStatus,
         );
 
@@ -485,14 +545,27 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         saveButton.type = 'button';
         saveButton.className = 'lf-matting-settings-primary';
         saveButton.textContent = 'Save settings';
-        saveButton.onclick = () => {
-            saveMattingSettings({
-                modelPath: modelSelect.value === 'auto' ? '' : modelSelect.value,
-                mode: modeSelect.value as MattingMode,
-                threshold: Number(thresholdInput.value),
-            });
-            closeMattingSettings();
-            showInfoNotification('Matting settings saved.', 2000);
+        saveButton.onclick = async () => {
+            saveButton.disabled = true;
+            try {
+                await persistMattingSettings(
+                    {
+                        modelPath: modelSelect.value === 'auto' ? '' : modelSelect.value,
+                        mode: modeSelect.value as MattingMode,
+                        threshold: Number(thresholdInput.value),
+                        hfTokenConfigured: settings.hfTokenConfigured,
+                    },
+                    tokenInput.value,
+                    clearTokenInput.checked,
+                );
+                closeMattingSettings();
+                showInfoNotification('Matting settings saved.', 2000);
+            } catch (error) {
+                log.error('Unable to save Matting settings:', error);
+                showErrorNotification(error instanceof Error ? error.message : 'Unable to save Matting settings.', 8000);
+            } finally {
+                saveButton.disabled = false;
+            }
         };
 
         actions.append(resetButton, saveButton);
@@ -811,7 +884,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         const button = (e.target as HTMLElement).closest('.lf-matting-button') as HTMLButtonElement;
                         if (button.classList.contains('lf-loading')) return;
 
-                        const mattingSettings = loadMattingSettings();
+                        const mattingSettings = await loadMattingSettings();
 
                         try {
                             // First check if model is available

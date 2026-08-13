@@ -116,6 +116,7 @@ def _import_layerforge(monkeypatch, tmp_path):
         matting_api=sys.modules[f"{package_name}.python.matting.api"],
         matting_birefnet=sys.modules[f"{package_name}.python.matting.backends.birefnet"],
         matting_rmbg=sys.modules[f"{package_name}.python.matting.backends.rmbg"],
+        matting_settings=sys.modules[f"{package_name}.python.matting.settings"],
         matting_service=sys.modules[f"{package_name}.python.matting.service"],
         routes=routes,
         package_name=package_name,
@@ -169,11 +170,40 @@ def test_entrypoint_registers_backend_route_contract(layerforge_runtime):
         ("GET", "/layerforge/get-latest-images/{since}"),
         ("GET", "/ycnode/get_latest_image"),
         ("POST", "/ycnode/load_image_from_path"),
+        ("GET", "/matting/settings"),
+        ("POST", "/matting/settings"),
         ("GET", "/matting/check-model"),
         ("POST", "/matting"),
     }
 
     assert expected <= registered
+
+
+def test_matting_settings_are_persisted_without_exposing_the_token(layerforge_runtime, monkeypatch, tmp_path):
+    settings_module = layerforge_runtime.matting_settings
+    settings_file = tmp_path / "layerforge_settings.json"
+    monkeypatch.setattr(settings_module, "SETTINGS_FILE", settings_file)
+
+    saved = settings_module.save_settings(
+        {
+            "model_path": "remote:rmbg_2_0",
+            "mode": "mask_only",
+            "threshold": 0.75,
+            "hf_token": "hf-test-token",
+        }
+    )
+
+    assert saved["model_path"] == "remote:rmbg_2_0"
+    assert saved["mode"] == "mask_only"
+    assert saved["threshold"] == 0.75
+    assert settings_module.get_huggingface_token() == "hf-test-token"
+    public_settings = settings_module.get_public_settings()
+    assert public_settings["hf_token_configured"] is True
+    assert "hf_token" not in public_settings
+    assert settings_file.exists()
+
+    settings_module.save_settings({"clear_hf_token": True})
+    assert settings_module.get_huggingface_token() == ""
 
 
 def test_tensor_input_normalization_preserves_comfyui_shapes(layerforge_runtime):
@@ -679,6 +709,7 @@ def test_rmbg_checkpoint_is_not_selected_as_native_birefnet(layerforge_runtime, 
 
 def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, monkeypatch, tmp_path):
     node_module = layerforge_runtime.matting
+    rmbg_module = layerforge_runtime.matting_rmbg
     model = node_module._RMBG_MODEL_CATALOG[0]
     download = {}
 
@@ -699,6 +730,7 @@ def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, 
     huggingface_hub = ModuleType("huggingface_hub")
     huggingface_hub.snapshot_download = fake_snapshot_download
     monkeypatch.setitem(sys.modules, "huggingface_hub", huggingface_hub)
+    monkeypatch.setattr(rmbg_module, "get_huggingface_token", lambda: "hf-test-token")
 
     result = node_module._download_rmbg_model(model)
     expected_dir = Path(tmp_path) / "models" / "background_removal" / "RMBG-2.0"
@@ -706,6 +738,7 @@ def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, 
     assert Path(download["local_dir"]) == expected_dir
     assert download["repo_id"] == "briaai/RMBG-2.0"
     assert "*.safetensors" in download["allow_patterns"]
+    assert download["token"] == "hf-test-token"
     assert Path(result) == expected_dir
     assert node_module._is_rmbg_model_directory(result)
 

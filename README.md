@@ -236,13 +236,15 @@ RMBG 2.0 locally through Transformers.
 > - **Automatic download**: If no compatible checkpoint is found, LayerForge downloads the standard full BiRefNet checkpoint automatically on first use.
 > - **Compatibility**: LayerForge uses ComfyUI's native BiRefNet loader, so the checkpoint must use the full BiRefNet architecture. The `lite-*` variants are not compatible with this native loader.
 > - **BRIA RMBG 2.0**: Select it in Matting settings to download the local Transformers model into `ComfyUI/models/background_removal/RMBG-2.0/`. The Hugging Face repository is gated, so access must be accepted there before downloading.
+> - **Hugging Face token**: Paste an optional read token in Matting settings for gated downloads. It is stored server-side in `layerforge_settings.json`, never in the workflow or browser `localStorage`.
 > - **BRIA license**: The self-hosted RMBG 2.0 weights are released for non-commercial use under the model's stated license. Check the [official model card](https://huggingface.co/briaai/RMBG-2.0) before using it commercially.
 
-Click the gear button next to **Matting** to configure its behavior. Settings are saved locally in the browser and include:
+Click the gear button next to **Matting** to configure its behavior. Settings are saved server-side in `layerforge_settings.json` and include:
 
 - **Model**: automatically select a compatible local checkpoint, choose an installed local checkpoint, or select an official BiRefNet or BRIA RMBG 2.0 model for download on first use.
 - **Processing mode**: remove the background, remove the detected foreground, or apply the generated mask to LayerForge's Draw Mask output-area mask.
 - **Mask threshold**: use `0` for a soft alpha mask or a higher value for a harder cutout.
+- **Hugging Face token**: an optional read token for gated repositories such as BRIA RMBG 2.0; leave the field blank to keep the saved token.
 
 The model selector separates compatible local models from official models available for download. BiRefNet variants are stored directly in `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`. BRIA RMBG 2.0 is stored as a complete Transformers model under `ComfyUI/models/background_removal/RMBG-2.0/`. Every selected model is validated before use. Lite BiRefNet variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
 

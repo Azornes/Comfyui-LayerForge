@@ -3,7 +3,13 @@
 import folder_paths
 from aiohttp import web
 
-from .api import check_matting_model, matting, register_matting_routes
+from .api import (
+    check_matting_model,
+    get_matting_settings,
+    matting,
+    register_matting_routes,
+    save_matting_settings,
+)
 from .backends.birefnet import (
     _download_birefnet_checkpoint,
     _ensure_birefnet_checkpoint,
@@ -49,14 +55,30 @@ from .paths import (
     _get_rmbg_model_roots,
 )
 from .service import BiRefNetMatting
+from .settings import (
+    DEFAULT_SETTINGS,
+    SETTINGS_FILE,
+    get_huggingface_token,
+    get_public_settings,
+    load_settings,
+    save_settings,
+)
 
 
 __all__ = [
     "BiRefNetMatting",
     "RMBG2Model",
     "check_matting_model",
+    "get_matting_settings",
     "matting",
     "register_matting_routes",
+    "save_matting_settings",
+    "DEFAULT_SETTINGS",
+    "SETTINGS_FILE",
+    "get_huggingface_token",
+    "get_public_settings",
+    "load_settings",
+    "save_settings",
     "_BIREFNET_DEFAULT_LOCAL_FILENAME",
     "_BIREFNET_FILENAME",
     "_BIREFNET_MODEL_CATALOG",

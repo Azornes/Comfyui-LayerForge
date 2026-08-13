@@ -19,6 +19,7 @@ from ..paths import (
     _get_birefnet_remote_checkpoint_path,
     _get_rmbg_model_roots,
 )
+from ..settings import get_huggingface_token
 
 
 def _get_comfy_birefnet_loader():
@@ -164,19 +165,20 @@ def _download_birefnet_checkpoint(model=None):
         target_path = _get_birefnet_remote_checkpoint_path(model)
 
     log.info(f"Downloading {model_label} from Hugging Face into {download_dir}...")
+    download_kwargs = {
+        "repo_id": repository,
+        "filename": filename,
+        "local_dir": download_dir,
+        "local_dir_use_symlinks": False,
+    }
+    token = get_huggingface_token()
+    if token:
+        download_kwargs["token"] = token
     try:
-        downloaded_path = hf_hub_download(
-            repo_id=repository,
-            filename=filename,
-            local_dir=download_dir,
-            local_dir_use_symlinks=False,
-        )
+        downloaded_path = hf_hub_download(**download_kwargs)
     except TypeError:
-        downloaded_path = hf_hub_download(
-            repo_id=repository,
-            filename=filename,
-            local_dir=download_dir,
-        )
+        download_kwargs.pop("local_dir_use_symlinks", None)
+        downloaded_path = hf_hub_download(**download_kwargs)
 
     if not _is_native_birefnet_checkpoint(downloaded_path):
         raise RuntimeError(

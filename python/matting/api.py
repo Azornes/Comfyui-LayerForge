@@ -23,8 +23,43 @@ from .backends.rmbg import (
 from .options import _get_birefnet_model_options
 from .paths import _get_birefnet_base_paths
 from .service import BiRefNetMatting
+from .settings import get_public_settings, save_settings
 
 _matting_lock = None
+
+
+async def get_matting_settings(request):
+    """Return persisted Matting preferences without exposing the Hugging Face token."""
+    del request
+    try:
+        return web.json_response({"settings": get_public_settings()})
+    except Exception as error:
+        log.error(f"Error reading Matting settings: {error}")
+        return web.json_response(
+            {"error": "Unable to read Matting settings"},
+            status=500,
+        )
+
+
+async def save_matting_settings(request):
+    """Persist Matting preferences and an optional Hugging Face token."""
+    try:
+        payload = await request.json()
+    except Exception:
+        return web.json_response({"error": "Expected valid JSON"}, status=400)
+
+    if not isinstance(payload, dict):
+        return web.json_response({"error": "Expected JSON object"}, status=400)
+
+    try:
+        save_settings(payload)
+        return web.json_response({"success": True, "settings": get_public_settings()})
+    except Exception as error:
+        log.error(f"Error saving Matting settings: {error}")
+        return web.json_response(
+            {"error": "Unable to save Matting settings"},
+            status=500,
+        )
 
 
 def _matting_status_response(
@@ -292,8 +327,16 @@ async def matting(request):
 
 def register_matting_routes():
     """Register matting endpoints without import-time decorators."""
+    PromptServer.instance.routes.get("/matting/settings")(get_matting_settings)
+    PromptServer.instance.routes.post("/matting/settings")(save_matting_settings)
     PromptServer.instance.routes.get("/matting/check-model")(check_matting_model)
     PromptServer.instance.routes.post("/matting")(matting)
 
 
-__all__ = ["check_matting_model", "matting", "register_matting_routes"]
+__all__ = [
+    "check_matting_model",
+    "get_matting_settings",
+    "matting",
+    "register_matting_routes",
+    "save_matting_settings",
+]

@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from ...node import log
 from ..catalog import _RMBG_MODEL_CATALOG, _RMBG_REMOTE_PREFIX
 from ..paths import _get_rmbg_model_directory
+from ..settings import get_huggingface_token
 
 
 def _get_rmbg_transformers_status():
@@ -145,12 +146,16 @@ def _download_rmbg_model(model):
 
     os.makedirs(model_directory, exist_ok=True)
     log.info(f"Downloading {model['label']} from Hugging Face into {model_directory}...")
+    download_kwargs = {
+        "repo_id": model["repo_id"],
+        "local_dir": model_directory,
+        "allow_patterns": ["*.json", "*.py", "*.safetensors"],
+    }
+    token = get_huggingface_token()
+    if token:
+        download_kwargs["token"] = token
     try:
-        snapshot_download(
-            repo_id=model["repo_id"],
-            local_dir=model_directory,
-            allow_patterns=["*.json", "*.py", "*.safetensors"],
-        )
+        snapshot_download(**download_kwargs)
     except Exception as error:
         raise RuntimeError(
             "Unable to download BRIA RMBG 2.0. Accept the model's gated access on "

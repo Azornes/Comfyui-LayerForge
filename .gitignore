@@ -31,6 +31,9 @@ tmp/
 *.swp
 *.tmp
 
+# local LayerForge settings may contain a Hugging Face token
+layerforge_settings.json
+
 *.txt
 Zbierz
 .gitignore
