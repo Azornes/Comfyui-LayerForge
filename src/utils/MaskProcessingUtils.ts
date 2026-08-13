@@ -1,6 +1,5 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "./CommonUtils.js";
-import { convertToImage } from "./ImageUtils.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('MaskProcessingUtils');
@@ -18,6 +17,43 @@ export interface MaskProcessingOptions {
     invertAlpha?: boolean;
     /** Mask color RGB values (default: {r: 255, g: 255, b: 255}) */
     maskColor?: { r: number; g: number; b: number };
+}
+
+type PixelTransform = (
+    r: number,
+    g: number,
+    b: number,
+    a: number,
+    index: number
+) => [number, number, number, number];
+
+async function processImagePixels(
+    sourceImage: HTMLImageElement | HTMLCanvasElement,
+    targetWidth: number,
+    targetHeight: number,
+    pixelTransform: PixelTransform,
+    contextErrorMessage: string
+): Promise<HTMLCanvasElement> {
+    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
+
+    if (!tempCtx) {
+        throw createValidationError(contextErrorMessage);
+    }
+
+    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
+    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b, a] = pixelTransform(data[i], data[i + 1], data[i + 2], data[i + 3], i / 4);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = a;
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+    return tempCanvas;
 }
 
 /**
@@ -48,39 +84,18 @@ export const processImageToMask = withErrorHandling(async function(
         maskColor
     });
 
-    // Create temporary canvas for processing
-    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
-
-    if (!tempCtx) {
-        throw createValidationError("Failed to get 2D context for mask processing");
-    }
-
-    // Draw the source image
-    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
-
-    // Get image data for processing
-    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-    const data = imageData.data;
-
-    // Process pixels to create mask
-    for (let i = 0; i < data.length; i += 4) {
-        const originalAlpha = data[i + 3];
-        
-        // Set RGB to mask color
-        data[i] = maskColor.r;     // Red
-        data[i + 1] = maskColor.g; // Green
-        data[i + 2] = maskColor.b; // Blue
-        
-        // Handle alpha channel
-        if (invertAlpha) {
-            data[i + 3] = 255 - originalAlpha; // Invert alpha
-        } else {
-            data[i + 3] = originalAlpha; // Keep original alpha
-        }
-    }
-
-    // Put processed data back to canvas
-    tempCtx.putImageData(imageData, 0, 0);
+    const tempCanvas = await processImagePixels(
+        sourceImage,
+        targetWidth,
+        targetHeight,
+        (_r, _g, _b, originalAlpha) => [
+            maskColor.r,
+            maskColor.g,
+            maskColor.b,
+            invertAlpha ? 255 - originalAlpha : originalAlpha
+        ],
+        "Failed to get 2D context for mask processing"
+    );
 
     log.debug('Mask processing completed');
     return tempCanvas;
@@ -110,26 +125,13 @@ export const processImageWithTransform = withErrorHandling(async function(
         targetHeight = sourceImage.height
     } = options;
 
-    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
-
-    if (!tempCtx) {
-        throw createValidationError("Failed to get 2D context for image processing");
-    }
-
-    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
-    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-        const [r, g, b, a] = pixelTransform(data[i], data[i + 1], data[i + 2], data[i + 3], i / 4);
-        data[i] = r;
-        data[i + 1] = g;
-        data[i + 2] = b;
-        data[i + 3] = a;
-    }
-
-    tempCtx.putImageData(imageData, 0, 0);
-    return tempCanvas;
+    return processImagePixels(
+        sourceImage,
+        targetWidth,
+        targetHeight,
+        pixelTransform,
+        "Failed to get 2D context for image processing"
+    );
 }, 'processImageWithTransform');
 
 /**

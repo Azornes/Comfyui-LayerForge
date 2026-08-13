@@ -2,6 +2,24 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "./CommonUtils.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 const log = createModuleLogger('MaskProcessingUtils');
+async function processImagePixels(sourceImage, targetWidth, targetHeight, pixelTransform, contextErrorMessage) {
+    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
+    if (!tempCtx) {
+        throw createValidationError(contextErrorMessage);
+    }
+    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
+    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b, a] = pixelTransform(data[i], data[i + 1], data[i + 2], data[i + 3], i / 4);
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = a;
+    }
+    tempCtx.putImageData(imageData, 0, 0);
+    return tempCanvas;
+}
 /**
  * Processes an image to create a mask with inverted alpha channel
  * @param sourceImage - Source image or canvas element
@@ -19,33 +37,12 @@ export const processImageToMask = withErrorHandling(async function (sourceImage,
         invertAlpha,
         maskColor
     });
-    // Create temporary canvas for processing
-    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
-    if (!tempCtx) {
-        throw createValidationError("Failed to get 2D context for mask processing");
-    }
-    // Draw the source image
-    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
-    // Get image data for processing
-    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-    const data = imageData.data;
-    // Process pixels to create mask
-    for (let i = 0; i < data.length; i += 4) {
-        const originalAlpha = data[i + 3];
-        // Set RGB to mask color
-        data[i] = maskColor.r; // Red
-        data[i + 1] = maskColor.g; // Green
-        data[i + 2] = maskColor.b; // Blue
-        // Handle alpha channel
-        if (invertAlpha) {
-            data[i + 3] = 255 - originalAlpha; // Invert alpha
-        }
-        else {
-            data[i + 3] = originalAlpha; // Keep original alpha
-        }
-    }
-    // Put processed data back to canvas
-    tempCtx.putImageData(imageData, 0, 0);
+    const tempCanvas = await processImagePixels(sourceImage, targetWidth, targetHeight, (_r, _g, _b, originalAlpha) => [
+        maskColor.r,
+        maskColor.g,
+        maskColor.b,
+        invertAlpha ? 255 - originalAlpha : originalAlpha
+    ], "Failed to get 2D context for mask processing");
     log.debug('Mask processing completed');
     return tempCanvas;
 }, 'processImageToMask');
@@ -64,22 +61,7 @@ export const processImageWithTransform = withErrorHandling(async function (sourc
         throw createValidationError("Pixel transform function is required", { pixelTransform });
     }
     const { targetWidth = sourceImage.width, targetHeight = sourceImage.height } = options;
-    const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(targetWidth, targetHeight, '2d', { willReadFrequently: true });
-    if (!tempCtx) {
-        throw createValidationError("Failed to get 2D context for image processing");
-    }
-    tempCtx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
-    const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
-    const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
-        const [r, g, b, a] = pixelTransform(data[i], data[i + 1], data[i + 2], data[i + 3], i / 4);
-        data[i] = r;
-        data[i + 1] = g;
-        data[i + 2] = b;
-        data[i + 3] = a;
-    }
-    tempCtx.putImageData(imageData, 0, 0);
-    return tempCanvas;
+    return processImagePixels(sourceImage, targetWidth, targetHeight, pixelTransform, "Failed to get 2D context for image processing");
 }, 'processImageWithTransform');
 /**
  * Crops an image to a specific region
