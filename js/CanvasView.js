@@ -12,6 +12,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
+import { exportCanvasImage } from "./utils/CanvasExportUtils.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
 const MATTING_SETTINGS_STORAGE_KEY = 'layerforge.matting.settings';
@@ -1845,6 +1846,25 @@ app.registerExtension({
                 }
                 // Hook into "Open in SAM Detector" using the new integration module
                 setupSAMDetectorHook(self, options);
+                const runCanvasExport = async (action, variant, filename) => {
+                    const canvas = self.canvasWidget?.canvas;
+                    if (!canvas)
+                        return;
+                    const withMask = variant === 'with-mask';
+                    const imageLabel = withMask ? 'image with mask' : 'image';
+                    try {
+                        const exported = await exportCanvasImage(canvas, { action, variant, filename });
+                        if (exported && action === 'copy') {
+                            log.info(`${withMask ? 'Image with mask alpha' : 'Image'} copied to clipboard.`);
+                        }
+                    }
+                    catch (error) {
+                        log.error(`Error ${action === 'open' ? 'opening' : action === 'copy' ? 'copying' : 'saving'} ${imageLabel}:`, error);
+                        if (action === 'copy') {
+                            showErrorNotification(`Failed to copy ${withMask ? 'image with mask to clipboard.' : 'image to clipboard.'}`);
+                        }
+                    }
+                };
                 const newOptions = [
                     {
                         content: "Open in MaskEditor",
@@ -1867,123 +1887,27 @@ app.registerExtension({
                     },
                     {
                         content: "Open Image",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
-                                if (!blob)
-                                    return;
-                                const url = URL.createObjectURL(blob);
-                                window.open(url, '_blank');
-                                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            }
-                            catch (e) {
-                                log.error("Error opening image:", e);
-                            }
-                        },
+                        callback: () => runCanvasExport('open', 'plain'),
                     },
                     {
                         content: "Open Image with Mask Alpha",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-                                if (!blob)
-                                    return;
-                                const url = URL.createObjectURL(blob);
-                                window.open(url, '_blank');
-                                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            }
-                            catch (e) {
-                                log.error("Error opening image with mask:", e);
-                            }
-                        },
+                        callback: () => runCanvasExport('open', 'with-mask'),
                     },
                     {
                         content: "Copy Image",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
-                                if (!blob)
-                                    return;
-                                const item = new ClipboardItem({ 'image/png': blob });
-                                await navigator.clipboard.write([item]);
-                                log.info("Image copied to clipboard.");
-                            }
-                            catch (e) {
-                                log.error("Error copying image:", e);
-                                showErrorNotification("Failed to copy image to clipboard.");
-                            }
-                        },
+                        callback: () => runCanvasExport('copy', 'plain'),
                     },
                     {
                         content: "Copy Image with Mask Alpha",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-                                if (!blob)
-                                    return;
-                                const item = new ClipboardItem({ 'image/png': blob });
-                                await navigator.clipboard.write([item]);
-                                log.info("Image with mask alpha copied to clipboard.");
-                            }
-                            catch (e) {
-                                log.error("Error copying image with mask:", e);
-                                showErrorNotification("Failed to copy image with mask to clipboard.");
-                            }
-                        },
+                        callback: () => runCanvasExport('copy', 'with-mask'),
                     },
                     {
                         content: "Save Image",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasAsBlob();
-                                if (!blob)
-                                    return;
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'canvas_output.png';
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            }
-                            catch (e) {
-                                log.error("Error saving image:", e);
-                            }
-                        },
+                        callback: () => runCanvasExport('download', 'plain', 'canvas_output.png'),
                     },
                     {
                         content: "Save Image with Mask Alpha",
-                        callback: async () => {
-                            try {
-                                if (!self.canvasWidget || !self.canvasWidget.canvas)
-                                    return;
-                                const blob = await self.canvasWidget.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-                                if (!blob)
-                                    return;
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'canvas_output_with_mask.png';
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                            }
-                            catch (e) {
-                                log.error("Error saving image with mask:", e);
-                            }
-                        },
+                        callback: () => runCanvasExport('download', 'with-mask', 'canvas_output_with_mask.png'),
                     },
                 ];
                 if (options.length > 0) {
