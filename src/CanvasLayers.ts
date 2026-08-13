@@ -20,6 +20,7 @@ import {app} from "../../scripts/app.js";
 import {ComfyApp} from "../../scripts/app.js";
 import { ClipboardManager } from "./utils/ClipboardManager.js";
 import { createDistanceFieldMaskSync } from "./utils/ImageAnalysis.js";
+import { fillInverseAlphaMask } from "./utils/MaskPixelUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Point, AddMode, ClipboardPreference } from './types';
 
@@ -1807,12 +1808,7 @@ export class CanvasLayers {
             // Konwertuj przezroczystość warstw na maskę
             const visibilityData = visibilityCtx.getImageData(0, 0, bounds.width, bounds.height);
             const maskData = maskCtx.getImageData(0, 0, bounds.width, bounds.height);
-            for (let i = 0; i < visibilityData.data.length; i += 4) {
-                const alpha = visibilityData.data[i + 3];
-                const maskValue = 255 - alpha; // Odwróć alpha żeby stworzyć maskę
-                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
-                maskData.data[i + 3] = 255; // Solidna maska
-            }
+            fillInverseAlphaMask(visibilityData, maskData);
             maskCtx.putImageData(maskData, 0, 0);
 
             // Aplikuj maskę narzędzia jeśli istnieje - używaj zoptymalizowanej metody

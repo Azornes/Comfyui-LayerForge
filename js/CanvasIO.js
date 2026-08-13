@@ -3,6 +3,7 @@ import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
+import { fillInverseAlphaMask } from "./utils/MaskPixelUtils.js";
 const log = createModuleLogger('CanvasIO');
 export class CanvasIO {
     constructor(canvas) {
@@ -68,12 +69,7 @@ export class CanvasIO {
             log.debug(`Finished rendering layers`);
             const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
             const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            for (let i = 0; i < visibilityData.data.length; i += 4) {
-                const alpha = visibilityData.data[i + 3];
-                const maskValue = 255 - alpha;
-                maskData.data[i] = maskData.data[i + 1] = maskData.data[i + 2] = maskValue;
-                maskData.data[i + 3] = 255;
-            }
+            fillInverseAlphaMask(visibilityData, maskData);
             maskCtx.putImageData(maskData, 0, 0);
             this.canvas.outputAreaShape = originalShape;
             // Use optimized getMaskForOutputArea() instead of getMask() for better performance

@@ -1,6 +1,6 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { createCanvas, createCanvasWithContext } from "./utils/CommonUtils.js";
-import { calculateDistanceTransform } from "./utils/MaskPixelUtils.js";
+import { applyLuminanceAsAlpha, calculateDistanceTransform, imageDataToBinaryMask } from "./utils/MaskPixelUtils.js";
 const log = createModuleLogger('Mask_tool');
 export class MaskTool {
     constructor(canvasInstance, callbacks = {}) {
@@ -438,11 +438,7 @@ export class MaskTool {
         const { canvas, ctx } = createCanvasWithContext(width, height);
         this.drawShapeOnCanvas(ctx, points);
         const maskImage = ctx.getImageData(0, 0, width, height);
-        const binaryData = new Uint8Array(width * height);
-        for (let i = 0; i < binaryData.length; i++) {
-            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0;
-        }
-        return binaryData;
+        return imageDataToBinaryMask(maskImage, width, height, 0);
     }
     /**
      * Creates output canvas with image data
@@ -1235,10 +1231,7 @@ export class MaskTool {
             tempCtx.fill('evenodd'); // Use evenodd to handle holes correctly
         }
         const maskImage = tempCtx.getImageData(0, 0, width, height);
-        const binaryData = new Uint8Array(width * height);
-        for (let i = 0; i < binaryData.length; i++) {
-            binaryData[i] = maskImage.data[i * 4] > 0 ? 1 : 0;
-        }
+        const binaryData = imageDataToBinaryMask(maskImage, width, height, 0);
         let resultMask;
         const scaledExpansionValue = Math.round(Math.abs(expansionValue * zoom));
         if (expansionValue >= 0) {
@@ -1466,15 +1459,7 @@ export class MaskTool {
                 throw new Error("Could not create mask processing context");
             ctx.drawImage(image, 0, 0);
             const imgData = ctx.getImageData(0, 0, image.width, image.height);
-            const data = imgData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i], g = data[i + 1], b = data[i + 2];
-                const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-                data[i] = 255; // force white color (color channels ignored downstream)
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                data[i + 3] = lum; // alpha encodes mask strength: white -> strong, black -> 0
-            }
+            applyLuminanceAsAlpha(imgData);
             ctx.putImageData(imgData, 0, 0);
             // Clear target area and apply to chunked system at centered position
             this.clearMaskInArea(centerX, centerY, image.width, image.height);
@@ -1527,16 +1512,7 @@ export class MaskTool {
         }
         sourceMaskCtx.drawImage(image, 0, 0, sourceWidth, sourceHeight);
         const sourceImageData = sourceMaskCtx.getImageData(0, 0, sourceWidth, sourceHeight);
-        const sourceData = sourceImageData.data;
-        for (let i = 0; i < sourceData.length; i += 4) {
-            const luminance = Math.round(0.299 * sourceData[i] +
-                0.587 * sourceData[i + 1] +
-                0.114 * sourceData[i + 2]);
-            sourceData[i] = 255;
-            sourceData[i + 1] = 255;
-            sourceData[i + 2] = 255;
-            sourceData[i + 3] = luminance;
-        }
+        applyLuminanceAsAlpha(sourceImageData);
         sourceMaskCtx.putImageData(sourceImageData, 0, 0);
         ctx.save();
         ctx.translate(maskWidth / 2, maskHeight / 2);
@@ -1852,12 +1828,7 @@ export class MaskTool {
      * Creates a feathered mask from existing ImageData (used when combining expansion + feather)
      */
     _createFeatheredMaskFromImageData(imageData, featherRadius, width, height) {
-        const data = imageData.data;
-        const binaryData = new Uint8Array(width * height);
-        // Convert ImageData to binary mask
-        for (let i = 0; i < width * height; i++) {
-            binaryData[i] = data[i * 4 + 3] > 0 ? 1 : 0; // 1 = inside, 0 = outside
-        }
+        const binaryData = imageDataToBinaryMask(imageData, width, height, 3);
         // Use unified feathering logic
         return this.createFeatheredMaskFromBinaryData(binaryData, featherRadius, width, height);
     }

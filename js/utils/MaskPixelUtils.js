@@ -1,4 +1,41 @@
 /**
+ * Converts RGB luminance into an opaque white mask with luminance as alpha.
+ */
+export function applyLuminanceAsAlpha(imageData) {
+    const data = imageData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const luminance = Math.round(0.299 * data[i] +
+            0.587 * data[i + 1] +
+            0.114 * data[i + 2]);
+        data[i] = 255;
+        data[i + 1] = 255;
+        data[i + 2] = 255;
+        data[i + 3] = luminance;
+    }
+}
+/**
+ * Fills an opaque white mask from the inverse alpha of visibility data.
+ */
+export function fillInverseAlphaMask(visibilityData, maskData) {
+    for (let i = 0; i < visibilityData.data.length; i += 4) {
+        const maskValue = 255 - visibilityData.data[i + 3];
+        maskData.data[i] = maskValue;
+        maskData.data[i + 1] = maskValue;
+        maskData.data[i + 2] = maskValue;
+        maskData.data[i + 3] = 255;
+    }
+}
+/**
+ * Converts one ImageData channel into a binary mask.
+ */
+export function imageDataToBinaryMask(imageData, width, height, channel) {
+    const binaryMask = new Uint8Array(width * height);
+    for (let i = 0; i < binaryMask.length; i++) {
+        binaryMask[i] = imageData.data[i * 4 + channel] > 0 ? 1 : 0;
+    }
+    return binaryMask;
+}
+/**
  * Calculates the Euclidean distance transform of a binary mask.
  * Uses a two-pass algorithm for efficiency.
  * @param binaryMask - Binary mask where 1 = inside, 0 = outside
