@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+
+import { CanvasRenderer } from '../js/CanvasRenderer.js';
 
 import {
   getBoundsFromPoints,
@@ -9,6 +12,11 @@ import {
   localToWorld,
   worldToLocal,
 } from '../js/utils/CommonUtils.js';
+
+const canvasLayersSource = await readFile(
+  new URL('../src/CanvasLayers.ts', import.meta.url),
+  'utf8'
+);
 
 function assertAlmostEqual(actual, expected, epsilon = 1e-9) {
   assert.ok(
@@ -20,6 +28,31 @@ function assertAlmostEqual(actual, expected, epsilon = 1e-9) {
 function assertPointAlmostEqual(actual, expected, epsilon = 1e-9) {
   assertAlmostEqual(actual.x, expected.x, epsilon);
   assertAlmostEqual(actual.y, expected.y, epsilon);
+}
+
+function createRendererContext(arcs = []) {
+  return {
+    beginPath() {},
+    arc(x, y, radius, startAngle, endAngle) {
+      arcs.push({ x, y, radius, startAngle, endAngle });
+    },
+    fill() {},
+    lineTo() {},
+    moveTo() {},
+    setLineDash() {},
+    stroke() {},
+    strokeRect() {},
+  };
+}
+
+function createRenderer() {
+  const renderer = Object.create(CanvasRenderer.prototype);
+  renderer.canvas = {
+    viewport: { zoom: 1 },
+    canvasLayers: { getHandles: () => ({}) },
+  };
+  renderer.isPointCoveredByHigherLayers = () => false;
+  return renderer;
 }
 
 test('rotated layer hit-test coordinates preserve current boundary behavior', () => {
@@ -94,4 +127,57 @@ test('crop bounds preserve flip-aware layer-local coordinates', () => {
     width: 50,
     height: 30,
   });
+});
+
+test('renderer adaptive lines use the layer center and rotation contract', () => {
+  const renderer = createRenderer();
+  const observedWorldPoints = [];
+  renderer.isPointCoveredByHigherLayers = (worldX, worldY) => {
+    observedWorldPoints.push({ x: worldX, y: worldY });
+    return false;
+  };
+
+  const layer = { x: 10, y: 20, width: 100, height: 50, rotation: 90 };
+  renderer.drawAdaptiveLine(createRendererContext(), 0, 0, 16, 0, layer);
+
+  const transform = {
+    centerX: layer.x + layer.width / 2,
+    centerY: layer.y + layer.height / 2,
+    rotation: layer.rotation,
+  };
+  assertPointAlmostEqual(observedWorldPoints[0], localToWorld(0, 0, transform));
+  assertPointAlmostEqual(observedWorldPoints.at(-1), localToWorld(16, 0, transform));
+});
+
+test('renderer selection handles convert world positions back to local coordinates with flips', () => {
+  const renderer = createRenderer();
+  const layer = {
+    x: 100,
+    y: 200,
+    width: 100,
+    height: 50,
+    rotation: 90,
+    flipH: true,
+    flipV: false,
+  };
+  const transform = {
+    centerX: layer.x + layer.width / 2,
+    centerY: layer.y + layer.height / 2,
+    rotation: layer.rotation,
+  };
+  const worldHandle = localToWorld(50, 0, transform);
+  renderer.canvas.canvasLayers.getHandles = () => ({ e: worldHandle });
+
+  const arcs = [];
+  renderer.drawSelectionFrame(createRendererContext(arcs), layer);
+
+  assert.equal(arcs.length, 1);
+  assertAlmostEqual(arcs[0].x, -50);
+  assertAlmostEqual(arcs[0].y, 0);
+});
+
+test('CanvasLayers handle construction uses the canonical point transform', () => {
+  assert.match(canvasLayersSource, /localToWorld\(/);
+  assert.doesNotMatch(canvasLayersSource, /const rad = layer\.rotation \* Math\.PI \/ 180/);
+  assert.match(canvasLayersSource, /worldHandles\[key\] = localToWorld/);
 });

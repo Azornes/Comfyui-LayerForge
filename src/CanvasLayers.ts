@@ -8,6 +8,7 @@ import {
     getLayerWorldCorners,
     isPointInLayerLocalBounds,
     isPointInRotatedLayer,
+    localToWorld,
     worldToLayerLocal
 } from "./utils/CommonUtils.js";
 import {withErrorHandling, createValidationError} from "./ErrorHandler.js";
@@ -1236,9 +1237,6 @@ export class CanvasLayers {
     getHandles(layer: Layer): Record<string, Point> {
         const layerCenterX = layer.x + layer.width / 2;
         const layerCenterY = layer.y + layer.height / 2;
-        const rad = layer.rotation * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
 
         let handleCenterX, handleCenterY, halfW, halfH;
 
@@ -1263,8 +1261,13 @@ export class CanvasLayers {
             const cropCenterY_local = (-layer.height / 2) + ((effectiveCropY + layer.cropBounds.height / 2) * layerScaleY);
             
             // Rotate this local center to find the world-space center of the crop rect
-            handleCenterX = layerCenterX + (cropCenterX_local * cos - cropCenterY_local * sin);
-            handleCenterY = layerCenterY + (cropCenterX_local * sin + cropCenterY_local * cos);
+            const cropCenter = localToWorld(cropCenterX_local, cropCenterY_local, {
+                centerX: layerCenterX,
+                centerY: layerCenterY,
+                rotation: layer.rotation
+            });
+            handleCenterX = cropCenter.x;
+            handleCenterY = cropCenter.y;
             
             halfW = cropRectW / 2;
             halfH = cropRectH / 2;
@@ -1285,12 +1288,14 @@ export class CanvasLayers {
     };
 
         const worldHandles: Record<string, Point> = {};
+        const handleTransform = {
+            centerX: handleCenterX,
+            centerY: handleCenterY,
+            rotation: layer.rotation
+        };
         for (const key in localHandles) {
             const p = localHandles[key];
-            worldHandles[key] = {
-                x: handleCenterX + (p.x * cos - p.y * sin),
-                y: handleCenterY + (p.x * sin + p.y * cos)
-            };
+            worldHandles[key] = localToWorld(p.x, p.y, handleTransform);
         }
         return worldHandles;
     }

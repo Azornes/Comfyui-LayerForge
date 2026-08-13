@@ -1,5 +1,5 @@
 import {createModuleLogger} from "./log_system/log_funcs.js";
-import { getLayerWorldBounds, isPointInRotatedLayer } from "./utils/CommonUtils.js";
+import { getLayerWorldBounds, isPointInRotatedLayer, localToWorld, worldToLocal } from "./utils/CommonUtils.js";
 
 const log = createModuleLogger('CanvasRenderer');
 
@@ -452,6 +452,11 @@ export class CanvasRenderer {
         let currentY = startY;
         let lastCovered = null;
         let segmentStart = { x: startX, y: startY };
+        const layerTransform = {
+            centerX: layer.x + layer.width / 2,
+            centerY: layer.y + layer.height / 2,
+            rotation: layer.rotation
+        };
         
         for (let i = 0; i <= segments; i++) {
             const t = i / segments;
@@ -459,14 +464,9 @@ export class CanvasRenderer {
             const y = startY + (endY - startY) * t;
             
             // Przekształć współrzędne lokalne na światowe
-            const centerX = layer.x + layer.width / 2;
-            const centerY = layer.y + layer.height / 2;
-            const rad = layer.rotation * Math.PI / 180;
-            const cos = Math.cos(rad);
-            const sin = Math.sin(rad);
-            
-            const worldX = centerX + (x * cos - y * sin);
-            const worldY = centerY + (x * sin + y * cos);
+            const worldPoint = localToWorld(x, y, layerTransform);
+            const worldX = worldPoint.x;
+            const worldY = worldPoint.y;
             
             const isCovered = this.isPointCoveredByHigherLayers(worldX, worldY, layer);
             
@@ -574,6 +574,11 @@ export class CanvasRenderer {
 
         const centerX = layer.x + layer.width / 2;
         const centerY = layer.y + layer.height / 2;
+        const layerTransform = {
+            centerX,
+            centerY,
+            rotation: layer.rotation
+        };
 
         for (const key in handles) {
             // Skip rotation handle in crop mode
@@ -582,20 +587,12 @@ export class CanvasRenderer {
             const point = handles[key];
             // The handle position is already in world space.
             // We need to convert it to the layer's local, un-rotated space.
-            const dx = point.x - centerX;
-            const dy = point.y - centerY;
-
-            // "Un-rotate" the position to get it in the layer's local, un-rotated space
-            const rad = -layer.rotation * Math.PI / 180;
-            const cos = Math.cos(rad);
-            const sin = Math.sin(rad);
-            const localX = dx * cos - dy * sin;
-            const localY = dx * sin + dy * cos;
+            const localPoint = worldToLocal(point.x, point.y, layerTransform);
 
             // The context is already flipped. We need to flip the coordinates
             // to match the visual transformation, so the arc is drawn in the correct place.
-            const finalX = localX * (layer.flipH ? -1 : 1);
-            const finalY = localY * (layer.flipV ? -1 : 1);
+            const finalX = localPoint.x * (layer.flipH ? -1 : 1);
+            const finalY = localPoint.y * (layer.flipV ? -1 : 1);
 
             ctx.beginPath();
             ctx.arc(finalX, finalY, handleRadius, 0, Math.PI * 2);
