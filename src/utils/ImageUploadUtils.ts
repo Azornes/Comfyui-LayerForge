@@ -39,6 +39,32 @@ interface CanvasBlobUploadConfig {
     emptyBlobMessage: string;
 }
 
+interface ImageBlobUploadRequest {
+    blob: Blob;
+    filename: string;
+    overwrite?: boolean;
+    type?: string;
+}
+
+type ImageUploadTransport = (input: string, init: RequestInit) => Promise<Response>;
+
+export async function postImageBlob(
+    request: ImageBlobUploadRequest,
+    transport: ImageUploadTransport = (input, init) => api.fetchApi(input, init)
+): Promise<Response> {
+    const formData = new FormData();
+    formData.append("image", request.blob, request.filename);
+    formData.append("overwrite", (request.overwrite ?? true).toString());
+    if (request.type !== undefined) {
+        formData.append("type", request.type);
+    }
+
+    return transport("/upload/image", {
+        method: "POST",
+        body: formData,
+    });
+}
+
 async function getCanvasBlobForUpload(
     canvas: any,
     uploadOptions: UploadImageOptions,
@@ -104,16 +130,12 @@ export const uploadImageBlob = withErrorHandling(async function(blob: Blob, opti
         overwrite
     });
 
-    // Create FormData
-    const formData = new FormData();
-    formData.append("image", blob, filename);
-    formData.append("overwrite", overwrite.toString());
-    formData.append("type", type);
-
     // Upload to server
-    const response = await api.fetchApi("/upload/image", {
-        method: "POST",
-        body: formData,
+    const response = await postImageBlob({
+        blob,
+        filename,
+        overwrite,
+        type
     });
 
     if (!response.ok) {

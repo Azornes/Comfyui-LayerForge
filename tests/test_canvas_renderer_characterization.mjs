@@ -24,7 +24,7 @@ test('output paths preserve their current render bounds and mask responsibilitie
 test('output rendering keeps persistence and transport in CanvasIO', () => {
   assert.match(canvasIOSource, /async _performSave\(fileName: string, outputMode: string\)/);
   assert.match(canvasIOSource, /tempCanvas\.toDataURL\('image\/png'\)/);
-  assert.match(canvasIOSource, /fetch\("\/upload\/image"/);
+  assert.equal((canvasIOSource.match(/postImageBlob\(/g) ?? []).length, 3);
   assert.match(canvasLayersSource, /async getFlattenedCanvasAsBlob\(\)/);
   assert.match(canvasLayersSource, /async getFlattenedMaskAsBlob\(\)/);
 });

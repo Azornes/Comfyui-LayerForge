@@ -3,6 +3,7 @@ import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, blobToDataUrl, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
+import { postImageBlob } from "./utils/ImageUploadUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape, AddMode } from './types';
 
@@ -153,15 +154,12 @@ export class CanvasIO {
             tempCanvas.toBlob(async (blobWithoutMask) => {
                 if (!blobWithoutMask) return;
                 log.debug(`Created blob for image without mask, size: ${blobWithoutMask.size} bytes`);
-                const formDataWithoutMask = new FormData();
-                formDataWithoutMask.append("image", blobWithoutMask, fileNameWithoutMask);
-                formDataWithoutMask.append("overwrite", "true");
 
                 try {
-                    const response = await fetch("/upload/image", {
-                        method: "POST",
-                        body: formDataWithoutMask,
-                    });
+                    const response = await postImageBlob(
+                        { blob: blobWithoutMask, filename: fileNameWithoutMask },
+                        fetch
+                    );
                     log.debug(`Image without mask upload response: ${response.status}`);
                 } catch (error) {
                     log.error(`Error uploading image without mask:`, error);
@@ -171,15 +169,12 @@ export class CanvasIO {
             tempCanvas.toBlob(async (blob) => {
                 if (!blob) return;
                 log.debug(`Created blob for main image, size: ${blob.size} bytes`);
-                const formData = new FormData();
-                formData.append("image", blob, fileName);
-                formData.append("overwrite", "true");
 
                 try {
-                    const resp = await fetch("/upload/image", {
-                        method: "POST",
-                        body: formData,
-                    });
+                    const resp = await postImageBlob(
+                        { blob, filename: fileName },
+                        fetch
+                    );
                     log.debug(`Main image upload response: ${resp.status}`);
 
                     if (resp.status === 200) {
@@ -189,15 +184,12 @@ export class CanvasIO {
                         maskCanvas.toBlob(async (maskBlob) => {
                             if (!maskBlob) return;
                             log.debug(`Created blob for mask, size: ${maskBlob.size} bytes`);
-                            const maskFormData = new FormData();
-                            maskFormData.append("image", maskBlob, maskFileName);
-                            maskFormData.append("overwrite", "true");
 
                             try {
-                                const maskResp = await fetch("/upload/image", {
-                                    method: "POST",
-                                    body: maskFormData,
-                                });
+                                const maskResp = await postImageBlob(
+                                    { blob: maskBlob, filename: maskFileName },
+                                    fetch
+                                );
                                 log.debug(`Mask upload response: ${maskResp.status}`);
 
                                 if (maskResp.status === 200) {

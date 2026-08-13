@@ -4,6 +4,18 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
 import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
 const log = createModuleLogger('ImageUploadUtils');
+export async function postImageBlob(request, transport = (input, init) => api.fetchApi(input, init)) {
+    const formData = new FormData();
+    formData.append("image", request.blob, request.filename);
+    formData.append("overwrite", (request.overwrite ?? true).toString());
+    if (request.type !== undefined) {
+        formData.append("type", request.type);
+    }
+    return transport("/upload/image", {
+        method: "POST",
+        body: formData,
+    });
+}
 async function getCanvasBlobForUpload(canvas, uploadOptions, config) {
     if (!canvas) {
         throw createValidationError("Canvas is required", { canvas });
@@ -53,15 +65,12 @@ export const uploadImageBlob = withErrorHandling(async function (blob, options =
         type,
         overwrite
     });
-    // Create FormData
-    const formData = new FormData();
-    formData.append("image", blob, filename);
-    formData.append("overwrite", overwrite.toString());
-    formData.append("type", type);
     // Upload to server
-    const response = await api.fetchApi("/upload/image", {
-        method: "POST",
-        body: formData,
+    const response = await postImageBlob({
+        blob,
+        filename,
+        overwrite,
+        type
     });
     if (!response.ok) {
         throw createNetworkError(`Failed to upload image: ${response.statusText}`, {
