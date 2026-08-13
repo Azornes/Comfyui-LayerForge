@@ -301,12 +301,14 @@ async function createCanvasWidget(node, widget, app) {
                 modelDetails.hidden = false;
                 return;
             }
-            modelDescription.textContent = selectedOption.description || 'Installed checkpoint validated by ComfyUI\'s native BiRefNet loader.';
+            modelDescription.textContent = selectedOption.description || (selectedOption.backend === 'rmbg'
+                ? 'Local BRIA RMBG 2.0 model loaded through Transformers.'
+                : 'Installed checkpoint validated by ComfyUI\'s native BiRefNet loader.');
             if (selectedOption.url) {
                 modelLinks.appendChild(createModelLink('Model page', selectedOption.url));
             }
             if (selectedOption.project_url) {
-                modelLinks.appendChild(createModelLink('BiRefNet project', selectedOption.project_url));
+                modelLinks.appendChild(createModelLink(selectedOption.backend === 'rmbg' ? 'BRIA project' : 'BiRefNet project', selectedOption.project_url));
             }
             modelDetails.hidden = false;
         };
@@ -346,7 +348,7 @@ async function createCanvasWidget(node, widget, app) {
             remoteCount > 0 ? `${remoteCount} official model(s) available for download` : '',
         ].filter(Boolean).join('; ');
         modelStatus.textContent = `${modelCounts}. ${modelStatusMessage}`;
-        body.append(createRow('Model', modelSelect, 'Only checkpoints accepted by the native ComfyUI BiRefNet loader are listed.'), modelDetails, createRow('Processing mode', modeSelect, 'The selected mode controls what the Matting button creates from the detected mask.'), createRow('Mask threshold', thresholdContainer, 'Set to 0 for a soft alpha mask; higher values create a harder cutout.'), modelStatus);
+        body.append(createRow('Model', modelSelect, 'Choose a local BiRefNet checkpoint or BRIA RMBG 2.0, or download an official model on first use.'), modelDetails, createRow('Processing mode', modeSelect, 'The selected mode controls what the Matting button creates from the detected mask.'), createRow('Mask threshold', thresholdContainer, 'Set to 0 for a soft alpha mask; higher values create a harder cutout.'), modelStatus);
         const actions = document.createElement('div');
         actions.className = 'lf-matting-settings-actions';
         const resetButton = document.createElement('button');
@@ -657,12 +659,12 @@ async function createCanvasWidget(node, widget, app) {
                                         showErrorNotification(modelStatus.message, 8000);
                                         return;
                                     case 'not_downloaded':
-                                        showWarningNotification("The selected BiRefNet model will be downloaded automatically (requires internet connection).", 5000);
+                                        showWarningNotification(modelStatus.message || "The selected background-removal model will be downloaded automatically.", 7000);
                                         // Ask user if they want to proceed with download
-                                        if (!confirm("The selected BiRefNet model needs to be downloaded. This is a one-time download and may be large. Do you want to proceed?")) {
+                                        if (!confirm(`${modelStatus.message || "The selected background-removal model needs to be downloaded."}\n\nThis is a one-time download and may be large. Do you want to proceed?`)) {
                                             return;
                                         }
-                                        showInfoNotification("Downloading the selected BiRefNet model... This may take a few minutes.", 10000);
+                                        showInfoNotification("Downloading the selected background-removal model... This may take a few minutes.", 10000);
                                         break;
                                     case 'selected_model_unavailable':
                                         showErrorNotification(modelStatus.message, 8000);

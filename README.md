@@ -52,7 +52,7 @@ https://github.com/user-attachments/assets/9c7ce1de-873b-4a3b-8579-0fc67642af3a
     - **Drag & Drop** image files to create new layers.
     - **Copy & Paste** images directly from your system clipboard.
     - Import the last generated image from your workflow with one click.
-- **AI-Powered Matting:** Optional background removal for any layer using the `BiRefNet` model.
+- **AI-Powered Matting:** Optional background removal for any layer using `BiRefNet` or local `BRIA RMBG 2.0`.
 - **Efficient Memory Management:** An automatic garbage collection system cleans up unused image data to keep the
   browser's storage footprint low.
 - **Inputs**
@@ -224,9 +224,10 @@ LayerForge is designed to work with **any ComfyUI-compatible model**. The node o
 ## 🧠 Optional: Matting Model (for image cutout)
 
 The "Matting" feature allows you to automatically generate a cutout (alpha mask) for a selected layer. This is an
-optional feature and requires a model.
+optional feature and requires a model. LayerForge supports ComfyUI's native BiRefNet loader and can also run BRIA
+RMBG 2.0 locally through Transformers.
 
-> - **Model Name**: `BiRefNet`
+> - **Model Names**: `BiRefNet`, `BRIA RMBG 2.0`
 > - **Download from**:
     >
 - [Hugging Face](https://huggingface.co/ZhengPeng7/BiRefNet/tree/main) (Recommended)
@@ -234,14 +235,16 @@ optional feature and requires a model.
 > - **Installation Path**: Place a full BiRefNet checkpoint in `ComfyUI/models/background_removal/`.
 > - **Automatic download**: If no compatible checkpoint is found, LayerForge downloads the standard full BiRefNet checkpoint automatically on first use.
 > - **Compatibility**: LayerForge uses ComfyUI's native BiRefNet loader, so the checkpoint must use the full BiRefNet architecture. The `lite-*` variants are not compatible with this native loader.
+> - **BRIA RMBG 2.0**: Select it in Matting settings to download the local Transformers model into `ComfyUI/models/background_removal/RMBG-2.0/`. The Hugging Face repository is gated, so access must be accepted there before downloading.
+> - **BRIA license**: The self-hosted RMBG 2.0 weights are released for non-commercial use under the model's stated license. Check the [official model card](https://huggingface.co/briaai/RMBG-2.0) before using it commercially.
 
 Click the gear button next to **Matting** to configure its behavior. Settings are saved locally in the browser and include:
 
-- **Model**: automatically select a compatible local checkpoint, choose an installed local checkpoint, or select an official BiRefNet variant for download on first use.
+- **Model**: automatically select a compatible local checkpoint, choose an installed local checkpoint, or select an official BiRefNet or BRIA RMBG 2.0 model for download on first use.
 - **Processing mode**: remove the background, remove the detected foreground, or apply the generated mask to LayerForge's Draw Mask output-area mask.
 - **Mask threshold**: use `0` for a soft alpha mask or a higher value for a harder cutout.
 
-The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored directly in `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`, then validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
+The model selector separates compatible local models from official models available for download. BiRefNet variants are stored directly in `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`. BRIA RMBG 2.0 is stored as a complete Transformers model under `ComfyUI/models/background_removal/RMBG-2.0/`. Every selected model is validated before use. Lite BiRefNet variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
 
 ### BiRefNet model guide
 

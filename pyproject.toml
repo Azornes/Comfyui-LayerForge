@@ -4,7 +4,7 @@ description = "Photoshop-like layered canvas editor to your ComfyUI workflow. Th
 version = "1.5.13"
 license = { text = "MIT License" }
 requires-python = ">=3.10"
-dependencies = ["torch", "torchvision", "huggingface_hub", "aiohttp", "numpy", "tqdm", "Pillow"]
+dependencies = ["torch", "torchvision", "huggingface_hub", "aiohttp", "numpy", "tqdm", "Pillow", "transformers>=4.50.3", "kornia"]
 
 [project.urls]
 Repository = "https://github.com/Azornes/Comfyui-LayerForge"
