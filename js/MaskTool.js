@@ -1502,6 +1502,76 @@ export class MaskTool {
         }
     }
     /**
+     * Applies a generated mask using the selected layer's world-space geometry.
+     * The regular input-mask path intentionally centers images in the output
+     * area, but a mask generated from a layer must follow that layer's position,
+     * scale, rotation, crop, and flips.
+     */
+    setMaskForLayer(image, layer) {
+        const layerWidth = Number(layer.width);
+        const layerHeight = Number(layer.height);
+        const originalWidth = Number(layer.originalWidth) || image.naturalWidth || image.width;
+        const originalHeight = Number(layer.originalHeight) || image.naturalHeight || image.height;
+        if (!(layerWidth > 0) || !(layerHeight > 0) || !(originalWidth > 0) || !(originalHeight > 0)) {
+            throw new Error('Cannot align the generated mask with an invalid layer geometry.');
+        }
+        const rotation = (Number(layer.rotation) || 0) * Math.PI / 180;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+        const maskWidth = Math.max(1, Math.ceil(Math.abs(layerWidth * cos) + Math.abs(layerHeight * sin)));
+        const maskHeight = Math.max(1, Math.ceil(Math.abs(layerWidth * sin) + Math.abs(layerHeight * cos)));
+        const centerX = Number(layer.x) + layerWidth / 2;
+        const centerY = Number(layer.y) + layerHeight / 2;
+        const maskLeft = centerX - maskWidth / 2;
+        const maskTop = centerY - maskHeight / 2;
+        const { canvas: maskCanvas, ctx } = createCanvas(maskWidth, maskHeight, '2d', { willReadFrequently: true });
+        if (!ctx) {
+            throw new Error('Could not create aligned mask canvas');
+        }
+        const sourceWidth = image.naturalWidth || image.width;
+        const sourceHeight = image.naturalHeight || image.height;
+        const { canvas: sourceMaskCanvas, ctx: sourceMaskCtx } = createCanvas(sourceWidth, sourceHeight, '2d', { willReadFrequently: true });
+        if (!sourceMaskCtx) {
+            throw new Error('Could not create mask conversion canvas');
+        }
+        sourceMaskCtx.drawImage(image, 0, 0, sourceWidth, sourceHeight);
+        const sourceImageData = sourceMaskCtx.getImageData(0, 0, sourceWidth, sourceHeight);
+        const sourceData = sourceImageData.data;
+        for (let i = 0; i < sourceData.length; i += 4) {
+            const luminance = Math.round(0.299 * sourceData[i] +
+                0.587 * sourceData[i + 1] +
+                0.114 * sourceData[i + 2]);
+            sourceData[i] = 255;
+            sourceData[i + 1] = 255;
+            sourceData[i + 2] = 255;
+            sourceData[i + 3] = luminance;
+        }
+        sourceMaskCtx.putImageData(sourceImageData, 0, 0);
+        ctx.save();
+        ctx.translate(maskWidth / 2, maskHeight / 2);
+        ctx.rotate(rotation);
+        ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+        const scaleX = layerWidth / originalWidth;
+        const scaleY = layerHeight / originalHeight;
+        const crop = layer.cropBounds;
+        if (crop && originalWidth && originalHeight) {
+            const destinationX = -layerWidth / 2 + crop.x * scaleX;
+            const destinationY = -layerHeight / 2 + crop.y * scaleY;
+            ctx.drawImage(sourceMaskCanvas, crop.x, crop.y, crop.width, crop.height, destinationX, destinationY, crop.width * scaleX, crop.height * scaleY);
+        }
+        else {
+            ctx.drawImage(sourceMaskCanvas, -layerWidth / 2, -layerHeight / 2, layerWidth, layerHeight);
+        }
+        ctx.restore();
+        this.clearMaskInArea(maskLeft, maskTop, maskWidth, maskHeight);
+        this.applyMaskCanvasToChunks(maskCanvas, maskLeft, maskTop);
+        this.updateActiveMaskCanvas(true);
+        this.canvasInstance.canvasState.saveMaskState();
+        this.canvasInstance.render();
+        log.info(`MaskTool set layer-aligned mask at (${maskLeft.toFixed(1)}, ${maskTop.toFixed(1)}) ` +
+            `with size ${maskWidth}x${maskHeight} for layer ${layer.id}`);
+    }
+    /**
      * Clears mask data in a specific area by clearing affected chunks
      */
     clearMaskInArea(x, y, width, height) {

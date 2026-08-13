@@ -631,6 +631,170 @@
         transform: translateY(-50%) rotate(360deg);
     }
 }
+
+.lf-matting-settings-button {
+    color: #d7d7d7;
+    font-size: 17px;
+}
+
+.lf-matting-settings-button:hover {
+    color: #fff;
+}
+
+.lf-matting-settings-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.lf-matting-settings-dialog {
+    width: min(520px, 100%);
+    max-height: min(680px, 100%);
+    overflow: auto;
+    color: #f2f2f2;
+    background: #303030;
+    border: 1px solid #555;
+    border-radius: 9px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.lf-matting-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px;
+    border-bottom: 1px solid #484848;
+}
+
+.lf-matting-settings-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.lf-matting-settings-close {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    color: #d0d0d0;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.lf-matting-settings-close:hover {
+    color: #fff;
+    background: #484848;
+    border-color: #666;
+}
+
+.lf-matting-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px;
+}
+
+.lf-matting-settings-row {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.lf-matting-settings-label {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.lf-matting-settings-select {
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 9px;
+    color: #f4f4f4;
+    cursor: pointer;
+    background: #252525;
+    border: 1px solid #5a5a5a;
+    border-radius: 4px;
+}
+
+.lf-matting-settings-select:focus,
+.lf-matting-settings-threshold input:focus {
+    outline: 2px solid #4b8fe8;
+    outline-offset: 1px;
+}
+
+.lf-matting-settings-hint,
+.lf-matting-settings-status {
+    margin: 0;
+    color: #bdbdbd;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.lf-matting-settings-threshold {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lf-matting-settings-threshold input {
+    flex: 1;
+    accent-color: #4b8fe8;
+}
+
+.lf-matting-settings-threshold-value {
+    min-width: 38px;
+    color: #fff;
+    font-family: monospace;
+    text-align: right;
+}
+
+.lf-matting-settings-status {
+    padding: 10px 12px;
+    background: rgba(75, 143, 232, 0.1);
+    border: 1px solid rgba(75, 143, 232, 0.28);
+    border-radius: 4px;
+}
+
+.lf-matting-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 18px 18px;
+    border-top: 1px solid #484848;
+}
+
+.lf-matting-settings-actions button {
+    min-height: 34px;
+    padding: 6px 14px;
+    color: #fff;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.lf-matting-settings-secondary {
+    background: #414141;
+    border: 1px solid #5c5c5c;
+}
+
+.lf-matting-settings-primary {
+    background: #3a76d6;
+    border: 1px solid #2a6ac4;
+}
+
+.lf-matting-settings-actions button:hover {
+    filter: brightness(1.12);
+}
+
 .lf-painter-modal-backdrop {
     position: fixed;
     top: 0;

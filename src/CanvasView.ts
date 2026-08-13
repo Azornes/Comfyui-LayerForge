@@ -23,6 +23,68 @@ import type { ComfyNode, Layer, AddMode } from './types';
 
 const log = createModuleLogger('Canvas_view');
 
+type MattingMode = 'remove_background' | 'remove_foreground' | 'mask_only';
+
+interface MattingSettings {
+    modelPath: string;
+    mode: MattingMode;
+    threshold: number;
+}
+
+interface MattingModelOption {
+    path: string;
+    label: string;
+    description?: string;
+    source?: 'local' | 'remote';
+    downloaded?: boolean;
+}
+
+const MATTING_SETTINGS_STORAGE_KEY = 'layerforge.matting.settings';
+const DEFAULT_MATTING_SETTINGS: MattingSettings = {
+    modelPath: '',
+    mode: 'remove_background',
+    threshold: 0.5,
+};
+
+const isMattingMode = (value: unknown): value is MattingMode => {
+    return value === 'remove_background' || value === 'remove_foreground' || value === 'mask_only';
+};
+
+const loadMattingSettings = (): MattingSettings => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(MATTING_SETTINGS_STORAGE_KEY) || '{}') as Partial<MattingSettings>;
+        const threshold = Number(stored.threshold);
+
+        return {
+            modelPath: typeof stored.modelPath === 'string' ? stored.modelPath : DEFAULT_MATTING_SETTINGS.modelPath,
+            mode: isMattingMode(stored.mode) ? stored.mode : DEFAULT_MATTING_SETTINGS.mode,
+            threshold: Number.isFinite(threshold) ? Math.min(1, Math.max(0, threshold)) : DEFAULT_MATTING_SETTINGS.threshold,
+        };
+    } catch (error) {
+        log.warn('Unable to load Matting settings:', error);
+        return { ...DEFAULT_MATTING_SETTINGS };
+    }
+};
+
+const saveMattingSettings = (settings: MattingSettings): void => {
+    try {
+        localStorage.setItem(MATTING_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (error) {
+        log.warn('Unable to save Matting settings:', error);
+    }
+};
+
+const getMattingModeLabel = (mode: MattingMode): string => {
+    switch (mode) {
+        case 'remove_foreground':
+            return 'Remove detected foreground / keep background';
+        case 'mask_only':
+            return 'Apply generated mask to Draw Mask';
+        default:
+            return 'Remove background / keep foreground';
+    }
+};
+
 const LAYERFORGE_CHANGE_TRACKER_PATCH_FLAG = '__layerForgeUndoRedoPatched';
 const LAYERFORGE_SHORTCUT_ACTIVE_ATTR = 'data-layerforge-shortcuts-active';
 
@@ -173,6 +235,222 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
     const hideTooltip = () => {
         helpTooltip.style.display = 'none';
+    };
+
+    let mattingSettingsBackdrop: HTMLDivElement | null = null;
+    let mattingSettingsEscapeHandler: ((event: KeyboardEvent) => void) | null = null;
+
+    const closeMattingSettings = () => {
+        if (mattingSettingsEscapeHandler) {
+            document.removeEventListener('keydown', mattingSettingsEscapeHandler);
+            mattingSettingsEscapeHandler = null;
+        }
+
+        mattingSettingsBackdrop?.remove();
+        mattingSettingsBackdrop = null;
+    };
+
+    const openMattingSettings = async (): Promise<void> => {
+        if (mattingSettingsBackdrop) return;
+
+        const settings = loadMattingSettings();
+        let modelOptions: MattingModelOption[] = [];
+        let modelStatusMessage = 'Model options are loaded from ComfyUI background-removal storage.';
+
+        try {
+            const response = await fetch('/matting/check-model');
+            if (response.ok) {
+                const status = await response.json() as { models?: MattingModelOption[] };
+                if (Array.isArray(status.models)) {
+                    modelOptions = status.models.filter((option) => (
+                        option && typeof option.path === 'string' && typeof option.label === 'string'
+                    ));
+                }
+            } else {
+                modelStatusMessage = 'Unable to read installed model options. Automatic selection remains available.';
+            }
+        } catch (error) {
+            log.warn('Unable to load Matting model options:', error);
+            modelStatusMessage = 'Unable to read installed model options. Automatic selection remains available.';
+        }
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'lf-matting-settings-backdrop';
+        backdrop.setAttribute('role', 'presentation');
+
+        const dialog = document.createElement('div');
+        dialog.className = 'lf-matting-settings-dialog';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        dialog.setAttribute('aria-labelledby', 'lf-matting-settings-title');
+
+        const header = document.createElement('div');
+        header.className = 'lf-matting-settings-header';
+
+        const title = document.createElement('h2');
+        title.id = 'lf-matting-settings-title';
+        title.textContent = 'Matting Settings';
+
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.className = 'lf-matting-settings-close';
+        closeButton.textContent = '×';
+        closeButton.title = 'Close Matting settings';
+        closeButton.setAttribute('aria-label', 'Close Matting settings');
+        closeButton.onclick = closeMattingSettings;
+
+        header.append(title, closeButton);
+
+        const body = document.createElement('div');
+        body.className = 'lf-matting-settings-body';
+
+        const createRow = (labelText: string, control: HTMLElement, description?: string): HTMLLabelElement => {
+            const row = document.createElement('label');
+            row.className = 'lf-matting-settings-row';
+
+            const label = document.createElement('span');
+            label.className = 'lf-matting-settings-label';
+            label.textContent = labelText;
+            row.appendChild(label);
+            row.appendChild(control);
+
+            if (description) {
+                const hint = document.createElement('small');
+                hint.className = 'lf-matting-settings-hint';
+                hint.textContent = description;
+                row.appendChild(hint);
+            }
+
+            return row;
+        };
+
+        const modelSelect = document.createElement('select');
+        modelSelect.className = 'lf-matting-settings-select';
+        modelSelect.appendChild(new Option('Automatic (recommended)', 'auto'));
+        const localModelOptions = modelOptions.filter((option) => option.source !== 'remote');
+        const remoteModelOptions = modelOptions.filter((option) => option.source === 'remote');
+
+        if (localModelOptions.length > 0) {
+            const localGroup = document.createElement('optgroup');
+            localGroup.label = 'Installed locally';
+            localModelOptions.forEach((option) => {
+                localGroup.appendChild(new Option(option.label, option.path));
+            });
+            modelSelect.appendChild(localGroup);
+        }
+
+        if (remoteModelOptions.length > 0) {
+            const remoteGroup = document.createElement('optgroup');
+            remoteGroup.label = 'Download on first use';
+            remoteModelOptions.forEach((option) => {
+                const suffix = option.downloaded ? ' (downloaded)' : '';
+                const remoteOption = new Option(`${option.label}${suffix}`, option.path);
+                if (option.description) remoteOption.title = option.description;
+                remoteGroup.appendChild(remoteOption);
+            });
+            modelSelect.appendChild(remoteGroup);
+        }
+
+        const selectedModel = settings.modelPath && modelOptions.some((option) => option.path === settings.modelPath)
+            ? settings.modelPath
+            : 'auto';
+        modelSelect.value = selectedModel;
+
+        const modeSelect = document.createElement('select');
+        modeSelect.className = 'lf-matting-settings-select';
+        (['remove_background', 'remove_foreground', 'mask_only'] as MattingMode[]).forEach((mode) => {
+            modeSelect.appendChild(new Option(getMattingModeLabel(mode), mode));
+        });
+        modeSelect.value = settings.mode;
+
+        const thresholdContainer = document.createElement('div');
+        thresholdContainer.className = 'lf-matting-settings-threshold';
+
+        const thresholdInput = document.createElement('input');
+        thresholdInput.type = 'range';
+        thresholdInput.min = '0';
+        thresholdInput.max = '1';
+        thresholdInput.step = '0.01';
+        thresholdInput.value = String(settings.threshold);
+
+        const thresholdValue = document.createElement('output');
+        thresholdValue.className = 'lf-matting-settings-threshold-value';
+        thresholdValue.value = settings.threshold.toFixed(2);
+        thresholdValue.textContent = settings.threshold.toFixed(2);
+
+        thresholdInput.oninput = () => {
+            const value = Number(thresholdInput.value);
+            thresholdValue.value = value.toFixed(2);
+            thresholdValue.textContent = value.toFixed(2);
+        };
+
+        thresholdContainer.append(thresholdInput, thresholdValue);
+
+        const modelStatus = document.createElement('p');
+        modelStatus.className = 'lf-matting-settings-status';
+        const localCount = localModelOptions.length;
+        const remoteCount = remoteModelOptions.length;
+        const modelCounts = [
+            localCount > 0 ? `${localCount} installed local model(s)` : 'No compatible local model installed',
+            remoteCount > 0 ? `${remoteCount} official model(s) available for download` : '',
+        ].filter(Boolean).join('; ');
+        modelStatus.textContent = `${modelCounts}. ${modelStatusMessage}`;
+
+        body.append(
+            createRow('Model', modelSelect, 'Only checkpoints accepted by the native ComfyUI BiRefNet loader are listed.'),
+            createRow('Processing mode', modeSelect, 'The selected mode controls what the Matting button creates from the detected mask.'),
+            createRow('Mask threshold', thresholdContainer, 'Set to 0 for a soft alpha mask; higher values create a harder cutout.'),
+            modelStatus,
+        );
+
+        const actions = document.createElement('div');
+        actions.className = 'lf-matting-settings-actions';
+
+        const resetButton = document.createElement('button');
+        resetButton.type = 'button';
+        resetButton.className = 'lf-matting-settings-secondary';
+        resetButton.textContent = 'Reset';
+        resetButton.onclick = () => {
+            modelSelect.value = 'auto';
+            modeSelect.value = DEFAULT_MATTING_SETTINGS.mode;
+            thresholdInput.value = String(DEFAULT_MATTING_SETTINGS.threshold);
+            thresholdValue.value = DEFAULT_MATTING_SETTINGS.threshold.toFixed(2);
+            thresholdValue.textContent = DEFAULT_MATTING_SETTINGS.threshold.toFixed(2);
+        };
+
+        const saveButton = document.createElement('button');
+        saveButton.type = 'button';
+        saveButton.className = 'lf-matting-settings-primary';
+        saveButton.textContent = 'Save settings';
+        saveButton.onclick = () => {
+            saveMattingSettings({
+                modelPath: modelSelect.value === 'auto' ? '' : modelSelect.value,
+                mode: modeSelect.value as MattingMode,
+                threshold: Number(thresholdInput.value),
+            });
+            closeMattingSettings();
+            showInfoNotification('Matting settings saved.', 2000);
+        };
+
+        actions.append(resetButton, saveButton);
+        dialog.append(header, body, actions);
+        backdrop.appendChild(dialog);
+
+        backdrop.addEventListener('click', (event) => {
+            if (event.target === backdrop) closeMattingSettings();
+        });
+
+        mattingSettingsEscapeHandler = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeMattingSettings();
+            }
+        };
+        document.addEventListener('keydown', mattingSettingsEscapeHandler);
+
+        mattingSettingsBackdrop = backdrop;
+        document.body.appendChild(backdrop);
+        closeButton.focus();
     };
 
     const controlPanel = $el("div.painterControlPanel", {}, [
@@ -480,9 +758,14 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                         const button = (e.target as HTMLElement).closest('.lf-matting-button') as HTMLButtonElement;
                         if (button.classList.contains('lf-loading')) return;
 
+                        const mattingSettings = loadMattingSettings();
+
                         try {
                             // First check if model is available
-                            const modelCheckResponse = await fetch("/matting/check-model");
+                            const modelCheckUrl = mattingSettings.modelPath
+                                ? `/matting/check-model?model_path=${encodeURIComponent(mattingSettings.modelPath)}`
+                                : "/matting/check-model";
+                            const modelCheckResponse = await fetch(modelCheckUrl);
                             const modelStatus = await modelCheckResponse.json();
                             
                             if (!modelStatus.available) {
@@ -496,14 +779,18 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                         return;
                                     
                                     case 'not_downloaded':
-                                        showWarningNotification("The BiRefNet model will be downloaded automatically (requires internet connection).", 5000);
+                                        showWarningNotification("The selected BiRefNet model will be downloaded automatically (requires internet connection).", 5000);
                                         
                                         // Ask user if they want to proceed with download
-                                        if (!confirm("The BiRefNet model needs to be downloaded (about 450 MB). This is a one-time download. Do you want to proceed?")) {
+                                        if (!confirm("The selected BiRefNet model needs to be downloaded. This is a one-time download and may be large. Do you want to proceed?")) {
                                             return;
                                         }
-                                        showInfoNotification("Downloading BiRefNet model... This may take a few minutes.", 10000);
+                                        showInfoNotification("Downloading the selected BiRefNet model... This may take a few minutes.", 10000);
                                         break;
+
+                                    case 'selected_model_unavailable':
+                                        showErrorNotification(modelStatus.message, 8000);
+                                        return;
                                     
                                     case 'corrupted':
                                         showErrorNotification(modelStatus.message, 8000);
@@ -521,7 +808,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             button.classList.add('lf-loading');
                             
                             if (modelStatus.available) {
-                                showInfoNotification("Starting background removal process...", 2000);
+                                showInfoNotification(`Starting ${getMattingModeLabel(mattingSettings.mode).toLowerCase()}...`, 2000);
                             }
 
                             if (canvas.canvasSelection.selectedLayers.length !== 1) {
@@ -534,7 +821,12 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             const response = await fetch("/matting", {
                                 method: "POST",
                                 headers: {"Content-Type": "application/json"},
-                                body: JSON.stringify({image: imageData})
+                                body: JSON.stringify({
+                                    image: imageData,
+                                    model_path: mattingSettings.modelPath || "auto",
+                                    mode: mattingSettings.mode,
+                                    threshold: mattingSettings.threshold,
+                                })
                             });
 
                             const result = await response.json();
@@ -558,6 +850,19 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                 throw new Error(errorMsg);
                             }
                             
+                            if (mattingSettings.mode === 'mask_only') {
+                                if (typeof result.draw_mask !== 'string') {
+                                    throw new Error('Matting response did not contain a Draw Mask image.');
+                                }
+
+                                const drawMaskImage = new Image();
+                                drawMaskImage.src = result.draw_mask;
+                                await drawMaskImage.decode();
+                                canvas.maskTool.setMaskForLayer(drawMaskImage, selectedLayer);
+                                showSuccessNotification('Generated mask applied to Draw Mask.');
+                                return;
+                            }
+
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
@@ -573,7 +878,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             
                             canvas.render();
                             canvas.saveState();
-                            showSuccessNotification("Background removed successfully!");
+                            showSuccessNotification(`${getMattingModeLabel(mattingSettings.mode)} successfully!`);
 
                         } catch (error: any) {
                             log.error("Matting error:", error);
@@ -590,6 +895,15 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                 button.removeChild(spinner);
                             }
                         }
+                    }
+                }),
+                $el("button.lf-painter-button.lf-icon-button.lf-matting-settings-button", {
+                    textContent: "⚙",
+                    title: "Open Matting settings",
+                    "aria-label": "Open Matting settings",
+                    onclick: (e: MouseEvent) => {
+                        e.stopPropagation();
+                        void openMattingSettings();
                     }
                 }),
                 $el("button.lf-painter-button", {
@@ -1324,6 +1638,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         canvas: canvas,
         panel: controlPanel,
         destroy: () => {
+            closeMattingSettings();
             mainContainer.removeEventListener('copy', stopEditableClipboardLeak);
             mainContainer.removeEventListener('cut', stopEditableClipboardLeak);
             mainContainer.removeEventListener('paste', stopEditableClipboardLeak);

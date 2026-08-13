@@ -235,6 +235,14 @@ optional feature and requires a model.
 > - **Automatic download**: If no compatible checkpoint is found, LayerForge downloads the standard full BiRefNet checkpoint automatically on first use.
 > - **Compatibility**: LayerForge uses ComfyUI's native BiRefNet loader, so the checkpoint must use the full BiRefNet architecture. The `lite-*` variants are not compatible with this native loader.
 
+Click the gear button next to **Matting** to configure its behavior. Settings are saved locally in the browser and include:
+
+- **Model**: automatically select a compatible local checkpoint, choose an installed local checkpoint, or select an official BiRefNet variant for download on first use.
+- **Processing mode**: remove the background, remove the detected foreground, or apply the generated mask to LayerForge's Draw Mask output-area mask.
+- **Mask threshold**: use `0` for a soft alpha mask or a higher value for a harder cutout.
+
+The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored in separate subdirectories under `ComfyUI/models/background_removal/` and are validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture.
+
 ---
 
 ## ⚠️ Known Issues / Compatibility

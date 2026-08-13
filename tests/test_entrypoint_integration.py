@@ -216,7 +216,7 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
     monkeypatch.setattr(
         node_module,
         "_ensure_birefnet_checkpoint",
-        lambda: "native-birefnet.safetensors",
+        lambda model_path=None: "native-birefnet.safetensors",
     )
     node_module.BiRefNetMatting._model_cache.clear()
 
@@ -231,6 +231,86 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
     assert calls == {"shape": (1, 2, 4, 3), "dtype": torch.float32}
     assert tuple(matted_image.shape) == (1, 3, 2, 4)
     assert tuple(alpha_mask.shape) == (1, 1, 2, 4)
+
+
+def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtime, monkeypatch):
+    import torch
+
+    node_module = layerforge_runtime.canvas_node
+
+    class NativeBiRefNet:
+        def encode_image(self, image):
+            return torch.full((image.shape[0], image.shape[1], image.shape[2]), 0.75)
+
+    monkeypatch.setattr(
+        node_module,
+        "_get_comfy_birefnet_loader",
+        lambda: lambda path: NativeBiRefNet(),
+    )
+    monkeypatch.setattr(
+        node_module,
+        "_ensure_birefnet_checkpoint",
+        lambda model_path=None: "native-birefnet.safetensors",
+    )
+    node_module.BiRefNetMatting._model_cache.clear()
+
+    image = torch.ones((1, 3, 2, 4), dtype=torch.float32)
+    matting = node_module.BiRefNetMatting()
+
+    removed_foreground, inverted_mask = matting.execute(
+        image,
+        model_path=None,
+        threshold=0.5,
+        refinement=1,
+        mode="remove_foreground",
+    )
+    mask_preview, preview_mask = matting.execute(
+        image,
+        model_path=None,
+        threshold=0.5,
+        refinement=1,
+        mode="mask_only",
+    )
+
+    assert torch.allclose(removed_foreground, torch.zeros_like(removed_foreground))
+    assert torch.allclose(inverted_mask, torch.zeros_like(inverted_mask))
+    assert torch.allclose(mask_preview, torch.ones_like(mask_preview))
+    assert torch.allclose(preview_mask, torch.ones_like(preview_mask))
+
+
+def test_matting_model_options_include_downloadable_official_variants(layerforge_runtime, monkeypatch):
+    node_module = layerforge_runtime.canvas_node
+
+    monkeypatch.setattr(node_module, "_iter_birefnet_checkpoint_paths", lambda: iter(()))
+
+    options = node_module._get_birefnet_model_options()
+    remote_options = [option for option in options if option["source"] == "remote"]
+
+    assert remote_options
+    assert all(option["path"].startswith("remote:") for option in remote_options)
+    assert all(option["downloaded"] is False for option in remote_options)
+    assert any(option["path"] == "remote:portrait" for option in remote_options)
+
+
+def test_selected_remote_matting_model_is_sent_to_downloader(layerforge_runtime, monkeypatch):
+    node_module = layerforge_runtime.canvas_node
+    selected_model = next(
+        model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait"
+    )
+    downloaded = {}
+
+    monkeypatch.setattr(node_module, "_is_native_birefnet_checkpoint", lambda path: False)
+
+    def fake_download(model=None):
+        downloaded["model"] = model
+        return "downloaded-portrait.safetensors"
+
+    monkeypatch.setattr(node_module, "_download_birefnet_checkpoint", fake_download)
+
+    result = node_module._ensure_birefnet_checkpoint("remote:portrait")
+
+    assert result == "downloaded-portrait.safetensors"
+    assert downloaded["model"] is selected_model
 
 
 def test_empty_execution_returns_comfyui_compatible_fallback_tensors(layerforge_runtime):
