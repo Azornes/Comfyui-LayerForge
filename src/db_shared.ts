@@ -15,7 +15,7 @@ export interface DBOpenOptions {
     logStoreCreation?: boolean;
 }
 
-export type DBRequestOperation = 'get' | 'put' | 'delete' | 'clear';
+export type DBRequestOperation = 'get' | 'put' | 'delete' | 'clear' | 'getAllKeys';
 
 export const DB_NAME = 'CanvasNodeDB';
 export const DB_VERSION = 3;
@@ -58,6 +58,9 @@ export function createDBRequest(
                 break;
             case 'clear':
                 request = store.clear();
+                break;
+            case 'getAllKeys':
+                request = store.getAllKeys();
                 break;
             default:
                 reject(new Error(`Unknown operation: ${operation}`));

@@ -18,8 +18,8 @@ import { loadImageFromBlob } from "./utils/ImageUtils.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
-import { exportCanvasImage, type CanvasExportAction, type CanvasExportVariant } from "./utils/CanvasExportUtils.js";
-import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
+import { exportCanvasImage, type CanvasExportAction } from "./utils/CanvasExportUtils.js";
+import { getFlattenedCanvasBlob, type CanvasBlobVariant } from "./utils/CanvasBlobUtils.js";
 import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
@@ -2144,7 +2144,7 @@ app.registerExtension({
 
                 const runCanvasExport = async (
                     action: CanvasExportAction,
-                    variant: CanvasExportVariant,
+                    variant: CanvasBlobVariant,
                     filename?: string,
                 ): Promise<void> => {
                     const canvas = (self as any).canvasWidget?.canvas;

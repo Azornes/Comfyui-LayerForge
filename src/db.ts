@@ -87,20 +87,9 @@ export async function getAllImageIds(): Promise<string[]> {
     const transaction = db.transaction([IMAGE_STORE.name], 'readonly');
     const store = transaction.objectStore(IMAGE_STORE.name);
 
-    return new Promise((resolve, reject) => {
-        const request = store.getAllKeys();
-
-        request.onerror = (event) => {
-            log.error("Error getting all image IDs:", (event.target as IDBRequest).error);
-            reject("Error getting all image IDs");
-        };
-
-        request.onsuccess = (event) => {
-            const imageIds = (event.target as IDBRequest).result;
-            log.debug(`Found ${imageIds.length} image IDs in database`);
-            resolve(imageIds);
-        };
-    });
+    const imageIds = await createDBRequest(store, 'getAllKeys', null, "Error getting all image IDs", log) as string[];
+    log.debug(`Found ${imageIds.length} image IDs in database`);
+    return imageIds;
 }
 
 export async function clearAllCanvasStates(): Promise<void> {

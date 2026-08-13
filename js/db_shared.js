@@ -29,6 +29,9 @@ export function createDBRequest(store, operation, data, errorMessage, log) {
             case 'clear':
                 request = store.clear();
                 break;
+            case 'getAllKeys':
+                request = store.getAllKeys();
+                break;
             default:
                 reject(new Error(`Unknown operation: ${operation}`));
                 return;

@@ -1,11 +1,10 @@
-import { getFlattenedCanvasBlob } from './CanvasBlobUtils.js';
+import { getFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
 
-export type CanvasExportVariant = 'plain' | 'with-mask';
 export type CanvasExportAction = 'open' | 'copy' | 'download';
 
 export interface CanvasExportOptions {
     action: CanvasExportAction;
-    variant: CanvasExportVariant;
+    variant: CanvasBlobVariant;
     filename?: string;
 }
 
