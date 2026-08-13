@@ -1,6 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
-import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
+import { resolveCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
 import type { ComfyNode } from '../types';
 
 const log = createModuleLogger('PreviewUtils');
@@ -122,14 +122,15 @@ export const createPreviewFromCanvas = withErrorHandling(async function(
             variant = 'with-mask';
         }
 
-        if (!supportsFlattenedCanvasBlob(canvas, variant)) {
+        const resolution = await resolveCanvasBlob(canvas, variant);
+        if (resolution.source === 'unsupported') {
             throw createValidationError("Canvas does not support required blob generation methods", {
                 canvas,
                 availableMethods: Object.getOwnPropertyNames(canvas.canvasLayers)
             });
         }
 
-        blob = await getFlattenedCanvasBlob(canvas, variant);
+        blob = resolution.blob;
     }
 
     if (!blob) {

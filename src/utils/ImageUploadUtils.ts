@@ -2,7 +2,7 @@
 import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
-import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
+import { resolveCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
 
 const log = createModuleLogger('ImageUploadUtils');
 
@@ -74,27 +74,27 @@ async function getCanvasBlobForUpload(
         throw createValidationError("Canvas is required", { canvas });
     }
 
-    const supportsVariant = supportsFlattenedCanvasBlob(canvas, config.variant);
-    let blob: Blob | null = null;
+    const resolution = await resolveCanvasBlob(canvas, config.variant, {
+        allowNativeCanvasFallback: config.allowNativeCanvasFallback,
+    });
 
-    if (supportsVariant) {
-        blob = await getFlattenedCanvasBlob(canvas, config.variant);
-    } else if (config.allowNativeCanvasFallback && canvas instanceof HTMLCanvasElement) {
-        blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
-    } else {
+    if (resolution.source === 'unsupported') {
         throw createValidationError(config.unsupportedCanvasMessage, {
             canvas,
             hasCanvasLayers: !!canvas.canvasLayers,
-            isHTMLCanvas: canvas instanceof HTMLCanvasElement,
-            ...(config.variant === 'with-mask' ? { hasMaskMethod: supportsVariant } : {})
+            isHTMLCanvas: typeof HTMLCanvasElement !== 'undefined'
+                && canvas instanceof HTMLCanvasElement,
+            ...(config.variant === 'with-mask'
+                ? { hasMaskMethod: false }
+                : {})
         });
     }
 
-    if (!blob) {
+    if (!resolution.blob) {
         throw createValidationError(config.emptyBlobMessage, { canvas, options: uploadOptions });
     }
 
-    return blob;
+    return resolution.blob;
 }
 
 /**

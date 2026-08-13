@@ -1,6 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
-import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
+import { resolveCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
 const log = createModuleLogger('PreviewUtils');
 async function loadPreviewImageFromBlob(blob, options) {
     const isCanvasSource = options.source === 'canvas';
@@ -69,13 +69,14 @@ export const createPreviewFromCanvas = withErrorHandling(async function (canvas,
         if (includeMask && supportsFlattenedCanvasBlob(canvas, 'with-mask')) {
             variant = 'with-mask';
         }
-        if (!supportsFlattenedCanvasBlob(canvas, variant)) {
+        const resolution = await resolveCanvasBlob(canvas, variant);
+        if (resolution.source === 'unsupported') {
             throw createValidationError("Canvas does not support required blob generation methods", {
                 canvas,
                 availableMethods: Object.getOwnPropertyNames(canvas.canvasLayers)
             });
         }
-        blob = await getFlattenedCanvasBlob(canvas, variant);
+        blob = resolution.blob;
     }
     if (!blob) {
         throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
