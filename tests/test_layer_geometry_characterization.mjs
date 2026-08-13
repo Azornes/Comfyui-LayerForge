@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { CanvasRenderer } from '../js/CanvasRenderer.js';
+import { ShapeTool } from '../js/ShapeTool.js';
 
 import {
   getBoundsFromPoints,
@@ -127,6 +128,46 @@ test('crop bounds preserve flip-aware layer-local coordinates', () => {
     width: 50,
     height: 30,
   });
+});
+
+test('shape and renderer bounding boxes preserve local and world-space behavior', () => {
+  const shapeTool = Object.create(ShapeTool.prototype);
+  shapeTool.shape = {
+    points: [
+      { x: -10, y: 5 },
+      { x: 20, y: -15 },
+      { x: 4, y: 25 },
+    ],
+    isClosed: true,
+  };
+
+  assert.deepEqual(shapeTool.getBoundingBox(), {
+    x: -10,
+    y: -15,
+    width: 30,
+    height: 40,
+  });
+
+  shapeTool.shape = { points: [], isClosed: false };
+  assert.equal(shapeTool.getBoundingBox(), null);
+
+  const renderer = createRenderer();
+  renderer.canvas.outputAreaBounds = { x: 100, y: 200 };
+  renderer.canvas.outputAreaExtensionEnabled = true;
+  renderer.canvas.outputAreaExtensions = { left: 5, top: -2, right: 0, bottom: 0 };
+  renderer.canvas.outputAreaShape = {
+    points: [{ x: 0, y: 0 }, { x: 10, y: 5 }],
+  };
+  renderer.canvas.batchPreviewManagers = [
+    { generationArea: { x: 104, y: 198, width: 2, height: 2 } },
+  ];
+
+  assert.equal(renderer.isCustomShapeOverlappingWithBatchAreas(), true);
+
+  renderer.canvas.batchPreviewManagers = [
+    { generationArea: { x: 200, y: 300, width: 2, height: 2 } },
+  ];
+  assert.equal(renderer.isCustomShapeOverlappingWithBatchAreas(), false);
 });
 
 test('renderer adaptive lines use the layer center and rotation contract', () => {

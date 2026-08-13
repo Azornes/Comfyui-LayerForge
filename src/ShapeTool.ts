@@ -1,6 +1,7 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
+import { getBoundsFromPoints } from './utils/CommonUtils.js';
 import type { Canvas } from './Canvas.js';
-import type { Point, Layer } from './types.js';
+import type { Point } from './types.js';
 
 const log = createModuleLogger('ShapeTool');
 
@@ -88,20 +89,7 @@ export class ShapeTool {
             return null;
         }
 
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        this.shape.points.forEach(p => {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-        });
-
-        return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY,
-        };
+        return getBoundsFromPoints(this.shape.points);
     }
 
     reset() {

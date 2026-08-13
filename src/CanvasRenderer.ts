@@ -1,5 +1,5 @@
 import {createModuleLogger} from "./log_system/log_funcs.js";
-import { getLayerWorldBounds, isPointInRotatedLayer, localToWorld, worldToLocal } from "./utils/CommonUtils.js";
+import { getBoundsFromPoints, getLayerWorldBounds, isPointInRotatedLayer, localToWorld, worldToLocal } from "./utils/CommonUtils.js";
 
 const log = createModuleLogger('CanvasRenderer');
 
@@ -338,19 +338,14 @@ export class CanvasRenderer {
         const shapeOffsetY = bounds.y + ext.top;
         
         const shape = this.canvas.outputAreaShape;
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        
-        // Calculate shape bounding box
-        shape.points.forEach((point: { x: number; y: number }) => {
-            const worldX = shapeOffsetX + point.x;
-            const worldY = shapeOffsetY + point.y;
-            minX = Math.min(minX, worldX);
-            maxX = Math.max(maxX, worldX);
-            minY = Math.min(minY, worldY);
-            maxY = Math.max(maxY, worldY);
-        });
-
-        const shapeBounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        const worldPoints = shape.points.map((point: { x: number; y: number }) => ({
+            x: shapeOffsetX + point.x,
+            y: shapeOffsetY + point.y,
+        }));
+        // Preserve the existing empty-shape bounds while using the shared point helper for valid shapes.
+        const shapeBounds = worldPoints.length === 0
+            ? { x: Infinity, y: Infinity, width: -Infinity, height: -Infinity }
+            : getBoundsFromPoints(worldPoints);
 
         // Check overlap with each active batch preview area
         for (const manager of this.canvas.batchPreviewManagers) {
