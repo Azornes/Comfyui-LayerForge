@@ -1072,9 +1072,31 @@ export class CanvasLayers {
         this.handleTransformEnd(layer, 'wheel', 500);
     }
 
+    private getOrCreateDistanceFieldMask(
+        imageOrCanvas: HTMLImageElement | HTMLCanvasElement,
+        cache: Map<number, HTMLCanvasElement>,
+        blendArea: number,
+        logSuffix = ''
+    ): HTMLCanvasElement | null {
+        if (cache.has(blendArea)) {
+            log.info(`Using cached distance field mask for blendArea: ${blendArea}%${logSuffix}`);
+            return cache.get(blendArea) || null;
+        }
+
+        try {
+            log.info(`Creating distance field mask for blendArea: ${blendArea}%${logSuffix}`);
+            const maskCanvas = createDistanceFieldMaskSync(imageOrCanvas as any, blendArea);
+            log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
+            cache.set(blendArea, maskCanvas);
+            return maskCanvas;
+        } catch (error) {
+            log.error(`Failed to create distance field mask${logSuffix}:`, error);
+            return null;
+        }
+    }
+
     private getDistanceFieldMaskSync(imageOrCanvas: HTMLImageElement | HTMLCanvasElement, blendArea: number): HTMLCanvasElement | null {
         // Use a WeakMap for images, and a Map for canvases (since canvases are not always stable references)
-        let cacheKey: any = imageOrCanvas;
         if (imageOrCanvas instanceof HTMLCanvasElement) {
             // For canvases, use a Map on this instance (not WeakMap)
             if (!this._canvasMaskCache) this._canvasMaskCache = new Map();
@@ -1083,20 +1105,7 @@ export class CanvasLayers {
                 canvasCache = new Map();
                 this._canvasMaskCache.set(imageOrCanvas, canvasCache);
             }
-            if (canvasCache.has(blendArea)) {
-                log.info(`Using cached distance field mask for blendArea: ${blendArea}% (canvas)`);
-                return canvasCache.get(blendArea) || null;
-            }
-            try {
-                log.info(`Creating distance field mask for blendArea: ${blendArea}% (canvas)`);
-                const maskCanvas = createDistanceFieldMaskSync(imageOrCanvas as any, blendArea);
-                log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
-                canvasCache.set(blendArea, maskCanvas);
-                return maskCanvas;
-            } catch (error) {
-                log.error('Failed to create distance field mask (canvas):', error);
-                return null;
-            }
+            return this.getOrCreateDistanceFieldMask(imageOrCanvas, canvasCache, blendArea, ' (canvas)');
         } else {
             // For images, use the original WeakMap cache
             let imageCache = this.distanceFieldCache.get(imageOrCanvas);
@@ -1104,21 +1113,7 @@ export class CanvasLayers {
                 imageCache = new Map();
                 this.distanceFieldCache.set(imageOrCanvas, imageCache);
             }
-            let maskCanvas = imageCache.get(blendArea);
-            if (!maskCanvas) {
-                try {
-                    log.info(`Creating distance field mask for blendArea: ${blendArea}%`);
-                    maskCanvas = createDistanceFieldMaskSync(imageOrCanvas, blendArea);
-                    log.info(`Distance field mask created successfully, size: ${maskCanvas.width}x${maskCanvas.height}`);
-                    imageCache.set(blendArea, maskCanvas);
-                } catch (error) {
-                    log.error('Failed to create distance field mask:', error);
-                    return null;
-                }
-            } else {
-                log.info(`Using cached distance field mask for blendArea: ${blendArea}%`);
-            }
-            return maskCanvas;
+            return this.getOrCreateDistanceFieldMask(imageOrCanvas, imageCache, blendArea);
         }
     }
 
