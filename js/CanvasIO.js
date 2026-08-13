@@ -3,7 +3,6 @@ import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
-import { fillInverseAlphaMask } from "./utils/MaskPixelUtils.js";
 const log = createModuleLogger('CanvasIO');
 export class CanvasIO {
     constructor(canvas) {
@@ -50,27 +49,16 @@ export class CanvasIO {
             await new Promise(resolve => setTimeout(resolve, delay));
         }
         return new Promise((resolve) => {
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(this.canvas.width, this.canvas.height);
-            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(this.canvas.width, this.canvas.height);
             const originalShape = this.canvas.outputAreaShape;
             this.canvas.outputAreaShape = null;
-            const { canvas: visibilityCanvas, ctx: visibilityCtx } = createCanvas(this.canvas.width, this.canvas.height, '2d', { alpha: true });
-            if (!visibilityCtx)
-                throw new Error("Could not create visibility context");
-            if (!maskCtx)
-                throw new Error("Could not create mask context");
-            if (!tempCtx)
-                throw new Error("Could not create temp context");
-            maskCtx.fillStyle = '#ffffff';
-            maskCtx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            const renderBounds = { x: 0, y: 0, width: this.canvas.width, height: this.canvas.height };
+            const { canvas: tempCanvas } = this.canvas.canvasLayers.renderLayersToCanvas(renderBounds, this.canvas.layers, {});
+            const { canvas: maskCanvas, ctx: maskCtx } = this.canvas.canvasLayers.renderLayerVisibilityMask(renderBounds, this.canvas.layers, {
+                maskContextOptions: {},
+                visibilityContextOptions: { alpha: true }
+            });
             log.debug(`Canvas contexts created, starting layer rendering`);
-            this.canvas.canvasLayers.drawLayersToContext(tempCtx, this.canvas.layers);
-            this.canvas.canvasLayers.drawLayersToContext(visibilityCtx, this.canvas.layers);
             log.debug(`Finished rendering layers`);
-            const visibilityData = visibilityCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            const maskData = maskCtx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            fillInverseAlphaMask(visibilityData, maskData);
-            maskCtx.putImageData(maskData, 0, 0);
             this.canvas.outputAreaShape = originalShape;
             // Use optimized getMaskForOutputArea() instead of getMask() for better performance
             // This only processes chunks that overlap with the output area

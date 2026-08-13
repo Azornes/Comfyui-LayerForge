@@ -333,9 +333,10 @@ test('CanvasIO and CanvasLayers preserve inverse-alpha mask generation', async (
   const canvasIOSource = await readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8');
   const canvasLayersSource = await readFile(new URL('../src/CanvasLayers.ts', import.meta.url), 'utf8');
 
-  assert.match(canvasIOSource, /from "\.\/utils\/MaskPixelUtils\.js"/);
+  assert.doesNotMatch(canvasIOSource, /from "\.\/utils\/MaskPixelUtils\.js"/);
   assert.match(canvasLayersSource, /from "\.\/utils\/MaskPixelUtils\.js"/);
-  assert.match(canvasIOSource, /fillInverseAlphaMask\(visibilityData, maskData\)/);
+  assert.match(canvasIOSource, /renderLayerVisibilityMask\(/);
+  assert.doesNotMatch(canvasIOSource, /fillInverseAlphaMask\(visibilityData, maskData\)/);
   assert.match(canvasLayersSource, /fillInverseAlphaMask\(visibilityData, maskData\)/);
   assert.doesNotMatch(canvasIOSource, /const maskValue = 255 - alpha/);
   assert.doesNotMatch(canvasLayersSource, /const maskValue = 255 - alpha/);

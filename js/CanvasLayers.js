@@ -985,6 +985,30 @@ export class CanvasLayers {
     drawLayersToContext(ctx, layers, options = {}) {
         this._drawLayers(ctx, layers, options);
     }
+    renderLayersToCanvas(bounds, layers = this.canvas.layers, contextOptions = {}) {
+        const { canvas, ctx } = createCanvas(bounds.width, bounds.height, '2d', contextOptions);
+        if (!ctx) {
+            throw new Error("Could not create canvas context");
+        }
+        ctx.translate(-bounds.x, -bounds.y);
+        this._drawLayers(ctx, layers);
+        return { canvas, ctx };
+    }
+    renderLayerVisibilityMask(bounds, layers = this.canvas.layers, options = {}) {
+        const { maskContextOptions = { willReadFrequently: true }, visibilityContextOptions = { alpha: true } } = options;
+        const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(bounds.width, bounds.height, '2d', maskContextOptions);
+        if (!maskCtx) {
+            throw new Error("Could not create mask context");
+        }
+        maskCtx.fillStyle = '#ffffff';
+        maskCtx.fillRect(0, 0, bounds.width, bounds.height);
+        const { ctx: visibilityCtx } = this.renderLayersToCanvas(bounds, layers, visibilityContextOptions);
+        const visibilityData = visibilityCtx.getImageData(0, 0, bounds.width, bounds.height);
+        const maskData = maskCtx.getImageData(0, 0, bounds.width, bounds.height);
+        fillInverseAlphaMask(visibilityData, maskData);
+        maskCtx.putImageData(maskData, 0, 0);
+        return { canvas: maskCanvas, ctx: maskCtx };
+    }
     async mirrorHorizontal() {
         if (this.canvas.canvasSelection.selectedLayers.length === 0)
             return;
@@ -1409,7 +1433,7 @@ export class CanvasLayers {
      */
     async _generateCanvasBlob(options = {}) {
         const { layers = this.canvas.layers, useOutputBounds = true, applyMask = false, enableLogging = false, customBounds } = options;
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             let bounds;
             if (customBounds) {
                 bounds = customBounds;
@@ -1427,15 +1451,10 @@ export class CanvasLayers {
                 }
                 bounds = { x: layerBounds.x, y: layerBounds.y, width: newWidth, height: newHeight };
             }
-            const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
-            if (!tempCtx) {
-                reject(new Error("Could not create canvas context"));
-                return;
-            }
             if (enableLogging) {
                 log.info("=== GENERATING OUTPUT CANVAS ===");
                 log.info(`Bounds: x=${bounds.x}, y=${bounds.y}, w=${bounds.width}, h=${bounds.height}`);
-                log.info(`Canvas Size: ${tempCanvas.width}x${tempCanvas.height}`);
+                log.info(`Canvas Size: ${bounds.width}x${bounds.height}`);
                 log.info(`Context Translation: translate(${-bounds.x}, ${-bounds.y})`);
                 log.info(`Apply Mask: ${applyMask}`);
                 // Log layer positions before rendering
@@ -1449,9 +1468,7 @@ export class CanvasLayers {
                     }
                 });
             }
-            // Renderuj fragment świata zdefiniowany przez bounds
-            tempCtx.translate(-bounds.x, -bounds.y);
-            this._drawLayers(tempCtx, layers);
+            const { canvas: tempCanvas, ctx: tempCtx } = this.renderLayersToCanvas(bounds, layers, { willReadFrequently: true });
             // Aplikuj maskę jeśli wymagana
             if (applyMask) {
                 const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
@@ -1515,32 +1532,14 @@ export class CanvasLayers {
         });
     }
     async getFlattenedMaskAsBlob() {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const bounds = this.canvas.outputAreaBounds;
-            const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(bounds.width, bounds.height, '2d', { willReadFrequently: true });
-            if (!maskCtx) {
-                reject(new Error("Could not create mask context"));
-                return;
-            }
             log.info("=== GENERATING MASK BLOB ===");
-            log.info(`Mask Canvas Size: ${maskCanvas.width}x${maskCanvas.height}`);
-            // Rozpocznij z białą maską (nic nie zamaskowane)
-            maskCtx.fillStyle = '#ffffff';
-            maskCtx.fillRect(0, 0, bounds.width, bounds.height);
-            // Stwórz canvas do sprawdzenia przezroczystości warstw
-            const { canvas: visibilityCanvas, ctx: visibilityCtx } = createCanvas(bounds.width, bounds.height, '2d', { alpha: true });
-            if (!visibilityCtx) {
-                reject(new Error("Could not create visibility context"));
-                return;
-            }
-            // Renderuj warstwy z przesunięciem dla output bounds
-            visibilityCtx.translate(-bounds.x, -bounds.y);
-            this._drawLayers(visibilityCtx, this.canvas.layers);
-            // Konwertuj przezroczystość warstw na maskę
-            const visibilityData = visibilityCtx.getImageData(0, 0, bounds.width, bounds.height);
-            const maskData = maskCtx.getImageData(0, 0, bounds.width, bounds.height);
-            fillInverseAlphaMask(visibilityData, maskData);
-            maskCtx.putImageData(maskData, 0, 0);
+            log.info(`Mask Canvas Size: ${bounds.width}x${bounds.height}`);
+            const { canvas: maskCanvas, ctx: maskCtx } = this.renderLayerVisibilityMask(bounds, this.canvas.layers, {
+                maskContextOptions: { willReadFrequently: true },
+                visibilityContextOptions: { alpha: true }
+            });
             // Aplikuj maskę narzędzia jeśli istnieje - używaj zoptymalizowanej metody
             const toolMaskCanvas = this.canvas.maskTool.getMaskForOutputArea();
             if (toolMaskCanvas) {
