@@ -2,7 +2,7 @@ import {createModuleLogger} from "../log_system/log_funcs.js";
 import { showNotification, showInfoNotification, showErrorNotification, showWarningNotification } from "./NotificationUtils.js";
 import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
 import { safeClipspacePaste } from "./ClipspaceUtils.js";
-import { loadImageFromBlob } from "./ImageUtils.js";
+import { loadImage, loadImageFromBlob } from "./ImageUtils.js";
 
 // @ts-ignore
 import {api} from "../../../scripts/api.js";
@@ -83,12 +83,10 @@ export class ClipboardManager {
             const clipspaceImage = this.canvas.node.imgs[0];
             if (clipspaceImage && clipspaceImage.src) {
                 log.info("Successfully got image from ComfyUI Clipspace");
-                const img = new Image();
-                img.onload = async () => {
+                void loadImage(clipspaceImage.src).then(async img => {
                     await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
                     showInfoNotification("Image pasted from Clipspace");
-                };
-                img.src = clipspaceImage.src;
+                }).catch(() => undefined);
                 return true;
             }
         }
@@ -207,27 +205,17 @@ export class ClipboardManager {
      * @returns {Promise<boolean>} - True if successful, false otherwise
      */
     async loadImageFromDataURI(dataURI: string, addMode: AddMode): Promise<boolean> {
-        return new Promise((resolve) => {
-            try {
-                const img = new Image();
-                img.onload = async () => {
-                    log.info("Successfully loaded image from data URI");
-                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                    showInfoNotification("Image pasted from clipboard (base64)");
-                    resolve(true);
-                };
-                img.onerror = () => {
-                    log.warn("Failed to load image from data URI");
-                    showErrorNotification("Failed to load base64 image from clipboard", 5000, true);
-                    resolve(false);
-                };
-                img.src = dataURI;
-            } catch (error) {
-                log.error("Error loading data URI:", error);
-                showErrorNotification("Error processing base64 image from clipboard", 5000, true);
-                resolve(false);
-            }
-        });
+        try {
+            const img = await loadImage(dataURI);
+            log.info("Successfully loaded image from data URI");
+            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+            showInfoNotification("Image pasted from clipboard (base64)");
+            return true;
+        } catch (error) {
+            log.warn("Failed to load image from data URI", error);
+            showErrorNotification("Failed to load base64 image from clipboard", 5000, true);
+            return false;
+        }
     }
 
     /**
@@ -302,24 +290,14 @@ export class ClipboardManager {
 
         if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
             try {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                return new Promise((resolve) => {
-            img.onload = async () => {
+                const img = await loadImage(filePath, { crossOrigin: 'anonymous' });
                 log.info("Successfully loaded image from URL");
                 await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
                 showInfoNotification("Image loaded from URL");
-                resolve(true);
-            };
-            img.onerror = () => {
-                log.warn("Failed to load image from URL:", filePath);
-                showErrorNotification(`Failed to load image from URL\nThe link might be incorrect or may not point to an image file.: ${filePath}`, 5000, true);
-                resolve(false);
-            };
-                    img.src = filePath;
-                });
+                return true;
             } catch (error) {
                 log.warn("Error loading image from URL:", error);
+                showErrorNotification(`Failed to load image from URL\nThe link might be incorrect or may not point to an image file.: ${filePath}`, 5000, true);
                 return false;
             }
         }
@@ -388,23 +366,16 @@ export class ClipboardManager {
         
         log.info("Successfully loaded image via ComfyUI backend:", filePath);
 
-        const img = new Image();
-        const success: boolean = await new Promise((resolve) => {
-            img.onload = async () => {
-                log.info("Successfully loaded image from backend response");
-                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                showInfoNotification("Image loaded from file path");
-                resolve(true);
-            };
-            img.onerror = () => {
-                log.warn("Failed to load image from backend response");
-                resolve(false);
-            };
-            
-            img.src = data.image_data;
-        });
-        
-        return success;
+        try {
+            const img = await loadImage(data.image_data);
+            log.info("Successfully loaded image from backend response");
+            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+            showInfoNotification("Image loaded from file path");
+            return true;
+        } catch (error) {
+            log.warn("Failed to load image from backend response", error);
+            return false;
+        }
     }, 'ClipboardManager.loadFileViaBackend');
 
     /**

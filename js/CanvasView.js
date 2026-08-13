@@ -8,7 +8,7 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 import { Canvas } from "./Canvas.js";
 import { clearAllCanvasStates, getCanvasState, setCanvasState } from "./db.js";
 import { createCanvas } from "./utils/CommonUtils.js";
-import { loadImageFromBlob } from "./utils/ImageUtils.js";
+import { loadImage, loadImageFromBlob } from "./utils/ImageUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
@@ -1141,8 +1141,7 @@ async function createCanvasWidget(node, widget, app) {
                     // For large images, use blob URL for better performance
                     if (blob.size > 2 * 1024 * 1024) { // 2MB threshold
                         const blobUrl = URL.createObjectURL(blob);
-                        const img = new Image();
-                        img.onload = () => {
+                        void loadImage(blobUrl).then(img => {
                             node.imgs = [img];
                             log.debug(`Using blob URL for large image (${(blob.size / 1024 / 1024).toFixed(1)}MB): ${blobUrl.substring(0, 50)}...`);
                             // Clean up old blob URLs to prevent memory leaks
@@ -1152,8 +1151,7 @@ async function createCanvasWidget(node, widget, app) {
                                     URL.revokeObjectURL(oldImg.src);
                                 }
                             }
-                        };
-                        img.src = blobUrl;
+                        }).catch(() => undefined);
                     }
                     else {
                         // For smaller images, use data URI as before

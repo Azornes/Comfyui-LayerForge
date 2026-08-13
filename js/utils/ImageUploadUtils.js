@@ -3,6 +3,7 @@ import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
 import { resolveCanvasBlob } from './CanvasBlobUtils.js';
+import { loadImage } from './ImageUtils.js';
 const log = createModuleLogger('ImageUploadUtils');
 export async function postImageBlob(request, transport = (input, init) => api.fetchApi(input, init)) {
     const formData = new FormData();
@@ -82,23 +83,18 @@ export const uploadImageBlob = withErrorHandling(async function (blob, options =
     log.debug('Image uploaded successfully:', data);
     // Create image element with proper URL
     const imageUrl = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-    const imageElement = new Image();
-    imageElement.crossOrigin = "anonymous";
-    // Wait for image to load
-    await new Promise((resolve, reject) => {
-        imageElement.onload = () => {
-            log.debug("Uploaded image loaded successfully", {
-                width: imageElement.width,
-                height: imageElement.height,
-                src: imageElement.src.substring(0, 100) + '...'
-            });
-            resolve();
-        };
-        imageElement.onerror = (error) => {
-            log.error("Failed to load uploaded image", error);
-            reject(createNetworkError("Failed to load uploaded image", { error, imageUrl, filename }));
-        };
-        imageElement.src = imageUrl;
+    let imageElement;
+    try {
+        imageElement = await loadImage(imageUrl, { crossOrigin: "anonymous" });
+    }
+    catch (error) {
+        log.error("Failed to load uploaded image", error);
+        throw createNetworkError("Failed to load uploaded image", { error, imageUrl, filename });
+    }
+    log.debug("Uploaded image loaded successfully", {
+        width: imageElement.width,
+        height: imageElement.height,
+        src: imageElement.src.substring(0, 100) + '...'
     });
     return {
         data,

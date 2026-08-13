@@ -3,6 +3,7 @@ import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
 import { resolveCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
+import { loadImage } from './ImageUtils.js';
 
 const log = createModuleLogger('ImageUploadUtils');
 
@@ -152,24 +153,18 @@ export const uploadImageBlob = withErrorHandling(async function(blob: Blob, opti
 
     // Create image element with proper URL
     const imageUrl = api.apiURL(`/view?filename=${encodeURIComponent(data.name)}&type=${data.type}&subfolder=${data.subfolder}`);
-    const imageElement = new Image();
-    imageElement.crossOrigin = "anonymous";
+    let imageElement: HTMLImageElement;
+    try {
+        imageElement = await loadImage(imageUrl, { crossOrigin: "anonymous" });
+    } catch (error) {
+        log.error("Failed to load uploaded image", error);
+        throw createNetworkError("Failed to load uploaded image", { error, imageUrl, filename });
+    }
 
-    // Wait for image to load
-    await new Promise<void>((resolve, reject) => {
-        imageElement.onload = () => {
-            log.debug("Uploaded image loaded successfully", {
-                width: imageElement.width,
-                height: imageElement.height,
-                src: imageElement.src.substring(0, 100) + '...'
-            });
-            resolve();
-        };
-        imageElement.onerror = (error) => {
-            log.error("Failed to load uploaded image", error);
-            reject(createNetworkError("Failed to load uploaded image", { error, imageUrl, filename }));
-        };
-        imageElement.src = imageUrl;
+    log.debug("Uploaded image loaded successfully", {
+        width: imageElement.width,
+        height: imageElement.height,
+        src: imageElement.src.substring(0, 100) + '...'
     });
 
     return {

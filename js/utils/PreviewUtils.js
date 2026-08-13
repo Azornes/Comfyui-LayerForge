@@ -1,35 +1,34 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import { resolveCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
+import { loadImage } from './ImageUtils.js';
 const log = createModuleLogger('PreviewUtils');
 async function loadPreviewImageFromBlob(blob, options) {
     const isCanvasSource = options.source === 'canvas';
-    const previewImage = new Image();
-    previewImage.src = URL.createObjectURL(blob);
-    await new Promise((resolve, reject) => {
-        previewImage.onload = () => {
-            log.debug(isCanvasSource ? "Preview image loaded successfully" : "Preview image from blob loaded successfully", isCanvasSource
-                ? {
-                    width: previewImage.width,
-                    height: previewImage.height,
-                    nodeId: options.node?.id
-                }
-                : {
-                    width: previewImage.width,
-                    height: previewImage.height
-                });
-            resolve();
-        };
-        previewImage.onerror = (error) => {
-            const errorMessage = isCanvasSource
-                ? "Failed to load preview image"
-                : "Failed to load preview image from blob";
-            log.error(errorMessage, error);
-            reject(createValidationError(errorMessage, isCanvasSource
-                ? { error, blob: blob.size }
-                : { error, blobSize: blob.size }));
-        };
-    });
+    const previewUrl = URL.createObjectURL(blob);
+    let previewImage;
+    try {
+        previewImage = await loadImage(previewUrl);
+    }
+    catch (error) {
+        const errorMessage = isCanvasSource
+            ? "Failed to load preview image"
+            : "Failed to load preview image from blob";
+        log.error(errorMessage, error);
+        throw createValidationError(errorMessage, isCanvasSource
+            ? { error, blob: blob.size }
+            : { error, blobSize: blob.size });
+    }
+    log.debug(isCanvasSource ? "Preview image loaded successfully" : "Preview image from blob loaded successfully", isCanvasSource
+        ? {
+            width: previewImage.width,
+            height: previewImage.height,
+            nodeId: options.node?.id
+        }
+        : {
+            width: previewImage.width,
+            height: previewImage.height
+        });
     if (options.updateNodeImages && options.node) {
         options.node.imgs = [previewImage];
         log.debug(isCanvasSource
