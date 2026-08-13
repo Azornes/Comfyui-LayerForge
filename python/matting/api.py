@@ -1,5 +1,6 @@
 """HTTP endpoints for model status and background-removal execution."""
 
+import asyncio
 import traceback
 
 from aiohttp import web
@@ -22,7 +23,8 @@ from .backends.rmbg import (
 )
 from .options import _get_birefnet_model_options
 from .paths import _get_birefnet_base_paths
-from .service import BiRefNetMatting
+from .progress import get_matting_status
+from .service import BiRefNetMatting, MattingInterruptedError
 from .settings import get_public_settings, save_settings
 
 _matting_lock = None
@@ -39,6 +41,11 @@ async def get_matting_settings(request):
             {"error": "Unable to read Matting settings"},
             status=500,
         )
+
+
+async def get_matting_progress(request):
+    """Return the latest download status for the requested LayerForge node."""
+    return web.json_response(get_matting_status(request.query.get("node_id")))
 
 
 async def save_matting_settings(request):
@@ -259,15 +266,18 @@ async def matting(request):
 
         mode = data.get("mode", "remove_background")
         model_path = data.get("model_path") or "auto"
-        matted_image, alpha_mask = matting_instance.execute(
+        node_id = data.get("node_id")
+        matted_image, alpha_mask = await asyncio.to_thread(
+            matting_instance.execute,
             image_tensor,
             model_path,
             threshold=data.get("threshold", 0.5),
             refinement=data.get("refinement", 1),
             mode=mode,
+            node_id=node_id,
         )
 
-        if mode == "mask_only":
+        if mode in {"mask_only", "mask_only_inverted"}:
             result_image = convert_tensor_to_base64(alpha_mask)
         else:
             result_image = convert_tensor_to_base64(matted_image, alpha_mask, original_alpha)
@@ -284,6 +294,15 @@ async def matting(request):
                 "mode": mode,
                 "model_path": matting_instance.model_path,
             }
+        )
+    except MattingInterruptedError as error:
+        log.info("Matting was interrupted by ComfyUI")
+        return web.json_response(
+            {
+                "error": "Matting Interrupted",
+                "details": str(error),
+            },
+            status=409,
         )
     except RuntimeError as error:
         log.error(f"Runtime error during matting: {error}")
@@ -330,12 +349,14 @@ def register_matting_routes():
     PromptServer.instance.routes.get("/matting/settings")(get_matting_settings)
     PromptServer.instance.routes.post("/matting/settings")(save_matting_settings)
     PromptServer.instance.routes.get("/matting/check-model")(check_matting_model)
+    PromptServer.instance.routes.get("/matting/progress")(get_matting_progress)
     PromptServer.instance.routes.post("/matting")(matting)
 
 
 __all__ = [
     "check_matting_model",
     "get_matting_settings",
+    "get_matting_progress",
     "matting",
     "register_matting_routes",
     "save_matting_settings",

@@ -6,7 +6,6 @@ from typing import ClassVar
 
 import torch
 import torch.nn.functional as F
-from server import PromptServer
 from torchvision import transforms
 
 from ..node import log
@@ -19,6 +18,19 @@ from .backends.rmbg import (
     _get_rmbg_model_status_message,
     _get_rmbg_remote_model,
 )
+from .progress import send_matting_status
+
+
+class MattingInterruptedError(RuntimeError):
+    """Raised when ComfyUI interrupts the native model during inference."""
+
+
+def _is_comfyui_processing_interrupt(error):
+    try:
+        from comfy.model_management import InterruptProcessingException
+    except (ImportError, AttributeError):
+        return False
+    return isinstance(error, InterruptProcessingException)
 
 
 class BiRefNetMatting:
@@ -31,7 +43,7 @@ class BiRefNetMatting:
         self.model = None
         self.model_path = None
 
-    def load_model(self, model_path=None):
+    def load_model(self, model_path=None, node_id=None):
         """Load the selected backend and reuse its process-wide model cache."""
         rmbg_model = _get_rmbg_remote_model(model_path)
         local_rmbg_path = None
@@ -41,7 +53,10 @@ class BiRefNetMatting:
         if rmbg_model or local_rmbg_path:
             if _get_rmbg_model_loader() is None:
                 raise RuntimeError(_get_rmbg_model_status_message())
-            model_directory = _ensure_rmbg_model(model_path)
+            if node_id is None:
+                model_directory = _ensure_rmbg_model(model_path)
+            else:
+                model_directory = _ensure_rmbg_model(model_path, node_id=node_id)
             self.model = RMBG2Model.load(model_directory)
             self.model_path = model_directory
             return self.model
@@ -52,7 +67,10 @@ class BiRefNetMatting:
                 "This ComfyUI version does not provide the native BiRefNet background-removal loader."
             )
 
-        checkpoint_path = _ensure_birefnet_checkpoint(model_path)
+        if node_id is None:
+            checkpoint_path = _ensure_birefnet_checkpoint(model_path)
+        else:
+            checkpoint_path = _ensure_birefnet_checkpoint(model_path, node_id=node_id)
         with self._model_cache_lock:
             if checkpoint_path not in self._model_cache:
                 log.info(f"Loading BiRefNet with ComfyUI's native loader from {checkpoint_path}")
@@ -92,11 +110,19 @@ class BiRefNetMatting:
 
         return image.to(dtype=torch.float32).contiguous()
 
-    def execute(self, image, model_path, threshold=0.5, refinement=1, mode="remove_background"):
+    def execute(
+        self,
+        image,
+        model_path,
+        threshold=0.5,
+        refinement=1,
+        mode="remove_background",
+        node_id=None,
+    ):
         try:
-            PromptServer.instance.send_sync("matting_status", {"status": "processing"})
+            send_matting_status("processing", node_id=node_id)
             del refinement
-            if mode not in {"remove_background", "remove_foreground", "mask_only"}:
+            if mode not in {"remove_background", "remove_foreground", "mask_only", "mask_only_inverted"}:
                 raise ValueError(f"Unsupported matting mode: {mode}")
 
             threshold = float(threshold)
@@ -106,7 +132,7 @@ class BiRefNetMatting:
             image_tensor = self.preprocess_image(image)
             original_size = (image_tensor.shape[1], image_tensor.shape[2])
             log.debug(f"Original size: {original_size}")
-            self.load_model(model_path)
+            self.load_model(model_path, node_id=node_id)
             log.debug(f"Processed image shape: {image_tensor.shape}, dtype: {image_tensor.dtype}")
 
             with torch.no_grad():
@@ -132,16 +158,23 @@ class BiRefNetMatting:
                 if threshold > 0:
                     result = (result > threshold).to(dtype=torch.float32)
 
-                alpha_mask = 1.0 - result if mode == "remove_foreground" else result
-                if mode == "mask_only":
+                alpha_mask = 1.0 - result if mode in {"remove_foreground", "mask_only_inverted"} else result
+                if mode in {"mask_only", "mask_only_inverted"}:
                     masked_image = alpha_mask.expand(-1, 3, -1, -1)
                 else:
                     masked_image = image_tensor.movedim(-1, 1) * alpha_mask
 
-                PromptServer.instance.send_sync("matting_status", {"status": "completed"})
+                send_matting_status("completed", node_id=node_id)
                 return masked_image, alpha_mask
         except Exception:
-            PromptServer.instance.send_sync("matting_status", {"status": "error"})
+            send_matting_status("error", node_id=node_id)
+            raise
+        except BaseException as error:
+            if _is_comfyui_processing_interrupt(error):
+                send_matting_status("error", node_id=node_id, reason="interrupted")
+                raise MattingInterruptedError(
+                    "ComfyUI interrupted the Matting operation."
+                ) from error
             raise
 
     @classmethod
@@ -155,4 +188,4 @@ class BiRefNetMatting:
         return digest.hexdigest()
 
 
-__all__ = ["BiRefNetMatting"]
+__all__ = ["BiRefNetMatting", "MattingInterruptedError"]

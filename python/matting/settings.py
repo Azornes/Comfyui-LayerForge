@@ -17,7 +17,7 @@ DEFAULT_SETTINGS = {
     "threshold": 0.5,
     "hf_token": "",
 }
-_VALID_MODES = {"remove_background", "remove_foreground", "mask_only"}
+_VALID_MODES = {"remove_background", "remove_foreground", "mask_only", "mask_only_inverted"}
 _SETTINGS_LOCK = threading.RLock()
 
 

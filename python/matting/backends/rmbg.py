@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from ...node import log
 from ..catalog import _RMBG_MODEL_CATALOG, _RMBG_REMOTE_PREFIX
 from ..paths import _get_rmbg_model_directory
+from ..progress import call_huggingface_download
 from ..settings import get_huggingface_token
 
 
@@ -129,7 +130,7 @@ def _find_local_rmbg_model(model_path=None):
     return None
 
 
-def _download_rmbg_model(model):
+def _download_rmbg_model(model, node_id=None):
     """Download the BRIA RMBG 2.0 repository into ComfyUI's model path."""
     try:
         from huggingface_hub import snapshot_download
@@ -155,7 +156,12 @@ def _download_rmbg_model(model):
     if token:
         download_kwargs["token"] = token
     try:
-        snapshot_download(**download_kwargs)
+        call_huggingface_download(
+            snapshot_download,
+            download_kwargs,
+            model["label"],
+            node_id=node_id,
+        )
     except Exception as error:
         raise RuntimeError(
             "Unable to download BRIA RMBG 2.0. Accept the model's gated access on "
@@ -172,14 +178,16 @@ def _download_rmbg_model(model):
     return model_directory
 
 
-def _ensure_rmbg_model(model_path):
+def _ensure_rmbg_model(model_path, node_id=None):
     """Resolve or download the selected BRIA RMBG 2.0 model directory."""
     remote_model = _get_rmbg_remote_model(model_path)
     if remote_model:
         model_directory = _find_existing_rmbg_model(remote_model)
         if model_directory:
             return model_directory
-        return _download_rmbg_model(remote_model)
+        if node_id is None:
+            return _download_rmbg_model(remote_model)
+        return _download_rmbg_model(remote_model, node_id=node_id)
 
     model_directory = _find_local_rmbg_model(model_path)
     if model_directory:

@@ -118,6 +118,7 @@ def _import_layerforge(monkeypatch, tmp_path):
         matting_rmbg=sys.modules[f"{package_name}.python.matting.backends.rmbg"],
         matting_settings=sys.modules[f"{package_name}.python.matting.settings"],
         matting_service=sys.modules[f"{package_name}.python.matting.service"],
+        matting_progress=sys.modules[f"{package_name}.python.matting.progress"],
         routes=routes,
         package_name=package_name,
     )
@@ -173,6 +174,7 @@ def test_entrypoint_registers_backend_route_contract(layerforge_runtime):
         ("GET", "/matting/settings"),
         ("POST", "/matting/settings"),
         ("GET", "/matting/check-model"),
+        ("GET", "/matting/progress"),
         ("POST", "/matting"),
     }
 
@@ -187,14 +189,14 @@ def test_matting_settings_are_persisted_without_exposing_the_token(layerforge_ru
     saved = settings_module.save_settings(
         {
             "model_path": "remote:rmbg_2_0",
-            "mode": "mask_only",
+            "mode": "mask_only_inverted",
             "threshold": 0.75,
             "hf_token": "hf-test-token",
         }
     )
 
     assert saved["model_path"] == "remote:rmbg_2_0"
-    assert saved["mode"] == "mask_only"
+    assert saved["mode"] == "mask_only_inverted"
     assert saved["threshold"] == 0.75
     assert settings_module.get_huggingface_token() == "hf-test-token"
     public_settings = settings_module.get_public_settings()
@@ -402,6 +404,48 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
     assert tuple(alpha_mask.shape) == (1, 1, 2, 4)
 
 
+def test_matting_adapter_translates_comfyui_interrupt(layerforge_runtime, monkeypatch):
+    import torch
+
+    node_module = layerforge_runtime.matting
+    service_module = layerforge_runtime.matting_service
+
+    class FakeInterruptProcessingException(BaseException):
+        pass
+
+    comfy_module = ModuleType("comfy")
+    model_management = ModuleType("comfy.model_management")
+    model_management.InterruptProcessingException = FakeInterruptProcessingException
+    comfy_module.model_management = model_management
+    monkeypatch.setitem(sys.modules, "comfy", comfy_module)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", model_management)
+
+    class InterruptingBiRefNet:
+        def encode_image(self, image):
+            del image
+            raise FakeInterruptProcessingException()
+
+    monkeypatch.setattr(
+        service_module,
+        "_get_comfy_birefnet_loader",
+        lambda: lambda path: InterruptingBiRefNet(),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "_ensure_birefnet_checkpoint",
+        lambda model_path=None: "interrupting-birefnet.safetensors",
+    )
+    node_module.BiRefNetMatting._model_cache.clear()
+
+    with pytest.raises(service_module.MattingInterruptedError, match="interrupted"):
+        node_module.BiRefNetMatting().execute(
+            torch.ones((1, 3, 2, 4), dtype=torch.float32),
+            model_path=None,
+            threshold=0,
+            refinement=1,
+        )
+
+
 def test_matting_model_status_preserves_unsupported_and_error_responses(layerforge_runtime, monkeypatch):
     node_module = layerforge_runtime.matting
     api_module = layerforge_runtime.matting_api
@@ -591,11 +635,20 @@ def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtim
         refinement=1,
         mode="mask_only",
     )
+    inverted_mask_preview, inverted_preview_mask = matting.execute(
+        image,
+        model_path=None,
+        threshold=0.5,
+        refinement=1,
+        mode="mask_only_inverted",
+    )
 
     assert torch.allclose(removed_foreground, torch.zeros_like(removed_foreground))
     assert torch.allclose(inverted_mask, torch.zeros_like(inverted_mask))
     assert torch.allclose(mask_preview, torch.ones_like(mask_preview))
     assert torch.allclose(preview_mask, torch.ones_like(preview_mask))
+    assert torch.allclose(inverted_mask_preview, torch.zeros_like(inverted_mask_preview))
+    assert torch.allclose(inverted_preview_mask, torch.zeros_like(inverted_preview_mask))
 
 
 def test_matting_model_options_include_downloadable_official_variants(layerforge_runtime, monkeypatch):
@@ -681,6 +734,52 @@ def test_remote_matting_download_uses_background_removal_root(layerforge_runtime
     assert "layerforge_birefnet" not in Path(download["local_dir"]).parts
     assert Path(result) == expected_dir / model["local_filename"]
     assert Path(result).exists()
+
+
+def test_model_download_progress_reports_bytes_to_the_frontend(layerforge_runtime, monkeypatch):
+    progress_module = layerforge_runtime.matting_progress
+    events = []
+    monkeypatch.setattr(
+        sys.modules["server"].PromptServer.instance,
+        "send_sync",
+        lambda *args: events.append(args),
+    )
+
+    progress_class = progress_module.create_huggingface_tqdm_class("Test model", node_id="42")
+    progress = progress_class(total=100, initial=0, unit="B", disable=True)
+    progress.update(25)
+    progress.update(75)
+    progress.close()
+
+    download_events = [event for event in events if event[1]["status"] == "downloading"]
+    assert download_events
+    assert download_events[-1][1]["node_id"] == "42"
+    assert download_events[-1][1]["progress"] == 100.0
+    assert download_events[-1][1]["downloaded_bytes"] == 100
+    assert download_events[-1][1]["total_bytes"] == 100
+    progress_module.send_matting_status("completed", node_id="42")
+    assert progress_module.get_matting_status("42")["status"] == "completed"
+
+
+def test_matting_progress_status_is_available_without_websocket_delivery(layerforge_runtime):
+    progress_module = layerforge_runtime.matting_progress
+
+    progress_module.send_matting_status(
+        "downloading",
+        node_id="poll-node",
+        progress=37.5,
+        downloaded_bytes=375,
+        total_bytes=1000,
+    )
+
+    assert progress_module.get_matting_status("poll-node") == {
+        "status": "downloading",
+        "node_id": "poll-node",
+        "progress": 37.5,
+        "downloaded_bytes": 375,
+        "total_bytes": 1000,
+    }
+    progress_module.send_matting_status("completed", node_id="poll-node")
 
 
 def test_rmbg_model_path_uses_background_removal_subdirectory(layerforge_runtime):

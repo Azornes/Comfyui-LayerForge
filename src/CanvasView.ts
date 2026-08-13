@@ -34,7 +34,7 @@ import type { ComfyNode, Layer, AddMode } from './types';
 
 const log = createModuleLogger('Canvas_view');
 
-type MattingMode = 'remove_background' | 'remove_foreground' | 'mask_only';
+type MattingMode = 'remove_background' | 'remove_foreground' | 'mask_only' | 'mask_only_inverted';
 
 interface MattingSettings {
     modelPath: string;
@@ -62,7 +62,10 @@ const DEFAULT_MATTING_SETTINGS: MattingSettings = {
 };
 
 const isMattingMode = (value: unknown): value is MattingMode => {
-    return value === 'remove_background' || value === 'remove_foreground' || value === 'mask_only';
+    return value === 'remove_background'
+        || value === 'remove_foreground'
+        || value === 'mask_only'
+        || value === 'mask_only_inverted';
 };
 
 const normalizeMattingSettings = (settings: Partial<MattingSettings>): MattingSettings => {
@@ -122,6 +125,8 @@ const getMattingModeLabel = (mode: MattingMode): string => {
             return 'Remove detected foreground / keep background';
         case 'mask_only':
             return 'Apply generated mask to Draw Mask';
+        case 'mask_only_inverted':
+            return 'Apply inverted mask to Draw Mask';
         default:
             return 'Remove background / keep foreground';
     }
@@ -278,10 +283,43 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         helpTooltip.style.display = 'none';
     };
 
+    const showMattingTooltip = (target: HTMLElement, content: string): void => {
+        helpTooltip.classList.add('lf-matting-tooltip');
+        showTooltip(target, content);
+    };
+
+    const hideMattingTooltip = (): void => {
+        hideTooltip();
+        helpTooltip.classList.remove('lf-matting-tooltip');
+    };
+
+    const createMattingTooltipBadge = (labelText: string, tooltipText: string): HTMLSpanElement => {
+        const badge = document.createElement('span');
+        badge.className = 'lf-matting-tooltip-badge';
+        badge.textContent = '?';
+        badge.tabIndex = 0;
+        badge.dataset.tooltip = tooltipText;
+        badge.setAttribute('aria-label', `More information about ${labelText}`);
+
+        const show = (): void => {
+            const content = badge.dataset.tooltip;
+            if (content) showMattingTooltip(badge, content);
+        };
+        const hide = (): void => hideMattingTooltip();
+
+        badge.addEventListener('mouseenter', show);
+        badge.addEventListener('focus', show);
+        badge.addEventListener('mouseleave', hide);
+        badge.addEventListener('blur', hide);
+        badge.addEventListener('click', (event) => event.preventDefault());
+        return badge;
+    };
+
     let mattingSettingsBackdrop: HTMLDivElement | null = null;
     let mattingSettingsEscapeHandler: ((event: KeyboardEvent) => void) | null = null;
 
     const closeMattingSettings = () => {
+        hideMattingTooltip();
         if (mattingSettingsEscapeHandler) {
             document.removeEventListener('keydown', mattingSettingsEscapeHandler);
             mattingSettingsEscapeHandler = null;
@@ -344,22 +382,18 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         const body = document.createElement('div');
         body.className = 'lf-matting-settings-body';
 
-        const createRow = (labelText: string, control: HTMLElement, description?: string): HTMLLabelElement => {
+        const createRow = (labelText: string, control: HTMLElement, tooltipText?: string): HTMLLabelElement => {
             const row = document.createElement('label');
             row.className = 'lf-matting-settings-row';
 
             const label = document.createElement('span');
             label.className = 'lf-matting-settings-label';
-            label.textContent = labelText;
+            label.appendChild(document.createTextNode(labelText));
+            if (tooltipText) {
+                label.appendChild(createMattingTooltipBadge(labelText, tooltipText));
+            }
             row.appendChild(label);
             row.appendChild(control);
-
-            if (description) {
-                const hint = document.createElement('small');
-                hint.className = 'lf-matting-settings-hint';
-                hint.textContent = description;
-                row.appendChild(hint);
-            }
 
             return row;
         };
@@ -420,7 +454,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             const selectedOption = modelOptions.find((option) => option.path === modelSelect.value);
 
             if (modelSelect.value === 'auto') {
-                modelDescription.textContent = 'LayerForge selects the best compatible installed checkpoint. If none is available, the standard General model is downloaded.';
+                modelDescription.textContent = 'Automatic mode picks the best compatible installed model and downloads the default model if needed.';
                 modelDetails.hidden = false;
                 return;
             }
@@ -454,7 +488,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
         const modeSelect = document.createElement('select');
         modeSelect.className = 'lf-matting-settings-select';
-        (['remove_background', 'remove_foreground', 'mask_only'] as MattingMode[]).forEach((mode) => {
+        (['remove_background', 'remove_foreground', 'mask_only', 'mask_only_inverted'] as MattingMode[]).forEach((mode) => {
             modeSelect.appendChild(new Option(getMattingModeLabel(mode), mode));
         });
         modeSelect.value = settings.mode;
@@ -539,6 +573,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             thresholdInput.value = String(DEFAULT_MATTING_SETTINGS.threshold);
             thresholdValue.value = DEFAULT_MATTING_SETTINGS.threshold.toFixed(2);
             thresholdValue.textContent = DEFAULT_MATTING_SETTINGS.threshold.toFixed(2);
+            updateModelDetails();
         };
 
         const saveButton = document.createElement('button');
@@ -932,6 +967,11 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             const spinner = $el("div.lf-matting-spinner") as HTMLDivElement;
                             button.appendChild(spinner);
                             button.classList.add('lf-loading');
+                            startMattingSpinner();
+                            if (modelStatus.reason === 'not_downloaded') {
+                                setMattingDownloadProgress(0);
+                                startMattingProgressPolling();
+                            }
                             
                             if (modelStatus.available) {
                                 showInfoNotification(`Starting ${getMattingModeLabel(mattingSettings.mode).toLowerCase()}...`, 2000);
@@ -952,6 +992,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                     model_path: mattingSettings.modelPath || "auto",
                                     mode: mattingSettings.mode,
                                     threshold: mattingSettings.threshold,
+                                    node_id: String(node.id),
                                 })
                             });
 
@@ -963,6 +1004,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                     // Handle specific error types
                                     if (result.error === "Network Connection Error") {
                                         showErrorNotification("Failed to download the matting model. Please check your internet connection and try again.", 8000);
+                                        return;
+                                    } else if (result.error === "Matting Interrupted") {
+                                        showWarningNotification(result.details || "Matting was interrupted by ComfyUI.", 6000);
                                         return;
                                     } else if (result.error === "Matting Model Error") {
                                         showErrorNotification(result.details || "Model loading error. Please check the console for details.", 8000);
@@ -976,7 +1020,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                 throw new Error(errorMsg);
                             }
                             
-                            if (mattingSettings.mode === 'mask_only') {
+                            if (mattingSettings.mode === 'mask_only' || mattingSettings.mode === 'mask_only_inverted') {
                                 if (typeof result.draw_mask !== 'string') {
                                     throw new Error('Matting response did not contain a Draw Mask image.');
                                 }
@@ -985,7 +1029,11 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                 drawMaskImage.src = result.draw_mask;
                                 await drawMaskImage.decode();
                                 canvas.maskTool.setMaskForLayer(drawMaskImage, selectedLayer);
-                                showSuccessNotification('Generated mask applied to Draw Mask.');
+                                showSuccessNotification(
+                                    mattingSettings.mode === 'mask_only_inverted'
+                                        ? 'Inverted mask applied to Draw Mask.'
+                                        : 'Generated mask applied to Draw Mask.',
+                                );
                                 return;
                             }
 
@@ -1015,6 +1063,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                 showErrorNotification(`Matting Failed: ${errorMessage}`);
                             }
                         } finally {
+                            stopMattingProgressPolling();
+                            stopMattingSpinner();
+                            setMattingDownloadProgress(null);
                             button.classList.remove('lf-loading');
                             const spinner = button.querySelector('.lf-matting-spinner');
                             if (spinner && button.contains(spinner)) {
@@ -1263,6 +1314,122 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         $el("div.lf-painter-separator")
     ]);
 
+    const mattingButton = controlPanel.querySelector('.lf-matting-button') as HTMLButtonElement | null;
+    const mattingProgressTrack = document.createElement('span');
+    mattingProgressTrack.className = 'lf-matting-download-progress';
+    mattingProgressTrack.setAttribute('aria-hidden', 'true');
+    const mattingProgressFill = document.createElement('span');
+    mattingProgressFill.className = 'lf-matting-download-progress-fill';
+    mattingProgressTrack.appendChild(mattingProgressFill);
+    mattingButton?.appendChild(mattingProgressTrack);
+
+    let mattingSpinnerAnimationFrame: number | null = null;
+    let mattingProgressPollTimer: number | null = null;
+    let mattingProgressPolling = false;
+
+    const stopMattingSpinner = (): void => {
+        if (mattingSpinnerAnimationFrame !== null) {
+            window.cancelAnimationFrame(mattingSpinnerAnimationFrame);
+            mattingSpinnerAnimationFrame = null;
+        }
+
+        const spinner = mattingButton?.querySelector('.lf-matting-spinner') as HTMLDivElement | null;
+        if (spinner) {
+            spinner.style.transform = '';
+        }
+    };
+
+    const startMattingSpinner = (): void => {
+        stopMattingSpinner();
+        const spinner = mattingButton?.querySelector('.lf-matting-spinner') as HTMLDivElement | null;
+        if (!spinner) return;
+
+        const startedAt = performance.now();
+        const animate = (timestamp: number): void => {
+            if (!mattingButton?.classList.contains('lf-loading') || !spinner.isConnected) {
+                stopMattingSpinner();
+                return;
+            }
+
+            const rotation = ((timestamp - startedAt) * 0.45) % 360;
+            spinner.style.transform = `translateY(-50%) rotate(${rotation}deg)`;
+            mattingSpinnerAnimationFrame = window.requestAnimationFrame(animate);
+        };
+
+        mattingSpinnerAnimationFrame = window.requestAnimationFrame(animate);
+    };
+
+    const setMattingDownloadProgress = (progress: number | null): void => {
+        if (!mattingButton) return;
+
+        if (progress === null) {
+            mattingButton.classList.remove('lf-downloading');
+            mattingProgressFill.style.width = '0%';
+            return;
+        }
+
+        const normalizedProgress = Math.min(100, Math.max(0, Number(progress) || 0));
+        mattingButton.classList.add('lf-downloading');
+        mattingProgressFill.style.width = `${normalizedProgress}%`;
+    };
+
+    const handleMattingStatus = (event: any): void => {
+        const eventPayload = event?.detail && typeof event.detail === 'object' ? event.detail : event;
+        const payload = eventPayload?.data && typeof eventPayload.data === 'object'
+            ? eventPayload.data
+            : eventPayload;
+        if (!payload || typeof payload.status !== 'string') return;
+
+        if (payload.node_id !== undefined && String(payload.node_id) !== String(node.id)) {
+            return;
+        }
+
+        if (payload.status === 'downloading') {
+            setMattingDownloadProgress(Number(payload.progress) || 0);
+        } else if (payload.status === 'completed' || payload.status === 'error') {
+            setMattingDownloadProgress(null);
+        }
+    };
+
+    const stopMattingProgressPolling = (): void => {
+        mattingProgressPolling = false;
+        if (mattingProgressPollTimer !== null) {
+            window.clearTimeout(mattingProgressPollTimer);
+            mattingProgressPollTimer = null;
+        }
+    };
+
+    const pollMattingProgress = async (): Promise<void> => {
+        if (!mattingProgressPolling) return;
+
+        try {
+            const response = await fetch(
+                `/matting/progress?node_id=${encodeURIComponent(String(node.id))}`,
+                { cache: 'no-store' },
+            );
+            if (response.ok) {
+                handleMattingStatus({ detail: await response.json() });
+            }
+        } catch {
+            // WebSocket events remain the primary path; polling is a best-effort fallback.
+        } finally {
+            if (mattingProgressPolling) {
+                mattingProgressPollTimer = window.setTimeout(() => {
+                    void pollMattingProgress();
+                }, 250);
+            }
+        }
+    };
+
+    const startMattingProgressPolling = (): void => {
+        stopMattingProgressPolling();
+        mattingProgressPolling = true;
+        void pollMattingProgress();
+    };
+
+    if (mattingButton) {
+        api.addEventListener('matting_status', handleMattingStatus);
+    }
 
     // Function to create mask icon
     const createMaskIcon = (): HTMLElement => {
@@ -1761,6 +1928,11 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         panel: controlPanel,
         destroy: () => {
             closeMattingSettings();
+            stopMattingProgressPolling();
+            stopMattingSpinner();
+            if (mattingButton) {
+                api.removeEventListener('matting_status', handleMattingStatus);
+            }
             mainContainer.removeEventListener('copy', stopEditableClipboardLeak);
             mainContainer.removeEventListener('cut', stopEditableClipboardLeak);
             mainContainer.removeEventListener('paste', stopEditableClipboardLeak);

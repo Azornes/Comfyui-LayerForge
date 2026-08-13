@@ -5,6 +5,7 @@ from aiohttp import web
 
 from .api import (
     check_matting_model,
+    get_matting_progress,
     get_matting_settings,
     matting,
     register_matting_routes,
@@ -69,6 +70,7 @@ __all__ = [
     "BiRefNetMatting",
     "RMBG2Model",
     "check_matting_model",
+    "get_matting_progress",
     "get_matting_settings",
     "matting",
     "register_matting_routes",

@@ -601,6 +601,7 @@
 .lf-painter-button.lf-matting-button {
     position: relative;
     transition: all 0.3s ease;
+    overflow: hidden;
 }
 
 .lf-painter-button.lf-matting-button.lf-loading {
@@ -619,17 +620,37 @@
     border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     border-top-color: #fff;
-    animation: matting-spin 1s linear infinite;
+    will-change: transform;
 }
 
 .lf-painter-button.lf-matting-button.lf-loading .lf-matting-spinner {
     display: block;
 }
 
-@keyframes matting-spin {
-    to {
-        transform: translateY(-50%) rotate(360deg);
-    }
+.lf-painter-button.lf-matting-button .lf-matting-download-progress {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.18);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.lf-painter-button.lf-matting-button.lf-downloading .lf-matting-download-progress {
+    display: block;
+}
+
+.lf-painter-button.lf-matting-button .lf-matting-download-progress-fill {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: #39d353;
+    box-shadow: 0 0 5px rgba(57, 211, 83, 0.85);
+    transition: width 0.12s linear;
 }
 
 .lf-matting-settings-button {
@@ -710,9 +731,55 @@
 }
 
 .lf-matting-settings-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: #fff;
     font-size: 13px;
     font-weight: 600;
+}
+
+.lf-matting-tooltip-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    margin-left: 2px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+}
+
+.lf-matting-tooltip-badge:hover,
+.lf-matting-tooltip-badge:focus-visible {
+    color: #d9ecff;
+    outline: none;
+    background: rgba(78, 161, 255, 0.18);
+    border-color: rgba(78, 161, 255, 0.65);
+}
+
+.lf-painter-tooltip.lf-matting-tooltip {
+    min-width: 220px;
+    max-width: min(320px, calc(100vw - 24px));
+    padding: 8px 10px;
+    color: #f2f2f2;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.5;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    background: rgba(34, 34, 38, 0.98);
+    border: 1px solid #555;
+    border-radius: 8px;
+    z-index: 1000001;
 }
 
 .lf-matting-settings-select {
@@ -762,7 +829,6 @@
     outline-offset: 1px;
 }
 
-.lf-matting-settings-hint,
 .lf-matting-settings-status {
     margin: 0;
     color: #bdbdbd;

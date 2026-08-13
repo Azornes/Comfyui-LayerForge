@@ -19,6 +19,7 @@ from ..paths import (
     _get_birefnet_remote_checkpoint_path,
     _get_rmbg_model_roots,
 )
+from ..progress import call_huggingface_download
 from ..settings import get_huggingface_token
 
 
@@ -140,7 +141,7 @@ def _find_existing_birefnet_default_checkpoint():
     return None
 
 
-def _download_birefnet_checkpoint(model=None):
+def _download_birefnet_checkpoint(model=None, node_id=None):
     """Download and validate a full BiRefNet checkpoint into ComfyUI's model path."""
     try:
         from huggingface_hub import hf_hub_download
@@ -174,11 +175,12 @@ def _download_birefnet_checkpoint(model=None):
     token = get_huggingface_token()
     if token:
         download_kwargs["token"] = token
-    try:
-        downloaded_path = hf_hub_download(**download_kwargs)
-    except TypeError:
-        download_kwargs.pop("local_dir_use_symlinks", None)
-        downloaded_path = hf_hub_download(**download_kwargs)
+    downloaded_path = call_huggingface_download(
+        hf_hub_download,
+        download_kwargs,
+        model_label,
+        node_id=node_id,
+    )
 
     if not _is_native_birefnet_checkpoint(downloaded_path):
         raise RuntimeError(
@@ -204,14 +206,16 @@ def _download_birefnet_checkpoint(model=None):
     return downloaded_path
 
 
-def _ensure_birefnet_checkpoint(model_path=None):
+def _ensure_birefnet_checkpoint(model_path=None, node_id=None):
     """Resolve or download the selected BiRefNet checkpoint."""
     remote_model = _get_birefnet_remote_model(model_path)
     if remote_model:
         checkpoint_path = _find_existing_birefnet_remote_checkpoint(remote_model)
         if checkpoint_path:
             return checkpoint_path
-        return _download_birefnet_checkpoint(remote_model)
+        if node_id is None:
+            return _download_birefnet_checkpoint(remote_model)
+        return _download_birefnet_checkpoint(remote_model, node_id=node_id)
 
     if not model_path or model_path == "auto":
         _find_existing_birefnet_default_checkpoint()
@@ -223,7 +227,9 @@ def _ensure_birefnet_checkpoint(model_path=None):
     if model_path and model_path != "auto":
         raise RuntimeError("The selected BiRefNet checkpoint is not available or is not compatible with ComfyUI.")
 
-    return _download_birefnet_checkpoint()
+    if node_id is None:
+        return _download_birefnet_checkpoint()
+    return _download_birefnet_checkpoint(node_id=node_id)
 
 
 __all__ = [
