@@ -13,6 +13,7 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 
 import {Canvas, configureCanvasImagePreviewWidget} from "./Canvas.js";
 import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
+import {getCanvasStateKey} from "./utils/CanvasStateKey.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import { loadImageFromBlob } from "./utils/ImageUtils.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
@@ -2081,7 +2082,10 @@ app.registerExtension({
                     // Copy the canvas state now that the widget is initialized
                     setTimeout(async () => {
                         try {
-                            let sourceState = await getCanvasState(String(sourceNodeId));
+                            const sourceNode = (this as any).graph?.getNodeById?.(sourceNodeId);
+                            let sourceState = sourceNode
+                                ? await getCanvasState(getCanvasStateKey(sourceNode))
+                                : null;
 
                             // If source node doesn't exist (cross-workflow paste), try clipboard
                             if (!sourceState) {
@@ -2094,7 +2098,7 @@ app.registerExtension({
                                 return;
                             }
 
-                            await setCanvasState(String(this.id), sourceState);
+                            await setCanvasState(getCanvasStateKey(this), sourceState);
                             await canvasWidget.canvas.loadInitialState();
                             log.info(`Canvas state copied successfully to node ${this.id}`);
                         } catch (error) {
@@ -2299,7 +2303,7 @@ app.registerExtension({
                 // This happens async but that's fine since paste happens later
                 (async () => {
                     try {
-                        const sourceState = await getCanvasState(String(this.id));
+                        const sourceState = await getCanvasState(getCanvasStateKey(this));
                         if (sourceState) {
                             // Store in a special "clipboard" entry
                             await setCanvasState('__clipboard__', sourceState);

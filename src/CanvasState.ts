@@ -3,6 +3,7 @@ import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showAlertNotification, showAllNotificationTypes} from "./utils/NotificationUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas, cloneCanvas} from "./utils/CommonUtils.js";
 import {loadImage} from "./utils/ImageUtils.js";
+import {getCanvasStateKey} from "./utils/CanvasStateKey.js";
 import {withErrorHandling} from "./ErrorHandler.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from './types';
@@ -86,9 +87,10 @@ export class CanvasState {
                 log.error("Node ID is not available for loading state from DB.");
                 return false;
             }
-            const savedState = await getCanvasState(String(this.canvas.node.id));
+            const stateKey = getCanvasStateKey(this.canvas.node);
+            const savedState = await getCanvasState(stateKey);
             if (!savedState) {
-                log.info("No saved state found in IndexedDB for node:", this.canvas.node.id);
+                log.info("No saved state found in IndexedDB for key:", stateKey);
                 return false;
             }
             log.info("Found saved state in IndexedDB.");
@@ -128,7 +130,7 @@ export class CanvasState {
 
             this.canvas.updateSelectionAfterHistory();
             this.canvas.render();
-            log.info("Canvas state loaded successfully from IndexedDB for node", this.canvas.node.id);
+            log.info("Canvas state loaded successfully from IndexedDB for key", stateKey);
             return true;
         } catch (error) {
             log.error("Error during state load:", error);
@@ -284,7 +286,8 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
             }
         }
 
-        log.info("Preparing state to be sent to worker...");
+        const stateKey = getCanvasStateKey(this.canvas.node);
+        log.info("Preparing state to be sent to worker for key:", stateKey);
         const layers = await this._prepareLayers();
         const state = {
             layers: layers.filter(layer => layer !== null),
@@ -302,13 +305,13 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         if (this.stateSaverWorker) {
             log.info("Posting state to worker for background saving.");
             this.stateSaverWorker.postMessage({
-                nodeId: String(this.canvas.node.id),
+                stateKey,
                 state: state
             });
             this.canvas.render();
         } else {
             log.warn("State saver worker not available. Saving on main thread.");
-            await setCanvasState(String(this.canvas.node.id), state);
+            await setCanvasState(stateKey, state);
         }
     }
 

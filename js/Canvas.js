@@ -28,6 +28,30 @@ const useChainCallback = (original, next) => {
     };
 };
 const log = createModuleLogger('Canvas');
+const CANVAS_IMAGE_PREVIEW_WIDGET = "$$canvas-image-preview";
+const NATIVE_PREVIEW_HEIGHT = 180;
+export const configureCanvasImagePreviewWidget = (imagePreviewWidget, visible) => {
+    const previewHeight = visible ? NATIVE_PREVIEW_HEIGHT : 0;
+    if (imagePreviewWidget.options) {
+        imagePreviewWidget.options.hidden = !visible;
+        imagePreviewWidget.options.visible = visible;
+        imagePreviewWidget.options.getMinHeight = () => previewHeight;
+        imagePreviewWidget.options.getHeight = () => previewHeight;
+        imagePreviewWidget.options.getMaxHeight = () => previewHeight;
+    }
+    imagePreviewWidget.hidden = !visible;
+    if ('visible' in imagePreviewWidget) {
+        imagePreviewWidget.visible = visible;
+    }
+    // Recent ComfyUI versions use computeLayoutSize(), while older versions
+    // use computeSize(). Configure both before the widget enters the node.
+    imagePreviewWidget.computeLayoutSize = () => ({
+        minHeight: previewHeight,
+        maxHeight: previewHeight,
+        minWidth: visible ? 1 : 0,
+    });
+    imagePreviewWidget.computeSize = () => [0, previewHeight];
+};
 /**
  * Canvas - Fasada dla systemu rysowania
  *
@@ -150,37 +174,14 @@ export class Canvas {
     async setPreviewVisibility(visible) {
         this.previewVisible = visible;
         log.info("Canvas preview visibility set to:", visible);
-        const imagePreviewWidget = await this.waitForWidget("$$canvas-image-preview", this.node);
+        let imagePreviewWidget = this.node.widgets?.find((widget) => widget.name === CANVAS_IMAGE_PREVIEW_WIDGET);
+        if (!imagePreviewWidget) {
+            imagePreviewWidget = await this.waitForWidget(CANVAS_IMAGE_PREVIEW_WIDGET, this.node).catch(() => null);
+        }
         if (imagePreviewWidget) {
             log.debug("Found $$canvas-image-preview widget, controlling visibility");
-            if (visible) {
-                if (imagePreviewWidget.options) {
-                    imagePreviewWidget.options.hidden = false;
-                }
-                if ('visible' in imagePreviewWidget) {
-                    imagePreviewWidget.visible = true;
-                }
-                if ('hidden' in imagePreviewWidget) {
-                    imagePreviewWidget.hidden = false;
-                }
-                imagePreviewWidget.computeSize = function () {
-                    return [0, 250]; // Szerokość 0 (auto), wysokość 250
-                };
-            }
-            else {
-                if (imagePreviewWidget.options) {
-                    imagePreviewWidget.options.hidden = true;
-                }
-                if ('visible' in imagePreviewWidget) {
-                    imagePreviewWidget.visible = false;
-                }
-                if ('hidden' in imagePreviewWidget) {
-                    imagePreviewWidget.hidden = true;
-                }
-                imagePreviewWidget.computeSize = function () {
-                    return [0, 0]; // Szerokość 0, wysokość 0
-                };
-            }
+            configureCanvasImagePreviewWidget(imagePreviewWidget, visible);
+            this.node.setDirtyCanvas?.(true, true);
             this.render();
         }
         else {

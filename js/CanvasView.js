@@ -7,8 +7,9 @@ import { ChangeTracker } from "../../scripts/changeTracker.js";
 // @ts-ignore
 import { $el } from "../../scripts/ui.js";
 import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js";
-import { Canvas } from "./Canvas.js";
+import { Canvas, configureCanvasImagePreviewWidget } from "./Canvas.js";
 import { clearAllCanvasStates, getCanvasState, setCanvasState } from "./db.js";
+import { getCanvasStateKey } from "./utils/CanvasStateKey.js";
 import { createCanvas } from "./utils/CommonUtils.js";
 import { loadImageFromBlob } from "./utils/ImageUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
@@ -1509,7 +1510,14 @@ async function createCanvasWidget(node, widget, app) {
     mainContainer.addEventListener('pointerleave', handleShortcutContextPointerLeave);
     mainContainer.addEventListener('keydown', handleRootUndoRedo, true);
     if (node.addDOMWidget) {
-        node.addDOMWidget("mainContainer", "widget", mainContainer);
+        const getEditorWidgetHeight = () => {
+            const controlsHeight = controlsElement instanceof HTMLElement ? controlsElement.offsetHeight : 0;
+            return Math.max(300, controlsHeight + 180);
+        };
+        node.addDOMWidget("mainContainer", "widget", mainContainer, {
+            getMinHeight: getEditorWidgetHeight,
+            getHeight: getEditorWidgetHeight,
+        });
     }
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
     let backdrop = null;
@@ -1701,6 +1709,18 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");
                 const r = onNodeCreated?.apply(this, arguments);
+                const nodeWithPreviewHook = this;
+                const originalAddCustomWidget = nodeWithPreviewHook.addCustomWidget;
+                if (typeof originalAddCustomWidget === "function" && !nodeWithPreviewHook.__layerForgePreviewWidgetHooked) {
+                    nodeWithPreviewHook.addCustomWidget = function (customWidget, ...args) {
+                        if (customWidget?.name === "$$canvas-image-preview" || customWidget?.type === "IMAGE_PREVIEW") {
+                            const showPreviewWidget = this.widgets?.find((widget) => widget.name === "show_preview");
+                            configureCanvasImagePreviewWidget(customWidget, showPreviewWidget?.value === true);
+                        }
+                        return originalAddCustomWidget.call(this, customWidget, ...args);
+                    };
+                    nodeWithPreviewHook.__layerForgePreviewWidgetHooked = true;
+                }
                 this.size = [1150, 1000];
                 return r;
             };
@@ -1744,7 +1764,10 @@ app.registerExtension({
                     // Copy the canvas state now that the widget is initialized
                     setTimeout(async () => {
                         try {
-                            let sourceState = await getCanvasState(String(sourceNodeId));
+                            const sourceNode = this.graph?.getNodeById?.(sourceNodeId);
+                            let sourceState = sourceNode
+                                ? await getCanvasState(getCanvasStateKey(sourceNode))
+                                : null;
                             // If source node doesn't exist (cross-workflow paste), try clipboard
                             if (!sourceState) {
                                 log.debug(`No canvas state found for source node ${sourceNodeId}, checking clipboard`);
@@ -1754,7 +1777,7 @@ app.registerExtension({
                                 log.debug(`No canvas state found in clipboard either`);
                                 return;
                             }
-                            await setCanvasState(String(this.id), sourceState);
+                            await setCanvasState(getCanvasStateKey(this), sourceState);
                             await canvasWidget.canvas.loadInitialState();
                             log.info(`Canvas state copied successfully to node ${this.id}`);
                         }
@@ -1939,7 +1962,7 @@ app.registerExtension({
                 // This happens async but that's fine since paste happens later
                 (async () => {
                     try {
-                        const sourceState = await getCanvasState(String(this.id));
+                        const sourceState = await getCanvasState(getCanvasStateKey(this));
                         if (sourceState) {
                             // Store in a special "clipboard" entry
                             await setCanvasState('__clipboard__', sourceState);

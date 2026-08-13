@@ -30,20 +30,20 @@ async function setCanvasState(id: string, state: any): Promise<void> {
     );
 }
 
-self.onmessage = async function(e: MessageEvent<{ state: any, nodeId: string }>): Promise<void> {
+self.onmessage = async function(e: MessageEvent<{ state: any, stateKey: string }>): Promise<void> {
     log('Message received from main thread:', e.data ? 'data received' : 'no data');
-    const { state, nodeId } = e.data;
+    const { state, stateKey } = e.data;
 
-    if (!state || !nodeId) {
+    if (!state || !stateKey) {
         error('Invalid data received from main thread');
         return;
     }
 
     try {
-        log(`Saving state for node: ${nodeId}`);
-        await setCanvasState(nodeId, state);
-        log(`State saved successfully for node: ${nodeId}`);
+        log(`Saving state for key: ${stateKey}`);
+        await setCanvasState(stateKey, state);
+        log(`State saved successfully for key: ${stateKey}`);
     } catch (err) {
-        error(`Failed to save state for node: ${nodeId}`, err);
+        error(`Failed to save state for key: ${stateKey}`, err);
     }
 };
