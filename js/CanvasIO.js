@@ -18,6 +18,9 @@ export class CanvasIO {
             log.debug(`Added batch image ${i + 1}/${images.length} ${logSuffix}`);
         }
     }
+    canvasToPngBlob(canvas, callback) {
+        canvas.toBlob(callback, "image/png");
+    }
     async saveToServer(fileName, outputMode = 'disk') {
         if (outputMode === 'disk') {
             if (!window.canvasSaveStates) {
@@ -109,7 +112,7 @@ export class CanvasIO {
             }
             const fileNameWithoutMask = fileName.replace('.png', '_without_mask.png');
             log.info(`Saving image without mask as: ${fileNameWithoutMask}`);
-            tempCanvas.toBlob(async (blobWithoutMask) => {
+            this.canvasToPngBlob(tempCanvas, async (blobWithoutMask) => {
                 if (!blobWithoutMask)
                     return;
                 log.debug(`Created blob for image without mask, size: ${blobWithoutMask.size} bytes`);
@@ -120,9 +123,9 @@ export class CanvasIO {
                 catch (error) {
                     log.error(`Error uploading image without mask:`, error);
                 }
-            }, "image/png");
+            });
             log.info(`Saving main image as: ${fileName}`);
-            tempCanvas.toBlob(async (blob) => {
+            this.canvasToPngBlob(tempCanvas, async (blob) => {
                 if (!blob)
                     return;
                 log.debug(`Created blob for main image, size: ${blob.size} bytes`);
@@ -132,7 +135,7 @@ export class CanvasIO {
                     if (resp.status === 200) {
                         const maskFileName = fileName.replace('.png', '_mask.png');
                         log.info(`Saving mask as: ${maskFileName}`);
-                        maskCanvas.toBlob(async (maskBlob) => {
+                        this.canvasToPngBlob(maskCanvas, async (maskBlob) => {
                             if (!maskBlob)
                                 return;
                             log.debug(`Created blob for mask, size: ${maskBlob.size} bytes`);
@@ -156,7 +159,7 @@ export class CanvasIO {
                                 log.error(`Error saving mask:`, error);
                                 resolve(false);
                             }
-                        }, "image/png");
+                        });
                     }
                     else {
                         log.error(`Main image upload failed: ${resp.status} - ${resp.statusText}`);
@@ -167,7 +170,7 @@ export class CanvasIO {
                     log.error(`Error uploading main image:`, error);
                     resolve(false);
                 }
-            }, "image/png");
+            });
         });
     }
     async _renderOutputData() {
