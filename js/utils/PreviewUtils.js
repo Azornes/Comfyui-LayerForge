@@ -2,6 +2,42 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
 const log = createModuleLogger('PreviewUtils');
+async function loadPreviewImageFromBlob(blob, options) {
+    const isCanvasSource = options.source === 'canvas';
+    const previewImage = new Image();
+    previewImage.src = URL.createObjectURL(blob);
+    await new Promise((resolve, reject) => {
+        previewImage.onload = () => {
+            log.debug(isCanvasSource ? "Preview image loaded successfully" : "Preview image from blob loaded successfully", isCanvasSource
+                ? {
+                    width: previewImage.width,
+                    height: previewImage.height,
+                    nodeId: options.node?.id
+                }
+                : {
+                    width: previewImage.width,
+                    height: previewImage.height
+                });
+            resolve();
+        };
+        previewImage.onerror = (error) => {
+            const errorMessage = isCanvasSource
+                ? "Failed to load preview image"
+                : "Failed to load preview image from blob";
+            log.error(errorMessage, error);
+            reject(createValidationError(errorMessage, isCanvasSource
+                ? { error, blob: blob.size }
+                : { error, blobSize: blob.size }));
+        };
+    });
+    if (options.updateNodeImages && options.node) {
+        options.node.imgs = [previewImage];
+        log.debug(isCanvasSource
+            ? "Node images updated with new preview"
+            : "Node images updated with blob preview");
+    }
+    return previewImage;
+}
 /**
  * Creates a preview image from canvas and updates node
  * @param canvas - Canvas object with canvasLayers
@@ -44,30 +80,11 @@ export const createPreviewFromCanvas = withErrorHandling(async function (canvas,
     if (!blob) {
         throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
     }
-    // Create preview image
-    const previewImage = new Image();
-    previewImage.src = URL.createObjectURL(blob);
-    // Wait for image to load
-    await new Promise((resolve, reject) => {
-        previewImage.onload = () => {
-            log.debug("Preview image loaded successfully", {
-                width: previewImage.width,
-                height: previewImage.height,
-                nodeId: node.id
-            });
-            resolve();
-        };
-        previewImage.onerror = (error) => {
-            log.error("Failed to load preview image", error);
-            reject(createValidationError("Failed to load preview image", { error, blob: blob?.size }));
-        };
+    return loadPreviewImageFromBlob(blob, {
+        source: 'canvas',
+        node,
+        updateNodeImages
     });
-    // Update node images if requested
-    if (updateNodeImages) {
-        node.imgs = [previewImage];
-        log.debug("Node images updated with new preview");
-    }
-    return previewImage;
 }, 'createPreviewFromCanvas');
 /**
  * Creates a preview image from a blob
@@ -88,26 +105,11 @@ export const createPreviewFromBlob = withErrorHandling(async function (blob, nod
         updateNodeImages,
         hasNode: !!node
     });
-    const previewImage = new Image();
-    previewImage.src = URL.createObjectURL(blob);
-    await new Promise((resolve, reject) => {
-        previewImage.onload = () => {
-            log.debug("Preview image from blob loaded successfully", {
-                width: previewImage.width,
-                height: previewImage.height
-            });
-            resolve();
-        };
-        previewImage.onerror = (error) => {
-            log.error("Failed to load preview image from blob", error);
-            reject(createValidationError("Failed to load preview image from blob", { error, blobSize: blob.size }));
-        };
+    return loadPreviewImageFromBlob(blob, {
+        source: 'blob',
+        node,
+        updateNodeImages
     });
-    if (updateNodeImages && node) {
-        node.imgs = [previewImage];
-        log.debug("Node images updated with blob preview");
-    }
-    return previewImage;
 }, 'createPreviewFromBlob');
 /**
  * Updates node preview after canvas changes
