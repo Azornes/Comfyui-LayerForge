@@ -19,6 +19,7 @@ import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage, type CanvasExportAction, type CanvasExportVariant } from "./utils/CanvasExportUtils.js";
+import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
 
@@ -261,9 +262,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         let modelStatusMessage = 'Model options are loaded from ComfyUI background-removal storage.';
 
         try {
-            const response = await fetch('/matting/check-model');
-            if (response.ok) {
-                const status = await response.json() as { models?: MattingModelOption[] };
+            const { ok, data: status } = await fetchMattingModelStatus<MattingModelOption>();
+            if (ok) {
                 if (Array.isArray(status.models)) {
                     modelOptions = status.models.filter((option) => (
                         option && typeof option.path === 'string' && typeof option.label === 'string'
@@ -815,11 +815,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
 
                         try {
                             // First check if model is available
-                            const modelCheckUrl = mattingSettings.modelPath
-                                ? `/matting/check-model?model_path=${encodeURIComponent(mattingSettings.modelPath)}`
-                                : "/matting/check-model";
-                            const modelCheckResponse = await fetch(modelCheckUrl);
-                            const modelStatus = await modelCheckResponse.json();
+                            const { data: modelStatus } = await fetchMattingModelStatus(mattingSettings.modelPath);
                             
                             if (!modelStatus.available) {
                                 switch (modelStatus.reason) {

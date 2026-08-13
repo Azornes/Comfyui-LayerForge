@@ -13,6 +13,7 @@ import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage } from "./utils/CanvasExportUtils.js";
+import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
 const MATTING_SETTINGS_STORAGE_KEY = 'layerforge.matting.settings';
@@ -188,9 +189,8 @@ async function createCanvasWidget(node, widget, app) {
         let modelOptions = [];
         let modelStatusMessage = 'Model options are loaded from ComfyUI background-removal storage.';
         try {
-            const response = await fetch('/matting/check-model');
-            if (response.ok) {
-                const status = await response.json();
+            const { ok, data: status } = await fetchMattingModelStatus();
+            if (ok) {
                 if (Array.isArray(status.models)) {
                     modelOptions = status.models.filter((option) => (option && typeof option.path === 'string' && typeof option.label === 'string'));
                 }
@@ -655,11 +655,7 @@ async function createCanvasWidget(node, widget, app) {
                         const mattingSettings = loadMattingSettings();
                         try {
                             // First check if model is available
-                            const modelCheckUrl = mattingSettings.modelPath
-                                ? `/matting/check-model?model_path=${encodeURIComponent(mattingSettings.modelPath)}`
-                                : "/matting/check-model";
-                            const modelCheckResponse = await fetch(modelCheckUrl);
-                            const modelStatus = await modelCheckResponse.json();
+                            const { data: modelStatus } = await fetchMattingModelStatus(mattingSettings.modelPath);
                             if (!modelStatus.available) {
                                 switch (modelStatus.reason) {
                                     case 'missing_dependency':
