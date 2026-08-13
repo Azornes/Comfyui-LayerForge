@@ -826,6 +826,10 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                                     case 'unsupported_comfyui':
                                         showErrorNotification(modelStatus.message, 8000);
                                         return;
+
+                                    case 'unsupported_rmbg':
+                                        showErrorNotification(modelStatus.message, 8000);
+                                        return;
                                     
                                     case 'not_downloaded':
                                         showWarningNotification(modelStatus.message || "The selected background-removal model will be downloaded automatically.", 7000);

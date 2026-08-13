@@ -12,15 +12,72 @@ from ..catalog import _RMBG_MODEL_CATALOG, _RMBG_REMOTE_PREFIX
 from ..paths import _get_rmbg_model_directory
 
 
+def _get_rmbg_transformers_status():
+    """Inspect the installed Transformers API without changing the environment."""
+    try:
+        import transformers
+    except ModuleNotFoundError as error:
+        if error.name == "transformers":
+            return {
+                "loader": None,
+                "message": (
+                    "BRIA RMBG 2.0 requires the 'transformers' package in the active ComfyUI environment. "
+                    "Install or update it manually if you want to use this model."
+                ),
+            }
+        return {
+            "loader": None,
+            "message": (
+                "The installed Transformers package could not be loaded for BRIA RMBG 2.0: "
+                f"{error}. Check the active ComfyUI environment and update Transformers manually if needed."
+            ),
+        }
+    except Exception as error:
+        return {
+            "loader": None,
+            "message": (
+                "The installed Transformers package could not be loaded for BRIA RMBG 2.0: "
+                f"{error}. Update Transformers manually if needed."
+            ),
+        }
+
+    version = getattr(transformers, "__version__", "unknown")
+    try:
+        loader = getattr(transformers, "AutoModelForImageSegmentation", None)
+        from_pretrained = getattr(loader, "from_pretrained", None)
+    except Exception as error:
+        return {
+            "loader": None,
+            "message": (
+                f"Installed Transformers version {version} is not supported for BRIA RMBG 2.0: {error}. "
+                "Update Transformers manually if you want to use this model."
+            ),
+        }
+
+    if not callable(loader) or not callable(from_pretrained):
+        return {
+            "loader": None,
+            "message": (
+                f"Installed Transformers version {version} is not supported for BRIA RMBG 2.0. "
+                "It does not provide the required AutoModelForImageSegmentation API. "
+                "Update Transformers manually if you want to use this model."
+            ),
+        }
+
+    return {"loader": loader, "message": None, "version": version}
+
+
 def _get_rmbg_model_loader():
     """Return the Transformers loader used by BRIA RMBG 2.0, when installed."""
-    try:
-        from transformers import AutoModelForImageSegmentation
+    status = _get_rmbg_transformers_status()
+    if status["loader"] is None:
+        log.debug(status["message"])
+    return status["loader"]
 
-        return AutoModelForImageSegmentation
-    except Exception as error:
-        log.debug(f"BRIA RMBG 2.0 Transformers loader is unavailable: {error}")
-        return None
+
+def _get_rmbg_model_status_message():
+    """Return an actionable message for a missing or incompatible Transformers install."""
+    return _get_rmbg_transformers_status()["message"]
 
 
 def _is_rmbg_model_directory(path):
@@ -142,23 +199,29 @@ class RMBG2Model:
 
     @classmethod
     def load(cls, model_directory):
-        loader = _get_rmbg_model_loader()
+        status = _get_rmbg_transformers_status()
+        loader = status["loader"]
         if loader is None:
-            raise RuntimeError(
-                "BRIA RMBG 2.0 requires the 'transformers' package. "
-                "Install the LayerForge requirements in the ComfyUI environment."
-            )
+            raise RuntimeError(status["message"])
 
         cache_key = os.path.normcase(os.path.normpath(os.path.abspath(model_directory)))
         with cls._model_cache_lock:
             if cache_key not in cls._model_cache:
                 device = _get_rmbg_device()
                 log.info(f"Loading BRIA RMBG 2.0 from {model_directory} on {device}")
-                model = loader.from_pretrained(
-                    model_directory,
-                    trust_remote_code=True,
-                    local_files_only=True,
-                )
+                try:
+                    model = loader.from_pretrained(
+                        model_directory,
+                        trust_remote_code=True,
+                        local_files_only=True,
+                    )
+                except Exception as error:
+                    version = status.get("version", "unknown")
+                    raise RuntimeError(
+                        f"BRIA RMBG 2.0 could not be loaded with installed Transformers version {version}. "
+                        "This version may not support the model's remote code; update Transformers manually "
+                        f"if needed. Original error: {error}"
+                    ) from error
                 model.eval().to(device)
                 cls._model_cache[cache_key] = cls(model, device)
             else:
@@ -230,6 +293,8 @@ __all__ = [
     "_find_existing_rmbg_model",
     "_find_local_rmbg_model",
     "_get_rmbg_model_loader",
+    "_get_rmbg_model_status_message",
+    "_get_rmbg_transformers_status",
     "_get_rmbg_remote_model",
     "_is_rmbg_model_directory",
 ]

@@ -16,6 +16,7 @@ from .backends.rmbg import (
     _ensure_rmbg_model,
     _find_local_rmbg_model,
     _get_rmbg_model_loader,
+    _get_rmbg_model_status_message,
     _get_rmbg_remote_model,
 )
 
@@ -39,10 +40,7 @@ class BiRefNetMatting:
 
         if rmbg_model or local_rmbg_path:
             if _get_rmbg_model_loader() is None:
-                raise RuntimeError(
-                    "BRIA RMBG 2.0 requires the 'transformers' package. "
-                    "Install the LayerForge requirements in the active ComfyUI environment."
-                )
+                raise RuntimeError(_get_rmbg_model_status_message())
             model_directory = _ensure_rmbg_model(model_path)
             self.model = RMBG2Model.load(model_directory)
             self.model_path = model_directory

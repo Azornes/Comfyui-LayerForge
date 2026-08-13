@@ -17,6 +17,7 @@ from .backends.rmbg import (
     _find_existing_rmbg_model,
     _find_local_rmbg_model,
     _get_rmbg_model_loader,
+    _get_rmbg_model_status_message,
     _get_rmbg_remote_model,
 )
 from .options import _get_birefnet_model_options
@@ -62,7 +63,7 @@ async def check_matting_model(request):
                 return _matting_status_response(
                     False,
                     "unsupported_rmbg",
-                    "BRIA RMBG 2.0 requires the 'transformers' package in the active ComfyUI environment.",
+                    _get_rmbg_model_status_message(),
                     model_path=requested_model,
                     models=model_options,
                 )

@@ -745,6 +745,21 @@ def test_rmbg_model_status_does_not_require_native_birefnet_loader(layerforge_ru
     assert status.payload["model_path"] == "remote:rmbg_2_0"
 
 
+def test_rmbg_reports_an_unsupported_transformers_api(layerforge_runtime, monkeypatch):
+    rmbg_module = layerforge_runtime.matting_rmbg
+    transformers = ModuleType("transformers")
+    transformers.__version__ = "0.0-test"
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
+
+    status = rmbg_module._get_rmbg_transformers_status()
+
+    assert status["loader"] is None
+    assert "0.0-test" in status["message"]
+    assert "not supported" in status["message"]
+    assert "AutoModelForImageSegmentation" in status["message"]
+    assert rmbg_module._get_rmbg_model_loader() is None
+
+
 def test_legacy_automatic_checkpoint_is_not_migrated(layerforge_runtime, monkeypatch, tmp_path):
     birefnet_module = layerforge_runtime.matting_birefnet
     model_dir = Path(tmp_path) / "models" / "background_removal"

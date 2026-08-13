@@ -22,6 +22,8 @@ from .backends.rmbg import (
     _find_existing_rmbg_model,
     _find_local_rmbg_model,
     _get_rmbg_model_loader,
+    _get_rmbg_model_status_message,
+    _get_rmbg_transformers_status,
     _get_rmbg_remote_model,
     _is_rmbg_model_directory,
 )
@@ -79,6 +81,8 @@ __all__ = [
     "_get_comfy_birefnet_loader",
     "_get_rmbg_model_directory",
     "_get_rmbg_model_loader",
+    "_get_rmbg_model_status_message",
+    "_get_rmbg_transformers_status",
     "_get_rmbg_remote_model",
     "_is_native_birefnet_checkpoint",
     "_is_rmbg_model_directory",

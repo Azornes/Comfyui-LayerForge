@@ -5,5 +5,5 @@ aiohttp
 numpy
 tqdm
 Pillow
-transformers>=4.50.3
+transformers
 kornia
