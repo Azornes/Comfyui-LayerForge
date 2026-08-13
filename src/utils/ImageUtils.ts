@@ -287,6 +287,23 @@ export function loadImage(source: string, options: { crossOrigin?: string } = {}
     });
 }
 
+export function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+
+export async function loadImageFromBlob(
+    blob: Blob,
+    options: { crossOrigin?: string } = {}
+): Promise<HTMLImageElement> {
+    const dataUrl = await blobToDataUrl(blob);
+    return loadImage(dataUrl, options);
+}
+
 export const createEmptyImage = withErrorHandling(function (width: number, height: number, color = 'transparent'): Promise<HTMLImageElement> {
     const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
 

@@ -2,6 +2,7 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { showNotification, showInfoNotification, showErrorNotification, showWarningNotification } from "./NotificationUtils.js";
 import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
 import { safeClipspacePaste } from "./ClipspaceUtils.js";
+import { loadImageFromBlob } from "./ImageUtils.js";
 // @ts-ignore
 import { api } from "../../../scripts/api.js";
 const log = createModuleLogger('ClipboardManager');
@@ -139,19 +140,13 @@ export class ClipboardManager {
                     if (imageType) {
                         try {
                             const blob = await item.getType(imageType);
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                                const img = new Image();
-                                img.onload = async () => {
-                                    log.info("Successfully loaded image from system clipboard");
-                                    await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                                    showInfoNotification("Image pasted from system clipboard");
-                                };
-                                if (event.target?.result) {
-                                    img.src = event.target.result;
-                                }
-                            };
-                            reader.readAsDataURL(blob);
+                            void loadImageFromBlob(blob).then(async (img) => {
+                                log.info("Successfully loaded image from system clipboard");
+                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                                showInfoNotification("Image pasted from system clipboard");
+                            }).catch(error => {
+                                log.debug("Error reading image data:", error);
+                            });
                             log.info("Found image data in system clipboard");
                             return true;
                         }
@@ -377,28 +372,15 @@ export class ClipboardManager {
                 const file = target.files?.[0];
                 if (file && file.type.startsWith('image/')) {
                     try {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = async () => {
-                                log.info("Successfully loaded image from file picker");
-                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-                                showInfoNotification("Image loaded from selected file");
-                                resolve(true);
-                            };
-                            img.onerror = () => {
-                                log.warn("Failed to load selected image");
-                                resolve(false);
-                            };
-                            if (e.target?.result) {
-                                img.src = e.target.result;
-                            }
-                        };
-                        reader.onerror = () => {
-                            log.warn("Failed to read selected file");
+                        void loadImageFromBlob(file).then(async (img) => {
+                            log.info("Successfully loaded image from file picker");
+                            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+                            showInfoNotification("Image loaded from selected file");
+                            resolve(true);
+                        }).catch(error => {
+                            log.warn("Failed to load selected image", error);
                             resolve(false);
-                        };
-                        reader.readAsDataURL(file);
+                        });
                     }
                     catch (error) {
                         log.warn("Error processing selected file:", error);

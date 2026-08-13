@@ -223,6 +223,18 @@ export function loadImage(source, options = {}) {
         img.src = source;
     });
 }
+export function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+export async function loadImageFromBlob(blob, options = {}) {
+    const dataUrl = await blobToDataUrl(blob);
+    return loadImage(dataUrl, options);
+}
 export const createEmptyImage = withErrorHandling(function (width, height, color = 'transparent') {
     const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
     if (ctx) {

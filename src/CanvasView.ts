@@ -14,6 +14,7 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
+import { loadImageFromBlob } from "./utils/ImageUtils.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
@@ -543,17 +544,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             const target = e.target as HTMLInputElement;
                             if (!target.files) return;
                             for (const file of target.files) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                    const img = new Image();
-                                    img.onload = () => {
-                                        canvas.addLayer(img, {}, addMode);
-                                    };
-                                    if (event.target?.result) {
-                                        img.src = event.target.result as string;
-                                    }
-                                };
-                                reader.readAsDataURL(file);
+                                void loadImageFromBlob(file).then(img => {
+                                    canvas.addLayer(img, {}, addMode);
+                                }).catch(() => undefined);
                             }
                         };
                         input.click();
@@ -1363,17 +1356,10 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                         img.src = blobUrl;
                     } else {
                         // For smaller images, use data URI as before
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const dataUrl = reader.result as string;
-                            const img = new Image();
-                            img.onload = () => {
-                                node.imgs = [img];
-                                log.debug(`Using data URI for small image (${(blob.size / 1024).toFixed(1)}KB): ${dataUrl.substring(0, 50)}...`);
-                            };
-                            img.src = dataUrl;
-                        };
-                        reader.readAsDataURL(blob);
+                        void loadImageFromBlob(blob).then(img => {
+                            node.imgs = [img];
+                            log.debug(`Using data URI for small image (${(blob.size / 1024).toFixed(1)}KB): ${img.src.substring(0, 50)}...`);
+                        }).catch(() => undefined);
                     }
                 } else {
                     node.imgs = [];

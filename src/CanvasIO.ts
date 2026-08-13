@@ -2,7 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
-import { scaleImageToFit, loadImage, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
+import { scaleImageToFit, loadImage, blobToDataUrl, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape } from './types';
 
@@ -242,19 +242,8 @@ export class CanvasIO {
         }
         
         // Konwertuj blob na data URL
-        const imageDataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(imageBlob);
-        });
-        
-        const maskDataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(maskBlob);
-        });
+        const imageDataUrl = await blobToDataUrl(imageBlob);
+        const maskDataUrl = await blobToDataUrl(maskBlob);
         
         const bounds = this.canvas.outputAreaBounds;
         log.info(`=== OUTPUT DATA GENERATED ===`);

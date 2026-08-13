@@ -11,6 +11,7 @@ import { ComfyApp } from "../../scripts/app.js";
 import { ClipboardManager } from "./utils/ClipboardManager.js";
 import { createDistanceFieldMaskSync } from "./utils/ImageAnalysis.js";
 import { fillInverseAlphaMask } from "./utils/MaskPixelUtils.js";
+import { blobToDataUrl } from "./utils/ImageUtils.js";
 const log = createModuleLogger('CanvasLayers');
 export class CanvasLayers {
     constructor(canvas) {
@@ -153,12 +154,7 @@ export class CanvasLayers {
         }
         if (this.clipboardPreference === 'clipspace') {
             try {
-                const dataURL = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
+                const dataURL = await blobToDataUrl(blob);
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = () => {

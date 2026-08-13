@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { snapToGrid, getSnapAdjustment, isPointInRotatedLayer } from "./utils/CommonUtils.js";
+import { loadImageFromBlob } from "./utils/ImageUtils.js";
 const log = createModuleLogger('CanvasInteractions');
 export class CanvasInteractions {
     constructor(canvas) {
@@ -1106,25 +1107,13 @@ export class CanvasInteractions {
         }
     }
     async loadDroppedImageFile(file, worldCoords) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const img = new Image();
-            img.onload = async () => {
-                const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-                const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
-                await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
-            };
-            img.onerror = () => {
-                log.error(`Failed to load dropped image: ${file.name}`);
-            };
-            if (e.target?.result) {
-                img.src = e.target.result;
-            }
-        };
-        reader.onerror = () => {
-            log.error(`Failed to read dropped file: ${file.name}`);
-        };
-        reader.readAsDataURL(file);
+        void loadImageFromBlob(file).then(async (img) => {
+            const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
+            const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+            await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
+        }).catch(error => {
+            log.error(`Failed to load dropped image: ${file.name}`, error);
+        });
     }
     defineOutputAreaWithShape(shape) {
         const boundingBox = this.canvas.shapeTool.getBoundingBox();
@@ -1218,17 +1207,9 @@ export class CanvasInteractions {
                     const file = item.getAsFile();
                     if (file) {
                         log.info("Found direct image data in paste event");
-                        const reader = new FileReader();
-                        reader.onload = async (event) => {
-                            const img = new Image();
-                            img.onload = async () => {
-                                await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'mouse');
-                            };
-                            if (event.target?.result) {
-                                img.src = event.target.result;
-                            }
-                        };
-                        reader.readAsDataURL(file);
+                        void loadImageFromBlob(file).then(async (img) => {
+                            await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'mouse');
+                        }).catch(() => undefined);
                         return;
                     }
                 }
