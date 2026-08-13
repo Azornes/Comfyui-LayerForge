@@ -5,8 +5,7 @@ import { ComfyApp } from "../../scripts/app.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showInfoNotification, showSuccessNotification, showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
-import { processImageToMask } from "./utils/MaskProcessingUtils.js";
-import { convertToImage } from "./utils/ImageUtils.js";
+import { createMaskImageFromResult } from "./utils/MaskProcessingUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { validateAndFixClipspace } from "./utils/ClipspaceUtils.js";
 import type { ComfyNode } from './types';
@@ -347,14 +346,11 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
 
         // Process image to mask using MaskProcessingUtils
         log.debug("Processing image to mask using utils");
-        const processedMask = await processImageToMask(resultImage, {
+        const maskAsImage = await createMaskImageFromResult(resultImage, {
             targetWidth: resultImage.width,
             targetHeight: resultImage.height,
             invertAlpha: true
         });
-
-        // Convert processed mask to image
-        const maskAsImage = await convertToImage(processedMask);
 
         // Apply mask to LayerForge canvas using MaskTool.setMask method
         log.debug("Checking canvas and maskTool availability", {

@@ -1,5 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "./CommonUtils.js";
+import { convertToImage } from "./ImageUtils.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('MaskProcessingUtils');
@@ -17,6 +18,12 @@ export interface MaskProcessingOptions {
     invertAlpha?: boolean;
     /** Mask color RGB values (default: {r: 255, g: 255, b: 255}) */
     maskColor?: { r: number; g: number; b: number };
+}
+
+export interface MaskResultOptions {
+    targetWidth: number;
+    targetHeight: number;
+    invertAlpha?: boolean;
 }
 
 type PixelTransform = (
@@ -100,6 +107,19 @@ export const processImageToMask = withErrorHandling(async function(
     log.debug('Mask processing completed');
     return tempCanvas;
 }, 'processImageToMask');
+
+export async function createMaskImageFromResult(
+    sourceImage: HTMLImageElement | HTMLCanvasElement,
+    options: MaskResultOptions
+): Promise<HTMLImageElement> {
+    const processedMask = await processImageToMask(sourceImage, {
+        targetWidth: options.targetWidth,
+        targetHeight: options.targetHeight,
+        invertAlpha: options.invertAlpha ?? true
+    });
+
+    return convertToImage(processedMask);
+}
 
 /**
  * Processes image data with custom pixel transformation

@@ -7,8 +7,7 @@ import {api} from "../../scripts/api.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
-import { processImageToMask, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
-import { convertToImage } from "./utils/ImageUtils.js";
+import { createMaskImageFromResult, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 import { createCanvas } from "./utils/CommonUtils.js";
@@ -493,14 +492,11 @@ export class MaskEditorIntegration {
         // Process image to mask using MaskProcessingUtils
         log.debug("Processing image to mask using utils");
         const bounds = this.canvas.outputAreaBounds;
-        const processedMask = await processImageToMask(resultImage, {
+        const maskAsImage = await createMaskImageFromResult(resultImage, {
             targetWidth: bounds.width,
             targetHeight: bounds.height,
             invertAlpha: true
         });
-
-        // Convert processed mask to image
-        const maskAsImage = await convertToImage(processedMask);
 
         log.debug("Applying mask using chunk system", {
             boundsPos: {x: bounds.x, y: bounds.y},
