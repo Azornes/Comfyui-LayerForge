@@ -302,16 +302,21 @@ export class CanvasIO {
         }
     }
 
+    private async tensorToRgbImage(tensor: any): Promise<HTMLImageElement | null> {
+        const imageData = tensorToImageData(tensor, 'rgb');
+        if (!imageData) {
+            return null;
+        }
+
+        return createImageFromImageData(imageData);
+    }
+
     async addInputToCanvas(inputImage: any, inputMask: any): Promise<boolean> {
         try {
             log.debug("Adding input to canvas:", { inputImage });
 
-            // Use unified tensorToImageData for RGB image
-            const imageData = tensorToImageData(inputImage, 'rgb');
-            if (!imageData) throw new Error("Failed to convert input image tensor");
-
-            // Create HTMLImageElement from ImageData
-            const image = await createImageFromImageData(imageData);
+            const image = await this.tensorToRgbImage(inputImage);
+            if (!image) throw new Error("Failed to convert input image tensor");
 
             const bounds = this.canvas.outputAreaBounds;
             const scale = Math.min(
@@ -347,10 +352,10 @@ export class CanvasIO {
                 throw new Error("Invalid tensor data");
             }
 
-            const imageData = tensorToImageData(tensor, 'rgb');
-            if (!imageData) throw new Error("Failed to convert tensor to image data");
+            const image = await this.tensorToRgbImage(tensor);
+            if (!image) throw new Error("Failed to convert tensor to image data");
 
-            return await createImageFromImageData(imageData);
+            return image;
         } catch (error) {
             log.error("Error converting tensor to image:", error);
             throw error;
@@ -902,9 +907,8 @@ export class CanvasIO {
                 this.canvas.height / originalHeight * 0.8
             );
 
-            const convertedData = this.convertTensorToImageData(imageData);
-            if (convertedData) {
-                const image = await this.createImageFromData(convertedData);
+            const image = await this.tensorToRgbImage(imageData);
+            if (image) {
 
                 this.addScaledLayer(image, scale);
                 log.info("Image layer added successfully with scale:", scale);
@@ -951,14 +955,6 @@ export class CanvasIO {
             log.error("Error adding scaled layer:", error);
             throw error;
         }
-    }
-
-    convertTensorToImageData(tensor: any): ImageData | null {
-        return tensorToImageData(tensor, 'rgb');
-    }
-
-    async createImageFromData(imageData: ImageData): Promise<HTMLImageElement> {
-        return createImageFromImageData(imageData);
     }
 
     async processMaskData(maskData: any): Promise<void> {
