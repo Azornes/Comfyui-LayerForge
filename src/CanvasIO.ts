@@ -9,6 +9,23 @@ import type { Layer, Shape, AddMode } from './types';
 
 const log = createModuleLogger('CanvasIO');
 
+interface BackendInputData {
+    input_images_batch?: Array<{ data: string }>;
+    input_image?: string;
+}
+
+function imageBatchIdentity(sources: readonly string[]): string {
+    return sources.join('|');
+}
+
+function getBackendImageIdentity(data?: BackendInputData): string | undefined {
+    if (Array.isArray(data?.input_images_batch)) {
+        return imageBatchIdentity(data.input_images_batch.map(image => image.data));
+    }
+
+    return data?.input_image;
+}
+
 export class CanvasIO {
     private _saveInProgress: Promise<any> | null;
     private canvas: Canvas;
@@ -457,7 +474,7 @@ export class CanvasIO {
                         const sourceNode = graph.getNodeById(link.origin_id);
                         if (sourceNode && sourceNode.imgs && sourceNode.imgs.length > 0) {
                             // Create current batch identifier (all image sources combined)
-                            const currentBatchImageSrcs = sourceNode.imgs.map((img: HTMLImageElement) => img.src).join('|');
+                            const currentBatchImageSrcs = imageBatchIdentity(sourceNode.imgs.map((img: HTMLImageElement) => img.src));
                             
                             // Check if this is the same link we loaded before
                             if (this.canvas.lastLoadedLinkId === linkId) {
@@ -508,7 +525,7 @@ export class CanvasIO {
                                 log.info(`Found ${sourceNode.imgs.length} image(s) in connected node's output, loading all`);
                                 
                                 // Create a combined source identifier for batch detection
-                                const batchImageSrcs = sourceNode.imgs.map((img: HTMLImageElement) => img.src).join('|');
+                                const batchImageSrcs = imageBatchIdentity(sourceNode.imgs.map((img: HTMLImageElement) => img.src));
                                 
                                 // Mark this link and batch sources as loaded
                                 this.canvas.lastLoadedLinkId = linkId;
@@ -683,12 +700,7 @@ export class CanvasIO {
 
             if (result.success && result.has_input) {
                 // Dedupe: skip only if backend payload matches last loaded batch hash
-                let backendBatchHash: string | undefined;
-                if (result.data?.input_images_batch && Array.isArray(result.data.input_images_batch)) {
-                    backendBatchHash = result.data.input_images_batch.map((i: any) => i.data).join('|');
-                } else if (result.data?.input_image) {
-                    backendBatchHash = result.data.input_image;
-                }
+                const backendBatchHash = getBackendImageIdentity(result.data);
                 // Check mask separately - don't skip if only images are unchanged AND mask is actually connected AND allowed
                 const shouldCheckMask = hasMaskInput && allowMask;
                 
@@ -737,12 +749,7 @@ export class CanvasIO {
                 const inputData = result.data;
                 
                 // Compute backend batch hash for dedupe and state
-                let backendHashNow: string | undefined;
-                if (inputData?.input_images_batch && Array.isArray(inputData.input_images_batch)) {
-                    backendHashNow = inputData.input_images_batch.map((i: any) => i.data).join('|');
-                } else if (inputData?.input_image) {
-                    backendHashNow = inputData.input_image;
-                }
+                const backendHashNow = getBackendImageIdentity(inputData);
                 
                 // Just update the hash without removing any layers
                 if (backendHashNow) {
