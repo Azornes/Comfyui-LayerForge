@@ -255,9 +255,7 @@ export class MaskEditorIntegration {
         const maskCanvas = await messageBroker.pull('maskCanvas');
         const maskCtx = await messageBroker.pull('maskCtx');
         const maskColor = await messageBroker.pull('getMaskColor');
-        const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
-        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-        maskCtx.drawImage(processedMask, 0, 0);
+        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
         messageBroker.publish('saveState');
     }
     /**
@@ -274,6 +272,9 @@ export class MaskEditorIntegration {
             throw new Error("Old mask editor context not found");
         }
         const maskColor = { r: 255, g: 255, b: 255 };
+        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
+    }
+    async renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor) {
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
         maskCtx.drawImage(processedMask, 0, 0);

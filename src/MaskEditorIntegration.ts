@@ -299,10 +299,7 @@ export class MaskEditorIntegration {
         const maskCtx = await messageBroker.pull('maskCtx');
         const maskColor = await messageBroker.pull('getMaskColor');
 
-        const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
-
-        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-        maskCtx.drawImage(processedMask, 0, 0);
+        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
 
         messageBroker.publish('saveState');
     }
@@ -324,6 +321,15 @@ export class MaskEditorIntegration {
         }
 
         const maskColor = {r: 255, g: 255, b: 255};
+        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
+    }
+
+    private async renderProcessedMask(
+        maskData: any,
+        maskCanvas: HTMLCanvasElement,
+        maskCtx: CanvasRenderingContext2D,
+        maskColor: any
+    ): Promise<void> {
         const processedMask = await this.processMaskForEditor(maskData, maskCanvas.width, maskCanvas.height, maskColor);
 
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);

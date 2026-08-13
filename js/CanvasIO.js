@@ -9,6 +9,14 @@ export class CanvasIO {
         this.canvas = canvas;
         this._saveInProgress = null;
     }
+    async addBatchImages(images, addMode, targetArea, logSuffix) {
+        for (let i = 0; i < images.length; i++) {
+            const imageSource = images[i];
+            const image = typeof imageSource === 'string' ? await loadImage(imageSource) : imageSource;
+            await this.canvas.canvasLayers.addLayerWithImage(image, { name: `Batch Image ${i + 1}` }, addMode, targetArea);
+            log.debug(`Added batch image ${i + 1}/${images.length} ${logSuffix}`);
+        }
+    }
     async saveToServer(fileName, outputMode = 'disk') {
         if (outputMode === 'disk') {
             if (!window.canvasSaveStates) {
@@ -432,12 +440,7 @@ export class CanvasIO {
                                 const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
                                 const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
                                 // Add all images from the batch as separate layers
-                                for (let i = 0; i < sourceNode.imgs.length; i++) {
-                                    const img = sourceNode.imgs[i];
-                                    await this.canvas.canvasLayers.addLayerWithImage(img, { name: `Batch Image ${i + 1}` }, // Give each layer a unique name
-                                    addMode, this.canvas.outputAreaBounds);
-                                    log.debug(`Added batch image ${i + 1}/${sourceNode.imgs.length} to canvas`);
-                                }
+                                await this.addBatchImages(sourceNode.imgs, addMode, this.canvas.outputAreaBounds, 'to canvas');
                                 this.canvas.inputDataLoaded = true;
                                 imageLoaded = true;
                                 log.info(`All ${sourceNode.imgs.length} input images from batch added as separate layers`);
@@ -657,13 +660,7 @@ export class CanvasIO {
                         // Handle batch of images
                         const batch = inputData.input_images_batch;
                         log.info(`Processing batch of ${batch.length} images from backend`);
-                        for (let i = 0; i < batch.length; i++) {
-                            const imgData = batch[i];
-                            const img = await loadImage(imgData.data);
-                            // Add image to canvas with unique name
-                            await this.canvas.canvasLayers.addLayerWithImage(img, { name: `Batch Image ${i + 1}` }, addMode, this.canvas.outputAreaBounds);
-                            log.debug(`Added batch image ${i + 1}/${batch.length} from backend`);
-                        }
+                        await this.addBatchImages(batch.map((imgData) => imgData.data), addMode, this.canvas.outputAreaBounds, 'from backend');
                         log.info(`All ${batch.length} batch images added from backend`);
                         this.canvas.render();
                         this.canvas.saveState();

@@ -4,7 +4,7 @@ import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, blobToDataUrl, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 import type { Canvas } from './Canvas';
-import type { Layer, Shape } from './types';
+import type { Layer, Shape, AddMode } from './types';
 
 const log = createModuleLogger('CanvasIO');
 
@@ -15,6 +15,27 @@ export class CanvasIO {
     constructor(canvas: Canvas) {
         this.canvas = canvas;
         this._saveInProgress = null;
+    }
+
+    private async addBatchImages(
+        images: readonly (HTMLImageElement | string)[],
+        addMode: AddMode,
+        targetArea: { x: number, y: number, width: number, height: number } | null,
+        logSuffix: string
+    ): Promise<void> {
+        for (let i = 0; i < images.length; i++) {
+            const imageSource = images[i];
+            const image = typeof imageSource === 'string' ? await loadImage(imageSource) : imageSource;
+
+            await this.canvas.canvasLayers.addLayerWithImage(
+                image,
+                { name: `Batch Image ${i + 1}` },
+                addMode,
+                targetArea
+            );
+
+            log.debug(`Added batch image ${i + 1}/${images.length} ${logSuffix}`);
+        }
     }
 
     async saveToServer(fileName: string, outputMode = 'disk'): Promise<any> {
@@ -507,16 +528,12 @@ export class CanvasIO {
                                 const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
                                 
                                 // Add all images from the batch as separate layers
-                                for (let i = 0; i < sourceNode.imgs.length; i++) {
-                                    const img = sourceNode.imgs[i];
-                                    await this.canvas.canvasLayers.addLayerWithImage(
-                                        img, 
-                                        { name: `Batch Image ${i + 1}` }, // Give each layer a unique name
-                                        addMode,
-                                        this.canvas.outputAreaBounds
-                                    );
-                                    log.debug(`Added batch image ${i + 1}/${sourceNode.imgs.length} to canvas`);
-                                }
+                                await this.addBatchImages(
+                                    sourceNode.imgs,
+                                    addMode,
+                                    this.canvas.outputAreaBounds,
+                                    'to canvas'
+                                );
                                 
                                 this.canvas.inputDataLoaded = true;
                                 imageLoaded = true;
@@ -752,20 +769,12 @@ export class CanvasIO {
                         const batch = inputData.input_images_batch;
                         log.info(`Processing batch of ${batch.length} images from backend`);
                         
-                                for (let i = 0; i < batch.length; i++) {
-                                    const imgData = batch[i];
-                                    const img = await loadImage(imgData.data);
-                                    
-                                    // Add image to canvas with unique name
-                                    await this.canvas.canvasLayers.addLayerWithImage(
-                                        img, 
-                                        { name: `Batch Image ${i + 1}` },
-                                        addMode,
-                                        this.canvas.outputAreaBounds
-                                    );
-                                    
-                                    log.debug(`Added batch image ${i + 1}/${batch.length} from backend`);
-                                }
+                        await this.addBatchImages(
+                            batch.map((imgData: { data: string }) => imgData.data),
+                            addMode,
+                            this.canvas.outputAreaBounds,
+                            'from backend'
+                        );
                         
                         log.info(`All ${batch.length} batch images added from backend`);
                         this.canvas.render();
