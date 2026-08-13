@@ -1,4 +1,4 @@
-import { STATE_STORE, createDBRequest, openLayerForgeDB } from './db_shared.js';
+import { STATE_STORE, executeDBStoreRequest } from './db_shared.js';
 console.log('[StateWorker] Worker script loaded and running.');
 function log(...args) {
     console.log('[StateWorker]', ...args);
@@ -8,15 +8,12 @@ function error(...args) {
 }
 const dbLogger = { info: log, error };
 async function setCanvasState(id, state) {
-    const db = await openLayerForgeDB(dbLogger, [STATE_STORE], {
+    await executeDBStoreRequest(dbLogger, [STATE_STORE], STATE_STORE, 'readwrite', 'put', { id, state }, "Error setting canvas state", {
         openingMessage: null,
         upgradingMessage: 'Upgrading IndexedDB in worker...',
         successMessage: 'IndexedDB opened successfully in worker.',
         logStoreCreation: false,
     });
-    const transaction = db.transaction([STATE_STORE.name], 'readwrite');
-    const store = transaction.objectStore(STATE_STORE.name);
-    await createDBRequest(store, 'put', { id, state }, "Error setting canvas state", dbLogger);
 }
 self.onmessage = async function (e) {
     log('Message received from main thread:', e.data ? 'data received' : 'no data');

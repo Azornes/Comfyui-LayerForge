@@ -18,7 +18,10 @@ test('canvas export uses the canonical blob variant union', () => {
 
 test('image ID lookup uses the shared IndexedDB getAllKeys operation', () => {
   assert.match(sharedSource, /export type DBRequestOperation = 'get' \| 'put' \| 'delete' \| 'clear' \| 'getAllKeys';/);
+  assert.match(sharedSource, /export async function executeDBStoreRequest<T>\(/);
+  assert.match(sharedSource, /const database = await openLayerForgeDB\(log, stores, openOptions\)/);
+  assert.match(sharedSource, /return createDBRequest\(store, operation, data, errorMessage, log\)/);
   assert.match(sharedSource, /case 'getAllKeys':[\s\S]*?request = store\.getAllKeys\(\);/);
-  assert.match(dbSource, /createDBRequest\(store, 'getAllKeys', null, "Error getting all image IDs", log\)/);
+  assert.match(dbSource, /executeDBStoreRequest<string\[\]>\([\s\S]*?'getAllKeys',[\s\S]*?"Error getting all image IDs"/);
   assert.doesNotMatch(dbSource, /const request = store\.getAllKeys\(\);/);
 });

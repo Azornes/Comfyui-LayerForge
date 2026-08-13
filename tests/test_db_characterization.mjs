@@ -173,8 +173,24 @@ test('the worker uses shared database infrastructure for canvas-state persistenc
   assert.match(sharedSource, /export const IMAGE_STORE_NAME = 'CanvasImages'/);
   assert.match(sharedSource, /export const DB_VERSION = 3/);
   assert.match(workerSource, /from '\.\/db_shared\.js'/);
-  assert.match(workerSource, /openLayerForgeDB\(dbLogger, \[STATE_STORE\]/);
+  assert.match(workerSource, /executeDBStoreRequest<void>\(\s*dbLogger,\s*\[STATE_STORE\]/s);
   assert.doesNotMatch(workerSource, /const DB_NAME/);
   assert.doesNotMatch(workerSource, /function openDB/);
   assert.doesNotMatch(workerSource, /function createDBRequest/);
+});
+
+test('database callers share one transaction helper while preserving store and worker options', async () => {
+  const [dbSource, workerSource] = await Promise.all([
+    readFile(new URL('../src/db.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/state-saver.worker.ts', import.meta.url), 'utf8'),
+  ]);
+
+  assert.equal((dbSource.match(/executeDBStoreRequest</g) ?? []).length, 8);
+  assert.doesNotMatch(dbSource, /const transaction = db\.transaction\(/);
+  assert.doesNotMatch(dbSource, /const store = transaction\.objectStore\(/);
+  assert.match(workerSource, /executeDBStoreRequest<void>\(/);
+  assert.doesNotMatch(workerSource, /const transaction = db\.transaction\(/);
+  assert.doesNotMatch(workerSource, /const store = transaction\.objectStore\(/);
+  assert.match(workerSource, /openingMessage: null/);
+  assert.match(workerSource, /logStoreCreation: false/);
 });

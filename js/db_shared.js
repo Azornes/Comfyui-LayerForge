@@ -45,6 +45,13 @@ export function createDBRequest(store, operation, data, errorMessage, log) {
         };
     });
 }
+/** Open the shared database, execute one store operation, and preserve request error handling. */
+export async function executeDBStoreRequest(log, stores, storeDefinition, mode, operation, data, errorMessage, openOptions = {}) {
+    const database = await openLayerForgeDB(log, stores, openOptions);
+    const transaction = database.transaction([storeDefinition.name], mode);
+    const store = transaction.objectStore(storeDefinition.name);
+    return createDBRequest(store, operation, data, errorMessage, log);
+}
 /** Open the shared LayerForge database and create only the stores needed by the caller. */
 export function openLayerForgeDB(log, stores, options = {}) {
     return new Promise((resolve, reject) => {
