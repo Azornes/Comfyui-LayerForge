@@ -341,6 +341,38 @@ def test_legacy_automatic_checkpoint_gets_friendly_filename(layerforge_runtime, 
     assert not legacy_path.exists()
 
 
+def test_legacy_remote_checkpoint_gets_friendly_filename(layerforge_runtime, monkeypatch, tmp_path):
+    node_module = layerforge_runtime.matting
+    model = next(model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait")
+    managed_dir = Path(tmp_path) / "managed" / model["id"]
+    managed_dir.mkdir(parents=True)
+    legacy_path = managed_dir / model["filename"]
+    friendly_path = managed_dir / model["local_filename"]
+    legacy_path.write_bytes(b"legacy checkpoint")
+
+    monkeypatch.setattr(
+        node_module,
+        "_get_birefnet_remote_checkpoint_path",
+        lambda selected_model: str(friendly_path) if selected_model is model else None,
+    )
+    monkeypatch.setattr(
+        node_module,
+        "_get_birefnet_remote_legacy_checkpoint_path",
+        lambda selected_model: str(legacy_path) if selected_model is model else None,
+    )
+    monkeypatch.setattr(
+        node_module,
+        "_is_native_birefnet_checkpoint",
+        lambda path: Path(path).resolve() == legacy_path.resolve(),
+    )
+
+    result = node_module._find_existing_birefnet_remote_checkpoint(model)
+
+    assert Path(result) == friendly_path
+    assert friendly_path.exists()
+    assert not legacy_path.exists()
+
+
 def test_empty_execution_returns_comfyui_compatible_fallback_tensors(layerforge_runtime):
     node_class = layerforge_runtime.node.LayerForgeNode
     node_class._canvas_data_storage.clear()

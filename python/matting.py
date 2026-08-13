@@ -262,24 +262,43 @@ def _get_birefnet_remote_legacy_checkpoint_path(model):
     )
 
 
-def _find_existing_birefnet_remote_checkpoint(model):
-    """Find a managed remote checkpoint and migrate its old generic filename."""
-    checkpoint_path = _get_birefnet_remote_checkpoint_path(model)
+def _migrate_birefnet_checkpoint(
+    checkpoint_path,
+    legacy_path,
+    *,
+    log_description,
+    success_suffix="to",
+):
+    """Return an existing friendly checkpoint or migrate its legacy filename."""
     if checkpoint_path and _is_native_birefnet_checkpoint(checkpoint_path):
         return checkpoint_path
 
-    legacy_path = _get_birefnet_remote_legacy_checkpoint_path(model)
-    if not legacy_path or legacy_path == checkpoint_path or not _is_native_birefnet_checkpoint(legacy_path):
+    if (
+        not checkpoint_path
+        or not legacy_path
+        or legacy_path == checkpoint_path
+        or not _is_native_birefnet_checkpoint(legacy_path)
+    ):
         return None
 
     try:
         os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         os.replace(legacy_path, checkpoint_path)
-        log.info(f"Renamed BiRefNet checkpoint to the friendly filename {checkpoint_path}")
+        log.info(f"Renamed {log_description} {success_suffix} {checkpoint_path}")
         return checkpoint_path
     except OSError as error:
-        log.warning(f"Unable to rename BiRefNet checkpoint {legacy_path}: {error}")
+        log.warning(f"Unable to rename {log_description} {legacy_path}: {error}")
         return legacy_path
+
+
+def _find_existing_birefnet_remote_checkpoint(model):
+    """Find a managed remote checkpoint and migrate its old generic filename."""
+    return _migrate_birefnet_checkpoint(
+        _get_birefnet_remote_checkpoint_path(model),
+        _get_birefnet_remote_legacy_checkpoint_path(model),
+        log_description="BiRefNet checkpoint",
+        success_suffix="to the friendly filename",
+    )
 
 
 def _get_birefnet_model_options():
@@ -356,25 +375,16 @@ def _get_birefnet_default_checkpoint_path():
 def _find_existing_birefnet_default_checkpoint():
     """Find the automatic checkpoint and migrate its old generic filename."""
     checkpoint_path = _get_birefnet_default_checkpoint_path()
-    if checkpoint_path and _is_native_birefnet_checkpoint(checkpoint_path):
-        return checkpoint_path
-
     base_paths = _get_birefnet_base_paths()
     if not base_paths:
         return None
 
     legacy_path = os.path.join(base_paths[0], _BIREFNET_FILENAME)
-    if not checkpoint_path or not _is_native_birefnet_checkpoint(legacy_path):
-        return None
-
-    try:
-        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-        os.replace(legacy_path, checkpoint_path)
-        log.info(f"Renamed the automatic BiRefNet checkpoint to {checkpoint_path}")
-        return checkpoint_path
-    except OSError as error:
-        log.warning(f"Unable to rename the automatic BiRefNet checkpoint {legacy_path}: {error}")
-        return legacy_path
+    return _migrate_birefnet_checkpoint(
+        checkpoint_path,
+        legacy_path,
+        log_description="the automatic BiRefNet checkpoint",
+    )
 
 
 def _download_birefnet_checkpoint(model=None):
