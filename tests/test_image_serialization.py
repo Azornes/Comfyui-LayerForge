@@ -3,7 +3,7 @@ import io
 
 from PIL import Image
 
-from python.image_serialization import file_to_data_url, pil_to_data_url
+from python.image_serialization import data_url_to_pil, file_to_data_url, pil_to_data_url
 
 
 def _decode_data_url(data_url):
@@ -33,3 +33,13 @@ def test_file_to_data_url_preserves_file_bytes_and_mime_type(tmp_path):
 
     assert header == "data:image/png;base64"
     assert encoded == b"not-transformed-image-bytes"
+
+
+def test_data_url_to_pil_preserves_image_mode_dimensions_and_pixels():
+    image = Image.new("RGBA", (2, 1), (255, 0, 128, 128))
+
+    decoded = data_url_to_pil(pil_to_data_url(image))
+
+    assert decoded.mode == "RGBA"
+    assert decoded.size == (2, 1)
+    assert decoded.getpixel((0, 0)) == (255, 0, 128, 128)

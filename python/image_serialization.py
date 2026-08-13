@@ -29,4 +29,10 @@ def file_to_data_url(path: str, *, mime_type: str = "image/png") -> str:
         return _bytes_to_data_url(image_file.read(), mime_type)
 
 
-__all__ = ["file_to_data_url", "pil_to_data_url"]
+def data_url_to_pil(data_url: str) -> Image.Image:
+    """Decode an image data URL into a lazily opened PIL image."""
+    image_bytes = base64.b64decode(data_url.split(",")[1])
+    return Image.open(io.BytesIO(image_bytes))
+
+
+__all__ = ["data_url_to_pil", "file_to_data_url", "pil_to_data_url"]

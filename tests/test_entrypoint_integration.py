@@ -203,6 +203,114 @@ def test_base64_image_conversion_preserves_rgb_and_alpha(layerforge_runtime):
     assert roundtrip_image.getpixel((0, 0)) == (255, 0, 0)
 
 
+def test_tensor_input_payloads_preserve_single_and_batch_image_contract(layerforge_runtime):
+    import torch
+    from PIL import Image
+
+    node_class = layerforge_runtime.node.LayerForgeNode
+    node_class._canvas_data_storage.clear()
+    node_class._canvas_cache["persistent_cache"] = {}
+    node = node_class()
+    single_image = torch.tensor(
+        [[
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
+        ]],
+        dtype=torch.float32,
+    )
+
+    node.process_canvas_image(False, False, False, 0, "single-input", input_image=single_image)
+    single_payload = node_class._canvas_data_storage["single-input_input"]
+    single_image_data = base64.b64decode(single_payload["input_image"].split(",", 1)[1])
+    single_decoded = Image.open(io.BytesIO(single_image_data))
+
+    assert single_payload["input_image_width"] == 2
+    assert single_payload["input_image_height"] == 2
+    assert single_decoded.size == (2, 2)
+    assert single_decoded.getpixel((0, 0)) == (255, 0, 0)
+
+    batch_image = torch.stack((single_image[0], single_image[0] * 0.5))
+    node.process_canvas_image(False, False, False, 0, "batch-input", input_image=batch_image)
+    batch_payload = node_class._canvas_data_storage["batch-input_input"]
+
+    assert "input_image" not in batch_payload
+    assert [item["width"] for item in batch_payload["input_images_batch"]] == [2, 2]
+    assert [item["height"] for item in batch_payload["input_images_batch"]] == [2, 2]
+    assert all(item["data"].startswith("data:image/png;base64,") for item in batch_payload["input_images_batch"])
+
+
+def test_latest_image_helpers_preserve_filtering_and_time_semantics(layerforge_runtime, monkeypatch, tmp_path):
+    node_module = layerforge_runtime.node
+    node_class = node_module.LayerForgeNode
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    first_image = output_dir / "first.png"
+    second_image = output_dir / "second.JPG"
+    ignored_file = output_dir / "ignored.txt"
+    ignored_directory = output_dir / "folder.png"
+    first_image.write_bytes(b"first")
+    second_image.write_bytes(b"second")
+    ignored_file.write_bytes(b"ignored")
+    ignored_directory.mkdir()
+
+    monkeypatch.setattr(
+        node_module.folder_paths,
+        "get_output_directory",
+        lambda: str(output_dir),
+        raising=False,
+    )
+    creation_times = {
+        str(first_image): 10,
+        str(second_image): 20,
+    }
+    monkeypatch.setattr(node_module.os.path, "getctime", lambda path: creation_times[path])
+    assert node_class.get_latest_image() == str(second_image)
+
+    modification_times = {
+        str(first_image): 30,
+        str(second_image): 20,
+    }
+    monkeypatch.setattr(node_module.os.path, "getmtime", lambda path: modification_times[path])
+    assert node_class.get_latest_images(0) == [str(second_image), str(first_image)]
+    assert node_class.get_latest_images(25) == [str(first_image)]
+
+
+def test_websocket_and_cached_image_decoding_preserve_image_and_mask_modes(layerforge_runtime):
+    from PIL import Image
+
+    node_class = layerforge_runtime.node.LayerForgeNode
+    node_class._canvas_data_storage.clear()
+    node_class._canvas_cache["persistent_cache"] = {}
+
+    image = Image.new("RGBA", (2, 1), (255, 0, 0, 128))
+    mask = Image.new("L", (2, 1), 128)
+
+    def encode(pil_image):
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+    node_class._canvas_data_storage["decode-node"] = {
+        "image": encode(image),
+        "mask": encode(mask),
+    }
+    node = node_class()
+    processed_image, processed_mask = node.process_canvas_image(
+        False,
+        False,
+        False,
+        0,
+        "decode-node",
+    )
+
+    assert tuple(processed_image.shape) == (1, 1, 2, 3)
+    assert tuple(processed_mask.shape) == (1, 1, 2)
+
+    node.store_image(encode(image))
+    assert node.cached_image.mode == "RGBA"
+    assert node.cached_image.size == (2, 1)
+
+
 def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, monkeypatch):
     import torch
 

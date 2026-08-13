@@ -1,7 +1,5 @@
 """Core LayerForge ComfyUI node and its in-memory canvas state."""
 
-import base64
-import io
 import os
 import threading
 import time
@@ -15,7 +13,9 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from .image_serialization import pil_to_data_url
+from .image_serialization import data_url_to_pil, pil_to_data_url
+
+_OUTPUT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
 
 try:
     from .log_system import create_module_logger
@@ -172,6 +172,16 @@ class LayerForgeNode:
     FUNCTION = "process_canvas_image"
     CATEGORY = "azNodes > LayerForge"
 
+    @staticmethod
+    def _serialize_rgb_tensor_sample(image_tensor):
+        image_array = (image_tensor.cpu().numpy() * 255).astype(np.uint8)
+        pil_image = Image.fromarray(image_array, "RGB")
+        return {
+            "data": pil_to_data_url(pil_image),
+            "width": pil_image.width,
+            "height": pil_image.height,
+        }
+
     def add_image_to_canvas(self, input_image):
         try:
             if not isinstance(input_image, torch.Tensor):
@@ -252,27 +262,21 @@ class LayerForgeNode:
                     log.info(f"Processing batch of {batch_size} image(s)")
 
                     if batch_size == 1:
-                        img_np = (input_image.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
-                        pil_img = Image.fromarray(img_np, "RGB")
-                        input_data["input_image"] = pil_to_data_url(pil_img)
-                        input_data["input_image_width"] = pil_img.width
-                        input_data["input_image_height"] = pil_img.height
-                        log.debug(f"Stored single input image: {pil_img.width}x{pil_img.height}")
+                        serialized_image = self._serialize_rgb_tensor_sample(input_image.squeeze(0))
+                        input_data["input_image"] = serialized_image["data"]
+                        input_data["input_image_width"] = serialized_image["width"]
+                        input_data["input_image_height"] = serialized_image["height"]
+                        log.debug(
+                            f"Stored single input image: {serialized_image['width']}x{serialized_image['height']}"
+                        )
                     else:
                         images_array = []
                         for index in range(batch_size):
-                            img_np = (input_image[index].cpu().numpy() * 255).astype(np.uint8)
-                            pil_img = Image.fromarray(img_np, "RGB")
-                            images_array.append(
-                                {
-                                    "data": pil_to_data_url(pil_img),
-                                    "width": pil_img.width,
-                                    "height": pil_img.height,
-                                }
-                            )
+                            serialized_image = self._serialize_rgb_tensor_sample(input_image[index])
+                            images_array.append(serialized_image)
                             log.debug(
                                 f"Stored batch image {index + 1}/{batch_size}: "
-                                f"{pil_img.width}x{pil_img.height}"
+                                f"{serialized_image['width']}x{serialized_image['height']}"
                             )
 
                         input_data["input_images_batch"] = images_array
@@ -300,15 +304,13 @@ class LayerForgeNode:
             if canvas_data:
                 log.info(f"Canvas data found for node {node_id} from WebSocket")
                 if canvas_data.get("image"):
-                    image_bytes = base64.b64decode(canvas_data["image"].split(",")[1])
-                    pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                    pil_image = data_url_to_pil(canvas_data["image"]).convert("RGB")
                     image_array = np.array(pil_image).astype(np.float32) / 255.0
                     processed_image = torch.from_numpy(image_array)[None,]
                     log.debug(f"Image loaded from WebSocket, shape: {processed_image.shape}")
 
                 if canvas_data.get("mask"):
-                    mask_bytes = base64.b64decode(canvas_data["mask"].split(",")[1])
-                    pil_mask = Image.open(io.BytesIO(mask_bytes)).convert("L")
+                    pil_mask = data_url_to_pil(canvas_data["mask"]).convert("L")
                     mask_array = np.array(pil_mask).astype(np.float32) / 255.0
                     processed_mask = torch.from_numpy(mask_array)[None,]
                     log.debug(f"Mask loaded from WebSocket, shape: {processed_mask.shape}")
@@ -353,37 +355,32 @@ class LayerForgeNode:
 
     @classmethod
     def get_latest_image(cls):
-        output_dir = folder_paths.get_output_directory()
-        files = [
-            os.path.join(output_dir, filename)
-            for filename in os.listdir(output_dir)
-            if os.path.isfile(os.path.join(output_dir, filename))
-        ]
-        image_files = [
-            path for path in files if path.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))
-        ]
+        image_files = list(cls._iter_output_image_paths())
         if not image_files:
             return None
         return max(image_files, key=os.path.getctime)
 
     @classmethod
     def get_latest_images(cls, since_timestamp=0):
-        output_dir = folder_paths.get_output_directory()
         files = []
-        for filename in os.listdir(output_dir):
-            file_path = os.path.join(output_dir, filename)
-            if os.path.isfile(file_path) and file_path.lower().endswith(
-                (".png", ".jpg", ".jpeg", ".bmp", ".gif")
-            ):
-                try:
-                    mtime = os.path.getmtime(file_path)
-                    if mtime > since_timestamp:
-                        files.append((mtime, file_path))
-                except OSError:
-                    continue
+        for file_path in cls._iter_output_image_paths():
+            try:
+                mtime = os.path.getmtime(file_path)
+                if mtime > since_timestamp:
+                    files.append((mtime, file_path))
+            except OSError:
+                continue
 
         files.sort(key=lambda item: item[0])
         return [item[1] for item in files]
+
+    @classmethod
+    def _iter_output_image_paths(cls):
+        output_dir = folder_paths.get_output_directory()
+        for filename in os.listdir(output_dir):
+            file_path = os.path.join(output_dir, filename)
+            if os.path.isfile(file_path) and file_path.lower().endswith(_OUTPUT_IMAGE_EXTENSIONS):
+                yield file_path
 
     @classmethod
     def get_flow_status(cls, flow_id=None):
@@ -423,8 +420,7 @@ class LayerForgeNode:
 
     def store_image(self, image_data):
         if isinstance(image_data, str) and image_data.startswith("data:image"):
-            image_bytes = base64.b64decode(image_data.split(",")[1])
-            self.cached_image = Image.open(io.BytesIO(image_bytes))
+            self.cached_image = data_url_to_pil(image_data)
         else:
             self.cached_image = image_data
 

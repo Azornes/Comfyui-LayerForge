@@ -1,22 +1,17 @@
 """Image and tensor conversion helpers shared by LayerForge endpoints."""
 
-import base64
-import io
-
 import numpy as np
 from PIL import Image
-
-from .image_serialization import pil_to_data_url
 from torchvision import transforms
 
+from .image_serialization import data_url_to_pil, pil_to_data_url
 from .node import log
 
 
 def convert_base64_to_tensor(base64_str):
     """Convert a data-URL image into a BCHW tensor and optional alpha tensor."""
     try:
-        img_data = base64.b64decode(base64_str.split(",")[1])
-        img = Image.open(io.BytesIO(img_data))
+        img = data_url_to_pil(base64_str)
 
         has_alpha = img.mode == "RGBA"
         alpha = None
