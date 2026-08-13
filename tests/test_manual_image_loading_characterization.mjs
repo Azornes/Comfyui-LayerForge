@@ -23,5 +23,5 @@ test('targeted image consumers use the shared Image loading lifecycle', () => {
   assert.match(previewSource, /loadImage\(previewUrl\)/);
 
   assert.doesNotMatch(viewSource, /const img = new Image\(\)/);
-  assert.match(viewSource, /loadImage\(blobUrl\)/);
+  assert.match(viewSource, /loadPreviewImage\(blob,/);
 });

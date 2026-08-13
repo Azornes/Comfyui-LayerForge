@@ -1,7 +1,7 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import { resolveCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
-import { loadImage } from './ImageUtils.js';
+import { loadImage, loadImageFromBlob } from './ImageUtils.js';
 import type { ComfyNode } from '../types';
 
 const log = createModuleLogger('PreviewUtils');
@@ -19,7 +19,14 @@ export interface PreviewOptions {
     customBlob?: Blob;
 }
 
-type PreviewBlobSource = 'canvas' | 'blob';
+export type PreviewBlobSource = 'canvas' | 'blob';
+
+export type PreviewUrlMode = 'data-url' | 'object-url';
+
+export interface PreviewImageLoadOptions {
+    source: PreviewBlobSource;
+    urlMode?: PreviewUrlMode;
+}
 
 interface PreviewBlobLoadOptions {
     source: PreviewBlobSource;
@@ -27,15 +34,19 @@ interface PreviewBlobLoadOptions {
     updateNodeImages?: boolean;
 }
 
-async function loadPreviewImageFromBlob(
+export async function loadPreviewImage(
     blob: Blob,
-    options: PreviewBlobLoadOptions
+    options: PreviewImageLoadOptions
 ): Promise<HTMLImageElement> {
     const isCanvasSource = options.source === 'canvas';
-    const previewUrl = URL.createObjectURL(blob);
-    let previewImage: HTMLImageElement;
+
     try {
-        previewImage = await loadImage(previewUrl);
+        if (options.urlMode === 'data-url') {
+            return await loadImageFromBlob(blob);
+        }
+
+        const previewUrl = URL.createObjectURL(blob);
+        return await loadImage(previewUrl);
     } catch (error) {
         const errorMessage = isCanvasSource
             ? "Failed to load preview image"
@@ -48,6 +59,17 @@ async function loadPreviewImageFromBlob(
                 : { error, blobSize: blob.size }
         );
     }
+}
+
+async function loadPreviewForNode(
+    blob: Blob,
+    options: PreviewBlobLoadOptions
+): Promise<HTMLImageElement> {
+    const isCanvasSource = options.source === 'canvas';
+    const previewImage = await loadPreviewImage(blob, {
+        source: options.source,
+        urlMode: 'object-url'
+    });
 
     log.debug(
         isCanvasSource ? "Preview image loaded successfully" : "Preview image from blob loaded successfully",
@@ -135,7 +157,7 @@ export const createPreviewFromCanvas = withErrorHandling(async function(
         throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
     }
 
-    return loadPreviewImageFromBlob(blob, {
+    return loadPreviewForNode(blob, {
         source: 'canvas',
         node,
         updateNodeImages
@@ -167,7 +189,7 @@ export const createPreviewFromBlob = withErrorHandling(async function(
         hasNode: !!node
     });
 
-    return loadPreviewImageFromBlob(blob, {
+    return loadPreviewForNode(blob, {
         source: 'blob',
         node,
         updateNodeImages

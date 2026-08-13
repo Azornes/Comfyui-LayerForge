@@ -1,14 +1,16 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 import { resolveCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
-import { loadImage } from './ImageUtils.js';
+import { loadImage, loadImageFromBlob } from './ImageUtils.js';
 const log = createModuleLogger('PreviewUtils');
-async function loadPreviewImageFromBlob(blob, options) {
+export async function loadPreviewImage(blob, options) {
     const isCanvasSource = options.source === 'canvas';
-    const previewUrl = URL.createObjectURL(blob);
-    let previewImage;
     try {
-        previewImage = await loadImage(previewUrl);
+        if (options.urlMode === 'data-url') {
+            return await loadImageFromBlob(blob);
+        }
+        const previewUrl = URL.createObjectURL(blob);
+        return await loadImage(previewUrl);
     }
     catch (error) {
         const errorMessage = isCanvasSource
@@ -19,6 +21,13 @@ async function loadPreviewImageFromBlob(blob, options) {
             ? { error, blob: blob.size }
             : { error, blobSize: blob.size });
     }
+}
+async function loadPreviewForNode(blob, options) {
+    const isCanvasSource = options.source === 'canvas';
+    const previewImage = await loadPreviewImage(blob, {
+        source: options.source,
+        urlMode: 'object-url'
+    });
     log.debug(isCanvasSource ? "Preview image loaded successfully" : "Preview image from blob loaded successfully", isCanvasSource
         ? {
             width: previewImage.width,
@@ -80,7 +89,7 @@ export const createPreviewFromCanvas = withErrorHandling(async function (canvas,
     if (!blob) {
         throw createValidationError("Failed to generate canvas blob for preview", { canvas, options });
     }
-    return loadPreviewImageFromBlob(blob, {
+    return loadPreviewForNode(blob, {
         source: 'canvas',
         node,
         updateNodeImages
@@ -105,7 +114,7 @@ export const createPreviewFromBlob = withErrorHandling(async function (blob, nod
         updateNodeImages,
         hasNode: !!node
     });
-    return loadPreviewImageFromBlob(blob, {
+    return loadPreviewForNode(blob, {
         source: 'blob',
         node,
         updateNodeImages

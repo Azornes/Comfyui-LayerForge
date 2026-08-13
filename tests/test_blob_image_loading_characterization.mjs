@@ -24,7 +24,7 @@ test('Blob and File image entry points use the shared loading helpers', () => {
   assert.match(clipboardSource, /loadImageFromBlob\(file\)/);
   assert.match(interactionsSource, /loadImageFromBlob\(file\)/);
   assert.match(viewSource, /loadImageFromBlob\(file\)/);
-  assert.match(viewSource, /loadImageFromBlob\(blob\)/);
+  assert.match(viewSource, /loadPreviewImage\(blob,/);
   assert.match(layersSource, /blobToDataUrl\(blob\)/);
   assert.match(ioSource, /blobToDataUrl\(imageBlob\)/);
   assert.match(ioSource, /blobToDataUrl\(maskBlob\)/);

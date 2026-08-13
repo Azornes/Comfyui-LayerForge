@@ -4,11 +4,13 @@ import test from 'node:test';
 import {
   createPreviewFromBlob,
   createPreviewFromCanvas,
+  loadPreviewImage,
 } from '../js/utils/PreviewUtils.js';
 
 function installPreviewStubs({ fail = false } = {}) {
   const originalImage = Object.getOwnPropertyDescriptor(globalThis, 'Image');
   const originalUrl = Object.getOwnPropertyDescriptor(globalThis, 'URL');
+  const originalFileReader = Object.getOwnPropertyDescriptor(globalThis, 'FileReader');
   const createdUrls = [];
 
   Object.defineProperty(globalThis, 'Image', {
@@ -47,6 +49,20 @@ function installPreviewStubs({ fail = false } = {}) {
     },
   });
 
+  Object.defineProperty(globalThis, 'FileReader', {
+    configurable: true,
+    value: class TestFileReader {
+      result = null;
+      onload = null;
+      onerror = null;
+
+      readAsDataURL() {
+        this.result = 'data:image/png;base64,encoded';
+        setTimeout(() => this.onload?.(), 0);
+      }
+    },
+  });
+
   return {
     createdUrls,
     restore() {
@@ -59,6 +75,11 @@ function installPreviewStubs({ fail = false } = {}) {
         Object.defineProperty(globalThis, 'URL', originalUrl);
       } else {
         delete globalThis.URL;
+      }
+      if (originalFileReader) {
+        Object.defineProperty(globalThis, 'FileReader', originalFileReader);
+      } else {
+        delete globalThis.FileReader;
       }
     },
   };
@@ -90,6 +111,23 @@ test('canvas and Blob preview functions preserve loading and node update behavio
     assert.deepEqual(blobNode.imgs, [blobImage]);
     assert.deepEqual(untouchedNode.imgs, []);
     assert.equal(stubs.createdUrls.length, 3);
+  } finally {
+    stubs.restore();
+  }
+});
+
+test('shared preview loader supports data URLs without creating an object URL', async () => {
+  const stubs = installPreviewStubs();
+  const blob = new Blob(['preview'], { type: 'image/png' });
+
+  try {
+    const image = await loadPreviewImage(blob, {
+      source: 'canvas',
+      urlMode: 'data-url',
+    });
+
+    assert.equal(image.src, 'data:image/png;base64,encoded');
+    assert.equal(stubs.createdUrls.length, 0);
   } finally {
     stubs.restore();
   }

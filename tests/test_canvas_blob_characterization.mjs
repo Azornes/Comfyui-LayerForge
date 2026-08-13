@@ -176,3 +176,11 @@ test('canvas blob callers preserve plain and mask method responsibilities', () =
   assert.match(blobUtilsSource, /getFlattenedCanvasWithMaskAsBlob/);
   assert.match(blobUtilsSource, /export async function resolveCanvasBlob/);
 });
+
+test('CanvasView preserves size-dependent preview loading strategies', () => {
+  const canvasViewSource = sourceFiles[3];
+
+  assert.match(canvasViewSource, /blob\.size > 2 \* 1024 \* 1024/);
+  assert.match(canvasViewSource, /loadPreviewImage\(blob, \{[\s\S]*urlMode: 'object-url'/);
+  assert.match(canvasViewSource, /loadPreviewImage\(blob, \{[\s\S]*urlMode: 'data-url'/);
+});

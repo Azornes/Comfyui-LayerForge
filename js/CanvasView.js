@@ -8,12 +8,13 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 import { Canvas } from "./Canvas.js";
 import { clearAllCanvasStates, getCanvasState, setCanvasState } from "./db.js";
 import { createCanvas } from "./utils/CommonUtils.js";
-import { loadImage, loadImageFromBlob } from "./utils/ImageUtils.js";
+import { loadImageFromBlob } from "./utils/ImageUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage } from "./utils/CanvasExportUtils.js";
 import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
+import { loadPreviewImage } from "./utils/PreviewUtils.js";
 import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
@@ -1140,10 +1141,12 @@ async function createCanvasWidget(node, widget, app) {
                 if (blob) {
                     // For large images, use blob URL for better performance
                     if (blob.size > 2 * 1024 * 1024) { // 2MB threshold
-                        const blobUrl = URL.createObjectURL(blob);
-                        void loadImage(blobUrl).then(img => {
+                        void loadPreviewImage(blob, {
+                            source: 'canvas',
+                            urlMode: 'object-url'
+                        }).then(img => {
                             node.imgs = [img];
-                            log.debug(`Using blob URL for large image (${(blob.size / 1024 / 1024).toFixed(1)}MB): ${blobUrl.substring(0, 50)}...`);
+                            log.debug(`Using blob URL for large image (${(blob.size / 1024 / 1024).toFixed(1)}MB): ${img.src.substring(0, 50)}...`);
                             // Clean up old blob URLs to prevent memory leaks
                             if (node.imgs.length > 1) {
                                 const oldImg = node.imgs[0];
@@ -1155,7 +1158,10 @@ async function createCanvasWidget(node, widget, app) {
                     }
                     else {
                         // For smaller images, use data URI as before
-                        void loadImageFromBlob(blob).then(img => {
+                        void loadPreviewImage(blob, {
+                            source: 'canvas',
+                            urlMode: 'data-url'
+                        }).then(img => {
                             node.imgs = [img];
                             log.debug(`Using data URI for small image (${(blob.size / 1024).toFixed(1)}KB): ${img.src.substring(0, 50)}...`);
                         }).catch(() => undefined);
