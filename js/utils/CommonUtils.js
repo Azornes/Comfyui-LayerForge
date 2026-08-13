@@ -310,6 +310,16 @@ export function createCanvas(width, height, contextType = '2d', contextOptions =
     return { canvas, ctx };
 }
 /**
+ * Creates a canvas and requires a usable rendering context.
+ */
+export function createCanvasWithContext(width, height, contextType = '2d', contextOptions = { willReadFrequently: true }) {
+    const { canvas, ctx } = createCanvas(width, height, contextType, contextOptions);
+    if (!ctx) {
+        throw new Error("Failed to get 2D context for canvas");
+    }
+    return { canvas, ctx };
+}
+/**
  * Normalizuje wartość do zakresu Uint8 (0-255)
  * @param {number} value - Wartość do znormalizowania (0-1)
  * @returns {number} Wartość w zakresie 0-255

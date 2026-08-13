@@ -1,5 +1,5 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
-import { createCanvas } from "./utils/CommonUtils.js";
+import { createCanvas, createCanvasWithContext } from "./utils/CommonUtils.js";
 import { calculateDistanceTransform } from "./utils/MaskPixelUtils.js";
 const log = createModuleLogger('Mask_tool');
 export class MaskTool {
@@ -419,16 +419,6 @@ export class MaskTool {
         this.triggerStateChangeAndRender();
     }
     /**
-     * Creates a canvas with specified dimensions and returns both canvas and context
-     */
-    createCanvas(width, height) {
-        const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
-        if (!ctx) {
-            throw new Error("Failed to get 2D context for canvas");
-        }
-        return { canvas, ctx };
-    }
-    /**
      * Draws shape points on a canvas context
      */
     drawShapeOnCanvas(ctx, points, fillRule = 'evenodd') {
@@ -445,7 +435,7 @@ export class MaskTool {
      * Creates binary mask data from shape points
      */
     createBinaryMaskFromShape(points, width, height) {
-        const { canvas, ctx } = this.createCanvas(width, height);
+        const { canvas, ctx } = createCanvasWithContext(width, height);
         this.drawShapeOnCanvas(ctx, points);
         const maskImage = ctx.getImageData(0, 0, width, height);
         const binaryData = new Uint8Array(width * height);
@@ -458,7 +448,7 @@ export class MaskTool {
      * Creates output canvas with image data
      */
     createOutputCanvasFromImageData(imageData, width, height) {
-        const { canvas, ctx } = this.createCanvas(width, height);
+        const { canvas, ctx } = createCanvasWithContext(width, height);
         ctx.putImageData(imageData, 0, 0);
         return canvas;
     }
@@ -466,7 +456,7 @@ export class MaskTool {
      * Creates output canvas from processed pixel data
      */
     createOutputCanvasFromPixelData(pixelProcessor, width, height) {
-        const { canvas, ctx } = this.createCanvas(width, height);
+        const { canvas, ctx } = createCanvasWithContext(width, height);
         const outputData = ctx.createImageData(width, height);
         pixelProcessor(outputData);
         ctx.putImageData(outputData, 0, 0);
@@ -510,7 +500,7 @@ export class MaskTool {
             }
         }
         // Create ImageData with feather effect
-        const { canvas: tempCanvas, ctx: tempCtx } = this.createCanvas(width, height);
+        const { canvas: tempCanvas, ctx: tempCtx } = createCanvasWithContext(width, height);
         const outputData = tempCtx.createImageData(width, height);
         // Use featherRadius as the threshold for the gradient
         const threshold = Math.min(featherRadius, maxDistance);
@@ -657,7 +647,7 @@ export class MaskTool {
      * Creates a new chunk at the given chunk coordinates
      */
     createChunk(chunkX, chunkY) {
-        const { canvas, ctx } = this.createCanvas(this.chunkSize, this.chunkSize);
+        const { canvas, ctx } = createCanvasWithContext(this.chunkSize, this.chunkSize);
         const chunk = {
             canvas,
             ctx,
@@ -1230,7 +1220,7 @@ export class MaskTool {
             return contours;
         const width = this.canvasInstance.canvas.width;
         const height = this.canvasInstance.canvas.height;
-        const { canvas: tempCanvas, ctx: tempCtx } = this.createCanvas(width, height);
+        const { canvas: tempCanvas, ctx: tempCtx } = createCanvasWithContext(width, height);
         // Draw all contours to create the initial mask
         tempCtx.fillStyle = 'white';
         for (const points of contours) {
@@ -1746,7 +1736,7 @@ export class MaskTool {
         const needsFeather = this.canvasInstance.shapeMaskFeather && this.canvasInstance.shapeMaskFeatherValue > 0;
         if (!needsExpansion && !needsFeather) {
             // Simple case: just draw the original shape
-            const { canvas, ctx } = this.createCanvas(config.tempCanvasWidth, config.tempCanvasHeight);
+            const { canvas, ctx } = createCanvasWithContext(config.tempCanvasWidth, config.tempCanvasHeight);
             shapeMaskCanvas = canvas;
             this.drawShapeOnCanvas(ctx, config.tempShapePoints, 'evenodd');
         }
