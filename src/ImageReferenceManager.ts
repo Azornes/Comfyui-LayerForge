@@ -96,7 +96,7 @@ export class ImageReferenceManager {
     /**
      * Aktualizuje referencje na podstawie aktualnego stanu canvas
      */
-    updateReferences(): void {
+    private rebuildReferences(): Set<string> {
         log.debug("Updating image references...");
         this.imageReferences.clear();
         const usedImageIds = this.collectAllUsedImageIds();
@@ -105,6 +105,11 @@ export class ImageReferenceManager {
         });
 
         log.info(`Updated references for ${usedImageIds.size} unique images`);
+        return usedImageIds;
+    }
+
+    updateReferences(): void {
+        this.rebuildReferences();
     }
 
     /**
@@ -225,10 +230,7 @@ export class ImageReferenceManager {
         log.info("Starting garbage collection...");
 
         try {
-
-            this.updateReferences();
-
-            const usedImageIds = this.collectAllUsedImageIds();
+            const usedImageIds = this.rebuildReferences();
 
             const unusedImages = await this.findUnusedImages(usedImageIds);
 
