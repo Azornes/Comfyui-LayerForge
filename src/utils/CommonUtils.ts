@@ -1,14 +1,10 @@
-import type { Layer } from '../types';
+import type { Layer, Point } from '../types';
+export type { Point } from '../types';
 
 /**
  * CommonUtils - Wspólne funkcje pomocnicze
  * Eliminuje duplikację funkcji używanych w różnych modułach
  */
-
-export interface Point {
-    x: number;
-    y: number;
-}
 
 export interface LayerGeometryInput {
     x: number;
