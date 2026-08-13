@@ -10,6 +10,7 @@ import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 import { createCanvas } from "./utils/CommonUtils.js";
 import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
+import { loadImage } from "./utils/ImageUtils.js";
 const log = createModuleLogger('MaskEditorIntegration');
 export class MaskEditorIntegration {
     constructor(canvas) {
@@ -305,12 +306,7 @@ export class MaskEditorIntegration {
         if (!this.maskTool || !this.maskTool.maskCanvas) {
             throw new Error("No mask canvas available");
         }
-        return new Promise((resolve, reject) => {
-            const maskImage = new Image();
-            maskImage.onload = () => resolve(maskImage);
-            maskImage.onerror = reject;
-            maskImage.src = this.maskTool.maskCanvas.toDataURL();
-        });
+        return loadImage(this.maskTool.maskCanvas.toDataURL());
     }
     waitWhileMaskEditing() {
         if (mask_editor_showing(app)) {
@@ -394,13 +390,9 @@ export class MaskEditorIntegration {
             return;
         }
         log.debug("Processing mask editor result, image source:", this.node.imgs[0].src.substring(0, 100) + '...');
-        const resultImage = new Image();
-        resultImage.src = this.node.imgs[0].src;
+        let resultImage;
         try {
-            await new Promise((resolve, reject) => {
-                resultImage.onload = resolve;
-                resultImage.onerror = reject;
-            });
+            resultImage = await loadImage(this.node.imgs[0].src);
             log.debug("Result image loaded successfully", {
                 width: resultImage.width,
                 height: resultImage.height

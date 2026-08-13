@@ -2,6 +2,7 @@ import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showAlertNotification, showAllNotificationTypes} from "./utils/NotificationUtils.js";
 import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas} from "./utils/CommonUtils.js";
+import {loadImage} from "./utils/ImageUtils.js";
 import {withErrorHandling} from "./ErrorHandler.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from './types';
@@ -233,34 +234,26 @@ export class CanvasState {
      */
     _createLayerFromSrc(layerData: Layer, imageSrc: string | ImageBitmap, index: number, resolve: (value: Layer | null) => void): void {
         if (typeof imageSrc === 'string') {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
+            loadImage(imageSrc, { crossOrigin: 'anonymous' }).then(img => {
                 log.debug(`Layer ${index}: Image loaded successfully.`);
                 const newLayer: Layer = {...layerData, image: img};
                 resolve(newLayer);
-            };
-            img.onerror = () => {
+            }).catch(() => {
                 log.error(`Layer ${index}: Failed to load image from src.`);
                 resolve(null);
-            };
-            img.src = imageSrc;
+            });
         } else {
             const { canvas, ctx } = createCanvas(imageSrc.width, imageSrc.height);
             if (ctx) {
                 ctx.drawImage(imageSrc, 0, 0);
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
+                loadImage(canvas.toDataURL(), { crossOrigin: 'anonymous' }).then(img => {
                     log.debug(`Layer ${index}: Image loaded successfully from ImageBitmap.`);
                     const newLayer: Layer = {...layerData, image: img};
                     resolve(newLayer);
-                };
-                img.onerror = () => {
+                }).catch(() => {
                     log.error(`Layer ${index}: Failed to load image from ImageBitmap.`);
                     resolve(null);
-                };
-                img.src = canvas.toDataURL();
+                });
             } else {
                 log.error(`Layer ${index}: Failed to get 2d context from canvas.`);
                 resolve(null);
