@@ -16,6 +16,7 @@ import { createModuleLogger } from "./log_system/log_funcs.js";
 import { debounce, createCanvas } from "./utils/CommonUtils.js";
 import { MaskEditorIntegration } from "./MaskEditorIntegration.js";
 import { CanvasSelection } from "./CanvasSelection.js";
+import { removeLayersWithLifecycle } from "./utils/LayerRemovalUtils.js";
 const useChainCallback = (original, next) => {
     if (original === undefined || original === null) {
         return next;
@@ -297,18 +298,7 @@ export class Canvas {
     removeLayersByIds(layerIds) {
         if (!layerIds || layerIds.length === 0)
             return;
-        const initialCount = this.layers.length;
-        this.saveState();
-        this.layers = this.layers.filter((l) => !layerIds.includes(l.id));
-        // If the current selection was part of the removal, clear it
-        const newSelection = this.canvasSelection.selectedLayers.filter((l) => !layerIds.includes(l.id));
-        this.canvasSelection.updateSelection(newSelection);
-        this.render();
-        this.saveState();
-        if (this.canvasLayersPanel) {
-            this.canvasLayersPanel.onLayersChanged();
-        }
-        log.info(`Removed ${initialCount - this.layers.length} layers by ID.`);
+        removeLayersWithLifecycle(this, layer => layerIds.includes(layer.id), removedCount => log.info(`Removed ${removedCount} layers by ID.`));
     }
     removeSelectedLayers() {
         return this.canvasSelection.removeSelectedLayers();

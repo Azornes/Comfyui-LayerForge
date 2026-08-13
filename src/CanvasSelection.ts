@@ -1,5 +1,6 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { generateUUID } from "./utils/CommonUtils.js";
+import { removeLayersWithLifecycle } from "./utils/LayerRemovalUtils.js";
 
 const log = createModuleLogger('CanvasSelection');
 
@@ -138,19 +139,11 @@ export class CanvasSelection {
                 totalLayers: this.canvas.layers.length
             });
 
-            this.canvas.saveState();
-            this.canvas.layers = this.canvas.layers.filter((l: any) => !this.selectedLayers.includes(l));
-            
-            this.updateSelection([]); 
-            
-            this.canvas.render();
-            this.canvas.saveState();
-
-            if (this.canvas.canvasLayersPanel) {
-                this.canvas.canvasLayersPanel.onLayersChanged();
-            }
-
-            log.debug('Layers removed successfully, remaining layers:', this.canvas.layers.length);
+            removeLayersWithLifecycle(
+                this.canvas,
+                layer => this.selectedLayers.includes(layer),
+                () => log.debug('Layers removed successfully, remaining layers:', this.canvas.layers.length),
+            );
         } else {
             log.debug('No layers selected for removal');
         }
