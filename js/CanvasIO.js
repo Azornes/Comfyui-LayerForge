@@ -4,6 +4,7 @@ import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, blobToDataUrl, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 import { postImageBlob } from "./utils/ImageUploadUtils.js";
+import { getImageAddMode, isFitOnAddEnabled } from "./utils/CanvasInputUtils.js";
 const log = createModuleLogger('CanvasIO');
 function imageBatchIdentity(sources) {
     return sources.join('|');
@@ -432,8 +433,7 @@ export class CanvasIO {
                                     log.info("Image change detected, will add new layers");
                                 }
                                 // Determine add mode
-                                const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-                                const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
+                                const addMode = getImageAddMode(this.canvas.node.widgets);
                                 // Add all images from the batch as separate layers
                                 await this.addBatchImages(sourceNode.imgs, addMode, this.canvas.outputAreaBounds, 'to canvas');
                                 this.canvas.inputDataLoaded = true;
@@ -522,9 +522,7 @@ export class CanvasIO {
                             // Convert to HTMLImageElement
                             const maskImg = await loadImage(maskCanvas.toDataURL());
                             // Respect fit_on_add (scale to output area)
-                            const widgets = this.canvas.node.widgets;
-                            const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
-                            const shouldFit = fitOnAddWidget && fitOnAddWidget.value;
+                            const shouldFit = isFitOnAddEnabled(this.canvas.node.widgets);
                             let finalMaskImg = maskImg;
                             if (shouldFit) {
                                 const bounds = this.canvas.outputAreaBounds;
@@ -634,9 +632,7 @@ export class CanvasIO {
                 // Mark that we've loaded input data for this execution
                 this.canvas.inputDataLoaded = true;
                 // Determine add mode based on fit_on_add setting
-                const widgets = this.canvas.node.widgets;
-                const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
-                const addMode = (fitOnAddWidget && fitOnAddWidget.value) ? 'fit' : 'center';
+                const addMode = getImageAddMode(this.canvas.node.widgets);
                 // Load input image(s) only if image input is actually connected, not already loaded, and allowed
                 if (allowImage && !imageLoaded && hasImageInput) {
                     if (inputData.input_images_batch) {
@@ -670,8 +666,7 @@ export class CanvasIO {
                     // Load mask image
                     const maskImg = await loadImage(inputData.input_mask);
                     // Determine if we should fit the mask or use it at original size
-                    const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-                    const shouldFit = fitOnAddWidget2 && fitOnAddWidget2.value;
+                    const shouldFit = isFitOnAddEnabled(this.canvas.node.widgets);
                     let finalMaskImg = maskImg;
                     if (shouldFit && this.canvas.maskTool) {
                         const bounds = this.canvas.outputAreaBounds;

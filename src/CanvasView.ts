@@ -21,6 +21,7 @@ import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage, type CanvasExportAction } from "./utils/CanvasExportUtils.js";
 import { getFlattenedCanvasBlob, type CanvasBlobVariant } from "./utils/CanvasBlobUtils.js";
 import { loadPreviewImage } from "./utils/PreviewUtils.js";
+import { getImageAddMode } from "./utils/CanvasInputUtils.js";
 import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
@@ -535,8 +536,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                     textContent: "Add Image",
                     title: "Add image from file",
                     onclick: () => {
-                        const fitOnAddWidget = node.widgets.find((w) => w.name === "fit_on_add");
-                        const addMode: AddMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                        const addMode: AddMode = getImageAddMode(node.widgets);
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*';
@@ -563,8 +563,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                     textContent: "Paste Image",
                     title: "Paste image from clipboard",
                     onclick: () => {
-                        const fitOnAddWidget = node.widgets.find((w) => w.name === "fit_on_add");
-                        const addMode: AddMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                        const addMode: AddMode = getImageAddMode(node.widgets);
                         canvas.canvasLayers.handlePaste(addMode);
                     }
                 }),

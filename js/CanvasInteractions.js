@@ -1,6 +1,7 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { snapToGrid, getSnapAdjustment, isPointInRotatedLayer } from "./utils/CommonUtils.js";
 import { loadImageFromBlob } from "./utils/ImageUtils.js";
+import { getImageAddMode } from "./utils/CanvasInputUtils.js";
 const log = createModuleLogger('CanvasInteractions');
 export class CanvasInteractions {
     constructor(canvas) {
@@ -1108,8 +1109,7 @@ export class CanvasInteractions {
     }
     async loadDroppedImageFile(file, worldCoords) {
         void loadImageFromBlob(file).then(async (img) => {
-            const fitOnAddWidget = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
-            const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+            const addMode = getImageAddMode(this.canvas.node.widgets);
             await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);
         }).catch(error => {
             log.error(`Failed to load dropped image: ${file.name}`, error);

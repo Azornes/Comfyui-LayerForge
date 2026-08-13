@@ -15,6 +15,7 @@ import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage } from "./utils/CanvasExportUtils.js";
 import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
 import { loadPreviewImage } from "./utils/PreviewUtils.js";
+import { getImageAddMode } from "./utils/CanvasInputUtils.js";
 import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
@@ -418,8 +419,7 @@ async function createCanvasWidget(node, widget, app) {
                     textContent: "Add Image",
                     title: "Add image from file",
                     onclick: () => {
-                        const fitOnAddWidget = node.widgets.find((w) => w.name === "fit_on_add");
-                        const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                        const addMode = getImageAddMode(node.widgets);
                         const input = document.createElement('input');
                         input.type = 'file';
                         input.accept = 'image/*';
@@ -447,8 +447,7 @@ async function createCanvasWidget(node, widget, app) {
                         textContent: "Paste Image",
                         title: "Paste image from clipboard",
                         onclick: () => {
-                            const fitOnAddWidget = node.widgets.find((w) => w.name === "fit_on_add");
-                            const addMode = fitOnAddWidget && fitOnAddWidget.value ? 'fit' : 'center';
+                            const addMode = getImageAddMode(node.widgets);
                             canvas.canvasLayers.handlePaste(addMode);
                         }
                     }),
