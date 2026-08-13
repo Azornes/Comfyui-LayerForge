@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { createMaskImageFromResult } from '../js/utils/MaskProcessingUtils.js';
+import {
+  applyMaskResultToTool,
+  createMaskImageFromResult,
+} from '../js/utils/MaskProcessingUtils.js';
 
 function installMaskConversionStubs(sourcePixels) {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -108,15 +111,46 @@ test('mask result conversion preserves target size, transformed pixels, and imag
   }
 });
 
+test('mask result application processes before resolving and updating the target tool', async () => {
+  const stubs = installMaskConversionStubs([
+    10, 20, 30, 0,
+    40, 50, 60, 128,
+  ]);
+  const appliedMasks = [];
+
+  try {
+    const result = await applyMaskResultToTool(
+      { width: 2, height: 1 },
+      { targetWidth: 2, targetHeight: 1, invertAlpha: true },
+      () => ({
+        setMask(mask) {
+          appliedMasks.push(mask);
+        },
+      })
+    );
+
+    assert.deepEqual(appliedMasks, [result]);
+    assert.deepEqual([...stubs.output.data], [
+      255, 255, 255, 255,
+      255, 255, 255, 127,
+    ]);
+  } finally {
+    stubs.restore();
+  }
+});
+
 test('mask integrations share conversion but retain their own side effects', async () => {
   const maskEditorSource = await readFile(new URL('../src/MaskEditorIntegration.ts', import.meta.url), 'utf8');
   const samSource = await readFile(new URL('../src/SAMDetectorIntegration.ts', import.meta.url), 'utf8');
 
-  assert.match(maskEditorSource, /createMaskImageFromResult\(/);
-  assert.match(samSource, /createMaskImageFromResult\(/);
+  assert.match(maskEditorSource, /applyMaskResultToTool\(/);
+  assert.match(samSource, /applyMaskResultToTool\(/);
   assert.doesNotMatch(maskEditorSource, /processImageToMask|convertToImage/);
   assert.doesNotMatch(samSource, /processImageToMask|convertToImage/);
-  assert.match(maskEditorSource, /this\.maskTool\.setMask\(maskAsImage\)/);
+  assert.doesNotMatch(maskEditorSource, /setMask\(maskAsImage\)/);
+  assert.doesNotMatch(samSource, /setMask\(maskAsImage\)/);
+  assert.match(maskEditorSource, /targetWidth: bounds\.width/);
+  assert.match(samSource, /targetWidth: resultImage\.width/);
   assert.match(samSource, /actualCanvas\.render\(\)/);
   assert.match(samSource, /actualCanvas\.saveState\(\)/);
 });

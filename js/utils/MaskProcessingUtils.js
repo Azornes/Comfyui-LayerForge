@@ -55,6 +55,11 @@ export async function createMaskImageFromResult(sourceImage, options) {
     });
     return convertToImage(processedMask);
 }
+export async function applyMaskResultToTool(sourceImage, options, resolveTarget) {
+    const maskImage = await createMaskImageFromResult(sourceImage, options);
+    resolveTarget().setMask(maskImage);
+    return maskImage;
+}
 /**
  * Processes image data with custom pixel transformation
  * @param sourceImage - Source image or canvas element

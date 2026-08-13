@@ -121,6 +121,20 @@ export async function createMaskImageFromResult(
     return convertToImage(processedMask);
 }
 
+interface MaskResultTarget {
+    setMask(image: HTMLImageElement): void;
+}
+
+export async function applyMaskResultToTool(
+    sourceImage: HTMLImageElement | HTMLCanvasElement,
+    options: MaskResultOptions,
+    resolveTarget: () => MaskResultTarget
+): Promise<HTMLImageElement> {
+    const maskImage = await createMaskImageFromResult(sourceImage, options);
+    resolveTarget().setMask(maskImage);
+    return maskImage;
+}
+
 /**
  * Processes image data with custom pixel transformation
  * @param sourceImage - Source image or canvas element

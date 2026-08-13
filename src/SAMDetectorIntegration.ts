@@ -5,7 +5,7 @@ import { ComfyApp } from "../../scripts/app.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showInfoNotification, showSuccessNotification, showErrorNotification } from "./utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadImageBlob } from "./utils/ImageUploadUtils.js";
-import { createMaskImageFromResult } from "./utils/MaskProcessingUtils.js";
+import { applyMaskResultToTool } from "./utils/MaskProcessingUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { validateAndFixClipspace } from "./utils/ClipspaceUtils.js";
 import type { ComfyNode } from './types';
@@ -346,45 +346,44 @@ async function handleSAMDetectorResult(node: ComfyNode, resultImage: HTMLImageEl
 
         // Process image to mask using MaskProcessingUtils
         log.debug("Processing image to mask using utils");
-        const maskAsImage = await createMaskImageFromResult(resultImage, {
+        let actualCanvas: any;
+        await applyMaskResultToTool(resultImage, {
             targetWidth: resultImage.width,
             targetHeight: resultImage.height,
             invertAlpha: true
-        });
-
-        // Apply mask to LayerForge canvas using MaskTool.setMask method
-        log.debug("Checking canvas and maskTool availability", {
-            hasCanvas: !!canvas,
-            hasCanvasProperty: !!canvas.canvas,
-            canvasCanvasKeys: canvas.canvas ? Object.keys(canvas.canvas) : [],
-            hasMaskTool: !!canvas.maskTool,
-            hasCanvasMaskTool: !!(canvas.canvas && canvas.canvas.maskTool),
-            maskToolType: typeof canvas.maskTool,
-            canvasMaskToolType: canvas.canvas ? typeof canvas.canvas.maskTool : 'undefined',
-            canvasKeys: Object.keys(canvas)
-        });
-
-        // Get the actual Canvas object and its maskTool
-        const actualCanvas = canvas.canvas || canvas;
-        const maskTool = actualCanvas.maskTool;
-
-        if (!maskTool) {
-            log.error("MaskTool is not available. Canvas state:", {
+        }, () => {
+            // Apply mask to LayerForge canvas using MaskTool.setMask method
+            log.debug("Checking canvas and maskTool availability", {
                 hasCanvas: !!canvas,
-                hasActualCanvas: !!actualCanvas,
-                canvasConstructor: canvas.constructor.name,
-                actualCanvasConstructor: actualCanvas ? actualCanvas.constructor.name : 'undefined',
-                canvasKeys: Object.keys(canvas),
-                actualCanvasKeys: actualCanvas ? Object.keys(actualCanvas) : [],
-                maskToolValue: maskTool
+                hasCanvasProperty: !!canvas.canvas,
+                canvasCanvasKeys: canvas.canvas ? Object.keys(canvas.canvas) : [],
+                hasMaskTool: !!canvas.maskTool,
+                hasCanvasMaskTool: !!(canvas.canvas && canvas.canvas.maskTool),
+                maskToolType: typeof canvas.maskTool,
+                canvasMaskToolType: canvas.canvas ? typeof canvas.canvas.maskTool : 'undefined',
+                canvasKeys: Object.keys(canvas)
             });
-            throw new Error("Mask tool not available or not initialized");
-        }
 
-        log.debug("Applying SAM mask to canvas using setMask method");
+            // Get the actual Canvas object and its maskTool
+            actualCanvas = canvas.canvas || canvas;
+            const maskTool = actualCanvas.maskTool;
 
-        // Use the setMask method which clears existing mask and sets new one
-        maskTool.setMask(maskAsImage);
+            if (!maskTool) {
+                log.error("MaskTool is not available. Canvas state:", {
+                    hasCanvas: !!canvas,
+                    hasActualCanvas: !!actualCanvas,
+                    canvasConstructor: canvas.constructor.name,
+                    actualCanvasConstructor: actualCanvas ? actualCanvas.constructor.name : 'undefined',
+                    canvasKeys: Object.keys(canvas),
+                    actualCanvasKeys: actualCanvas ? Object.keys(actualCanvas) : [],
+                    maskToolValue: maskTool
+                });
+                throw new Error("Mask tool not available or not initialized");
+            }
+
+            log.debug("Applying SAM mask to canvas using setMask method");
+            return maskTool;
+        });
 
         // Update canvas and save state (same as MaskEditorIntegration)
         actualCanvas.render();
