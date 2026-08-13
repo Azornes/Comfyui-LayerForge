@@ -1,6 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "./CommonUtils.js";
-import { calculateDistanceTransform } from "./MaskPixelUtils.js";
+import { calculateDistanceTransform, rasterizeDistanceFieldMask } from "./MaskPixelUtils.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
 
 const log = createModuleLogger('ImageAnalysis');
@@ -49,11 +49,12 @@ export function createDistanceFieldMaskSync(image: HTMLImageElement, blendArea: 
     }
 
     let distanceField: Float32Array;
+    let binaryMask: Uint8Array | null = null;
     let maxDistance: number;
 
     if (hasTransparency) {
         // For images with transparency, use alpha-based distance transform
-        const binaryMask = new Uint8Array(width * height);
+        binaryMask = new Uint8Array(width * height);
         for (let i = 0; i < width * height; i++) {
             binaryMask[i] = data[i * 4 + 3] > 0 ? 1 : 0;
         }
@@ -74,33 +75,7 @@ export function createDistanceFieldMaskSync(image: HTMLImageElement, blendArea: 
     // Create the gradient mask based on blendArea
     const maskData = ctx.createImageData(width, height);
     const threshold = maxDistance * (blendArea / 100);
-
-    for (let i = 0; i < width * height; i++) {
-        const distance = distanceField[i];
-        const alpha = data[i * 4 + 3];
-        
-        if (alpha === 0) {
-            // Transparent pixels remain transparent
-            maskData.data[i * 4] = 255;
-            maskData.data[i * 4 + 1] = 255;
-            maskData.data[i * 4 + 2] = 255;
-            maskData.data[i * 4 + 3] = 0;
-        } else if (distance <= threshold) {
-            // Edge area - apply gradient alpha
-            const gradientValue = distance / threshold;
-            const alphaValue = Math.floor(gradientValue * 255);
-            maskData.data[i * 4] = 255;
-            maskData.data[i * 4 + 1] = 255;
-            maskData.data[i * 4 + 2] = 255;
-            maskData.data[i * 4 + 3] = alphaValue;
-        } else {
-            // Inner area - full alpha (no blending effect)
-            maskData.data[i * 4] = 255;
-            maskData.data[i * 4 + 1] = 255;
-            maskData.data[i * 4 + 2] = 255;
-            maskData.data[i * 4 + 3] = 255;
-        }
-    }
+    rasterizeDistanceFieldMask(distanceField, binaryMask, threshold, maskData.data);
 
     // Clear canvas and put the mask data
     ctx.clearRect(0, 0, width, height);

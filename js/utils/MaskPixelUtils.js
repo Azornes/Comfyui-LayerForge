@@ -36,6 +36,30 @@ export function imageDataToBinaryMask(imageData, width, height, channel) {
     return binaryMask;
 }
 /**
+ * Rasterizes a distance field into a white RGBA mask with feathered alpha.
+ * A null binary mask means every pixel is inside the mask.
+ */
+export function rasterizeDistanceFieldMask(distanceMap, binaryMask, threshold, outputData) {
+    for (let i = 0; i < distanceMap.length; i++) {
+        const distance = distanceMap[i];
+        const isInside = binaryMask === null || binaryMask[i] === 1;
+        const pixelIndex = i * 4;
+        outputData[pixelIndex] = 255;
+        outputData[pixelIndex + 1] = 255;
+        outputData[pixelIndex + 2] = 255;
+        if (!isInside) {
+            outputData[pixelIndex + 3] = 0;
+        }
+        else if (distance <= threshold) {
+            const gradientValue = distance / threshold;
+            outputData[pixelIndex + 3] = Math.floor(gradientValue * 255);
+        }
+        else {
+            outputData[pixelIndex + 3] = 255;
+        }
+    }
+}
+/**
  * Calculates the Euclidean distance transform of a binary mask.
  * Uses a two-pass algorithm for efficiency.
  * @param binaryMask - Binary mask where 1 = inside, 0 = outside

@@ -1,6 +1,6 @@
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { createCanvas, createCanvasWithContext } from "./utils/CommonUtils.js";
-import { applyLuminanceAsAlpha, calculateDistanceTransform, imageDataToBinaryMask } from "./utils/MaskPixelUtils.js";
+import { applyLuminanceAsAlpha, calculateDistanceTransform, imageDataToBinaryMask, rasterizeDistanceFieldMask } from "./utils/MaskPixelUtils.js";
 const log = createModuleLogger('Mask_tool');
 export class MaskTool {
     constructor(canvasInstance, callbacks = {}) {
@@ -500,33 +500,7 @@ export class MaskTool {
         const outputData = tempCtx.createImageData(width, height);
         // Use featherRadius as the threshold for the gradient
         const threshold = Math.min(featherRadius, maxDistance);
-        for (let i = 0; i < distanceMap.length; i++) {
-            const distance = distanceMap[i];
-            const isInside = binaryData[i] === 1;
-            if (!isInside) {
-                // Transparent pixels remain transparent
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 0;
-            }
-            else if (distance <= threshold) {
-                // Edge area - apply gradient alpha (from edge inward)
-                const gradientValue = distance / threshold;
-                const alphaValue = Math.floor(gradientValue * 255);
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = alphaValue;
-            }
-            else {
-                // Inner area - full alpha (no blending effect)
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 255;
-            }
-        }
+        rasterizeDistanceFieldMask(distanceMap, binaryData, threshold, outputData.data);
         return outputData;
     }
     /**

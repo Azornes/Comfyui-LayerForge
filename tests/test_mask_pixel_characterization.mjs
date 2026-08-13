@@ -7,6 +7,7 @@ import {
   applyLuminanceAsAlpha,
   fillInverseAlphaMask,
   imageDataToBinaryMask,
+  rasterizeDistanceFieldMask,
 } from '../js/utils/MaskPixelUtils.js';
 
 function installCanvasStub(sourceAlpha) {
@@ -140,6 +141,8 @@ test('mask consumers use one shared distance transform implementation', async ()
   assert.match(imageAnalysisSource, /from "\.\/MaskPixelUtils\.js"/);
   assert.match(maskToolSource, /from "\.\/utils\/MaskPixelUtils\.js"/);
   assert.match(maskToolSource, /calculateDistanceTransform\(binaryData, width, height\)/);
+  assert.match(imageAnalysisSource, /rasterizeDistanceFieldMask\(distanceField, binaryMask, threshold, maskData\.data\)/);
+  assert.match(maskToolSource, /rasterizeDistanceFieldMask\(distanceMap, binaryData, threshold, outputData\.data\)/);
   assert.match(maskToolSource, /applyLuminanceAsAlpha\(imgData\)/);
   assert.match(maskToolSource, /applyLuminanceAsAlpha\(sourceImageData\)/);
   assert.match(maskToolSource, /imageDataToBinaryMask\(maskImage, width, height, 0\)/);
@@ -191,6 +194,34 @@ test('shared mask pixel helpers preserve luminance, inverse alpha, and explicit 
   };
   assert.deepEqual([...imageDataToBinaryMask(channelData, 2, 1, 0)], [1, 0]);
   assert.deepEqual([...imageDataToBinaryMask(channelData, 2, 1, 3)], [0, 1]);
+});
+
+test('shared distance-field rasterizer preserves masked, opaque, and zero-threshold pixels', () => {
+  const outputData = new Uint8ClampedArray(16);
+  rasterizeDistanceFieldMask(
+    new Float32Array([0, 1, 2, 3]),
+    new Uint8Array([0, 1, 1, 1]),
+    2,
+    outputData
+  );
+  assert.deepEqual([...outputData], [
+    255, 255, 255, 0,
+    255, 255, 255, 127,
+    255, 255, 255, 255,
+    255, 255, 255, 255,
+  ]);
+
+  const opaqueOutput = new Uint8ClampedArray(8);
+  rasterizeDistanceFieldMask(
+    new Float32Array([0, 1]),
+    null,
+    0,
+    opaqueOutput
+  );
+  assert.deepEqual([...opaqueOutput], [
+    255, 255, 255, 0,
+    255, 255, 255, 255,
+  ]);
 });
 
 test('MaskTool converts shape pixels through the existing red-channel binary contract', () => {
@@ -260,6 +291,41 @@ test('MaskTool preserves luminance-to-alpha behavior for input and layer masks',
     assert.deepEqual(layerStubs.outputs[0], expected);
   } finally {
     layerStubs.restore();
+  }
+});
+
+test('MaskTool feather rasterization preserves edge interpolation and threshold-zero behavior', () => {
+  const stubs = installCanvasStub([]);
+  const maskTool = Object.create(MaskTool.prototype);
+
+  try {
+    const feathered = maskTool.applyFeatherToDistanceMap(
+      new Float32Array([0, 1, 2, 3]),
+      new Uint8Array([0, 1, 1, 1]),
+      2,
+      4,
+      1
+    );
+    assert.deepEqual([...feathered.data], [
+      255, 255, 255, 0,
+      255, 255, 255, 127,
+      255, 255, 255, 255,
+      255, 255, 255, 255,
+    ]);
+
+    const zeroThreshold = maskTool.applyFeatherToDistanceMap(
+      new Float32Array([0, 1]),
+      new Uint8Array([1, 1]),
+      0,
+      2,
+      1
+    );
+    assert.deepEqual([...zeroThreshold.data], [
+      255, 255, 255, 0,
+      255, 255, 255, 255,
+    ]);
+  } finally {
+    stubs.restore();
   }
 });
 

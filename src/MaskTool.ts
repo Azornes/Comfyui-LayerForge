@@ -3,7 +3,8 @@ import { createCanvas, createCanvasWithContext } from "./utils/CommonUtils.js";
 import {
     applyLuminanceAsAlpha,
     calculateDistanceTransform,
-    imageDataToBinaryMask
+    imageDataToBinaryMask,
+    rasterizeDistanceFieldMask
 } from "./utils/MaskPixelUtils.js";
 import type { Canvas } from './Canvas';
 import type { Point, CanvasState, Layer } from './types';
@@ -664,33 +665,7 @@ export class MaskTool {
 
         // Use featherRadius as the threshold for the gradient
         const threshold = Math.min(featherRadius, maxDistance);
-
-        for (let i = 0; i < distanceMap.length; i++) {
-            const distance = distanceMap[i];
-            const isInside = binaryData[i] === 1;
-            
-            if (!isInside) {
-                // Transparent pixels remain transparent
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 0;
-            } else if (distance <= threshold) {
-                // Edge area - apply gradient alpha (from edge inward)
-                const gradientValue = distance / threshold;
-                const alphaValue = Math.floor(gradientValue * 255);
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = alphaValue;
-            } else {
-                // Inner area - full alpha (no blending effect)
-                outputData.data[i * 4] = 255;
-                outputData.data[i * 4 + 1] = 255;
-                outputData.data[i * 4 + 2] = 255;
-                outputData.data[i * 4 + 3] = 255;
-            }
-        }
+        rasterizeDistanceFieldMask(distanceMap, binaryData, threshold, outputData.data);
 
         return outputData;
     }
