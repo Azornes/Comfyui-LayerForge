@@ -4,17 +4,20 @@ export class ImageCache {
     constructor() {
         this.cache = new Map();
     }
-    set(key, imageData) {
-        log.info("Caching image data for key:", key);
-        this.cache.set(key, imageData);
+    set(key, image) {
+        log.info("Caching image for key:", key);
+        this.cache.set(key, image);
     }
     get(key) {
-        const data = this.cache.get(key);
-        log.debug("Retrieved cached data for key:", key, !!data);
-        return data;
+        const image = this.cache.get(key);
+        log.debug("Retrieved cached image for key:", key, !!image);
+        return image;
     }
     has(key) {
         return this.cache.has(key);
+    }
+    delete(key) {
+        return this.cache.delete(key);
     }
     clear() {
         log.info("Clearing image cache");

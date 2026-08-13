@@ -17,6 +17,7 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "./CanvasIO.js";
 import {ImageReferenceManager} from "./ImageReferenceManager.js";
 import {BatchPreviewManager} from "./BatchPreviewManager.js";
+import {ImageCache} from "./ImageCache.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import { debounce, createCanvas } from "./utils/CommonUtils.js";
 import {MaskEditorIntegration} from "./MaskEditorIntegration.js";
@@ -59,7 +60,7 @@ export class Canvas {
     ctx: CanvasRenderingContext2D;
     dataInitialized: boolean;
     height: number;
-    imageCache: Map<string, any>;
+    imageCache: ImageCache;
     imageReferenceManager: ImageReferenceManager;
     interaction: any;
     isMouseOver: boolean;
@@ -145,7 +146,7 @@ export class Canvas {
         this.pendingDataCheck = null;
         this.pendingInputDataCheck = null;
         this.inputDataLoaded = false;
-        this.imageCache = new Map();
+        this.imageCache = new ImageCache();
 
         this.requestSaveState = () => {};
         this.outputAreaShape = null;

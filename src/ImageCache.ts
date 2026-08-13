@@ -1,28 +1,32 @@
 import {createModuleLogger} from "./log_system/log_funcs.js";
-import type { ImageDataPixel } from './types';
+import type { CachedImage, ImageCacheContract } from './types';
 
 const log = createModuleLogger('ImageCache');
 
-export class ImageCache {
-    private cache: Map<string, ImageDataPixel>;
+export class ImageCache implements ImageCacheContract {
+    private cache: Map<string, CachedImage>;
 
     constructor() {
         this.cache = new Map();
     }
 
-    set(key: string, imageData: ImageDataPixel): void {
-        log.info("Caching image data for key:", key);
-        this.cache.set(key, imageData);
+    set(key: string, image: CachedImage): void {
+        log.info("Caching image for key:", key);
+        this.cache.set(key, image);
     }
 
-    get(key: string): ImageDataPixel | undefined {
-        const data = this.cache.get(key);
-        log.debug("Retrieved cached data for key:", key, !!data);
-        return data;
+    get(key: string): CachedImage | undefined {
+        const image = this.cache.get(key);
+        log.debug("Retrieved cached image for key:", key, !!image);
+        return image;
     }
 
     has(key: string): boolean {
         return this.cache.has(key);
+    }
+
+    delete(key: string): boolean {
+        return this.cache.delete(key);
     }
 
     clear(): void {

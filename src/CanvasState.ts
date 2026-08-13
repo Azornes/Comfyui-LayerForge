@@ -177,9 +177,8 @@ export class CanvasState {
 
         if (this.canvas.imageCache.has(layerData.imageId)) {
             log.debug(`Layer ${index}: Image found in cache.`);
-            const imageData = this.canvas.imageCache.get(layerData.imageId);
-            if (imageData) {
-                const imageSrc = URL.createObjectURL(new Blob([imageData.data]));
+            const imageSrc = this.canvas.imageCache.get(layerData.imageId);
+            if (imageSrc) {
                 this._createLayerFromSrc(layerData, imageSrc, index, resolve);
             } else {
                 resolve(null);

@@ -178,6 +178,16 @@ export interface Tensor {
     height: number;
 }
 
+export type CachedImage = string | ImageBitmap;
+
+export interface ImageCacheContract {
+    get(key: string): CachedImage | undefined;
+    set(key: string, image: CachedImage): void;
+    has(key: string): boolean;
+    delete(key: string): boolean;
+    clear(): void;
+}
+
 export interface ImageDataPixel {
     data: Uint8ClampedArray;
     width: number;

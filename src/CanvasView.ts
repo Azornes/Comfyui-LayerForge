@@ -13,7 +13,6 @@ import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js"
 
 import {Canvas} from "./Canvas.js";
 import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
-import {ImageCache} from "./ImageCache.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
@@ -160,7 +159,6 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
     });
-    const imageCache = new ImageCache();
 
     /**
      * Helper function to update the icon of a switch component.
