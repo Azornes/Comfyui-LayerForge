@@ -38,6 +38,34 @@ const useChainCallback = (original: any, next: any) => {
 
 const log = createModuleLogger('Canvas');
 
+const CANVAS_IMAGE_PREVIEW_WIDGET = "$$canvas-image-preview";
+const NATIVE_PREVIEW_HEIGHT = 180;
+
+export const configureCanvasImagePreviewWidget = (imagePreviewWidget: any, visible: boolean): void => {
+    const previewHeight = visible ? NATIVE_PREVIEW_HEIGHT : 0;
+
+    if (imagePreviewWidget.options) {
+        imagePreviewWidget.options.hidden = !visible;
+        imagePreviewWidget.options.visible = visible;
+        imagePreviewWidget.options.getMinHeight = () => previewHeight;
+        imagePreviewWidget.options.getHeight = () => previewHeight;
+        imagePreviewWidget.options.getMaxHeight = () => previewHeight;
+    }
+    imagePreviewWidget.hidden = !visible;
+    if ('visible' in imagePreviewWidget) {
+        imagePreviewWidget.visible = visible;
+    }
+
+    // Recent ComfyUI versions use computeLayoutSize(), while older versions
+    // use computeSize(). Configure both before the widget enters the node.
+    imagePreviewWidget.computeLayoutSize = () => ({
+        minHeight: previewHeight,
+        maxHeight: previewHeight,
+        minWidth: visible ? 1 : 0,
+    });
+    imagePreviewWidget.computeSize = () => [0, previewHeight];
+};
+
 /**
  * Canvas - Fasada dla systemu rysowania
  *
@@ -227,39 +255,17 @@ export class Canvas {
         this.previewVisible = visible;
         log.info("Canvas preview visibility set to:", visible);
 
-        const imagePreviewWidget = await this.waitForWidget("$$canvas-image-preview", this.node) as any;
+        let imagePreviewWidget = this.node.widgets?.find((widget: any) => widget.name === CANVAS_IMAGE_PREVIEW_WIDGET) as any;
+        if (!imagePreviewWidget) {
+            imagePreviewWidget = await this.waitForWidget(CANVAS_IMAGE_PREVIEW_WIDGET, this.node).catch(() => null) as any;
+        }
         if (imagePreviewWidget) {
             log.debug("Found $$canvas-image-preview widget, controlling visibility");
 
-            if (visible) {
-                if (imagePreviewWidget.options) {
-                    imagePreviewWidget.options.hidden = false;
-                }
-                if ('visible' in imagePreviewWidget) {
-                    imagePreviewWidget.visible = true;
-                }
-                if ('hidden' in imagePreviewWidget) {
-                    imagePreviewWidget.hidden = false;
-                }
-                imagePreviewWidget.computeSize = function () {
-                    return [0, 250]; // Szerokość 0 (auto), wysokość 250
-                };
-            } else {
-                if (imagePreviewWidget.options) {
-                    imagePreviewWidget.options.hidden = true;
-                }
-                if ('visible' in imagePreviewWidget) {
-                    imagePreviewWidget.visible = false;
-                }
-                if ('hidden' in imagePreviewWidget) {
-                    imagePreviewWidget.hidden = true;
-                }
+            configureCanvasImagePreviewWidget(imagePreviewWidget, visible);
 
-                imagePreviewWidget.computeSize = function () {
-                    return [0, 0]; // Szerokość 0, wysokość 0
-                };
-            }
-            this.render()
+            this.node.setDirtyCanvas?.(true, true);
+            this.render();
         } else {
             log.warn("$$canvas-image-preview widget not found in Canvas.js");
         }

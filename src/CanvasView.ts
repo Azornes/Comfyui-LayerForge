@@ -11,7 +11,7 @@ import {$el} from "../../scripts/ui.js";
 
 import { addStylesheet, getUrl, loadTemplate } from "./utils/ResourceManager.js";
 
-import {Canvas} from "./Canvas.js";
+import {Canvas, configureCanvasImagePreviewWidget} from "./Canvas.js";
 import {clearAllCanvasStates, getCanvasState, setCanvasState} from "./db.js";
 import {generateUniqueFileName, createCanvas} from "./utils/CommonUtils.js";
 import { loadImageFromBlob } from "./utils/ImageUtils.js";
@@ -1772,7 +1772,14 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     mainContainer.addEventListener('keydown', handleRootUndoRedo, true);
 
     if (node.addDOMWidget) {
-        node.addDOMWidget("mainContainer", "widget", mainContainer);
+        const getEditorWidgetHeight = () => {
+            const controlsHeight = controlsElement instanceof HTMLElement ? controlsElement.offsetHeight : 0;
+            return Math.max(300, controlsHeight + 180);
+        };
+        (node.addDOMWidget as any)("mainContainer", "widget", mainContainer, {
+            getMinHeight: getEditorWidgetHeight,
+            getHeight: getEditorWidgetHeight,
+        });
     }
 
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`) as HTMLButtonElement;
@@ -2007,6 +2014,21 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function (this: ComfyNode) {
                 log.debug("CanvasNode onNodeCreated: Base widget setup.");
                 const r = onNodeCreated?.apply(this, arguments as any);
+
+                const nodeWithPreviewHook = this as any;
+                const originalAddCustomWidget = nodeWithPreviewHook.addCustomWidget;
+                if (typeof originalAddCustomWidget === "function" && !nodeWithPreviewHook.__layerForgePreviewWidgetHooked) {
+                    nodeWithPreviewHook.addCustomWidget = function (customWidget: any, ...args: any[]) {
+                        if (customWidget?.name === "$$canvas-image-preview" || customWidget?.type === "IMAGE_PREVIEW") {
+                            const showPreviewWidget = this.widgets?.find((widget: any) => widget.name === "show_preview");
+                            configureCanvasImagePreviewWidget(customWidget, showPreviewWidget?.value === true);
+                        }
+
+                        return originalAddCustomWidget.call(this, customWidget, ...args);
+                    };
+                    nodeWithPreviewHook.__layerForgePreviewWidgetHooked = true;
+                }
+
                 this.size = [1150, 1000];
                 return r;
             };
