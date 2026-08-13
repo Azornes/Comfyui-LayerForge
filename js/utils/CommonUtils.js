@@ -309,6 +309,13 @@ export function createCanvas(width, height, contextType = '2d', contextOptions =
     const ctx = canvas.getContext(contextType, contextOptions);
     return { canvas, ctx };
 }
+export function cloneCanvas(source) {
+    const { canvas, ctx } = createCanvas(source.width, source.height, '2d', { willReadFrequently: true });
+    if (ctx) {
+        ctx.drawImage(source, 0, 0);
+    }
+    return canvas;
+}
 /**
  * Creates a canvas and requires a usable rendering context.
  */

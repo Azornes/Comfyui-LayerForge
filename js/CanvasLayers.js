@@ -991,23 +991,21 @@ export class CanvasLayers {
         maskCtx.putImageData(maskData, 0, 0);
         return { canvas: maskCanvas, ctx: maskCtx };
     }
-    async mirrorHorizontal() {
-        if (this.canvas.canvasSelection.selectedLayers.length === 0)
+    toggleSelectedFlip(axis) {
+        const selectedLayers = this.canvas.canvasSelection.selectedLayers;
+        if (selectedLayers.length === 0)
             return;
-        this.canvas.canvasSelection.selectedLayers.forEach((layer) => {
-            layer.flipH = !layer.flipH;
+        selectedLayers.forEach((layer) => {
+            layer[axis] = !layer[axis];
         });
         this.canvas.render();
         this.canvas.requestSaveState();
     }
+    async mirrorHorizontal() {
+        this.toggleSelectedFlip('flipH');
+    }
     async mirrorVertical() {
-        if (this.canvas.canvasSelection.selectedLayers.length === 0)
-            return;
-        this.canvas.canvasSelection.selectedLayers.forEach((layer) => {
-            layer.flipV = !layer.flipV;
-        });
-        this.canvas.render();
-        this.canvas.requestSaveState();
+        this.toggleSelectedFlip('flipV');
     }
     async getLayerImageData(layer) {
         try {

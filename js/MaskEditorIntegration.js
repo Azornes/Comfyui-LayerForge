@@ -8,7 +8,7 @@ import { uploadImageBlob } from "./utils/ImageUploadUtils.js";
 import { applyMaskResultToTool, processMaskForViewport } from "./utils/MaskProcessingUtils.js";
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
-import { createCanvas } from "./utils/CommonUtils.js";
+import { cloneCanvas } from "./utils/CommonUtils.js";
 import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
 import { loadImage } from "./utils/ImageUtils.js";
 const log = createModuleLogger('MaskEditorIntegration');
@@ -329,10 +329,7 @@ export class MaskEditorIntegration {
             return null;
         }
         const maskCanvas = this.maskTool.maskCanvas;
-        const { canvas: savedCanvas, ctx: savedCtx } = createCanvas(maskCanvas.width, maskCanvas.height, '2d', { willReadFrequently: true });
-        if (savedCtx) {
-            savedCtx.drawImage(maskCanvas, 0, 0);
-        }
+        const savedCanvas = cloneCanvas(maskCanvas);
         return {
             maskData: savedCanvas,
             maskPosition: {

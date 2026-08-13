@@ -1,7 +1,7 @@
 import {getCanvasState, setCanvasState, saveImage, getImage} from "./db.js";
 import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showAlertNotification, showAllNotificationTypes} from "./utils/NotificationUtils.js";
-import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas} from "./utils/CommonUtils.js";
+import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas, cloneCanvas} from "./utils/CommonUtils.js";
 import {loadImage} from "./utils/ImageUtils.js";
 import {withErrorHandling} from "./ErrorHandler.js";
 import type { Canvas } from './Canvas';
@@ -383,10 +383,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
             this.maskUndoStack.pop();
         }
         const maskCanvas = this.canvas.maskTool.getMask();
-        const { canvas: clonedCanvas, ctx: clonedCtx } = createCanvas(maskCanvas.width, maskCanvas.height, '2d', { willReadFrequently: true });
-        if (clonedCtx) {
-            clonedCtx.drawImage(maskCanvas, 0, 0);
-        }
+        const clonedCanvas = cloneCanvas(maskCanvas);
 
         this.maskUndoStack.push(clonedCanvas);
 

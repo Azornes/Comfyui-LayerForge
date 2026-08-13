@@ -378,6 +378,19 @@ export function createCanvas(width: number, height: number, contextType = '2d', 
     return { canvas, ctx };
 }
 
+export function cloneCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+    const { canvas, ctx } = createCanvas(
+        source.width,
+        source.height,
+        '2d',
+        { willReadFrequently: true }
+    );
+    if (ctx) {
+        ctx.drawImage(source, 0, 0);
+    }
+    return canvas;
+}
+
 /**
  * Creates a canvas and requires a usable rendering context.
  */
