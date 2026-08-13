@@ -5,6 +5,43 @@ import type { Tensor, ImageDataPixel } from '../types';
 
 const log = createModuleLogger('ImageUtils');
 
+interface TensorPixelData {
+    shape: number[];
+    data: ArrayLike<number>;
+}
+
+function tensorToRgbaPixels(tensor: TensorPixelData, dimensionsLog: string): ImageDataPixel {
+    const shape = tensor.shape;
+    const height = shape[1];
+    const width = shape[2];
+    const channels = shape[3];
+    const floatData = new Float32Array(tensor.data);
+
+    log.debug(dimensionsLog, {height, width, channels});
+
+    const rgbaData = new Uint8ClampedArray(width * height * 4);
+
+    for (let h = 0; h < height; h++) {
+        for (let w = 0; w < width; w++) {
+            const pixelIndex = (h * width + w) * 4;
+            const tensorIndex = (h * width + w) * channels;
+
+            for (let c = 0; c < channels; c++) {
+                const value = floatData[tensorIndex + c];
+                rgbaData[pixelIndex + c] = Math.max(0, Math.min(255, Math.round(value * 255)));
+            }
+
+            rgbaData[pixelIndex + 3] = 255;
+        }
+    }
+
+    return {
+        data: rgbaData,
+        width: width,
+        height: height
+    };
+}
+
 export function validateImageData(data: any): boolean {
     log.debug("Validating data structure:", {
         hasData: !!data,
@@ -55,35 +92,7 @@ export function convertImageData(data: any): ImageDataPixel {
         data = data[0];
     }
 
-    const shape = data.shape;
-    const height = shape[1];
-    const width = shape[2];
-    const channels = shape[3];
-    const floatData = new Float32Array(data.data);
-
-    log.debug("Processing dimensions:", {height, width, channels});
-
-    const rgbaData = new Uint8ClampedArray(width * height * 4);
-
-    for (let h = 0; h < height; h++) {
-        for (let w = 0; w < width; w++) {
-            const pixelIndex = (h * width + w) * 4;
-            const tensorIndex = (h * width + w) * channels;
-
-            for (let c = 0; c < channels; c++) {
-                const value = floatData[tensorIndex + c];
-                rgbaData[pixelIndex + c] = Math.max(0, Math.min(255, Math.round(value * 255)));
-            }
-
-            rgbaData[pixelIndex + 3] = 255;
-        }
-    }
-
-    return {
-        data: rgbaData,
-        width: width,
-        height: height
-    };
+    return tensorToRgbaPixels(data, "Processing dimensions:");
 }
 
 export function applyMaskToImageData(imageData: ImageDataPixel, maskData: Tensor): ImageDataPixel {
@@ -128,35 +137,7 @@ export const prepareImageForCanvas = withErrorHandling(function (inputImage: any
         throw createValidationError("Invalid input image format", {inputImage});
     }
 
-    const shape = inputImage.shape;
-    const height = shape[1];
-    const width = shape[2];
-    const channels = shape[3];
-    const floatData = new Float32Array(inputImage.data);
-
-    log.debug("Image dimensions:", {height, width, channels});
-
-    const rgbaData = new Uint8ClampedArray(width * height * 4);
-
-    for (let h = 0; h < height; h++) {
-        for (let w = 0; w < width; w++) {
-            const pixelIndex = (h * width + w) * 4;
-            const tensorIndex = (h * width + w) * channels;
-
-            for (let c = 0; c < channels; c++) {
-                const value = floatData[tensorIndex + c];
-                rgbaData[pixelIndex + c] = Math.max(0, Math.min(255, Math.round(value * 255)));
-            }
-
-            rgbaData[pixelIndex + 3] = 255;
-        }
-    }
-
-    return {
-        data: rgbaData,
-        width: width,
-        height: height
-    };
+    return tensorToRgbaPixels(inputImage, "Image dimensions:");
 }, 'prepareImageForCanvas');
 
 export const imageToTensor = withErrorHandling(async function (image: HTMLImageElement | HTMLCanvasElement): Promise<Tensor> {

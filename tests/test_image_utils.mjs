@@ -53,6 +53,20 @@ test('prepareImageForCanvas returns pixels and reports validation errors', async
   );
 });
 
+test('convertImageData and prepareImageForCanvas preserve identical RGB conversion semantics', async () => {
+  const tensor = {
+    shape: [1, 1, 2, 3],
+    data: new Float32Array([-0.1, 0.5, 1.2, 0.25, 0.5, 0.75]),
+  };
+
+  const converted = convertImageData(tensor);
+  const prepared = await prepareImageForCanvas([tensor]);
+
+  assert.equal(converted.width, prepared.width);
+  assert.equal(converted.height, prepared.height);
+  assert.deepEqual([...converted.data], [...prepared.data]);
+});
+
 test('tensorToImageData supports grayscale masks without a browser canvas', () => {
   const originalImageData = globalThis.ImageData;
   globalThis.ImageData = class {
