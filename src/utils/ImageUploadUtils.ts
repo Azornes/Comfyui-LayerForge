@@ -2,7 +2,7 @@
 import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
-import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
+import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
 
 const log = createModuleLogger('ImageUploadUtils');
 
@@ -30,6 +30,45 @@ export interface UploadImageResult {
     imageUrl: string;
     /** Created Image element */
     imageElement: HTMLImageElement;
+}
+
+interface CanvasBlobUploadConfig {
+    variant: CanvasBlobVariant;
+    allowNativeCanvasFallback: boolean;
+    unsupportedCanvasMessage: string;
+    emptyBlobMessage: string;
+}
+
+async function getCanvasBlobForUpload(
+    canvas: any,
+    uploadOptions: UploadImageOptions,
+    config: CanvasBlobUploadConfig
+): Promise<Blob> {
+    if (!canvas) {
+        throw createValidationError("Canvas is required", { canvas });
+    }
+
+    const supportsVariant = supportsFlattenedCanvasBlob(canvas, config.variant);
+    let blob: Blob | null = null;
+
+    if (supportsVariant) {
+        blob = await getFlattenedCanvasBlob(canvas, config.variant);
+    } else if (config.allowNativeCanvasFallback && canvas instanceof HTMLCanvasElement) {
+        blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
+    } else {
+        throw createValidationError(config.unsupportedCanvasMessage, {
+            canvas,
+            hasCanvasLayers: !!canvas.canvasLayers,
+            isHTMLCanvas: canvas instanceof HTMLCanvasElement,
+            ...(config.variant === 'with-mask' ? { hasMaskMethod: supportsVariant } : {})
+        });
+    }
+
+    if (!blob) {
+        throw createValidationError(config.emptyBlobMessage, { canvas, options: uploadOptions });
+    }
+
+    return blob;
 }
 
 /**
@@ -126,31 +165,12 @@ export const uploadImageBlob = withErrorHandling(async function(blob: Blob, opti
  * @returns Promise with upload result
  */
 export const uploadCanvasAsImage = withErrorHandling(async function(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
-    if (!canvas) {
-        throw createValidationError("Canvas is required", { canvas });
-    }
-
-    let blob: Blob | null = null;
-
-    // Handle different canvas types
-    if (supportsFlattenedCanvasBlob(canvas, 'plain')) {
-        // LayerForge Canvas object
-        blob = await getFlattenedCanvasBlob(canvas, 'plain');
-    } else if (canvas instanceof HTMLCanvasElement) {
-        // Standard HTML Canvas
-        blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
-    } else {
-        throw createValidationError("Unsupported canvas type", { 
-            canvas,
-            hasCanvasLayers: !!canvas.canvasLayers,
-            isHTMLCanvas: canvas instanceof HTMLCanvasElement
-        });
-    }
-
-    if (!blob) {
-        throw createValidationError("Failed to generate canvas blob", { canvas, options });
-    }
-
+    const blob = await getCanvasBlobForUpload(canvas, options, {
+        variant: 'plain',
+        allowNativeCanvasFallback: true,
+        unsupportedCanvasMessage: "Unsupported canvas type",
+        emptyBlobMessage: "Failed to generate canvas blob"
+    });
     return uploadImageBlob(blob, options);
 }, 'uploadCanvasAsImage');
 
@@ -161,21 +181,11 @@ export const uploadCanvasAsImage = withErrorHandling(async function(canvas: any,
  * @returns Promise with upload result
  */
 export const uploadCanvasWithMaskAsImage = withErrorHandling(async function(canvas: any, options: UploadImageOptions = {}): Promise<UploadImageResult> {
-    if (!canvas) {
-        throw createValidationError("Canvas is required", { canvas });
-    }
-    if (!supportsFlattenedCanvasBlob(canvas, 'with-mask')) {
-        throw createValidationError("Canvas does not support mask operations", {
-            canvas,
-            hasCanvasLayers: !!canvas.canvasLayers,
-            hasMaskMethod: supportsFlattenedCanvasBlob(canvas, 'with-mask')
-        });
-    }
-
-    const blob = await getFlattenedCanvasBlob(canvas, 'with-mask');
-    if (!blob) {
-        throw createValidationError("Failed to generate canvas with mask blob", { canvas, options });
-    }
-
+    const blob = await getCanvasBlobForUpload(canvas, options, {
+        variant: 'with-mask',
+        allowNativeCanvasFallback: false,
+        unsupportedCanvasMessage: "Canvas does not support mask operations",
+        emptyBlobMessage: "Failed to generate canvas with mask blob"
+    });
     return uploadImageBlob(blob, options);
 }, 'uploadCanvasWithMaskAsImage');

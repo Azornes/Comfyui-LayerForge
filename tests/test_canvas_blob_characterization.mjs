@@ -121,8 +121,11 @@ test('shared canvas blob dispatcher maps variants and reports support', async ()
 test('canvas blob callers preserve plain and mask method responsibilities', () => {
   const [imageUploadSource, previewSource, maskEditorSource, canvasViewSource, blobUtilsSource] = sourceFiles;
 
-  assert.match(imageUploadSource, /getFlattenedCanvasBlob\(canvas, 'plain'\)/);
-  assert.match(imageUploadSource, /getFlattenedCanvasBlob\(canvas, 'with-mask'\)/);
+  assert.match(imageUploadSource, /getFlattenedCanvasBlob\(canvas, config\.variant\)/);
+  assert.match(imageUploadSource, /variant: 'plain'/);
+  assert.match(imageUploadSource, /variant: 'with-mask'/);
+  assert.match(imageUploadSource, /allowNativeCanvasFallback: true/);
+  assert.match(imageUploadSource, /allowNativeCanvasFallback: false/);
   assert.match(previewSource, /getFlattenedCanvasBlob\(canvas, variant\)/);
   assert.match(previewSource, /supportsFlattenedCanvasBlob\(canvas, 'with-mask'\)/);
   assert.match(maskEditorSource, /getFlattenedCanvasBlob\(this\.canvas, 'plain'\)/);
