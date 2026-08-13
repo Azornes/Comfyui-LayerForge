@@ -1046,6 +1046,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
                             
                             canvas.layers[selectedLayerIndex] = newLayer;
                             canvas.canvasSelection.updateSelection([newLayer]);
+                            canvas.canvasLayersPanel?.onLayersChanged();
                             
                             // Invalidate processed image cache when layer image changes (matting)
                             canvas.canvasLayers.invalidateProcessedImageCache(newLayer.id);

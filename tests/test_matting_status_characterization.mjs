@@ -58,3 +58,10 @@ test('CanvasView delegates both model status checks to the shared helper', () =>
   assert.doesNotMatch(canvasViewSource, /const modelCheckUrl =/);
   assert.doesNotMatch(canvasViewSource, /fetch\(['"]\/matting\/check-model/);
 });
+
+test('Matting refreshes the layer panel after replacing a layer object', () => {
+  assert.match(
+    canvasViewSource,
+    /canvas\.layers\[selectedLayerIndex\] = newLayer;\s+canvas\.canvasSelection\.updateSelection\(\[newLayer\]\);\s+canvas\.canvasLayersPanel\?\.onLayersChanged\(\);/,
+  );
+});
