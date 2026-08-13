@@ -261,6 +261,18 @@ export class MaskTool {
         };
     }
     /**
+     * Runs an operation for every chunk intersecting a rectangular mask area.
+     */
+    forEachChunkInArea(area, operation) {
+        const chunkBounds = this.calculateChunkBounds(area.left, area.top, area.right, area.bottom);
+        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
+            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
+                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
+                operation(chunk);
+            }
+        }
+    }
+    /**
      * Activates chunks in a specific area and surrounding chunks for visibility
      */
     activateChunksInArea(left, top, right, bottom) {
@@ -1567,107 +1579,55 @@ export class MaskTool {
     addMask(image) {
         // Add mask to chunks system instead of directly to active canvas
         const bounds = this.canvasInstance.outputAreaBounds;
-        // Calculate which chunks this mask will affect
-        const maskLeft = bounds.x;
-        const maskTop = bounds.y;
-        const maskRight = bounds.x + image.width;
-        const maskBottom = bounds.y + image.height;
-        const chunkBounds = this.calculateChunkBounds(maskLeft, maskTop, maskRight, maskBottom);
-        // Add mask to all affected chunks
-        for (let chunkY = chunkBounds.minY; chunkY <= chunkBounds.maxY; chunkY++) {
-            for (let chunkX = chunkBounds.minX; chunkX <= chunkBounds.maxX; chunkX++) {
-                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
-                this.addMaskToChunk(chunk, image, bounds);
-            }
-        }
+        const maskArea = {
+            left: bounds.x,
+            top: bounds.y,
+            right: bounds.x + image.width,
+            bottom: bounds.y + image.height
+        };
+        this.forEachChunkInArea(maskArea, (chunk) => {
+            this.performChunkOperation(chunk, image, maskArea, 'add', "Added mask to");
+        });
         // Activate chunks in the area for visibility
-        const activatedChunks = this.activateChunksInArea(maskLeft, maskTop, maskRight, maskBottom);
+        const activatedChunks = this.activateChunksInArea(maskArea.left, maskArea.top, maskArea.right, maskArea.bottom);
         // Update active canvas to show the new mask with activated chunks
         this.updateActiveMaskCanvas(true); // Force full update to show all chunks including newly activated ones
         this.triggerStateChangeAndRender();
-        log.info(`MaskTool added SAM mask to chunks covering bounds (${bounds.x}, ${bounds.y}) to (${maskRight}, ${maskBottom}) and activated ${activatedChunks} chunks for visibility`);
-    }
-    /**
-     * Adds a mask image to a specific chunk
-     */
-    addMaskToChunk(chunk, maskImage, bounds) {
-        const sourceArea = {
-            left: bounds.x,
-            top: bounds.y,
-            right: bounds.x + maskImage.width,
-            bottom: bounds.y + maskImage.height
-        };
-        this.performChunkOperation(chunk, maskImage, sourceArea, 'add', "Added mask to");
+        log.info(`MaskTool added SAM mask to chunks covering bounds (${maskArea.left}, ${maskArea.top}) to (${maskArea.right}, ${maskArea.bottom}) and activated ${activatedChunks} chunks for visibility`);
     }
     /**
      * Applies a mask canvas to the chunked system at a specific world position
      */
     applyMaskCanvasToChunks(maskCanvas, worldX, worldY) {
-        // Calculate which chunks this mask will affect
-        const maskLeft = worldX;
-        const maskTop = worldY;
-        const maskRight = worldX + maskCanvas.width;
-        const maskBottom = worldY + maskCanvas.height;
-        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
-        const chunkMinY = Math.floor(maskTop / this.chunkSize);
-        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
-        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        const maskArea = {
+            left: worldX,
+            top: worldY,
+            right: worldX + maskCanvas.width,
+            bottom: worldY + maskCanvas.height
+        };
         // First, clear the area where the mask will be applied
-        this.clearMaskInArea(maskLeft, maskTop, maskCanvas.width, maskCanvas.height);
+        this.clearMaskInArea(maskArea.left, maskArea.top, maskCanvas.width, maskCanvas.height);
         // Apply mask to all affected chunks
-        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
-            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
-                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
-                this.applyMaskCanvasToChunk(chunk, maskCanvas, worldX, worldY);
-            }
-        }
-        log.info(`Applied mask canvas to chunks covering area (${maskLeft}, ${maskTop}) to (${maskRight}, ${maskBottom})`);
+        this.forEachChunkInArea(maskArea, (chunk) => {
+            this.performChunkOperation(chunk, maskCanvas, maskArea, 'apply', "Applied mask canvas to");
+        });
+        log.info(`Applied mask canvas to chunks covering area (${maskArea.left}, ${maskArea.top}) to (${maskArea.right}, ${maskArea.bottom})`);
     }
     /**
      * Removes a mask canvas from the chunked system at a specific world position
      */
     removeMaskCanvasFromChunks(maskCanvas, worldX, worldY) {
-        // Calculate which chunks this mask will affect
-        const maskLeft = worldX;
-        const maskTop = worldY;
-        const maskRight = worldX + maskCanvas.width;
-        const maskBottom = worldY + maskCanvas.height;
-        const chunkMinX = Math.floor(maskLeft / this.chunkSize);
-        const chunkMinY = Math.floor(maskTop / this.chunkSize);
-        const chunkMaxX = Math.floor(maskRight / this.chunkSize);
-        const chunkMaxY = Math.floor(maskBottom / this.chunkSize);
+        const maskArea = {
+            left: worldX,
+            top: worldY,
+            right: worldX + maskCanvas.width,
+            bottom: worldY + maskCanvas.height
+        };
         // Remove mask from all affected chunks
-        for (let chunkY = chunkMinY; chunkY <= chunkMaxY; chunkY++) {
-            for (let chunkX = chunkMinX; chunkX <= chunkMaxX; chunkX++) {
-                const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
-                this.removeMaskCanvasFromChunk(chunk, maskCanvas, worldX, worldY);
-            }
-        }
-        log.info(`Removed mask canvas from chunks covering area (${maskLeft}, ${maskTop}) to (${maskRight}, ${maskBottom})`);
-    }
-    /**
-     * Removes a mask canvas from a specific chunk using destination-out composition
-     */
-    removeMaskCanvasFromChunk(chunk, maskCanvas, maskWorldX, maskWorldY) {
-        const sourceArea = {
-            left: maskWorldX,
-            top: maskWorldY,
-            right: maskWorldX + maskCanvas.width,
-            bottom: maskWorldY + maskCanvas.height
-        };
-        this.performChunkOperation(chunk, maskCanvas, sourceArea, 'remove', "Removed mask canvas from");
-    }
-    /**
-     * Applies a mask canvas to a specific chunk
-     */
-    applyMaskCanvasToChunk(chunk, maskCanvas, maskWorldX, maskWorldY) {
-        const sourceArea = {
-            left: maskWorldX,
-            top: maskWorldY,
-            right: maskWorldX + maskCanvas.width,
-            bottom: maskWorldY + maskCanvas.height
-        };
-        this.performChunkOperation(chunk, maskCanvas, sourceArea, 'apply', "Applied mask canvas to");
+        this.forEachChunkInArea(maskArea, (chunk) => {
+            this.performChunkOperation(chunk, maskCanvas, maskArea, 'remove', "Removed mask canvas from");
+        });
+        log.info(`Removed mask canvas from chunks covering area (${maskArea.left}, ${maskArea.top}) to (${maskArea.right}, ${maskArea.bottom})`);
     }
     applyShapeMask(saveState = true) {
         // Use unified configuration preparation

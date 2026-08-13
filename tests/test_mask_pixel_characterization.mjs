@@ -294,6 +294,78 @@ test('MaskTool preserves luminance-to-alpha behavior for input and layer masks',
   }
 });
 
+test('MaskTool preserves affected chunk order, boundaries, and source areas', () => {
+  const maskTool = Object.create(MaskTool.prototype);
+  const chunkCalls = [];
+  const clearCalls = [];
+
+  maskTool.chunkSize = 10;
+  maskTool.canvasInstance = {
+    outputAreaBounds: { x: -5, y: 3 },
+  };
+  maskTool.getChunkForPosition = (x, y) => {
+    return { x, y };
+  };
+  maskTool.performChunkOperation = (chunk, source, sourceArea, operation, operationName) => {
+    chunkCalls.push({ chunk, source, sourceArea, operation, operationName });
+  };
+  maskTool.activateChunksInArea = () => 0;
+  maskTool.updateActiveMaskCanvas = () => {};
+  maskTool.triggerStateChangeAndRender = () => {};
+  maskTool.clearMaskInArea = (...args) => clearCalls.push(args);
+
+  const image = { width: 25, height: 15 };
+  const canvas = { width: 25, height: 15 };
+
+  maskTool.addMask(image);
+  assert.deepEqual(
+    chunkCalls.map(({ chunk, operation }) => [chunk.x, chunk.y, operation]),
+    [
+      [-10, 0, 'add'], [0, 0, 'add'], [10, 0, 'add'], [20, 0, 'add'],
+      [-10, 10, 'add'], [0, 10, 'add'], [10, 10, 'add'], [20, 10, 'add'],
+    ],
+  );
+  assert.deepEqual(chunkCalls[0].sourceArea, {
+    left: -5,
+    top: 3,
+    right: 20,
+    bottom: 18,
+  });
+
+  chunkCalls.length = 0;
+  maskTool.applyMaskCanvasToChunks(canvas, -5, 3);
+  assert.deepEqual(clearCalls, [[-5, 3, 25, 15]]);
+  assert.deepEqual(
+    chunkCalls.map(({ chunk, operation }) => [chunk.x, chunk.y, operation]),
+    [
+      [-10, 0, 'apply'], [0, 0, 'apply'], [10, 0, 'apply'], [20, 0, 'apply'],
+      [-10, 10, 'apply'], [0, 10, 'apply'], [10, 10, 'apply'], [20, 10, 'apply'],
+    ],
+  );
+  assert.deepEqual(chunkCalls[0].sourceArea, {
+    left: -5,
+    top: 3,
+    right: 20,
+    bottom: 18,
+  });
+
+  chunkCalls.length = 0;
+  maskTool.removeMaskCanvasFromChunks(canvas, -5, 3);
+  assert.deepEqual(
+    chunkCalls.map(({ chunk, operation }) => [chunk.x, chunk.y, operation]),
+    [
+      [-10, 0, 'remove'], [0, 0, 'remove'], [10, 0, 'remove'], [20, 0, 'remove'],
+      [-10, 10, 'remove'], [0, 10, 'remove'], [10, 10, 'remove'], [20, 10, 'remove'],
+    ],
+  );
+  assert.deepEqual(chunkCalls[0].sourceArea, {
+    left: -5,
+    top: 3,
+    right: 20,
+    bottom: 18,
+  });
+});
+
 test('MaskTool feather rasterization preserves edge interpolation and threshold-zero behavior', () => {
   const stubs = installCanvasStub([]);
   const maskTool = Object.create(MaskTool.prototype);
