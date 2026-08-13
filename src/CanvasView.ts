@@ -19,6 +19,7 @@ import {createModuleLogger} from "./log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "./utils/NotificationUtils.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "./utils/IconLoader.js";
 import { exportCanvasImage, type CanvasExportAction, type CanvasExportVariant } from "./utils/CanvasExportUtils.js";
+import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
 import { fetchMattingModelStatus } from "./utils/MattingUtils.js";
 import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "./SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from './types';
@@ -1344,7 +1345,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         // Debounce the update to prevent excessive processing during rapid changes
         updateOutputTimer = setTimeout(async () => {
             try {
-                const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+                const blob = await getFlattenedCanvasBlob(canvas, 'with-mask');
                 if (blob) {
                     // For large images, use blob URL for better performance
                     if (blob.size > 2 * 1024 * 1024) { // 2MB threshold

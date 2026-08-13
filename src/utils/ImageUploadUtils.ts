@@ -2,6 +2,7 @@
 import { api } from "../../../scripts/api.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
+import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob } from './CanvasBlobUtils.js';
 
 const log = createModuleLogger('ImageUploadUtils');
 
@@ -132,9 +133,9 @@ export const uploadCanvasAsImage = withErrorHandling(async function(canvas: any,
     let blob: Blob | null = null;
 
     // Handle different canvas types
-    if (canvas.canvasLayers && typeof canvas.canvasLayers.getFlattenedCanvasAsBlob === 'function') {
+    if (supportsFlattenedCanvasBlob(canvas, 'plain')) {
         // LayerForge Canvas object
-        blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
+        blob = await getFlattenedCanvasBlob(canvas, 'plain');
     } else if (canvas instanceof HTMLCanvasElement) {
         // Standard HTML Canvas
         blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve));
@@ -163,15 +164,15 @@ export const uploadCanvasWithMaskAsImage = withErrorHandling(async function(canv
     if (!canvas) {
         throw createValidationError("Canvas is required", { canvas });
     }
-    if (!canvas.canvasLayers || typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob !== 'function') {
-        throw createValidationError("Canvas does not support mask operations", { 
+    if (!supportsFlattenedCanvasBlob(canvas, 'with-mask')) {
+        throw createValidationError("Canvas does not support mask operations", {
             canvas,
             hasCanvasLayers: !!canvas.canvasLayers,
-            hasMaskMethod: !!(canvas.canvasLayers && typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob === 'function')
+            hasMaskMethod: supportsFlattenedCanvasBlob(canvas, 'with-mask')
         });
     }
 
-    const blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+    const blob = await getFlattenedCanvasBlob(canvas, 'with-mask');
     if (!blob) {
         throw createValidationError("Failed to generate canvas with mask blob", { canvas, options });
     }

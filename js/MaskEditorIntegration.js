@@ -9,6 +9,7 @@ import { createMaskImageFromResult, processMaskForViewport } from "./utils/MaskP
 import { updateNodePreview } from "./utils/PreviewUtils.js";
 import { mask_editor_showing, mask_editor_listen_for_cancel } from "./utils/mask_utils.js";
 import { createCanvas } from "./utils/CommonUtils.js";
+import { getFlattenedCanvasBlob } from "./utils/CanvasBlobUtils.js";
 const log = createModuleLogger('MaskEditorIntegration');
 export class MaskEditorIntegration {
     constructor(canvas) {
@@ -47,11 +48,11 @@ export class MaskEditorIntegration {
         let blob;
         if (sendCleanImage) {
             log.debug('Getting flattened canvas as blob (clean image)');
-            blob = await this.canvas.canvasLayers.getFlattenedCanvasAsBlob();
+            blob = await getFlattenedCanvasBlob(this.canvas, 'plain');
         }
         else {
             log.debug('Getting flattened canvas for mask editor (with mask)');
-            blob = await this.canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
+            blob = await getFlattenedCanvasBlob(this.canvas, 'with-mask');
         }
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");

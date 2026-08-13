@@ -1,9 +1,4 @@
-function getFlattenedCanvasBlob(canvas, variant) {
-    const methodName = variant === 'with-mask'
-        ? 'getFlattenedCanvasWithMaskAsBlob'
-        : 'getFlattenedCanvasAsBlob';
-    return canvas.canvasLayers[methodName]();
-}
+import { getFlattenedCanvasBlob } from './CanvasBlobUtils.js';
 function openBlob(blob) {
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');

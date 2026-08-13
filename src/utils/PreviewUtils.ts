@@ -1,5 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
+import { getFlattenedCanvasBlob, supportsFlattenedCanvasBlob, type CanvasBlobVariant } from './CanvasBlobUtils.js';
 import type { ComfyNode } from '../types';
 
 const log = createModuleLogger('PreviewUtils');
@@ -57,16 +58,19 @@ export const createPreviewFromCanvas = withErrorHandling(async function(
             throw createValidationError("Canvas does not have canvasLayers", { canvas });
         }
 
-        if (includeMask && typeof canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob === 'function') {
-            blob = await canvas.canvasLayers.getFlattenedCanvasWithMaskAsBlob();
-        } else if (typeof canvas.canvasLayers.getFlattenedCanvasAsBlob === 'function') {
-            blob = await canvas.canvasLayers.getFlattenedCanvasAsBlob();
-        } else {
-            throw createValidationError("Canvas does not support required blob generation methods", { 
+        let variant: CanvasBlobVariant = 'plain';
+        if (includeMask && supportsFlattenedCanvasBlob(canvas, 'with-mask')) {
+            variant = 'with-mask';
+        }
+
+        if (!supportsFlattenedCanvasBlob(canvas, variant)) {
+            throw createValidationError("Canvas does not support required blob generation methods", {
                 canvas,
                 availableMethods: Object.getOwnPropertyNames(canvas.canvasLayers)
             });
         }
+
+        blob = await getFlattenedCanvasBlob(canvas, variant);
     }
 
     if (!blob) {

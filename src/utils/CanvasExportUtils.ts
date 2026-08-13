@@ -1,3 +1,5 @@
+import { getFlattenedCanvasBlob } from './CanvasBlobUtils.js';
+
 export type CanvasExportVariant = 'plain' | 'with-mask';
 export type CanvasExportAction = 'open' | 'copy' | 'download';
 
@@ -5,14 +7,6 @@ export interface CanvasExportOptions {
     action: CanvasExportAction;
     variant: CanvasExportVariant;
     filename?: string;
-}
-
-function getFlattenedCanvasBlob(canvas: any, variant: CanvasExportVariant): Promise<Blob | null> {
-    const methodName = variant === 'with-mask'
-        ? 'getFlattenedCanvasWithMaskAsBlob'
-        : 'getFlattenedCanvasAsBlob';
-
-    return canvas.canvasLayers[methodName]();
 }
 
 function openBlob(blob: Blob): void {
