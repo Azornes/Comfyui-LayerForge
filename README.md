@@ -241,7 +241,7 @@ Click the gear button next to **Matting** to configure its behavior. Settings ar
 - **Processing mode**: remove the background, remove the detected foreground, or apply the generated mask to LayerForge's Draw Mask output-area mask.
 - **Mask threshold**: use `0` for a soft alpha mask or a higher value for a harder cutout.
 
-The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored in separate subdirectories under `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`, then validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
+The model selector separates checkpoints already installed locally from official full-size BiRefNet variants available for download. Downloaded variants are stored directly in `ComfyUI/models/background_removal/` with descriptive filenames such as `BiRefNet-general.safetensors` and `BiRefNet-portrait.safetensors`, then validated against ComfyUI's native loader before use. Lite variants are intentionally excluded because they use a different architecture. Hugging Face cache folders are ignored in the selector and are not deleted.
 
 ### BiRefNet model guide
 

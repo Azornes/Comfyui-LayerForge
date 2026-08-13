@@ -22,7 +22,6 @@ _BIREFNET_FILENAME = "model.safetensors"
 _BIREFNET_DEFAULT_LOCAL_FILENAME = "BiRefNet-general.safetensors"
 _BIREFNET_PROJECT_URL = "https://github.com/ZhengPeng7/BiRefNet"
 _BIREFNET_REMOTE_PREFIX = "remote:"
-_BIREFNET_REMOTE_DIRECTORY = "layerforge_birefnet"
 _BIREFNET_REQUIRED_KEYS = {
     "bb.layers.1.blocks.0.attn.relative_position_index",
     "bb.layers.2.blocks.17.attn.qkv.weight",
@@ -241,25 +240,7 @@ def _get_birefnet_remote_checkpoint_path(model):
     base_paths = _get_birefnet_base_paths()
     if not base_paths:
         return None
-    return os.path.join(
-        base_paths[0],
-        _BIREFNET_REMOTE_DIRECTORY,
-        model["id"],
-        model["local_filename"],
-    )
-
-
-def _get_birefnet_remote_legacy_checkpoint_path(model):
-    """Return the pre-friendly-name path used by earlier LayerForge builds."""
-    base_paths = _get_birefnet_base_paths()
-    if not base_paths:
-        return None
-    return os.path.join(
-        base_paths[0],
-        _BIREFNET_REMOTE_DIRECTORY,
-        model["id"],
-        model["filename"],
-    )
+    return os.path.join(base_paths[0], model["local_filename"])
 
 
 def _migrate_birefnet_checkpoint(
@@ -292,13 +273,11 @@ def _migrate_birefnet_checkpoint(
 
 
 def _find_existing_birefnet_remote_checkpoint(model):
-    """Find a managed remote checkpoint and migrate its old generic filename."""
-    return _migrate_birefnet_checkpoint(
-        _get_birefnet_remote_checkpoint_path(model),
-        _get_birefnet_remote_legacy_checkpoint_path(model),
-        log_description="BiRefNet checkpoint",
-        success_suffix="to the friendly filename",
-    )
+    """Return an installed managed remote checkpoint, when available."""
+    checkpoint_path = _get_birefnet_remote_checkpoint_path(model)
+    if checkpoint_path and _is_native_birefnet_checkpoint(checkpoint_path):
+        return checkpoint_path
+    return None
 
 
 def _get_birefnet_model_options():
@@ -306,21 +285,24 @@ def _get_birefnet_model_options():
     _find_existing_birefnet_default_checkpoint()
     local_options = []
     seen = set()
-    managed_roots = [
-        os.path.normcase(os.path.normpath(os.path.join(base_path, _BIREFNET_REMOTE_DIRECTORY)))
-        for base_path in _get_birefnet_base_paths()
-    ]
+    base_paths = _get_birefnet_base_paths()
+    managed_paths = {
+        os.path.normcase(os.path.normpath(os.path.abspath(path)))
+        for base_path in base_paths
+        for model in _BIREFNET_MODEL_CATALOG
+        for path in [os.path.join(base_path, model["local_filename"])]
+    }
 
     for path in _iter_birefnet_checkpoint_paths():
         normalized = os.path.normcase(os.path.normpath(os.path.abspath(path)))
         if normalized in seen or not _is_native_birefnet_checkpoint(path):
             continue
-        if any(normalized == root or normalized.startswith(root + os.sep) for root in managed_roots):
+        if normalized in managed_paths:
             continue
 
         seen.add(normalized)
         label = os.path.basename(path)
-        for base_path in _get_birefnet_base_paths():
+        for base_path in base_paths:
             try:
                 relative_path = os.path.relpath(path, base_path)
             except ValueError:
@@ -407,12 +389,7 @@ def _download_birefnet_checkpoint(model=None):
     else:
         repository = model["repo_id"]
         filename = model["filename"]
-        download_dir = os.path.join(
-            _get_birefnet_download_dir(),
-            _BIREFNET_REMOTE_DIRECTORY,
-            model["id"],
-        )
-        os.makedirs(download_dir, exist_ok=True)
+        download_dir = _get_birefnet_download_dir()
         model_label = model["label"]
         target_path = _get_birefnet_remote_checkpoint_path(model)
 
