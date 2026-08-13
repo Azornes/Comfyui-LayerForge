@@ -197,6 +197,11 @@ def test_base64_image_conversion_preserves_rgb_and_alpha(layerforge_runtime):
     roundtrip = node_module.convert_tensor_to_base64(rgb_tensor)
     assert roundtrip.startswith("data:image/png;base64,")
 
+    roundtrip_image = Image.open(io.BytesIO(base64.b64decode(roundtrip.split(",", 1)[1])))
+    assert roundtrip_image.mode == "RGB"
+    assert roundtrip_image.size == (2, 2)
+    assert roundtrip_image.getpixel((0, 0)) == (255, 0, 0)
+
 
 def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, monkeypatch):
     import torch

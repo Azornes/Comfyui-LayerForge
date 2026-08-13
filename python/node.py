@@ -15,6 +15,8 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+from .image_serialization import pil_to_data_url
+
 try:
     from .log_system import create_module_logger
 
@@ -252,10 +254,7 @@ class LayerForgeNode:
                     if batch_size == 1:
                         img_np = (input_image.squeeze(0).cpu().numpy() * 255).astype(np.uint8)
                         pil_img = Image.fromarray(img_np, "RGB")
-                        buffered = io.BytesIO()
-                        pil_img.save(buffered, format="PNG")
-                        img_str = base64.b64encode(buffered.getvalue()).decode()
-                        input_data["input_image"] = f"data:image/png;base64,{img_str}"
+                        input_data["input_image"] = pil_to_data_url(pil_img)
                         input_data["input_image_width"] = pil_img.width
                         input_data["input_image_height"] = pil_img.height
                         log.debug(f"Stored single input image: {pil_img.width}x{pil_img.height}")
@@ -264,12 +263,9 @@ class LayerForgeNode:
                         for index in range(batch_size):
                             img_np = (input_image[index].cpu().numpy() * 255).astype(np.uint8)
                             pil_img = Image.fromarray(img_np, "RGB")
-                            buffered = io.BytesIO()
-                            pil_img.save(buffered, format="PNG")
-                            img_str = base64.b64encode(buffered.getvalue()).decode()
                             images_array.append(
                                 {
-                                    "data": f"data:image/png;base64,{img_str}",
+                                    "data": pil_to_data_url(pil_img),
                                     "width": pil_img.width,
                                     "height": pil_img.height,
                                 }
@@ -290,10 +286,7 @@ class LayerForgeNode:
 
                     mask_np = (input_mask.cpu().numpy() * 255).astype(np.uint8)
                     pil_mask = Image.fromarray(mask_np, "L")
-                    mask_buffered = io.BytesIO()
-                    pil_mask.save(mask_buffered, format="PNG")
-                    mask_str = base64.b64encode(mask_buffered.getvalue()).decode()
-                    input_data["input_mask"] = f"data:image/png;base64,{mask_str}"
+                    input_data["input_mask"] = pil_to_data_url(pil_mask)
                     log.debug(f"Stored input mask: {pil_mask.width}x{pil_mask.height}")
 
                 input_data["fit_on_add"] = fit_on_add
@@ -437,10 +430,7 @@ class LayerForgeNode:
 
     def get_cached_image(self):
         if self.cached_image:
-            buffered = io.BytesIO()
-            self.cached_image.save(buffered, format="PNG")
-            img_str = base64.b64encode(buffered.getvalue()).decode()
-            return f"data:image/png;base64,{img_str}"
+            return pil_to_data_url(self.cached_image)
         return None
 
 

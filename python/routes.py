@@ -1,7 +1,5 @@
 """LayerForge HTTP and WebSocket route registration."""
 
-import base64
-import io
 import os
 import time
 
@@ -10,6 +8,7 @@ from PIL import Image
 from server import PromptServer
 
 from .matting import register_matting_routes
+from .image_serialization import file_to_data_url, pil_to_data_url
 from .node import log
 
 
@@ -99,16 +98,10 @@ def register_routes(node_class):
             }
 
             if cache_data["image"] is not None:
-                buffered = io.BytesIO()
-                cache_data["image"].save(buffered, format="PNG")
-                img_str = base64.b64encode(buffered.getvalue()).decode()
-                response_data["data"]["image"] = f"data:image/png;base64,{img_str}"
+                response_data["data"]["image"] = pil_to_data_url(cache_data["image"])
 
             if cache_data["mask"] is not None:
-                mask_buffer = io.BytesIO()
-                cache_data["mask"].save(mask_buffer, format="PNG")
-                mask_str = base64.b64encode(mask_buffer.getvalue()).decode()
-                response_data["data"]["mask"] = f"data:image/png;base64,{mask_str}"
+                response_data["data"]["mask"] = pil_to_data_url(cache_data["mask"])
 
             return web.json_response(response_data)
         except Exception as error:
@@ -122,9 +115,7 @@ def register_routes(node_class):
             latest_image_paths = node_class.get_latest_images(since_timestamp / 1000.0)
             images_data = []
             for image_path in latest_image_paths:
-                with open(image_path, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-                    images_data.append(f"data:image/png;base64,{encoded_string}")
+                images_data.append(file_to_data_url(image_path))
 
             return web.json_response({"success": True, "images": images_data})
         except Exception as error:
@@ -137,11 +128,9 @@ def register_routes(node_class):
         try:
             latest_image_path = node_class.get_latest_image()
             if latest_image_path:
-                with open(latest_image_path, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode()
                 return web.json_response({
                     "success": True,
-                    "image_data": f"data:image/png;base64,{encoded_string}",
+                    "image_data": file_to_data_url(latest_image_path),
                 })
 
             return web.json_response({
@@ -183,13 +172,10 @@ def register_routes(node_class):
                 with Image.open(file_path) as image:
                     if image.mode != "RGB":
                         image = image.convert("RGB")
-                    buffered = io.BytesIO()
-                    image.save(buffered, format="PNG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
                     log.info(f"Successfully loaded image from path: {file_path}")
                     return web.json_response({
                         "success": True,
-                        "image_data": f"data:image/png;base64,{img_str}",
+                        "image_data": pil_to_data_url(image),
                         "width": image.width,
                         "height": image.height,
                     })

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   applyMaskToImageData,
   convertImageData,
+  loadImage,
   prepareImageForCanvas,
   tensorToImageData,
   validateImageData,
@@ -89,6 +90,47 @@ test('tensorToImageData supports grayscale masks without a browser canvas', () =
       delete globalThis.ImageData;
     } else {
       globalThis.ImageData = originalImageData;
+    }
+  }
+});
+
+test('image loading resolves loaded images and preserves load errors', async () => {
+  const originalImage = globalThis.Image;
+  globalThis.Image = class {
+    constructor() {
+      this.onload = null;
+      this.onerror = null;
+      this.width = 4;
+      this.height = 3;
+    }
+
+    set src(value) {
+      this.source = value;
+      queueMicrotask(() => {
+        if (value === 'bad-image') {
+          this.onerror?.(new Error('image decode failed'));
+        } else {
+          this.onload?.();
+        }
+      });
+    }
+  };
+
+  try {
+    const image = await loadImage('good-image');
+    assert.equal(image.source, 'good-image');
+    assert.equal(image.width, 4);
+    assert.equal(image.height, 3);
+
+    await assert.rejects(
+      () => loadImage('bad-image'),
+      error => error.message === 'image decode failed'
+    );
+  } finally {
+    if (originalImage === undefined) {
+      delete globalThis.Image;
+    } else {
+      globalThis.Image = originalImage;
     }
   }
 });

@@ -2,7 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
-import { scaleImageToFit, createImageFromSource, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
+import { scaleImageToFit, loadImage, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape } from './types';
 
@@ -620,7 +620,7 @@ export class CanvasIO {
                             ctx.putImageData(maskImageData, 0, 0);
                             
                             // Convert to HTMLImageElement
-                            const maskImg = await createImageFromSource(maskCanvas.toDataURL());
+                            const maskImg = await loadImage(maskCanvas.toDataURL());
                             
                             // Respect fit_on_add (scale to output area)
                             const widgets = this.canvas.node.widgets;
@@ -768,7 +768,7 @@ export class CanvasIO {
                         
                                 for (let i = 0; i < batch.length; i++) {
                                     const imgData = batch[i];
-                                    const img = await createImageFromSource(imgData.data);
+                                    const img = await loadImage(imgData.data);
                                     
                                     // Add image to canvas with unique name
                                     await this.canvas.canvasLayers.addLayerWithImage(
@@ -787,7 +787,7 @@ export class CanvasIO {
                         
                     } else if (inputData.input_image) {
                         // Handle single image (backward compatibility)
-                        const img = await createImageFromSource(inputData.input_image);
+                        const img = await loadImage(inputData.input_image);
                         
                         // Add image to canvas at output area position
                         await this.canvas.canvasLayers.addLayerWithImage(
@@ -812,7 +812,7 @@ export class CanvasIO {
                     log.info("Processing input mask");
                     
                     // Load mask image
-                    const maskImg = await createImageFromSource(inputData.input_mask);
+                    const maskImg = await loadImage(inputData.input_mask);
                     
                     // Determine if we should fit the mask or use it at original size
                     const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
@@ -994,12 +994,7 @@ export class CanvasIO {
 
             if (result.success && result.image_data) {
                 log.info("Latest image received, adding to canvas.");
-                const img = new Image();
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = result.image_data;
-                });
+                const img = await loadImage(result.image_data);
 
                 await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
                 log.info("Latest image imported and placed on canvas successfully.");
@@ -1025,7 +1020,7 @@ export class CanvasIO {
                 const newLayers: (Layer | null)[] = [];
 
                 for (const imageData of result.images) {
-                    const img = await createImageFromSource(imageData);
+                    const img = await loadImage(imageData);
                     
                     let processedImage = img;
                     
@@ -1079,6 +1074,6 @@ export class CanvasIO {
         ctx.fill();
 
         // Create a new image from the clipped canvas
-        return await createImageFromSource(canvas.toDataURL());
+        return await loadImage(canvas.toDataURL());
     }
 }

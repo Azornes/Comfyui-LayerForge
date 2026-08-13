@@ -2,7 +2,7 @@ import { createCanvas } from "./utils/CommonUtils.js";
 import { createModuleLogger } from "./log_system/log_funcs.js";
 import { showErrorNotification } from "./utils/NotificationUtils.js";
 import { webSocketManager } from "./utils/WebSocketManager.js";
-import { scaleImageToFit, createImageFromSource, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
+import { scaleImageToFit, loadImage, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 const log = createModuleLogger('CanvasIO');
 export class CanvasIO {
     constructor(canvas) {
@@ -544,7 +544,7 @@ export class CanvasIO {
                                 throw new Error("Could not create mask context");
                             ctx.putImageData(maskImageData, 0, 0);
                             // Convert to HTMLImageElement
-                            const maskImg = await createImageFromSource(maskCanvas.toDataURL());
+                            const maskImg = await loadImage(maskCanvas.toDataURL());
                             // Respect fit_on_add (scale to output area)
                             const widgets = this.canvas.node.widgets;
                             const fitOnAddWidget = widgets ? widgets.find((w) => w.name === "fit_on_add") : null;
@@ -681,7 +681,7 @@ export class CanvasIO {
                         log.info(`Processing batch of ${batch.length} images from backend`);
                         for (let i = 0; i < batch.length; i++) {
                             const imgData = batch[i];
-                            const img = await createImageFromSource(imgData.data);
+                            const img = await loadImage(imgData.data);
                             // Add image to canvas with unique name
                             await this.canvas.canvasLayers.addLayerWithImage(img, { name: `Batch Image ${i + 1}` }, addMode, this.canvas.outputAreaBounds);
                             log.debug(`Added batch image ${i + 1}/${batch.length} from backend`);
@@ -692,7 +692,7 @@ export class CanvasIO {
                     }
                     else if (inputData.input_image) {
                         // Handle single image (backward compatibility)
-                        const img = await createImageFromSource(inputData.input_image);
+                        const img = await loadImage(inputData.input_image);
                         // Add image to canvas at output area position
                         await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode, this.canvas.outputAreaBounds);
                         log.info("Single input image added as new layer to canvas");
@@ -710,7 +710,7 @@ export class CanvasIO {
                 if (allowMask && !maskLoaded && hasMaskInput && inputData.input_mask) {
                     log.info("Processing input mask");
                     // Load mask image
-                    const maskImg = await createImageFromSource(inputData.input_mask);
+                    const maskImg = await loadImage(inputData.input_mask);
                     // Determine if we should fit the mask or use it at original size
                     const fitOnAddWidget2 = this.canvas.node.widgets.find((w) => w.name === "fit_on_add");
                     const shouldFit = fitOnAddWidget2 && fitOnAddWidget2.value;
@@ -867,12 +867,7 @@ export class CanvasIO {
             const result = await response.json();
             if (result.success && result.image_data) {
                 log.info("Latest image received, adding to canvas.");
-                const img = new Image();
-                await new Promise((resolve, reject) => {
-                    img.onload = resolve;
-                    img.onerror = reject;
-                    img.src = result.image_data;
-                });
+                const img = await loadImage(result.image_data);
                 await this.canvas.canvasLayers.addLayerWithImage(img, {}, 'fit');
                 log.info("Latest image imported and placed on canvas successfully.");
                 return true;
@@ -896,7 +891,7 @@ export class CanvasIO {
                 log.info(`Received ${result.images.length} new images, adding to canvas.`);
                 const newLayers = [];
                 for (const imageData of result.images) {
-                    const img = await createImageFromSource(imageData);
+                    const img = await loadImage(imageData);
                     let processedImage = img;
                     // If there's a custom shape, clip the image to that shape
                     if (this.canvas.outputAreaShape && this.canvas.outputAreaShape.isClosed) {
@@ -944,6 +939,6 @@ export class CanvasIO {
         ctx.closePath();
         ctx.fill();
         // Create a new image from the clipped canvas
-        return await createImageFromSource(canvas.toDataURL());
+        return await loadImage(canvas.toDataURL());
     }
 }

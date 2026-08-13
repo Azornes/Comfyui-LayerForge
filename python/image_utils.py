@@ -5,6 +5,8 @@ import io
 
 import numpy as np
 from PIL import Image
+
+from .image_serialization import pil_to_data_url
 from torchvision import transforms
 
 from .node import log
@@ -61,10 +63,7 @@ def convert_tensor_to_base64(tensor, alpha_mask=None, original_alpha=None):
         else:
             img = Image.fromarray(img_array, mode="RGB")
 
-        buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
-        img_str = base64.b64encode(buffer.getvalue()).decode()
-        return f"data:image/png;base64,{img_str}"
+        return pil_to_data_url(img)
     except Exception as error:
         log.error(f"Error in convert_tensor_to_base64: {error}")
         log.debug(f"Tensor shape: {tensor.shape}, dtype: {tensor.dtype}")

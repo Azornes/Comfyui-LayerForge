@@ -145,6 +145,3 @@ export const start_mask_editor_auto = withErrorHandling(function (canvasInstance
     }
     canvasInstance.startMaskEditor(null, true);
 }, 'start_mask_editor_auto');
-// Duplikowane funkcje zostały przeniesione do ImageUtils.ts:
-// - create_mask_from_image_src -> createMaskFromImageSrc
-// - canvas_to_mask_image -> canvasToMaskImage

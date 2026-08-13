@@ -146,12 +146,7 @@ export const tensorToImage = withErrorHandling(async function (tensor) {
             imageData.data[pixelIndex + 3] = 255;
         }
         ctx.putImageData(imageData, 0, 0);
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = (err) => reject(err);
-            img.src = canvas.toDataURL();
-        });
+        return loadImage(canvas.toDataURL());
     }
     throw new Error("Canvas context not available");
 }, 'tensorToImage');
@@ -169,12 +164,7 @@ export const resizeImage = withErrorHandling(async function (image, maxWidth, ma
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(image, 0, 0, newWidth, newHeight);
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = (err) => reject(err);
-            img.src = canvas.toDataURL();
-        });
+        return loadImage(canvas.toDataURL());
     }
     throw new Error("Canvas context not available");
 }, 'resizeImage');
@@ -199,11 +189,8 @@ export const base64ToImage = withErrorHandling(function (base64) {
     if (!base64) {
         throw createValidationError("Base64 string is required");
     }
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("Failed to load image from base64"));
-        img.src = base64;
+    return loadImage(base64).catch(() => {
+        throw new Error("Failed to load image from base64");
     });
 }, 'base64ToImage');
 export function isValidImage(image) {
@@ -225,9 +212,12 @@ export function getImageInfo(image) {
         area: width * height
     };
 }
-export function createImageFromSource(source) {
+export function loadImage(source, options = {}) {
     return new Promise((resolve, reject) => {
         const img = new Image();
+        if (options.crossOrigin !== undefined) {
+            img.crossOrigin = options.crossOrigin;
+        }
         img.onload = () => resolve(img);
         img.onerror = (err) => reject(err);
         img.src = source;
@@ -240,12 +230,7 @@ export const createEmptyImage = withErrorHandling(function (width, height, color
             ctx.fillStyle = color;
             ctx.fillRect(0, 0, width, height);
         }
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = (err) => reject(err);
-            img.src = canvas.toDataURL();
-        });
+        return loadImage(canvas.toDataURL());
     }
     throw new Error("Canvas context not available");
 }, 'createEmptyImage');
@@ -259,41 +244,7 @@ export async function convertToImage(source) {
     if (source instanceof HTMLImageElement) {
         return source; // Already an image
     }
-    const image = new Image();
-    image.src = source.toDataURL();
-    await new Promise((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = reject;
-    });
-    return image;
-}
-/**
- * Creates a mask from image source for use in mask editor
- * Consolidated from mask_utils.create_mask_from_image_src()
- * @param imageSrc - Image source (URL or data URL)
- * @returns Promise returning Image object
- */
-export function createMaskFromImageSrc(imageSrc) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = imageSrc;
-    });
-}
-/**
- * Converts canvas to Image for use as mask
- * Consolidated from mask_utils.canvas_to_mask_image()
- * @param canvas - Canvas to convert
- * @returns Promise returning Image object
- */
-export function canvasToMaskImage(canvas) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = (err) => reject(err);
-        img.src = canvas.toDataURL();
-    });
+    return loadImage(source.toDataURL());
 }
 /**
  * Scales an image to fit within specified bounds while maintaining aspect ratio
@@ -310,12 +261,7 @@ export async function scaleImageToFit(image, targetWidth, targetHeight) {
     if (!ctx)
         throw new Error("Could not create scaled image context");
     ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
-    return new Promise((resolve, reject) => {
-        const scaledImg = new Image();
-        scaledImg.onload = () => resolve(scaledImg);
-        scaledImg.onerror = reject;
-        scaledImg.src = canvas.toDataURL();
-    });
+    return loadImage(canvas.toDataURL());
 }
 /**
  * Unified tensor to image data conversion
@@ -392,5 +338,5 @@ export async function createImageFromImageData(imageData) {
     if (!ctx)
         throw new Error("Could not create canvas context");
     ctx.putImageData(imageData, 0, 0);
-    return await createImageFromSource(canvas.toDataURL());
+    return await loadImage(canvas.toDataURL());
 }
