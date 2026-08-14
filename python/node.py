@@ -16,6 +16,7 @@ from PIL import Image
 from .image_serialization import data_url_to_pil, pil_to_data_url
 
 _OUTPUT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
+_MAX_IMAGE_INPUTS = 32
 
 try:
     from .log_system import create_module_logger
@@ -136,6 +137,13 @@ class LayerForgeNode:
 
     @classmethod
     def INPUT_TYPES(cls):
+        optional = {
+            "input_image": ("IMAGE",),
+            "input_mask": ("MASK",),
+        }
+        for index in range(1, _MAX_IMAGE_INPUTS + 1):
+            optional[f"input_image_{index}"] = ("IMAGE", {"hidden": True})
+
         return {
             "required": {
                 "fit_on_add": (
@@ -157,10 +165,7 @@ class LayerForgeNode:
                 "trigger": ("INT", {"default": 0, "min": 0, "max": 99999999, "step": 1}),
                 "node_id": ("STRING", {"default": "0"}),
             },
-            "optional": {
-                "input_image": ("IMAGE",),
-                "input_mask": ("MASK",),
-            },
+            "optional": optional,
             "hidden": {
                 "prompt": ("PROMPT",),
                 "unique_id": ("UNIQUE_ID",),
@@ -234,6 +239,7 @@ class LayerForgeNode:
         input_mask=None,
         prompt=None,
         unique_id=None,
+        **kwargs,
     ):
         del show_preview, auto_refresh_after_generation, trigger, prompt
 
@@ -254,7 +260,41 @@ class LayerForgeNode:
             with self.__class__._storage_lock:
                 input_data = {}
 
-                if input_image is not None and isinstance(input_image, torch.Tensor):
+                transport_images = sorted(
+                    [
+                        (name, value)
+                        for name, value in kwargs.items()
+                        if name.startswith("input_image_")
+                        and name[len("input_image_"):].isdigit()
+                        and isinstance(value, torch.Tensor)
+                    ],
+                    key=lambda item: int(item[0][len("input_image_"):]),
+                )
+
+                if transport_images:
+                    image_sources = []
+                    if isinstance(input_image, torch.Tensor):
+                        image_sources.append(("input_image", input_image))
+                    image_sources.extend(transport_images)
+
+                    images_array = []
+                    for source_name, source_tensor in image_sources:
+                        tensor = source_tensor.unsqueeze(0) if source_tensor.dim() == 3 else source_tensor
+                        if tensor.dim() != 4:
+                            log.warning(
+                                f"Skipping {source_name}: expected an IMAGE tensor with 3 or 4 dimensions, "
+                                f"got {tuple(source_tensor.shape)}"
+                            )
+                            continue
+
+                        for index in range(tensor.shape[0]):
+                            serialized_image = self._serialize_rgb_tensor_sample(tensor[index])
+                            images_array.append(serialized_image)
+
+                    if images_array:
+                        input_data["input_images"] = images_array
+                        log.info(f"Stored {len(images_array)} image(s) from multiple image inputs")
+                elif input_image is not None and isinstance(input_image, torch.Tensor):
                     if input_image.dim() == 3:
                         input_image = input_image.unsqueeze(0)
 

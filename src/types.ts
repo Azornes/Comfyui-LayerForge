@@ -49,7 +49,7 @@ export interface ComfyNode {
     graph?: any;
     onRemoved?: () => void;
     addDOMWidget?: (name: string, type: string, element: HTMLElement) => void;
-    inputs?: Array<{ link: any }>;
+    inputs?: Array<{ link: any; name?: string; type?: string }>;
 }
 
 declare global {

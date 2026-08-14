@@ -124,8 +124,8 @@ export class Canvas {
     pendingInputDataCheck: number | null;
     inputDataLoaded: boolean;
     lastLoadedImageSrc?: string;
-    lastLoadedLinkId?: number;
-    lastLoadedMaskLinkId?: number;
+    lastLoadedLinkId?: string | number;
+    lastLoadedMaskLinkId?: string | number;
     previewVisible: boolean;
     requestSaveState: () => void;
     viewport: Viewport;

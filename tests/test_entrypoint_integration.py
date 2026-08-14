@@ -158,7 +158,15 @@ def test_entrypoint_exports_node_contract_and_frontend_directory(layerforge_runt
         "trigger",
         "node_id",
     } <= set(inputs["required"])
-    assert inputs["optional"] == {"input_image": ("IMAGE",), "input_mask": ("MASK",)}
+    assert inputs["optional"]["input_image"] == ("IMAGE",)
+    assert inputs["optional"]["input_mask"] == ("MASK",)
+    transport_inputs = {
+        name: value
+        for name, value in inputs["optional"].items()
+        if name.startswith("input_image_")
+    }
+    assert len(transport_inputs) == 32
+    assert all(value == ("IMAGE", {"hidden": True}) for value in transport_inputs.values())
 
 
 def test_entrypoint_registers_backend_route_contract(layerforge_runtime):
@@ -292,6 +300,49 @@ def test_tensor_input_payloads_preserve_single_and_batch_image_contract(layerfor
     assert [item["width"] for item in batch_payload["input_images_batch"]] == [2, 2]
     assert [item["height"] for item in batch_payload["input_images_batch"]] == [2, 2]
     assert all(item["data"].startswith("data:image/png;base64,") for item in batch_payload["input_images_batch"])
+
+
+def test_tensor_input_payloads_preserve_ordered_multiple_image_inputs(layerforge_runtime):
+    import torch
+    from PIL import Image
+
+    node_class = layerforge_runtime.node.LayerForgeNode
+    node_class._canvas_data_storage.clear()
+    node_class._canvas_cache["persistent_cache"] = {}
+    node = node_class()
+
+    red = torch.tensor(
+        [[[
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ]]],
+        dtype=torch.float32,
+    )
+    green = red.clone()
+    green[..., 0] = 0
+    green[..., 1] = 1
+
+    # Deliberately pass the transport inputs out of numeric order. The node
+    # must preserve the port order used by the virtual multi-input frontend.
+    node.process_canvas_image(
+        False,
+        False,
+        False,
+        0,
+        "multi-input",
+        input_image_2=green,
+        input_image_1=red,
+    )
+    payload = node_class._canvas_data_storage["multi-input_input"]
+
+    assert "input_image" not in payload
+    assert len(payload["input_images"]) == 2
+    decoded = [
+        Image.open(io.BytesIO(base64.b64decode(item["data"].split(",", 1)[1])))
+        for item in payload["input_images"]
+    ]
+    assert decoded[0].getpixel((0, 0)) == (255, 0, 0)
+    assert decoded[1].getpixel((0, 0)) == (0, 255, 0)
 
 
 def test_latest_image_helpers_preserve_filtering_and_time_semantics(layerforge_runtime, monkeypatch, tmp_path):
