@@ -1987,6 +1987,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         (node.addDOMWidget as any)("mainContainer", "widget", mainContainer, {
             getMinHeight: getEditorWidgetHeight,
             getHeight: getEditorWidgetHeight,
+            hideInPanel: true,
         });
     }
 

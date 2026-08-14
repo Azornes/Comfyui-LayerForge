@@ -1712,6 +1712,7 @@ async function createCanvasWidget(node, widget, _app) {
         node.addDOMWidget("mainContainer", "widget", mainContainer, {
             getMinHeight: getEditorWidgetHeight,
             getHeight: getEditorWidgetHeight,
+            hideInPanel: true,
         });
     }
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
