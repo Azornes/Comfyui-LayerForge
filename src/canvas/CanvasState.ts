@@ -5,39 +5,51 @@ import {generateUUID, cloneLayers, getStateSignature, debounce, createCanvas, cl
 import {loadImage} from "../media/ImageUtils.js";
 import {getCanvasStateKey} from "../utils/CanvasStateKey.js";
 import {withErrorHandling} from "../shared/ErrorHandler.js";
+import {HistoryStack, type HistoryInfo} from "./CanvasHistory.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from '../shared/types';
 
 const log = createModuleLogger('CanvasState');
-
-interface HistoryInfo {
-    undoCount: number;
-    redoCount: number;
-    canUndo: boolean;
-    canRedo: boolean;
-    historyLimit: number;
-}
 
 export class CanvasState {
     private _debouncedSave: (() => void) | null;
     private _loadInProgress: Promise<boolean> | null;
     private canvas: Canvas & { node: ComfyNode, layers: Layer[] };
     private historyLimit: number;
+    private layerHistory: HistoryStack<Layer[]>;
     private lastSavedStateSignature: string | null;
-    public layersRedoStack: Layer[][];
-    public layersUndoStack: Layer[][];
-    public maskRedoStack: HTMLCanvasElement[];
-    public maskUndoStack: HTMLCanvasElement[];
+    private maskHistory: HistoryStack<HTMLCanvasElement>;
     private saveTimeout: number | null;
     private stateSaverWorker: Worker | null;
 
+    public get layersUndoStack(): Layer[][] {
+        return this.layerHistory.undoStack;
+    }
+
+    public get layersRedoStack(): Layer[][] {
+        return this.layerHistory.redoStack;
+    }
+
+    public get maskUndoStack(): HTMLCanvasElement[] {
+        return this.maskHistory.undoStack;
+    }
+
+    public get maskRedoStack(): HTMLCanvasElement[] {
+        return this.maskHistory.redoStack;
+    }
+
     constructor(canvas: Canvas & { node: ComfyNode, layers: Layer[] }) {
         this.canvas = canvas;
-        this.layersUndoStack = [];
-        this.layersRedoStack = [];
-        this.maskUndoStack = [];
-        this.maskRedoStack = [];
         this.historyLimit = 100;
+        this.layerHistory = new HistoryStack<Layer[]>({
+            clone: cloneLayers,
+            equals: (left, right) => getStateSignature(left) === getStateSignature(right),
+            historyLimit: this.historyLimit,
+        });
+        this.maskHistory = new HistoryStack<HTMLCanvasElement>({
+            clone: cloneCanvas,
+            historyLimit: this.historyLimit,
+        });
         this.saveTimeout = null;
         this.lastSavedStateSignature = null;
         this._loadInProgress = null;
@@ -351,26 +363,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
     }
 
     saveLayersState(replaceLast = false): void {
-        if (replaceLast && this.layersUndoStack.length > 0) {
-            this.layersUndoStack.pop();
-        }
-
-        const currentState = cloneLayers(this.canvas.layers);
-        const currentStateSignature = getStateSignature(currentState);
-
-        if (this.layersUndoStack.length > 0) {
-            const lastState = this.layersUndoStack[this.layersUndoStack.length - 1];
-            if (getStateSignature(lastState) === currentStateSignature) {
-                return;
-            }
-        }
-        
-        this.layersUndoStack.push(currentState);
-
-        if (this.layersUndoStack.length > this.historyLimit) {
-            this.layersUndoStack.shift();
-        }
-        this.layersRedoStack = [];
+        if (!this.layerHistory.push(this.canvas.layers, replaceLast)) return;
         this.canvas.updateHistoryButtons();
         
         if (!this._debouncedSave) {
@@ -381,19 +374,8 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
 
     saveMaskState(replaceLast = false): void {
         if (!this.canvas.maskTool) return;
-
-        if (replaceLast && this.maskUndoStack.length > 0) {
-            this.maskUndoStack.pop();
-        }
         const maskCanvas = this.canvas.maskTool.getMask();
-        const clonedCanvas = cloneCanvas(maskCanvas);
-
-        this.maskUndoStack.push(clonedCanvas);
-
-        if (this.maskUndoStack.length > this.historyLimit) {
-            this.maskUndoStack.shift();
-        }
-        this.maskRedoStack = [];
+        this.maskHistory.push(maskCanvas, replaceLast);
         this.canvas.updateHistoryButtons();
     }
 
@@ -414,70 +396,51 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
     }
 
     undoLayersState(): void {
-        if (this.layersUndoStack.length <= 1) return;
-
-        const currentState = this.layersUndoStack.pop();
-        if (currentState) {
-            this.layersRedoStack.push(currentState);
-        }
-        const prevState = this.layersUndoStack[this.layersUndoStack.length - 1];
-        this.canvas.layers = cloneLayers(prevState);
+        const prevState = this.layerHistory.undo();
+        if (!prevState) return;
+        this.canvas.layers = prevState;
         this.canvas.updateSelectionAfterHistory();
         this.canvas.render();
         this.canvas.updateHistoryButtons();
     }
 
     redoLayersState(): void {
-        if (this.layersRedoStack.length === 0) return;
-
-        const nextState = this.layersRedoStack.pop();
-        if (nextState) {
-            this.layersUndoStack.push(nextState);
-            this.canvas.layers = cloneLayers(nextState);
-            this.canvas.updateSelectionAfterHistory();
-            this.canvas.render();
-            this.canvas.updateHistoryButtons();
-        }
+        const nextState = this.layerHistory.redo();
+        if (!nextState) return;
+        this.canvas.layers = nextState;
+        this.canvas.updateSelectionAfterHistory();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
     }
 
     undoMaskState(): void {
-        if (!this.canvas.maskTool || this.maskUndoStack.length <= 1) return;
+        if (!this.canvas.maskTool) return;
+        const prevState = this.maskHistory.undo();
+        if (!prevState) return;
 
-        const currentState = this.maskUndoStack.pop();
-        if (currentState) {
-            this.maskRedoStack.push(currentState);
-        }
+        // Use the new restoreMaskFromSavedState method that properly clears chunks first
+        this.canvas.maskTool.restoreMaskFromSavedState(prevState);
 
-        if (this.maskUndoStack.length > 0) {
-            const prevState = this.maskUndoStack[this.maskUndoStack.length - 1];
-            
-            // Use the new restoreMaskFromSavedState method that properly clears chunks first
-            this.canvas.maskTool.restoreMaskFromSavedState(prevState);
-            
-            // Clear stroke overlay to prevent old drawing previews from persisting
-            this.canvas.canvasRenderer.clearMaskStrokeOverlay();
-            
-            this.canvas.render();
-        }
+        // Clear stroke overlay to prevent old drawing previews from persisting
+        this.canvas.canvasRenderer.clearMaskStrokeOverlay();
+
+        this.canvas.render();
 
         this.canvas.updateHistoryButtons();
     }
 
     redoMaskState(): void {
-        if (!this.canvas.maskTool || this.maskRedoStack.length === 0) return;
+        if (!this.canvas.maskTool) return;
+        const nextState = this.maskHistory.redo();
+        if (!nextState) return;
 
-        const nextState = this.maskRedoStack.pop();
-        if (nextState) {
-            this.maskUndoStack.push(nextState);
-            
-            // Use the new restoreMaskFromSavedState method that properly clears chunks first
-            this.canvas.maskTool.restoreMaskFromSavedState(nextState);
-            
-            // Clear stroke overlay to prevent old drawing previews from persisting
-            this.canvas.canvasRenderer.clearMaskStrokeOverlay();
-            
-            this.canvas.render();
-        }
+        // Use the new restoreMaskFromSavedState method that properly clears chunks first
+        this.canvas.maskTool.restoreMaskFromSavedState(nextState);
+
+        // Clear stroke overlay to prevent old drawing previews from persisting
+        this.canvas.canvasRenderer.clearMaskStrokeOverlay();
+
+        this.canvas.render();
         this.canvas.updateHistoryButtons();
     }
 
@@ -486,11 +449,9 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
      */
     clearHistory(): void {
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
-            this.maskUndoStack = [];
-            this.maskRedoStack = [];
+            this.maskHistory.clear();
         } else {
-            this.layersUndoStack = [];
-            this.layersRedoStack = [];
+            this.layerHistory.clear();
         }
         this.canvas.updateHistoryButtons();
         log.info("History cleared");
@@ -502,21 +463,9 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
      */
     getHistoryInfo(): HistoryInfo {
         if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
-            return {
-                undoCount: this.maskUndoStack.length,
-                redoCount: this.maskRedoStack.length,
-                canUndo: this.maskUndoStack.length > 1,
-                canRedo: this.maskRedoStack.length > 0,
-                historyLimit: this.historyLimit
-            };
+            return this.maskHistory.getHistoryInfo();
         } else {
-            return {
-                undoCount: this.layersUndoStack.length,
-                redoCount: this.layersRedoStack.length,
-                canUndo: this.layersUndoStack.length > 1,
-                canRedo: this.layersRedoStack.length > 0,
-                historyLimit: this.historyLimit
-            };
+            return this.layerHistory.getHistoryInfo();
         }
     }
 }

@@ -4,11 +4,12 @@ import test from 'node:test';
 
 import { cloneCanvas } from '../js/utils/CommonUtils.js';
 
-const [layersSource, stateSource, maskEditorSource, commonUtilsSource] = await Promise.all([
+const [layersSource, stateSource, maskEditorSource, commonUtilsSource, historySource] = await Promise.all([
   readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/CommonUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasHistory.ts', import.meta.url), 'utf8'),
 ]);
 
 test('mirror commands share the selected-layer flip lifecycle', () => {
@@ -72,7 +73,8 @@ test('shared canvas cloning preserves dimensions, options, pixels, and null-cont
 });
 
 test('mask snapshots use the shared canvas clone helper', () => {
-  assert.match(stateSource, /const clonedCanvas = cloneCanvas\(maskCanvas\);/);
+  assert.match(stateSource, /maskHistory = new HistoryStack<HTMLCanvasElement>\(\{[\s\S]*?clone: cloneCanvas,/);
+  assert.match(historySource, /export class HistoryStack/);
   assert.doesNotMatch(stateSource, /clonedCtx\.drawImage\(maskCanvas, 0, 0\)/);
   assert.match(maskEditorSource, /const savedCanvas = cloneCanvas\(maskCanvas\);/);
   assert.doesNotMatch(maskEditorSource, /savedCtx\.drawImage\(maskCanvas, 0, 0\)/);
