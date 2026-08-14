@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { ImageCache } from '../js/persistence/ImageCache.js';
+import { ImageCache } from '../js/media/ImageCache.js';
 
 const sourceFiles = await Promise.all([
-  readFile(new URL('../src/persistence/ImageCache.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/ImageCache.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/canvas/Canvas.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
@@ -35,7 +35,10 @@ test('layer persistence uses one image cache contract', () => {
   const [cacheSource, canvasSource, layersSource, stateSource, viewSource] = sourceFiles;
 
   assert.match(cacheSource, /private cache: Map<string, CachedImage>/);
+  assert.match(cacheSource, /export class ImageCache/);
   assert.match(canvasSource, /imageCache: ImageCache/);
+  assert.match(canvasSource, /from "\.\.\/media\/ImageCache\.js"/);
+  assert.doesNotMatch(canvasSource, /persistence\/ImageCache/);
   assert.match(canvasSource, /this\.imageCache = new ImageCache\(\)/);
   assert.match(layersSource, /imageCache\.set\(imageId, image\.src\)/);
   assert.match(stateSource, /const imageSrc = this\.canvas\.imageCache\.get\(layerData\.imageId\)/);

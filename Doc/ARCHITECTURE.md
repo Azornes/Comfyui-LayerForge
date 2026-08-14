@@ -12,8 +12,8 @@ be edited independently.
 | `canvas/` | Canvas state, layers, rendering, interaction, tools, and layer panel |
 | `io/` | Input connections, tensor/image transport, and canvas output transport |
 | `mask/` | Mask editing, pixel processing, SAM, and matting integrations |
-| `media/` | Image/blob conversion, preview, upload, and export helpers |
-| `persistence/` | IndexedDB state, image cache, reference tracking, and state worker |
+| `media/` | Image/blob conversion, in-memory image cache, preview, upload, and export helpers |
+| `persistence/` | IndexedDB state, reference tracking, and state worker |
 | `shared/` | Cross-domain types, configuration, errors, and logging adapters |
 | `utils/` | Small compatibility and UI helpers that have not yet earned a domain |
 | `log_system/` | Canonical logging implementation |

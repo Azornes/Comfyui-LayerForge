@@ -1,5 +1,5 @@
 import {createModuleLogger} from "../log_system/log_funcs.js";
-import type { CachedImage, ImageCacheContract } from '../shared/types';
+import type {CachedImage, ImageCacheContract} from '../shared/types.js';
 
 const log = createModuleLogger('ImageCache');
 

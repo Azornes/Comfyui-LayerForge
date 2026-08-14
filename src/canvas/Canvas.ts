@@ -17,7 +17,7 @@ import {CanvasRenderer} from "./CanvasRenderer.js";
 import {CanvasIO} from "../io/CanvasIO.js";
 import {ImageReferenceManager} from "../persistence/ImageReferenceManager.js";
 import {BatchPreviewManager} from "./BatchPreviewManager.js";
-import {ImageCache} from "../persistence/ImageCache.js";
+import {ImageCache} from "../media/ImageCache.js";
 import {createModuleLogger} from "../log_system/log_funcs.js";
 import { debounce, createCanvas } from "../utils/CommonUtils.js";
 import {MaskEditorIntegration} from "../mask/MaskEditorIntegration.js";
