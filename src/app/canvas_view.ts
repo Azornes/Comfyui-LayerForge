@@ -1998,6 +1998,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     let workflowOverviewResizeObserver: ResizeObserver | null = null;
     let workflowOverviewWindowResizeHandler: (() => void) | null = null;
     let workflowOverviewLayoutFrame: number | null = null;
+    let workflowOverviewSyncFrame: number | null = null;
     let workflowOverviewToggleRequest = 0;
     let lastModalBounds = { left: Number.NaN, right: Number.NaN };
     let originalParent: HTMLElement | null = null;
@@ -2007,8 +2008,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     let workflowOverviewSelectionCleared = false;
 
     const workflowOverviewPanelSelector = '[data-testid="properties-panel"]';
-    const workflowOverviewNodesTabSelector =
-        workflowOverviewPanelSelector + ' [data-testid="panel-tab-nodes"]';
+    const workflowOverviewNodesTabSelector = '[data-testid="panel-tab-nodes"]';
     const nativeWorkflowOverviewToggleSelector =
         'button[aria-label="Toggle properties panel"]:not(.lf-workflow-overview-toggle)';
 
@@ -2028,36 +2028,71 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         return [];
     };
 
+    const getComfyCanvasStore = (): any => {
+        const vueRoot = document.querySelector<HTMLElement>("#vue-app") as any;
+        const provides = vueRoot?.__vue_app__?._context?.provides;
+        if (!provides) {
+            return null;
+        }
+
+        const pinia = Reflect.ownKeys(provides)
+            .map((key) => provides[key as keyof typeof provides])
+            .find((candidate: any) => candidate?._s?.has?.("canvas"));
+
+        return pinia?._s?.get?.("canvas") ?? null;
+    };
+
     const notifyComfySelectionChanged = (comfyCanvas: any) => {
         comfyCanvas?.onSelectionChange?.(comfyCanvas.selected_nodes ?? {});
+        // Vue Nodes 2.0 explicitly refreshes this Pinia store after native
+        // selection mutations. The native callback is not guaranteed to be
+        // installed for every canvas lifecycle, so mirror that update here.
+        const canvasStore = getComfyCanvasStore();
+        canvasStore?.updateSelectedItems?.();
+        // Keep a final explicit empty-state fallback. This covers a canvas
+        // lifecycle where the store still points at an old graph instance:
+        // the native canvas is already empty, so the properties panel must be
+        // told that there are no directly selected items as well.
+        if (canvasStore && getComfySelectedItems(comfyCanvas).length === 0) {
+            canvasStore.selectedItems = [];
+        }
         comfyCanvas?.setDirty?.(true, true);
     };
 
     const clearWorkflowOverviewSelection = () => {
-        if (workflowOverviewSelectionCleared) {
-            return;
-        }
-
         const comfyCanvas = getComfyCanvas();
         if (!comfyCanvas) {
             return;
         }
 
-        workflowOverviewSelectionSnapshot = getComfySelectedItems(comfyCanvas);
+        // Keep the selection from before fullscreen only once. The actual
+        // clearing must remain repeatable: ComfyUI can restore its selection
+        // while mounting/toggling the Vue properties panel, and returning
+        // early here would leave the panel on the LayerForge node.
+        if (!workflowOverviewSelectionCleared) {
+            workflowOverviewSelectionSnapshot = getComfySelectedItems(comfyCanvas);
+            workflowOverviewSelectionCleared = true;
+        }
 
         if (typeof comfyCanvas.deselectAll === "function") {
             comfyCanvas.deselectAll();
         } else if (comfyCanvas.selectedItems?.clear) {
-            for (const item of workflowOverviewSelectionSnapshot) {
+            for (const item of getComfySelectedItems(comfyCanvas)) {
                 item.selected = false;
                 item.onDeselected?.();
             }
             comfyCanvas.selectedItems.clear();
             comfyCanvas.selected_nodes = {};
-            notifyComfySelectionChanged(comfyCanvas);
+        } else if (comfyCanvas.selected_nodes && typeof comfyCanvas.selected_nodes === "object") {
+            comfyCanvas.selected_nodes = {};
         }
 
-        workflowOverviewSelectionCleared = true;
+        // ComfyUI's Vue canvas store is synchronized through this callback.
+        // Recent LiteGraph versions clear the native selection without always
+        // invoking it, which would leave the properties panel on the selected
+        // LayerForge node even though the canvas itself is deselected.
+        notifyComfySelectionChanged(comfyCanvas);
+
     };
 
     const restoreWorkflowOverviewSelection = () => {
@@ -2079,8 +2114,9 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                     item.selected = true;
                     comfyCanvas.selectedItems.add(item);
                 }
-                notifyComfySelectionChanged(comfyCanvas);
             }
+
+            notifyComfySelectionChanged(comfyCanvas);
         }
 
         workflowOverviewSelectionSnapshot = null;
@@ -2228,9 +2264,10 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         if (lastModalBounds.left !== left || lastModalBounds.right !== right) {
             lastModalBounds = { left, right };
-            canvas.render();
             if (node.onResize) {
                 node.onResize();
+            } else {
+                canvas.render();
             }
         }
     };
@@ -2291,55 +2328,52 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
             workflowOverviewLayoutFrame = null;
         }
 
+        if (workflowOverviewSyncFrame !== null) {
+            window.cancelAnimationFrame(workflowOverviewSyncFrame);
+            workflowOverviewSyncFrame = null;
+        }
+
         lastModalBounds = { left: Number.NaN, right: Number.NaN };
     };
 
-    const waitForWorkflowOverviewState = (expectedState: boolean): Promise<void> => {
-        return new Promise((resolve) => {
-            const deadline = performance.now() + 1000;
-            const checkState = () => {
-                if (!isEditorOpen ||
-                    isWorkflowOverviewOpen() === expectedState ||
-                    performance.now() >= deadline) {
-                    resolve();
-                    return;
-                }
+    const scheduleWorkflowOverviewSync = (expectedState: boolean, requestId: number) => {
+        if (workflowOverviewSyncFrame !== null) {
+            window.cancelAnimationFrame(workflowOverviewSyncFrame);
+        }
 
-                window.requestAnimationFrame(checkState);
-            };
+        let attempts = 0;
+        const synchronize = () => {
+            workflowOverviewSyncFrame = null;
+            if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
+                return;
+            }
 
-            checkState();
-        });
+            const panel = document.querySelector<HTMLElement>(workflowOverviewPanelSelector);
+            const nodesTab = panel?.querySelector<HTMLButtonElement>(
+                workflowOverviewNodesTabSelector
+            ) ?? null;
+
+            // Vue may need one extra frame to mount the global overview tabs after
+            // ComfyUI's native toggle changes the panel state. Keep this retry
+            // short and bounded so opening the panel never waits on a 1s poll.
+            if (expectedState && (!panel || !nodesTab) && attempts < 6) {
+                attempts += 1;
+                workflowOverviewSyncFrame = window.requestAnimationFrame(synchronize);
+                return;
+            }
+
+            if (expectedState && nodesTab && nodesTab.getAttribute("aria-selected") !== "true") {
+                nodesTab.click();
+            }
+
+            attachWorkflowOverviewResizeObserver();
+            applyWorkflowOverviewLayout();
+        };
+
+        workflowOverviewSyncFrame = window.requestAnimationFrame(synchronize);
     };
 
-    const waitForWorkflowOverviewNodesTab = (): Promise<void> => {
-        return new Promise((resolve) => {
-            const deadline = performance.now() + 1000;
-            const selectNodesTab = () => {
-                if (!isEditorOpen || performance.now() >= deadline) {
-                    resolve();
-                    return;
-                }
-
-                const nodesTab = document.querySelector<HTMLButtonElement>(
-                    workflowOverviewNodesTabSelector
-                );
-                if (isVisibleElement(nodesTab)) {
-                    if (nodesTab.getAttribute("aria-selected") !== "true") {
-                        nodesTab.click();
-                    }
-                    resolve();
-                    return;
-                }
-
-                window.requestAnimationFrame(selectNodesTab);
-            };
-
-            selectNodesTab();
-        });
-    };
-
-    const toggleWorkflowOverview = async () => {
+    const toggleWorkflowOverview = () => {
         const requestId = ++workflowOverviewToggleRequest;
         const nativeToggle = findNativeWorkflowOverviewToggle();
         if (!nativeToggle) {
@@ -2349,21 +2383,25 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         const expectedState = !isWorkflowOverviewOpen();
         if (expectedState) {
+            // Clear the selected node before ComfyUI renders the panel so its
+            // first render is the global Workflow Overview, not node details.
             clearWorkflowOverviewSelection();
         }
         nativeToggle.click();
-        await waitForWorkflowOverviewState(expectedState);
+        if (expectedState) {
+            // The native toggle has already run synchronously. Only the small
+            // DOM/layout synchronization is deferred until the next frame.
+            window.requestAnimationFrame(() => {
+                if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
+                    return;
+                }
 
-        if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
+                scheduleWorkflowOverviewSync(expectedState, requestId);
+            });
             return;
         }
 
-        if (expectedState) {
-            await waitForWorkflowOverviewNodesTab();
-        }
-
-        attachWorkflowOverviewResizeObserver();
-        applyWorkflowOverviewLayout();
+        scheduleWorkflowOverviewSync(expectedState, requestId);
     };
 
     /**
@@ -2484,7 +2522,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         applyWorkflowOverviewLayout();
         startWorkflowOverviewLayoutTracking();
         if (isWorkflowOverviewOpen()) {
-            void waitForWorkflowOverviewNodesTab();
+            scheduleWorkflowOverviewSync(true, workflowOverviewToggleRequest);
         }
         openEditorBtn.textContent = "X";
         tooltipManager.setTooltip(openEditorBtn, "Close Editor (ESC)");
