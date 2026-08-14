@@ -35,18 +35,18 @@ The generated files in `js/` are served by ComfyUI. Keep `src/` as the source of
 
 The frontend is organized by responsibility:
 
-- `src/CanvasView.ts` is the stable ComfyUI bootstrap. Its implementation is in `src/app/CanvasView.ts`.
-- `src/app/LayerForgeConnections.ts` contains graph identity, workflow
+- `src/canvas_view.ts` is the stable ComfyUI bootstrap. Its implementation is in `src/app/canvas_view.ts`.
+- `src/app/layer_forge_connections.ts` contains graph identity, workflow
   connections, and ComfyUI event/WebSocket integration used by the canvas.
 - `src/canvas/` contains the canvas runtime, layers, state, rendering, selection, tools, and interactions.
-- `src/canvas/CanvasHistory.ts` contains the bounded undo/redo snapshot model.
+- `src/canvas/canvas_history.ts` contains the bounded undo/redo snapshot model.
 - `src/io/` contains ComfyUI input and output handling.
 - `src/mask/` contains mask editing, mask algorithms, and detector/editor integrations.
-- `src/mask/MaskResultUtils.ts` contains shared mask-result conversion and
+- `src/mask/mask_result_utils.ts` contains shared mask-result conversion and
   application helpers; SAM and matting integrations retain their own side
   effects.
 - `src/media/` contains image, blob, upload, preview, and export helpers.
-- `src/media/ImageCache.ts` contains the in-memory image cache. IndexedDB image
+- `src/media/image_cache.ts` contains the in-memory image cache. IndexedDB image
   persistence and reference tracking remain in `src/persistence/`.
 - `src/persistence/` contains IndexedDB and image-reference persistence.
 - `src/persistence/contracts.ts` contains shared persisted-state and worker
@@ -54,7 +54,7 @@ The frontend is organized by responsibility:
 - `src/shared/` contains shared types and error handling.
 - `src/utils/` contains smaller cross-cutting browser and ComfyUI helpers.
 
-ComfyUI scans the generated web directory recursively. Only `js/CanvasView.js` invokes `registerLayerForgeExtension`; `js/app/CanvasView.js` exports the registration function without invoking it, preventing duplicate extension registration.
+ComfyUI scans the generated web directory recursively. Only `js/canvas_view.js` invokes `registerLayerForgeExtension`; `js/app/canvas_view.js` exports the registration function without invoking it, preventing duplicate extension registration.
 
 ## Watch mode
 

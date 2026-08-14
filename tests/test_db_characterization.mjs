@@ -166,7 +166,7 @@ test('IndexedDB persistence preserves state and image lifecycle behavior', async
 
 test('the worker uses shared database infrastructure for canvas-state persistence', async () => {
   const sharedSource = await readFile(new URL('../src/persistence/db_shared.ts', import.meta.url), 'utf8');
-  const workerSource = await readFile(new URL('../src/persistence/state-saver.worker.ts', import.meta.url), 'utf8');
+  const workerSource = await readFile(new URL('../src/persistence/state_saver.worker.ts', import.meta.url), 'utf8');
 
   assert.match(sharedSource, /export const DB_NAME = 'CanvasNodeDB'/);
   assert.match(sharedSource, /export const STATE_STORE_NAME = 'CanvasState'/);
@@ -184,7 +184,7 @@ test('the worker uses shared database infrastructure for canvas-state persistenc
 test('database callers share one transaction helper while preserving store and worker options', async () => {
   const [dbSource, workerSource] = await Promise.all([
     readFile(new URL('../src/persistence/db.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/persistence/state-saver.worker.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/persistence/state_saver.worker.ts', import.meta.url), 'utf8'),
   ]);
 
   assert.equal((dbSource.match(/executeDBStoreRequest</g) ?? []).length, 8);

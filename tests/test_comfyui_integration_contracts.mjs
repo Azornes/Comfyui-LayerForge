@@ -3,12 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [appSource, canvasSource, canvasIOSource, webSocketSource, clipboardSource, mattingSource, routesSource, mattingApiSource] = await Promise.all([
-  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/Canvas.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/WebSocketManager.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/ClipboardManager.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/MattingUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/web_socket_manager.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/clipboard_manager.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/matting_utils.ts', import.meta.url), 'utf8'),
   readFile(new URL('../python/routes.py', import.meta.url), 'utf8'),
   readFile(new URL('../python/matting/api.py', import.meta.url), 'utf8'),
 ]);

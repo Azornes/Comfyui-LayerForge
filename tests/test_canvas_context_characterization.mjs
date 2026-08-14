@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { createCanvas, createCanvasWithContext } from '../js/utils/CommonUtils.js';
+import { createCanvas, createCanvasWithContext } from '../js/utils/common_utils.js';
 
 const maskToolSource = await readFile(
-  new URL('../src/mask/MaskTool.ts', import.meta.url),
+  new URL('../src/mask/mask_tool.ts', import.meta.url),
   'utf8',
 );
 

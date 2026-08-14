@@ -1,5 +1,5 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
-import { withErrorHandling, createValidationError } from "../shared/ErrorHandler.js";
+import { withErrorHandling, createValidationError } from "../shared/error_handler.js";
 const log = createModuleLogger('MaskUtils');
 export function new_editor(app) {
     if (!app)

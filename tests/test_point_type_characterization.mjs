@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const commonUtilsSource = await readFile(
-  new URL('../src/utils/CommonUtils.ts', import.meta.url),
+  new URL('../src/utils/common_utils.ts', import.meta.url),
   'utf8',
 );
 const typesSource = await readFile(

@@ -1,0 +1,436 @@
+import { getCanvasState, setCanvasState, saveImage, getImage } from "../persistence/db.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
+import { showAlertNotification } from "../utils/notification_utils.js";
+import { generateUUID, cloneLayers, getStateSignature, debounce, createCanvas, cloneCanvas } from "../utils/common_utils.js";
+import { loadImage } from "../media/image_utils.js";
+import { getCanvasStateKey } from "../utils/canvas_state_key.js";
+import { HistoryStack } from "./canvas_history.js";
+import { CURRENT_PERSISTED_STATE_VERSION, migratePersistedCanvasState, } from '../persistence/contracts.js';
+const log = createModuleLogger('CanvasState');
+export class CanvasState {
+    get layersUndoStack() {
+        return this.layerHistory.undoStack;
+    }
+    get layersRedoStack() {
+        return this.layerHistory.redoStack;
+    }
+    get maskUndoStack() {
+        return this.maskHistory.undoStack;
+    }
+    get maskRedoStack() {
+        return this.maskHistory.redoStack;
+    }
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.historyLimit = 100;
+        this.layerHistory = new HistoryStack({
+            clone: cloneLayers,
+            equals: (left, right) => getStateSignature(left) === getStateSignature(right),
+            historyLimit: this.historyLimit,
+        });
+        this.maskHistory = new HistoryStack({
+            clone: cloneCanvas,
+            historyLimit: this.historyLimit,
+        });
+        this.saveTimeout = null;
+        this.lastSavedStateSignature = null;
+        this._loadInProgress = null;
+        this._debouncedSave = null;
+        try {
+            // @ts-ignore
+            this.stateSaverWorker = new Worker(new URL('../persistence/state_saver.worker.js', import.meta.url), { type: 'module' });
+            log.info("State saver worker initialized successfully.");
+            this.stateSaverWorker.onmessage = (e) => {
+                log.info("Message from state saver worker:", e.data);
+            };
+            this.stateSaverWorker.onerror = (e) => {
+                log.error("Error in state saver worker:", e.message, e.filename, e.lineno);
+                this.stateSaverWorker = null;
+            };
+        }
+        catch (e) {
+            log.error("Failed to initialize state saver worker:", e);
+            this.stateSaverWorker = null;
+        }
+    }
+    async loadStateFromDB() {
+        if (this._loadInProgress) {
+            log.warn("Load already in progress, waiting...");
+            return this._loadInProgress;
+        }
+        log.info("Attempting to load state from IndexedDB for node:", this.canvas.node.id);
+        const loadPromise = this._performLoad();
+        this._loadInProgress = loadPromise;
+        try {
+            const result = await loadPromise;
+            this._loadInProgress = null;
+            return result;
+        }
+        catch (error) {
+            this._loadInProgress = null;
+            throw error;
+        }
+    }
+    async _performLoad() {
+        try {
+            if (!this.canvas.node.id) {
+                log.error("Node ID is not available for loading state from DB.");
+                return false;
+            }
+            const stateKey = getCanvasStateKey(this.canvas.node);
+            const rawSavedState = await getCanvasState(stateKey);
+            const savedState = migratePersistedCanvasState(rawSavedState);
+            if (!savedState) {
+                log.info("No usable saved state found in IndexedDB for key:", stateKey);
+                return false;
+            }
+            log.info("Found saved state in IndexedDB.");
+            this.canvas.width = savedState.width || 512;
+            this.canvas.height = savedState.height || 512;
+            this.canvas.viewport = savedState.viewport || {
+                x: -(this.canvas.width / 4),
+                y: -(this.canvas.height / 4),
+                zoom: 0.8
+            };
+            // Restore outputAreaBounds if saved, otherwise use default
+            if (savedState.outputAreaBounds) {
+                this.canvas.outputAreaBounds = savedState.outputAreaBounds;
+                log.debug(`Output Area bounds restored: x=${this.canvas.outputAreaBounds.x}, y=${this.canvas.outputAreaBounds.y}, w=${this.canvas.outputAreaBounds.width}, h=${this.canvas.outputAreaBounds.height}`);
+            }
+            else {
+                // Fallback to default positioning for legacy saves
+                this.canvas.outputAreaBounds = {
+                    x: -(this.canvas.width / 4),
+                    y: -(this.canvas.height / 4),
+                    width: this.canvas.width,
+                    height: this.canvas.height
+                };
+                log.debug(`Output Area bounds set to default: x=${this.canvas.outputAreaBounds.x}, y=${this.canvas.outputAreaBounds.y}, w=${this.canvas.outputAreaBounds.width}, h=${this.canvas.outputAreaBounds.height}`);
+            }
+            this.canvas.canvasLayers.updateOutputAreaSize(this.canvas.width, this.canvas.height, false);
+            log.debug(`Output Area resized to ${this.canvas.width}x${this.canvas.height} and viewport set.`);
+            const loadedLayers = await this._loadLayers(savedState.layers);
+            this.canvas.layers = loadedLayers.filter((l) => l !== null);
+            log.info(`Loaded ${this.canvas.layers.length} layers from ${savedState.layers.length} saved layers.`);
+            if (this.canvas.layers.length === 0 && savedState.layers.length > 0) {
+                log.warn(`Failed to load any layers. Saved state had ${savedState.layers.length} layers but all failed to load. This may indicate corrupted IndexedDB data.`);
+                // Don't return false - allow empty canvas to be valid
+            }
+            this.canvas.updateSelectionAfterHistory();
+            this.canvas.render();
+            log.info("Canvas state loaded successfully from IndexedDB for key", stateKey);
+            return true;
+        }
+        catch (error) {
+            log.error("Error during state load:", error);
+            return false;
+        }
+    }
+    /**
+     * Ładuje warstwy z zapisanego stanu
+     * @param {any[]} layersData - Dane warstw do załadowania
+     * @returns {Promise<(Layer | null)[]>} Załadowane warstwy
+     */
+    async _loadLayers(layersData) {
+        const imagePromises = layersData.map((layerData, index) => this._loadSingleLayer(layerData, index));
+        return Promise.all(imagePromises);
+    }
+    /**
+     * Ładuje pojedynczą warstwę
+     * @param {any} layerData - Dane warstwy
+     * @param {number} index - Indeks warstwy
+     * @returns {Promise<Layer | null>} Załadowana warstwa lub null
+     */
+    async _loadSingleLayer(layerData, index) {
+        return new Promise((resolve) => {
+            if (layerData.imageId) {
+                this._loadLayerFromImageId(layerData, index, resolve);
+            }
+            else if (layerData.imageSrc) {
+                this._convertLegacyLayer(layerData, index, resolve);
+            }
+            else {
+                log.error(`Layer ${index}: No imageId or imageSrc found, skipping layer.`);
+                resolve(null);
+            }
+        });
+    }
+    /**
+     * Ładuje warstwę z imageId
+     * @param {any} layerData - Dane warstwy
+     * @param {number} index - Indeks warstwy
+     * @param {(value: Layer | null) => void} resolve - Funkcja resolve
+     */
+    _loadLayerFromImageId(layerData, index, resolve) {
+        log.debug(`Layer ${index}: Loading image with id: ${layerData.imageId}`);
+        if (this.canvas.imageCache.has(layerData.imageId)) {
+            log.debug(`Layer ${index}: Image found in cache.`);
+            const imageSrc = this.canvas.imageCache.get(layerData.imageId);
+            if (imageSrc) {
+                this._createLayerFromSrc(layerData, imageSrc, index, resolve);
+            }
+            else {
+                resolve(null);
+            }
+        }
+        else {
+            getImage(layerData.imageId)
+                .then(imageSrc => {
+                if (imageSrc) {
+                    log.debug(`Layer ${index}: Loading image from data:URL...`);
+                    this._createLayerFromSrc(layerData, imageSrc, index, resolve);
+                }
+                else {
+                    log.error(`Layer ${index}: Image not found in IndexedDB.`);
+                    resolve(null);
+                }
+            })
+                .catch(err => {
+                log.error(`Layer ${index}: Error loading image from IndexedDB:`, err);
+                resolve(null);
+            });
+        }
+    }
+    /**
+     * Konwertuje starą warstwę z imageSrc na nowy format
+     * @param {any} layerData - Dane warstwy
+     * @param {number} index - Indeks warstwy
+     * @param {(value: Layer | null) => void} resolve - Funkcja resolve
+     */
+    _convertLegacyLayer(layerData, index, resolve) {
+        log.info(`Layer ${index}: Found imageSrc, converting to new format with imageId.`);
+        const imageId = generateUUID();
+        saveImage(imageId, layerData.imageSrc)
+            .then(() => {
+            log.info(`Layer ${index}: Image saved to IndexedDB with id: ${imageId}`);
+            const newLayerData = { ...layerData, imageId };
+            delete newLayerData.imageSrc;
+            this._createLayerFromSrc(newLayerData, layerData.imageSrc, index, resolve);
+        })
+            .catch(err => {
+            log.error(`Layer ${index}: Error saving image to IndexedDB:`, err);
+            resolve(null);
+        });
+    }
+    /**
+     * Tworzy warstwę z src obrazu
+     * @param {any} layerData - Dane warstwy
+     * @param {string} imageSrc - Źródło obrazu
+     * @param {number} index - Indeks warstwy
+     * @param {(value: Layer | null) => void} resolve - Funkcja resolve
+     */
+    _createLayerFromSrc(layerData, imageSrc, index, resolve) {
+        if (typeof imageSrc === 'string') {
+            loadImage(imageSrc, { crossOrigin: 'anonymous' }).then(img => {
+                log.debug(`Layer ${index}: Image loaded successfully.`);
+                const newLayer = { ...layerData, image: img };
+                resolve(newLayer);
+            }).catch(() => {
+                log.error(`Layer ${index}: Failed to load image from src.`);
+                resolve(null);
+            });
+        }
+        else {
+            const { canvas, ctx } = createCanvas(imageSrc.width, imageSrc.height);
+            if (ctx) {
+                ctx.drawImage(imageSrc, 0, 0);
+                loadImage(canvas.toDataURL(), { crossOrigin: 'anonymous' }).then(img => {
+                    log.debug(`Layer ${index}: Image loaded successfully from ImageBitmap.`);
+                    const newLayer = { ...layerData, image: img };
+                    resolve(newLayer);
+                }).catch(() => {
+                    log.error(`Layer ${index}: Failed to load image from ImageBitmap.`);
+                    resolve(null);
+                });
+            }
+            else {
+                log.error(`Layer ${index}: Failed to get 2d context from canvas.`);
+                resolve(null);
+            }
+        }
+    }
+    async saveStateToDB() {
+        if (!this.canvas.node.id) {
+            log.error("Node ID is not available for saving state to DB.");
+            return;
+        }
+        // Auto-correct node_id widget if needed before saving state
+        if (this.canvas.node && this.canvas.node.widgets) {
+            const nodeIdWidget = this.canvas.node.widgets.find((w) => w.name === "node_id");
+            if (nodeIdWidget) {
+                const correctId = String(this.canvas.node.id);
+                if (nodeIdWidget.value !== correctId) {
+                    const prevValue = nodeIdWidget.value;
+                    nodeIdWidget.value = correctId;
+                    log.warn(`[CanvasState] node_id widget value (${prevValue}) did not match node.id (${correctId}) - auto-corrected (saveStateToDB).`);
+                    showAlertNotification(`The value of node_id (${prevValue}) did not match the node number (${correctId}) and was automatically corrected. 
+If you see dark images or masks in the output, make sure node_id is set to ${correctId}.`);
+                }
+            }
+        }
+        const stateKey = getCanvasStateKey(this.canvas.node);
+        log.info("Preparing state to be sent to worker for key:", stateKey);
+        const layers = await this._prepareLayers();
+        const state = {
+            version: CURRENT_PERSISTED_STATE_VERSION,
+            layers: layers.filter(layer => layer !== null),
+            viewport: this.canvas.viewport,
+            width: this.canvas.width,
+            height: this.canvas.height,
+            outputAreaBounds: this.canvas.outputAreaBounds,
+        };
+        if (state.layers.length === 0) {
+            log.warn("No valid layers to save, skipping.");
+            return;
+        }
+        if (this.stateSaverWorker) {
+            log.info("Posting state to worker for background saving.");
+            const message = {
+                stateKey,
+                state: state
+            };
+            this.stateSaverWorker.postMessage(message);
+            this.canvas.render();
+        }
+        else {
+            log.warn("State saver worker not available. Saving on main thread.");
+            await setCanvasState(stateKey, state);
+        }
+    }
+    /**
+     * Przygotowuje warstwy do zapisu
+     * @returns {Promise<(Omit<Layer, 'image'> & { imageId: string })[]>} Przygotowane warstwy
+     */
+    async _prepareLayers() {
+        const preparedLayers = await Promise.all(this.canvas.layers.map(async (layer, index) => {
+            const newLayer = { ...layer, imageId: layer.imageId || '' };
+            delete newLayer.image;
+            if (layer.image instanceof HTMLImageElement) {
+                if (layer.imageId) {
+                    newLayer.imageId = layer.imageId;
+                }
+                else {
+                    log.debug(`Layer ${index}: No imageId found, generating new one and saving image.`);
+                    newLayer.imageId = generateUUID();
+                    const imageBitmap = await createImageBitmap(layer.image);
+                    await saveImage(newLayer.imageId, imageBitmap);
+                }
+            }
+            else if (!layer.imageId) {
+                log.error(`Layer ${index}: No image or imageId found, skipping layer.`);
+                return null;
+            }
+            return newLayer;
+        }));
+        return preparedLayers.filter((layer) => layer !== null);
+    }
+    saveState(replaceLast = false) {
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.saveMaskState(replaceLast);
+        }
+        else {
+            this.saveLayersState(replaceLast);
+        }
+    }
+    saveLayersState(replaceLast = false) {
+        if (!this.layerHistory.push(this.canvas.layers, replaceLast))
+            return;
+        this.canvas.updateHistoryButtons();
+        if (!this._debouncedSave) {
+            this._debouncedSave = debounce(this.saveStateToDB.bind(this), 1000);
+        }
+        this._debouncedSave();
+    }
+    saveMaskState(replaceLast = false) {
+        if (!this.canvas.maskTool)
+            return;
+        const maskCanvas = this.canvas.maskTool.getMask();
+        this.maskHistory.push(maskCanvas, replaceLast);
+        this.canvas.updateHistoryButtons();
+    }
+    undo() {
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.undoMaskState();
+        }
+        else {
+            this.undoLayersState();
+        }
+    }
+    redo() {
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.redoMaskState();
+        }
+        else {
+            this.redoLayersState();
+        }
+    }
+    undoLayersState() {
+        const prevState = this.layerHistory.undo();
+        if (!prevState)
+            return;
+        this.canvas.layers = prevState;
+        this.canvas.updateSelectionAfterHistory();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
+    }
+    redoLayersState() {
+        const nextState = this.layerHistory.redo();
+        if (!nextState)
+            return;
+        this.canvas.layers = nextState;
+        this.canvas.updateSelectionAfterHistory();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
+    }
+    undoMaskState() {
+        if (!this.canvas.maskTool)
+            return;
+        const prevState = this.maskHistory.undo();
+        if (!prevState)
+            return;
+        // Use the new restoreMaskFromSavedState method that properly clears chunks first
+        this.canvas.maskTool.restoreMaskFromSavedState(prevState);
+        // Clear stroke overlay to prevent old drawing previews from persisting
+        this.canvas.canvasRenderer.clearMaskStrokeOverlay();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
+    }
+    redoMaskState() {
+        if (!this.canvas.maskTool)
+            return;
+        const nextState = this.maskHistory.redo();
+        if (!nextState)
+            return;
+        // Use the new restoreMaskFromSavedState method that properly clears chunks first
+        this.canvas.maskTool.restoreMaskFromSavedState(nextState);
+        // Clear stroke overlay to prevent old drawing previews from persisting
+        this.canvas.canvasRenderer.clearMaskStrokeOverlay();
+        this.canvas.render();
+        this.canvas.updateHistoryButtons();
+    }
+    /**
+     * Czyści historię undo/redo
+     */
+    clearHistory() {
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            this.maskHistory.clear();
+        }
+        else {
+            this.layerHistory.clear();
+        }
+        this.canvas.updateHistoryButtons();
+        log.info("History cleared");
+    }
+    /**
+     * Zwraca informacje o historii
+     * @returns {HistoryInfo} Informacje o historii
+     */
+    getHistoryInfo() {
+        if (this.canvas.maskTool && this.canvas.maskTool.isActive) {
+            return this.maskHistory.getHistoryInfo();
+        }
+        else {
+            return this.layerHistory.getHistoryInfo();
+        }
+    }
+}

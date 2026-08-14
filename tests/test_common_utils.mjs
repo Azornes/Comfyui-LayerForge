@@ -15,7 +15,7 @@ import {
   radiansToDegrees,
   snapToGrid,
   worldToLocal,
-} from '../js/utils/CommonUtils.js';
+} from '../js/utils/common_utils.js';
 
 test('common numeric helpers keep canvas math stable', () => {
   assert.equal(snapToGrid(95, 64), 64);

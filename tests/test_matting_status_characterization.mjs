@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { fetchMattingModelStatus } from '../js/utils/MattingUtils.js';
+import { fetchMattingModelStatus } from '../js/utils/matting_utils.js';
 
 const canvasViewSource = await readFile(
-  new URL('../src/app/CanvasView.ts', import.meta.url),
+  new URL('../src/app/canvas_view.ts', import.meta.url),
   'utf8',
 );
 

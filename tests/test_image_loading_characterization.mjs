@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { CanvasState } from '../js/canvas/CanvasState.js';
+import { CanvasState } from '../js/canvas/canvas_state.js';
 
 const [canvasStateSource, maskEditorSource] = await Promise.all([
-  readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_state.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/mask/mask_editor_integration.ts', import.meta.url), 'utf8'),
 ]);
 
 function installImageStub() {

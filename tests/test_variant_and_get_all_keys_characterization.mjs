@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [blobSource, exportSource, dbSource, sharedSource] = await Promise.all([
-  readFile(new URL('../src/media/CanvasBlobUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/CanvasExportUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/canvas_blob_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/canvas_export_utils.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/persistence/db.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/persistence/db_shared.ts', import.meta.url), 'utf8'),
 ]);

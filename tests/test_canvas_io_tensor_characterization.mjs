@@ -5,7 +5,7 @@ import test from 'node:test';
 import {
   createImageFromImageData,
   tensorToImageData,
-} from '../js/media/ImageUtils.js';
+} from '../js/media/image_utils.js';
 
 function installImageDataCanvasStubs() {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -105,7 +105,7 @@ test('tensor to image pipeline preserves RGB pixels and data URL conversion', as
 });
 
 test('CanvasIO uses one tensor-to-image helper for all RGB image entry points', async () => {
-  const source = await readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8');
 
   assert.match(source, /private async tensorToRgbImage\(/);
   assert.doesNotMatch(source, /convertTensorToImageData|createImageFromData/);

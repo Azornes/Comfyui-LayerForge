@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { HistoryStack } from '../js/canvas/CanvasHistory.js';
+import { HistoryStack } from '../js/canvas/canvas_history.js';
 
 test('history stack keeps independent snapshots and supports undo/redo', () => {
   const history = new HistoryStack({

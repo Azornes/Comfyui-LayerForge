@@ -2,15 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { blobToDataUrl, loadImageFromBlob } from '../js/media/ImageUtils.js';
+import { blobToDataUrl, loadImageFromBlob } from '../js/media/image_utils.js';
 
 const sourceFiles = await Promise.all([
-  readFile(new URL('../src/media/ImageUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/ClipboardManager.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasInteractions.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/image_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/clipboard_manager.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_interactions.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_layers.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8'),
 ]);
 
 test('Blob and File image entry points use the shared loading helpers', () => {

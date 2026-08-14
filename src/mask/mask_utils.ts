@@ -1,6 +1,6 @@
 import {createModuleLogger} from "../log_system/log_funcs.js";
-import { withErrorHandling, createValidationError } from "../shared/ErrorHandler.js";
-import type { Canvas } from '../canvas/Canvas.js';
+import { withErrorHandling, createValidationError } from "../shared/error_handler.js";
+import type { Canvas } from '../canvas/canvas.js';
 // @ts-ignore
 import {ComfyApp} from "../../../scripts/app.js";
 

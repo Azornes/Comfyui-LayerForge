@@ -98,7 +98,7 @@ test('state saver worker ignores malformed messages and reports storage failures
   console.error = (...args) => errors.push(args);
 
   try {
-    await import('../js/persistence/state-saver.worker.js?resilience-worker');
+    await import('../js/persistence/state_saver.worker.js?resilience-worker');
     await globalThis.self.onmessage({ data: { stateKey: '', state: null } });
     assert.match(errors.flat().join(' '), /Invalid data received/);
 

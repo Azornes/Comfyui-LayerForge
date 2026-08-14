@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {getCanvasStateKey, getWorkflowIdentity} from '../js/utils/CanvasStateKey.js';
+import {getCanvasStateKey, getWorkflowIdentity} from '../js/utils/canvas_state_key.js';
 
 test('LayerForge state keys isolate equal node IDs between workflows', () => {
   const firstNode = {id: 1, graph: {rootGraph: {id: 'workflow-a'}}};

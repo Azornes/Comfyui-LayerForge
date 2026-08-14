@@ -5,13 +5,13 @@ import test from 'node:test';
 import {
   getImageAddMode,
   isFitOnAddEnabled,
-} from '../js/utils/CanvasInputUtils.js';
+} from '../js/utils/canvas_input_utils.js';
 
 const [canvasIOSource, canvasViewSource, interactionsSource, inputUtilsSource] = await Promise.all([
-  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasInteractions.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/CanvasInputUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_interactions.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/canvas_input_utils.ts', import.meta.url), 'utf8'),
 ]);
 
 test('image entry points use the shared fit_on_add policy', () => {

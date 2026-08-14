@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { MaskTool } from '../js/mask/MaskTool.js';
+import { MaskTool } from '../js/mask/mask_tool.js';
 import {
   applyLuminanceAsAlpha,
   fillInverseAlphaMask,
   imageDataToBinaryMask,
   rasterizeDistanceFieldMask,
-} from '../js/mask/MaskPixelUtils.js';
+} from '../js/mask/mask_pixel_utils.js';
 
 function installCanvasStub(sourceAlpha) {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -116,7 +116,7 @@ test('distance-field mask preserves alpha-distance behavior for transparent pixe
   const stubs = installCanvasStub([255, 128, 0]);
 
   try {
-    const { createDistanceFieldMaskSync } = await import('../js/mask/ImageAnalysis.js?characterization');
+    const { createDistanceFieldMaskSync } = await import('../js/mask/image_analysis.js?characterization');
     createDistanceFieldMaskSync({ width: 3, height: 1 }, 100);
 
     assert.deepEqual([...stubs.output.data], [
@@ -130,16 +130,16 @@ test('distance-field mask preserves alpha-distance behavior for transparent pixe
 });
 
 test('mask consumers use one shared distance transform implementation', async () => {
-    const { calculateDistanceTransform } = await import('../js/mask/MaskPixelUtils.js?characterization');
-  const imageAnalysisSource = await readFile(new URL('../src/mask/ImageAnalysis.ts', import.meta.url), 'utf8');
-  const maskToolSource = await readFile(new URL('../src/mask/MaskTool.ts', import.meta.url), 'utf8');
+    const { calculateDistanceTransform } = await import('../js/mask/mask_pixel_utils.js?characterization');
+  const imageAnalysisSource = await readFile(new URL('../src/mask/image_analysis.ts', import.meta.url), 'utf8');
+  const maskToolSource = await readFile(new URL('../src/mask/mask_tool.ts', import.meta.url), 'utf8');
 
   assert.deepEqual(
     [...calculateDistanceTransform(new Uint8Array([1, 1, 0]), 3, 1)],
     [2, 1, 0],
   );
-  assert.match(imageAnalysisSource, /from "\.\/MaskPixelUtils\.js"/);
-  assert.match(maskToolSource, /from "\.\/MaskPixelUtils\.js"/);
+  assert.match(imageAnalysisSource, /from "\.\/mask_pixel_utils\.js"/);
+  assert.match(maskToolSource, /from "\.\/mask_pixel_utils\.js"/);
   assert.match(maskToolSource, /calculateDistanceTransform\(binaryData, width, height\)/);
   assert.match(imageAnalysisSource, /rasterizeDistanceFieldMask\(distanceField, binaryMask, threshold, maskData\.data\)/);
   assert.match(maskToolSource, /rasterizeDistanceFieldMask\(distanceMap, binaryData, threshold, outputData\.data\)/);
@@ -402,11 +402,11 @@ test('MaskTool feather rasterization preserves edge interpolation and threshold-
 });
 
 test('CanvasIO and CanvasLayers preserve inverse-alpha mask generation', async () => {
-  const canvasIOSource = await readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8');
-  const canvasLayersSource = await readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8');
+  const canvasIOSource = await readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8');
+  const canvasLayersSource = await readFile(new URL('../src/canvas/canvas_layers.ts', import.meta.url), 'utf8');
 
-  assert.doesNotMatch(canvasIOSource, /from "\.\/utils\/MaskPixelUtils\.js"/);
-  assert.match(canvasLayersSource, /from "\.\.\/mask\/MaskPixelUtils\.js"/);
+  assert.doesNotMatch(canvasIOSource, /from "\.\/utils\/mask_pixel_utils\.js"/);
+  assert.match(canvasLayersSource, /from "\.\.\/mask\/mask_pixel_utils\.js"/);
   assert.match(canvasIOSource, /renderLayerVisibilityMask\(/);
   assert.doesNotMatch(canvasIOSource, /fillInverseAlphaMask\(visibilityData, maskData\)/);
   assert.match(canvasLayersSource, /fillInverseAlphaMask\(visibilityData, maskData\)/);

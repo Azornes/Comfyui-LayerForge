@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const canvasViewSource = await readFile(
-  new URL('../js/app/CanvasView.js', import.meta.url),
+  new URL('../js/app/canvas_view.js', import.meta.url),
   'utf8'
 );
 

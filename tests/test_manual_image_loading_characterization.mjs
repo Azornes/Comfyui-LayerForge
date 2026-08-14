@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [imageUtilsSource, clipboardSource, uploadSource, previewSource, viewSource] = await Promise.all([
-  readFile(new URL('../src/media/ImageUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/ClipboardManager.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/ImageUploadUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/PreviewUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/image_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/clipboard_manager.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/image_upload_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/preview_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
 ]);
 
 test('targeted image consumers use the shared Image loading lifecycle', () => {

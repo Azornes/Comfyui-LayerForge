@@ -6,15 +6,15 @@ import {
   getFlattenedCanvasBlob,
   resolveCanvasBlob,
   supportsFlattenedCanvasBlob,
-} from '../js/media/CanvasBlobUtils.js';
-import { createPreviewFromCanvas } from '../js/media/PreviewUtils.js';
+} from '../js/media/canvas_blob_utils.js';
+import { createPreviewFromCanvas } from '../js/media/preview_utils.js';
 
 const sourceFiles = await Promise.all([
-  readFile(new URL('../src/media/ImageUploadUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/PreviewUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/CanvasBlobUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/image_upload_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/preview_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/mask/mask_editor_integration.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/canvas_blob_utils.ts', import.meta.url), 'utf8'),
 ]);
 
 function installPreviewStubs() {

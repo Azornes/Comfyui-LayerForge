@@ -50,7 +50,7 @@ function extractImports(source) {
 function getDomain(filePath) {
   const pathFromRoot = relative(SRC_ROOT, filePath);
   const [domain] = pathFromRoot.split(sep);
-  return domain === 'CanvasView.ts' ? 'root' : domain;
+  return domain === 'canvas_view.ts' ? 'root' : domain;
 }
 
 function getImportedDomain(importerPath, specifier) {
@@ -70,9 +70,9 @@ test('source root contains only the stable ComfyUI bootstrap', async () => {
     .map((filePath) => relative(SRC_ROOT, filePath))
     .sort();
 
-  assert.deepEqual(rootFiles, ['CanvasView.ts']);
+  assert.deepEqual(rootFiles, ['canvas_view.ts']);
 
-  const bootstrapSource = await readFile(resolve(SRC_ROOT, 'CanvasView.ts'), 'utf8');
+  const bootstrapSource = await readFile(resolve(SRC_ROOT, 'canvas_view.ts'), 'utf8');
   assert.match(bootstrapSource, /registerLayerForgeExtension\(\);/);
   assert.doesNotMatch(bootstrapSource, /app\.registerExtension\(/);
 });

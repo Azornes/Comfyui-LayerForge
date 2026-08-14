@@ -44,7 +44,7 @@ test('canonical logger handles levels, retention, and callsites', () => {
     assert.equal(logger.normalizeLevel('warning'), LogLevel.WARN);
     assert.equal(logger.normalizeLevel('critical'), LogLevel.FATAL);
     assert.equal(logger.parseJsonPayloadFromString('message {"value": 1}').value.value, 1);
-    assert.match(logger.formatSuffix('canvas', 'Canvas.ts:10:2'), /Canvas\.ts:10:2/);
+    assert.match(logger.formatSuffix('canvas', 'canvas.ts:10:2'), /canvas\.ts:10:2/);
 
     logger.setModuleLevel('quiet', LogLevel.NONE);
     assert.equal(logger.isLevelEnabled('quiet', LogLevel.ERROR), false);

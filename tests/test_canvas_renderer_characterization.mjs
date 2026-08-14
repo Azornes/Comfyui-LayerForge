@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [canvasIOSource, canvasLayersSource] = await Promise.all([
-  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_layers.ts', import.meta.url), 'utf8'),
 ]);
 
 test('output paths preserve their current render bounds and mask responsibilities', () => {

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { CanvasRenderer } from '../js/canvas/CanvasRenderer.js';
-import { ShapeTool } from '../js/canvas/ShapeTool.js';
+import { CanvasRenderer } from '../js/canvas/canvas_renderer.js';
+import { ShapeTool } from '../js/canvas/shape_tool.js';
 
 import {
   getBoundsFromPoints,
@@ -12,10 +12,10 @@ import {
   isPointInRotatedLayer,
   localToWorld,
   worldToLocal,
-} from '../js/utils/CommonUtils.js';
+} from '../js/utils/common_utils.js';
 
 const canvasLayersSource = await readFile(
-  new URL('../src/canvas/CanvasLayers.ts', import.meta.url),
+  new URL('../src/canvas/canvas_layers.ts', import.meta.url),
   'utf8'
 );
 

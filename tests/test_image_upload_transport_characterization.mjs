@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [canvasIOSource, imageUploadSource] = await Promise.all([
-  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/media/ImageUploadUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/canvas_io.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/image_upload_utils.ts', import.meta.url), 'utf8'),
 ]);
 
 test('current upload callers preserve their endpoint and form-data contracts', () => {

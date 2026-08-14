@@ -9,7 +9,7 @@ import {
   retryWithBackoff,
   safeExecute,
   withErrorHandling,
-} from '../js/shared/ErrorHandler.js';
+} from '../js/shared/error_handler.js';
 
 test('error handler categorizes and records application errors', () => {
   const handler = new ErrorHandler();

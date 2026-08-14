@@ -1,5 +1,5 @@
-import type { Canvas as CanvasClass } from '../canvas/Canvas';
-import type { CanvasLayers } from '../canvas/CanvasLayers';
+import type { Canvas as CanvasClass } from '../canvas/canvas';
+import type { CanvasLayers } from '../canvas/canvas_layers';
 
 export interface ComfyWidget {
     name: string;

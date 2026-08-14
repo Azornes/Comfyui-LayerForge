@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { resolveCanvasBlob } from '../js/media/CanvasBlobUtils.js';
+import { resolveCanvasBlob } from '../js/media/canvas_blob_utils.js';
 
 const source = await readFile(
-  new URL('../src/media/ImageUploadUtils.ts', import.meta.url),
+  new URL('../src/media/image_upload_utils.ts', import.meta.url),
   'utf8'
 );
 function getFunctionBody(functionName, nextFunctionName) {

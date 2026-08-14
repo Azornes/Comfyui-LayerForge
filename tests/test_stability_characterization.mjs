@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {HistoryStack} from '../js/canvas/CanvasHistory.js';
-import {ImageReferenceManager} from '../js/persistence/ImageReferenceManager.js';
+import {HistoryStack} from '../js/canvas/canvas_history.js';
+import {ImageReferenceManager} from '../js/persistence/image_reference_manager.js';
 
 function createReferenceCanvas(layers = []) {
   return {

@@ -22,17 +22,17 @@ be edited independently.
 
 These modules are the main seams between the frontend domains:
 
-- `app/CanvasView.ts` composes the canvas runtime without registering a second
+- `app/canvas_view.ts` composes the canvas runtime without registering a second
   ComfyUI extension as an import side effect.
-- `app/LayerForgeConnections.ts` owns graph identity, workflow connections,
+- `app/layer_forge_connections.ts` owns graph identity, workflow connections,
   and ComfyUI event/WebSocket integration.
-- `canvas/CanvasHistory.ts` owns bounded undo/redo stacks and snapshot
+- `canvas/canvas_history.ts` owns bounded undo/redo stacks and snapshot
   cloning.
-- `io/CanvasIO.ts` owns image input/output transport and render/export
+- `io/canvas_io.ts` owns image input/output transport and render/export
   coordination.
-- `media/ImageCache.ts` owns in-memory image identity and cache lifetime;
+- `media/image_cache.ts` owns in-memory image identity and cache lifetime;
   IndexedDB persistence remains under `persistence/`.
-- `mask/MaskResultUtils.ts` owns shared mask-result conversion and application;
+- `mask/mask_result_utils.ts` owns shared mask-result conversion and application;
   editor-specific side effects stay in the individual integrations.
 - `persistence/contracts.ts` owns the shared persisted-state and worker-message
   contracts used by the database and persistence worker.
@@ -54,8 +54,8 @@ The lower-level domains remain independent of application composition:
   dependencies;
 - ComfyUI-provided modules under `scripts/` are external runtime dependencies.
 
-The root `src/CanvasView.ts` file is the single served bootstrap. It invokes
-the registration function from `src/app/CanvasView.ts`; the implementation
+The root `src/canvas_view.ts` file is the single served bootstrap. It invokes
+the registration function from `src/app/canvas_view.ts`; the implementation
 module itself must not register the extension as an import side effect.
 
 The dependency rules are covered by `tests/test_architecture_boundaries.mjs`.

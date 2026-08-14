@@ -10,7 +10,7 @@
     "test:coverage": "node --experimental-test-coverage --test tests/*.mjs",
     "lint": "eslint js/ tests/ --max-warnings=0",
     "lint:fix": "eslint js/ tests/ --fix",
-    "test:coverage:critical": "node --experimental-test-coverage --test-coverage-include=js/canvas/CanvasHistory.js --test-coverage-include=js/persistence/contracts.js --test-coverage-include=js/utils/WebSocketManager.js --test-coverage-lines=65 --test-coverage-functions=65 --test-coverage-branches=50 --test tests/test_canvas_history.mjs tests/test_persistence_contracts.mjs tests/test_persistence_resilience.mjs tests/test_async_lifecycle_resilience.mjs",
+    "test:coverage:critical": "node --experimental-test-coverage --test-coverage-include=js/canvas/canvas_history.js --test-coverage-include=js/persistence/contracts.js --test-coverage-include=js/utils/web_socket_manager.js --test-coverage-lines=65 --test-coverage-functions=65 --test-coverage-branches=50 --test tests/test_canvas_history.mjs tests/test_persistence_contracts.mjs tests/test_persistence_resilience.mjs tests/test_async_lifecycle_resilience.mjs",
     "watch": ".\\node_modules\\.bin\\tsc.cmd --watch",
     "watch:build": "nodemon --watch src --ext ts,css,html --exec .\\build.bat"
   },

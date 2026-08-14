@@ -49,7 +49,7 @@ test('WebSocket manager reconnects and rejects pending acknowledgements on destr
   });
 
   try {
-    const { WebSocketManager, webSocketManager } = await import('../js/utils/WebSocketManager.js?resilience');
+    const { WebSocketManager, webSocketManager } = await import('../js/utils/web_socket_manager.js?resilience');
     const manager = new WebSocketManager('ws://localhost/layerforge/canvas_ws');
     manager.reconnectInterval = 0;
 
@@ -87,10 +87,10 @@ test('WebSocket manager reconnects and rejects pending acknowledgements on destr
 
 test('async integrations cancel work and ignore results after their owner is destroyed', async () => {
   const [canvasSource, samSource, maskSource, canvasStateSource] = await Promise.all([
-    readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/mask/SAMDetectorIntegration.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
-    readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/app/canvas_view.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/mask/sam_detector_integration.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/mask/mask_editor_integration.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/canvas/canvas_state.ts', import.meta.url), 'utf8'),
   ]);
 
   assert.match(canvasSource, /new AbortController\(\)/);

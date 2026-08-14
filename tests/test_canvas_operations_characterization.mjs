@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { cloneCanvas } from '../js/utils/CommonUtils.js';
+import { cloneCanvas } from '../js/utils/common_utils.js';
 
 const [layersSource, stateSource, maskEditorSource, commonUtilsSource, historySource] = await Promise.all([
-  readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/CommonUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/canvas/CanvasHistory.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_layers.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_state.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/mask/mask_editor_integration.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/utils/common_utils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/canvas_history.ts', import.meta.url), 'utf8'),
 ]);
 
 test('mirror commands share the selected-layer flip lifecycle', () => {
