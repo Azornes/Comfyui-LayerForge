@@ -212,7 +212,7 @@ const patchLayerForgeChangeTrackerUndoRedo = (): void => {
 
 patchLayerForgeChangeTrackerUndoRedo();
 
-async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): Promise<CanvasWidget> {
+async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp): Promise<CanvasWidget> {
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
     });
@@ -947,7 +947,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
     };
 
     // Tooltip logic
-    switchEl.addEventListener("mouseenter", (e: MouseEvent) => {
+    switchEl.addEventListener("mouseenter", () => {
         const tooltipContent = getCurrentTooltipContent();
         showTooltip(switchEl, tooltipContent);
     });
@@ -1850,8 +1850,6 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     if (!(window as any).layerForgeTempFileTracker) {
         (window as any).layerForgeTempFileTracker = new Map<string, string>();
     }
-    const tempFileTracker = (window as any).layerForgeTempFileTracker;
-
     const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
 
     const canvasContainer = $el("div.lf-painter-canvas-container.lf-painter-container", {
@@ -2193,7 +2191,7 @@ export function registerLayerForgeExtension(): void {
         }
 
         const originalQueuePrompt = app.queuePrompt;
-        app.queuePrompt = async function (this: ComfyApp, number: number, prompt: any) {
+        app.queuePrompt = async function (this: ComfyApp, _number: number, _prompt: any) {
             installLayerForgeMultiImagePromptPatch();
             installLayerForgeVirtualWirePatch();
             log.info("Preparing to queue prompt...");
@@ -2262,7 +2260,9 @@ export function registerLayerForgeExtension(): void {
                     nodeWithPreviewHook.__layerForgePreviewWidgetHooked = true;
                 }
 
-                (this as any).properties ||= {};
+                if (!(this as any).properties) {
+                    (this as any).properties = {};
+                }
                 pruneLayerForgeTransportInputs(this);
 
                 this.size = [1150, 1000];
@@ -2485,7 +2485,7 @@ export function registerLayerForgeExtension(): void {
 
             // Add onExecuted handler to check for input data after workflow execution
             const originalOnExecuted = nodeType.prototype.onExecuted;
-            nodeType.prototype.onExecuted = function (this: ComfyNode, message: any) {
+            nodeType.prototype.onExecuted = function (this: ComfyNode, _message: any) {
                 log.info("Node executed, checking for input data...");
                 
                 const canvas = (this as any).canvasWidget?.canvas || (this as any).canvasWidget;
@@ -2570,7 +2570,9 @@ export function registerLayerForgeExtension(): void {
                     originalConfigure.apply(this, [data]);
                 }
 
-                (this as any).properties ||= {};
+                if (!(this as any).properties) {
+                    (this as any).properties = {};
+                }
                 pruneLayerForgeTransportInputs(this);
 
                 // Store the source node ID in the map (persists across node ID changes)
@@ -2609,7 +2611,7 @@ export function registerLayerForgeExtension(): void {
                 });
 
                 // Additional debug: Check if any option contains common Impact Pack keywords
-                const impactOptions = options.filter((opt, idx) => {
+                const impactOptions = options.filter((opt) => {
                     if (!opt || !opt.content) return false;
                     const content = opt.content.toLowerCase();
                     return content.includes('impact') || 

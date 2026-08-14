@@ -1518,8 +1518,6 @@ export class CanvasLayers {
         content.appendChild(blendAreaContainer);
 
         let isDragging = false;
-        let dragOffset = { x: 0, y: 0 };
-
         // Drag logic needs to update world coordinates, not screen coordinates
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging) {

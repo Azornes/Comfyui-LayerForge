@@ -240,7 +240,7 @@ export class ClipboardManager {
                 new URL(text);
                 log.debug("Detected valid URL:", text);
                 return true;
-            } catch (e) {
+            } catch {
                 log.debug("Invalid URL format:", text);
                 return false;
             }
@@ -262,10 +262,10 @@ export class ClipboardManager {
 
 
         const pathPatterns = [
-            /^[a-zA-Z]:[\\\/]/, // Windows absolute path (C:\... or C:/...)
-            /^[\\\/]/, // Unix absolute path (/...)
-            /^\.{1,2}[\\\/]/, // Relative path (./... or ../...)
-            /^[^\\\/]*[\\\/]/ // Contains path separators
+            /^[a-zA-Z]:[\\/]/, // Windows absolute path (C:\... or C:/...)
+            /^[\\/]/, // Unix absolute path (/...)
+            /^\.{1,2}[\\/]/, // Relative path (./... or ../...)
+            /^[^\\/]*[\\/]/ // Contains path separators
         ];
 
         const isValidPath = pathPatterns.some(pattern => pattern.test(text)) || 
@@ -392,7 +392,7 @@ export class ClipboardManager {
             fileInput.accept = 'image/*';
             fileInput.style.display = 'none';
 
-            const fileName = originalPath.split(/[\\\/]/).pop();
+        const fileName = originalPath.split(/[\\/]/).pop();
 
             fileInput.onchange = async (event) => {
                 const target = event.target as HTMLInputElement;
@@ -438,7 +438,7 @@ export class ClipboardManager {
      * @param {string} filePath - The file path that couldn't be loaded
      */
     showFilePathMessage(filePath: string): void {
-        const fileName = filePath.split(/[\\\/]/).pop();
+        const fileName = filePath.split(/[\\/]/).pop();
         const message = `Cannot load local file directly due to browser security restrictions. File detected: ${fileName}`;
         showNotification(message, "#c54747", 5000);
         log.info("Showed file path limitation message to user");

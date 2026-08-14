@@ -817,7 +817,6 @@ export class CanvasRenderer {
         if (selectedLayers.length === 0)
             return;
         const iconRadius = 20 / this.canvas.viewport.zoom;
-        const innerRadius = 12 / this.canvas.viewport.zoom;
         selectedLayers.forEach((layer) => {
             if (!layer.visible)
                 return;
@@ -882,7 +881,7 @@ export class CanvasRenderer {
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 1 / this.canvas.viewport.zoom;
-        for (const [name, pos] of Object.entries(handles)) {
+        for (const pos of Object.values(handles)) {
             ctx.beginPath();
             ctx.arc(pos.x, pos.y, handleRadius, 0, Math.PI * 2);
             ctx.fill();

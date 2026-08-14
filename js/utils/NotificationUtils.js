@@ -30,7 +30,7 @@ try {
         log = createModuleLogger(CONFIG.LOGGER_NAME);
     }
 }
-catch (e) {
+catch {
     // Fallback if import fails or is commented out
 }
 if (!log) {
@@ -56,7 +56,7 @@ const activeNotifications = new Map();
  */
 export function showNotification(message, typeOrBgColor = "info", durationOrOptions = 3000, typeArg, deduplicateArg = false) {
     // Clean any prefix matching the project name (e.g. "[Layer Forge]")
-    const escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const prefixRegex = new RegExp(`^\\[\\s*${escapeRegex(CONFIG.PROJECT_NAME)}\\s*\\]\\s*`, 'i');
     message = message.replace(prefixRegex, "");
     let type = "info";

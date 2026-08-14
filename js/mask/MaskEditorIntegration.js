@@ -151,7 +151,7 @@ export class MaskEditorIntegration {
                                 log.info("New mask editor detected as ready via MessageBroker");
                             }
                         }
-                        catch (e) {
+                        catch {
                             editorReady = false;
                         }
                     }

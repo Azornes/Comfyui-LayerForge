@@ -418,7 +418,7 @@ export class CanvasInteractions {
             log.info("Internal clipboard cleared - mouse left canvas");
         }
     }
-    handleMouseEnter(e) {
+    handleMouseEnter(_e) {
         if (this.canvas.maskTool.isActive) {
             this.canvas.maskTool.handleMouseEnter();
         }
@@ -925,7 +925,7 @@ export class CanvasInteractions {
             const screenToImageScaleY = o.originalHeight / o.height;
             const delta_image_x = mouseDeltaX_local * screenToImageScaleX;
             const delta_image_y = mouseDeltaY_local * screenToImageScaleY;
-            let newCropBounds = { ...o.cropBounds }; // Start with the bounds from the beginning of the drag
+            const newCropBounds = { ...o.cropBounds }; // Start with the bounds from the beginning of the drag
             // Apply the image-space delta to the appropriate edges of the crop bounds
             const isFlippedH = layer.flipH;
             const isFlippedV = layer.flipV;
@@ -1030,7 +1030,7 @@ export class CanvasInteractions {
             return;
         const startAngle = Math.atan2(this.interaction.dragStart.y - o.centerY, this.interaction.dragStart.x - o.centerX);
         const currentAngle = Math.atan2(worldCoords.y - o.centerY, worldCoords.x - o.centerX);
-        let angleDiff = (currentAngle - startAngle) * 180 / Math.PI;
+        const angleDiff = (currentAngle - startAngle) * 180 / Math.PI;
         let newRotation = o.rotation + angleDiff;
         if (isShiftPressed) {
             newRotation = Math.round(newRotation / 15) * 15;
@@ -1107,7 +1107,7 @@ export class CanvasInteractions {
             }
         }
     }
-    async loadDroppedImageFile(file, worldCoords) {
+    async loadDroppedImageFile(file, _worldCoords) {
         void loadImageFromBlob(file).then(async (img) => {
             const addMode = getImageAddMode(this.canvas.node.widgets);
             await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode);

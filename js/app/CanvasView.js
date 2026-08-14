@@ -137,7 +137,7 @@ const patchLayerForgeChangeTrackerUndoRedo = () => {
     });
 };
 patchLayerForgeChangeTrackerUndoRedo();
-async function createCanvasWidget(node, widget, app) {
+async function createCanvasWidget(node, widget, _app) {
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
     });
@@ -774,7 +774,7 @@ async function createCanvasWidget(node, widget, app) {
                             }
                         };
                         // Tooltip logic
-                        switchEl.addEventListener("mouseenter", (e) => {
+                        switchEl.addEventListener("mouseenter", () => {
                             const tooltipContent = getCurrentTooltipContent();
                             showTooltip(switchEl, tooltipContent);
                         });
@@ -1582,7 +1582,6 @@ async function createCanvasWidget(node, widget, app) {
     if (!window.layerForgeTempFileTracker) {
         window.layerForgeTempFileTracker = new Map();
     }
-    const tempFileTracker = window.layerForgeTempFileTracker;
     const layersPanel = canvas.canvasLayersPanel.createPanelStructure();
     const canvasContainer = $el("div.lf-painter-canvas-container.lf-painter-container", {
         style: {
@@ -1863,7 +1862,7 @@ export function registerLayerForgeExtension() {
                 setTimeout(installLayerForgeVirtualWirePatch, delay);
             }
             const originalQueuePrompt = app.queuePrompt;
-            app.queuePrompt = async function (number, prompt) {
+            app.queuePrompt = async function (_number, _prompt) {
                 installLayerForgeMultiImagePromptPatch();
                 installLayerForgeVirtualWirePatch();
                 log.info("Preparing to queue prompt...");
@@ -1907,7 +1906,6 @@ export function registerLayerForgeExtension() {
                 const pendingCopySources = new Map();
                 const onNodeCreated = nodeType.prototype.onNodeCreated;
                 nodeType.prototype.onNodeCreated = function () {
-                    var _a;
                     log.debug("CanvasNode onNodeCreated: Base widget setup.");
                     const r = onNodeCreated?.apply(this, arguments);
                     const nodeWithPreviewHook = this;
@@ -1922,7 +1920,9 @@ export function registerLayerForgeExtension() {
                         };
                         nodeWithPreviewHook.__layerForgePreviewWidgetHooked = true;
                     }
-                    (_a = this).properties || (_a.properties = {});
+                    if (!this.properties) {
+                        this.properties = {};
+                    }
                     pruneLayerForgeTransportInputs(this);
                     this.size = [1150, 1000];
                     return r;
@@ -2122,7 +2122,7 @@ export function registerLayerForgeExtension() {
                 };
                 // Add onExecuted handler to check for input data after workflow execution
                 const originalOnExecuted = nodeType.prototype.onExecuted;
-                nodeType.prototype.onExecuted = function (message) {
+                nodeType.prototype.onExecuted = function (_message) {
                     log.info("Node executed, checking for input data...");
                     const canvas = this.canvasWidget?.canvas || this.canvasWidget;
                     if (canvas && canvas.canvasIO) {
@@ -2190,11 +2190,12 @@ export function registerLayerForgeExtension() {
                 // Handle copy/paste - load canvas state from source node when pasting
                 const originalConfigure = nodeType.prototype.onConfigure;
                 nodeType.prototype.onConfigure = async function (data) {
-                    var _a;
                     if (originalConfigure) {
                         originalConfigure.apply(this, [data]);
                     }
-                    (_a = this).properties || (_a.properties = {});
+                    if (!this.properties) {
+                        this.properties = {};
+                    }
                     pruneLayerForgeTransportInputs(this);
                     // Store the source node ID in the map (persists across node ID changes)
                     // This will be picked up later in onAdded when the canvas widget is ready
@@ -2227,7 +2228,7 @@ export function registerLayerForgeExtension() {
                         comfyClass: self.comfyClass
                     });
                     // Additional debug: Check if any option contains common Impact Pack keywords
-                    const impactOptions = options.filter((opt, idx) => {
+                    const impactOptions = options.filter((opt) => {
                         if (!opt || !opt.content)
                             return false;
                         const content = opt.content.toLowerCase();

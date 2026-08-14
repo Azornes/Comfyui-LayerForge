@@ -445,7 +445,7 @@ export class CanvasLayersPanel {
         this.canvas.removeSelectedLayers();
         this.renderLayers();
     }
-    handleDragStart(e, layer, index) {
+    handleDragStart(e, layer, _index) {
         if (!this.layersContainer || !e.dataTransfer)
             return;
         const editingElement = this.layersContainer.querySelector('.lf-layer-name.lf-editing');
@@ -516,7 +516,7 @@ export class CanvasLayersPanel {
         this.canvas.canvasLayers.moveLayers(this.draggedElements, { toIndex: insertIndex });
         log.info(`Dropped ${this.draggedElements.length} layers at position ${insertIndex}`);
     }
-    handleDragEnd(e) {
+    handleDragEnd(_e) {
         this.removeDragInsertionLine();
         if (!this.layersContainer)
             return;

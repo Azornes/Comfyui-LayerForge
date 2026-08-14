@@ -47,7 +47,7 @@ try {
     if (typeof createModuleLogger === 'function') {
         log = createModuleLogger(CONFIG.LOGGER_NAME);
     }
-} catch (e) {
+} catch {
     // Fallback if import fails or is commented out
 }
 
@@ -83,7 +83,7 @@ export function showNotification(
     deduplicateArg: boolean = false
 ): void {
     // Clean any prefix matching the project name (e.g. "[Layer Forge]")
-    const escapeRegex = (str: string) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const prefixRegex = new RegExp(`^\\[\\s*${escapeRegex(CONFIG.PROJECT_NAME)}\\s*\\]\\s*`, 'i');
     message = message.replace(prefixRegex, "");
 

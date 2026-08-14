@@ -529,7 +529,7 @@ export class CanvasLayersPanel {
         this.renderLayers();
     }
 
-    handleDragStart(e: DragEvent, layer: Layer, index: number): void {
+    handleDragStart(e: DragEvent, layer: Layer, _index: number): void {
         if (!this.layersContainer || !e.dataTransfer) return;
         const editingElement = this.layersContainer.querySelector('.lf-layer-name.lf-editing');
         if (editingElement) {
@@ -615,7 +615,7 @@ export class CanvasLayersPanel {
         log.info(`Dropped ${this.draggedElements.length} layers at position ${insertIndex}`);
     }
 
-    handleDragEnd(e: DragEvent): void {
+    handleDragEnd(_e: DragEvent): void {
         this.removeDragInsertionLine();
         if (!this.layersContainer) return;
         this.layersContainer.querySelectorAll('.lf-layer-row').forEach((row: Element) => {

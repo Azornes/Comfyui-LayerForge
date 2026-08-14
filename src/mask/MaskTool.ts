@@ -613,7 +613,7 @@ export class MaskTool {
      * Creates binary mask data from shape points
      */
     private createBinaryMaskFromShape(points: Point[], width: number, height: number): Uint8Array {
-        const { canvas, ctx } = createCanvasWithContext(width, height);
+        const { ctx } = createCanvasWithContext(width, height);
         this.drawShapeOnCanvas(ctx, points);
         
         const maskImage = ctx.getImageData(0, 0, width, height);
@@ -681,7 +681,7 @@ export class MaskTool {
         }
 
         // Create ImageData with feather effect
-        const { canvas: tempCanvas, ctx: tempCtx } = createCanvasWithContext(width, height);
+        const { ctx: tempCtx } = createCanvasWithContext(width, height);
         const outputData = tempCtx.createImageData(width, height);
 
         // Use featherRadius as the threshold for the gradient
@@ -797,8 +797,6 @@ export class MaskTool {
             for (let dx = -this.activeChunkRadius; dx <= this.activeChunkRadius; dx++) {
                 const chunkX = currentChunkX + dx;
                 const chunkY = currentChunkY + dy;
-                const chunkKey = `${chunkX},${chunkY}`;
-                
                 // Get or create chunk if it doesn't exist
                 const chunk = this.getChunkForPosition(chunkX * this.chunkSize, chunkY * this.chunkSize);
                 chunk.isActive = true;
@@ -887,7 +885,7 @@ export class MaskTool {
         this._brushStrength = Math.max(0, Math.min(1, strength));
     }
 
-    handleMouseDown(worldCoords: Point, viewCoords: Point): void {
+    handleMouseDown(worldCoords: Point, _viewCoords: Point): void {
         if (!this.isActive) return;
         this.isDrawing = true;
         this.lastPosition = worldCoords;
@@ -1163,7 +1161,7 @@ export class MaskTool {
      * Updates active canvas when drawing affects chunks
      * Since we now use overlay during drawing, this is only called after drawing is complete
      */
-    private updateActiveCanvasIfNeeded(startWorld: Point, endWorld: Point): void {
+    private updateActiveCanvasIfNeeded(_startWorld: Point, _endWorld: Point): void {
         // This method is now simplified - we only update after drawing is complete
         // The overlay handles all live preview, so we don't need complex chunk activation
         if (!this.isDrawing) {
@@ -1259,7 +1257,7 @@ export class MaskTool {
         }
     }
 
-    drawBrushPreview(viewCoords: Point): void {
+    drawBrushPreview(_viewCoords: Point): void {
         if (!this.previewVisible || this.isDrawing) {
             this.canvasInstance.canvasRenderer.clearOverlay();
             return;
@@ -1513,7 +1511,7 @@ export class MaskTool {
         const width = this.canvasInstance.canvas.width;
         const height = this.canvasInstance.canvas.height;
         
-        const { canvas: tempCanvas, ctx: tempCtx } = createCanvasWithContext(width, height);
+        const { ctx: tempCtx } = createCanvasWithContext(width, height);
         
         // Draw all contours to create the initial mask
         tempCtx.fillStyle = 'white';
@@ -1668,7 +1666,6 @@ export class MaskTool {
         // Now apply the saved mask state to chunks
         if (savedMaskCanvas.width > 0 && savedMaskCanvas.height > 0) {
             // Apply the saved mask to the chunk system at the correct position
-            const bounds = this.canvasInstance.outputAreaBounds;
             this.applyMaskCanvasToChunks(savedMaskCanvas, this.x, this.y);
         }
         
@@ -1966,7 +1963,7 @@ export class MaskTool {
      */
     private clearAllMaskChunks(): void {
         // Clear all existing chunks
-        for (const [chunkKey, chunk] of this.maskChunks) {
+        for (const chunk of this.maskChunks.values()) {
             chunk.ctx.clearRect(0, 0, this.chunkSize, this.chunkSize);
             chunk.isEmpty = true;
             chunk.isDirty = true;

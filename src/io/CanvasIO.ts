@@ -460,7 +460,7 @@ export class CanvasIO {
                                 log.debug(`Mask upload response: ${maskResp.status}`);
 
                                 if (maskResp.status === 200) {
-                                    const data = await resp.json();
+                                    await resp.json();
                                     if (this.canvas.widget) {
                                         this.canvas.widget.value = fileName;
                                     }
@@ -857,17 +857,6 @@ export class CanvasIO {
                             }
                             if (!width || !height) {
                                 throw new Error("Cannot determine mask dimensions from nodeOutputs");
-                            }
-                            
-                            // Determine channels count
-                            let channels = 1;
-                            if (Array.isArray(shape) && shape.length >= 4) {
-                                channels = shape[3];
-                            } else if ((maskOutput as any).channels) {
-                                channels = (maskOutput as any).channels;
-                            } else {
-                                const len = (maskOutput.data as any).length;
-                                channels = Math.max(1, Math.floor(len / (width * height)));
                             }
                             
                             // Use unified tensorToImageData for masks
