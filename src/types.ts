@@ -13,6 +13,8 @@ export interface Layer {
     id: string;
     image: HTMLImageElement;
     imageId: string;
+    /** Stable identity of an image that was automatically imported from an input connection. */
+    layerForgeInputImageIdentity?: string;
     name: string;
     x: number;
     y: number;

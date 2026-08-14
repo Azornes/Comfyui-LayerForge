@@ -21,8 +21,8 @@ test('batch input paths share one layer insertion helper', () => {
     canvasIOSource,
     /private async addBatchImages\([\s\S]*?const image = typeof imageSource === 'string' \? await loadImage\(imageSource\) : imageSource;[\s\S]*?name: `Batch Image \$\{i \+ 1\}`[\s\S]*?targetArea/
   );
-  assert.equal((canvasIOSource.match(/await this\.addBatchImages\(/g) ?? []).length, 2);
-  assert.equal((canvasIOSource.match(/await this\.canvas\.canvasLayers\.addLayerWithImage\(/g) ?? []).length, 6);
+  assert.equal((canvasIOSource.match(/await this\.addBatchImages\(/g) ?? []).length, 3);
+  assert.equal((canvasIOSource.match(/await this\.canvas\.canvasLayers\.addLayerWithImage\(/g) ?? []).length, 5);
   assert.match(canvasIOSource, /async addSelectedInputImage\(/);
   assert.doesNotMatch(canvasIOSource, /for \(let i = 0; i < sourceNode\.imgs\.length; i\+\+\)/);
   assert.doesNotMatch(canvasIOSource, /for \(let i = 0; i < batch\.length; i\+\+\)/);

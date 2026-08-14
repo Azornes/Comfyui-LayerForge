@@ -7,8 +7,38 @@ import { postImageBlob } from "./utils/ImageUploadUtils.js";
 import { getImageAddMode, isFitOnAddEnabled } from "./utils/CanvasInputUtils.js";
 import { getLayerForgeImageInputLinks, getLayerForgeImageInputSlot, getLayerForgeMaskInputSlot, hasLayerForgeImageInput, removeLayerForgeImageInputLink, } from "./utils/MultiImageInputUtils.js";
 const log = createModuleLogger('CanvasIO');
+const IMAGE_CACHE_BUSTER_QUERY_KEYS = new Set([
+    'cachebust',
+    'cache_buster',
+    'cachebuster',
+    'cache_busting',
+    'rand',
+    'random',
+]);
 function imageBatchIdentity(sources) {
     return sources.join('|');
+}
+function normalizeImageSource(source) {
+    const trimmedSource = source.trim();
+    if (!trimmedSource || trimmedSource.startsWith('data:'))
+        return trimmedSource;
+    try {
+        const url = new URL(trimmedSource, globalThis.location?.href ?? 'http://layerforge.invalid/');
+        const stableQuery = Array.from(url.searchParams.entries())
+            .filter(([key]) => !IMAGE_CACHE_BUSTER_QUERY_KEYS.has(key.toLowerCase()))
+            .sort(([firstKey, firstValue], [secondKey, secondValue]) => (firstKey.localeCompare(secondKey) || firstValue.localeCompare(secondValue)));
+        const query = new URLSearchParams(stableQuery).toString();
+        return `${url.origin}${url.pathname}${query ? `?${query}` : ''}${url.hash}`;
+    }
+    catch {
+        return trimmedSource;
+    }
+}
+function getImageSourceIdentity(source) {
+    const rawSource = typeof source === 'string'
+        ? source
+        : source?.currentSrc || source?.src || '';
+    return normalizeImageSource(rawSource);
 }
 function getBackendImageSources(data) {
     if (Array.isArray(data?.input_images))
@@ -27,6 +57,7 @@ export class CanvasIO {
     constructor(canvas) {
         this.canvas = canvas;
         this._saveInProgress = null;
+        this._inputDataCheckPromise = null;
     }
     getImageInputSlot() {
         return getLayerForgeImageInputSlot(this.canvas.node);
@@ -155,12 +186,41 @@ export class CanvasIO {
         return hasLayerForgeImageInput(this.canvas.node);
     }
     async addBatchImages(images, addMode, targetArea, logSuffix) {
+        const existingImageIdentities = this.getCanvasImageIdentities();
+        let addedCount = 0;
         for (let i = 0; i < images.length; i++) {
             const imageSource = images[i];
             const image = typeof imageSource === 'string' ? await loadImage(imageSource) : imageSource;
-            await this.canvas.canvasLayers.addLayerWithImage(image, { name: `Batch Image ${i + 1}` }, addMode, targetArea);
+            const imageIdentity = getImageSourceIdentity(imageSource) || getImageSourceIdentity(image);
+            if (imageIdentity && existingImageIdentities.has(imageIdentity)) {
+                log.info(`Skipping already imported input image ${i + 1}/${images.length} ${logSuffix}`);
+                continue;
+            }
+            const layerProps = {
+                name: `Batch Image ${i + 1}`,
+                ...(imageIdentity && !imageIdentity.startsWith('data:')
+                    ? { layerForgeInputImageIdentity: imageIdentity }
+                    : {}),
+            };
+            await this.canvas.canvasLayers.addLayerWithImage(image, layerProps, addMode, targetArea);
+            addedCount++;
             log.debug(`Added batch image ${i + 1}/${images.length} ${logSuffix}`);
         }
+        return addedCount;
+    }
+    getCanvasImageIdentities() {
+        const identities = new Set();
+        for (const layer of this.canvas.layers) {
+            const persistedIdentity = layer.layerForgeInputImageIdentity;
+            if (persistedIdentity) {
+                identities.add(normalizeImageSource(persistedIdentity));
+            }
+            const imageIdentity = getImageSourceIdentity(layer.image);
+            if (imageIdentity) {
+                identities.add(imageIdentity);
+            }
+        }
+        return identities;
     }
     canvasToPngBlob(canvas, callback) {
         canvas.toBlob(callback, "image/png");
@@ -492,6 +552,25 @@ export class CanvasIO {
         }
     }
     async checkForInputData(options) {
+        const previousCheck = this._inputDataCheckPromise ?? Promise.resolve();
+        const currentCheck = previousCheck
+            .catch(() => undefined)
+            .then(() => this.checkForInputDataInternal(options));
+        this._inputDataCheckPromise = currentCheck;
+        try {
+            await currentCheck;
+        }
+        finally {
+            if (this._inputDataCheckPromise === currentCheck) {
+                this._inputDataCheckPromise = null;
+            }
+        }
+    }
+    async checkForInputDataInternal(options) {
+        if (!this.canvas.initialStateLoaded) {
+            log.debug('Skipping input data check until the persisted canvas state is restored.');
+            return;
+        }
         try {
             const nodeId = this.canvas.node.id;
             const allowImage = options?.allowImage ?? true;
@@ -508,7 +587,7 @@ export class CanvasIO {
             const connectedImageSources = this.getConnectedImageSources();
             if (allowImage && connectedImageSources.length > 0) {
                 const imageInputIdentity = this.getImageInputIdentity() ?? 'image-input';
-                const currentSourceIdentities = connectedImageSources.map(({ sourceNode }) => imageBatchIdentity(sourceNode.imgs.map((img) => img.src)));
+                const currentSourceIdentities = connectedImageSources.map(({ sourceNode }) => imageBatchIdentity(sourceNode.imgs.map((img) => getImageSourceIdentity(img))));
                 const currentBatchImageSrcs = imageBatchIdentity(currentSourceIdentities);
                 if (this.canvas.lastLoadedLinkId === imageInputIdentity) {
                     if (this.canvas.lastLoadedImageSrc !== currentBatchImageSrcs) {
@@ -541,17 +620,17 @@ export class CanvasIO {
                     const sourceImages = connectedImageSources.flatMap(({ sourceNode }) => sourceNode.imgs);
                     if (sourceImages.length > 0) {
                         log.info(`Found ${sourceImages.length} image(s) across ${connectedImageSources.length} connected source(s), loading all`);
-                        const sourceIdentities = connectedImageSources.map(({ sourceNode }) => imageBatchIdentity(sourceNode.imgs.map((img) => img.src)));
+                        const sourceIdentities = connectedImageSources.map(({ sourceNode }) => imageBatchIdentity(sourceNode.imgs.map((img) => getImageSourceIdentity(img))));
                         const batchImageSrcs = imageBatchIdentity(sourceIdentities);
                         this.canvas.lastLoadedLinkId = imageInputIdentity;
                         this.canvas.lastLoadedImageSrc = batchImageSrcs;
                         if (imageChanged)
                             log.info("Image change detected, will add new layers");
                         const addMode = getImageAddMode(this.canvas.node.widgets);
-                        await this.addBatchImages(sourceImages, addMode, this.canvas.outputAreaBounds, 'to canvas');
+                        const addedCount = await this.addBatchImages(sourceImages, addMode, this.canvas.outputAreaBounds, 'to canvas');
                         this.canvas.inputDataLoaded = true;
                         imageLoaded = true;
-                        log.info(`All ${sourceImages.length} connected input images added as separate layers`);
+                        log.info(`Processed ${sourceImages.length} connected input image(s): ${addedCount} new layer(s) added`);
                         this.canvas.render();
                         this.canvas.saveState();
                     }
@@ -752,17 +831,16 @@ export class CanvasIO {
                         // the legacy tensor-batch payload for older workflows.
                         const batch = getBackendImageSources(inputData);
                         log.info(`Processing ${batch.length} ordered input images from backend`);
-                        await this.addBatchImages(batch.map((imgData) => imgData.data), addMode, this.canvas.outputAreaBounds, 'from backend');
-                        log.info(`All ${batch.length} input images added from backend`);
+                        const addedCount = await this.addBatchImages(batch.map((imgData) => imgData.data), addMode, this.canvas.outputAreaBounds, 'from backend');
+                        log.info(`Processed ${batch.length} backend input image(s): ${addedCount} new layer(s) added`);
                         this.canvas.render();
                         this.canvas.saveState();
                     }
                     else if (inputData.input_image) {
-                        // Handle single image (backward compatibility)
-                        const img = await loadImage(inputData.input_image);
-                        // Add image to canvas at output area position
-                        await this.canvas.canvasLayers.addLayerWithImage(img, {}, addMode, this.canvas.outputAreaBounds);
-                        log.info("Single input image added as new layer to canvas");
+                        // Handle single image (backward compatibility) through
+                        // the same persistent deduplication path as batches.
+                        const addedCount = await this.addBatchImages([inputData.input_image], addMode, this.canvas.outputAreaBounds, 'from backend');
+                        log.info(`Processed single backend input image: ${addedCount} new layer(s) added`);
                         this.canvas.render();
                         this.canvas.saveState();
                     }

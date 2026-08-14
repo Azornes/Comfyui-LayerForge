@@ -101,6 +101,8 @@ export class Canvas {
         this.pendingDataCheck = null;
         this.pendingInputDataCheck = null;
         this.inputDataLoaded = false;
+        this.initialStateLoaded = false;
+        this.initialStateLoadPromise = null;
         this.imageCache = new ImageCache();
         this.requestSaveState = () => { };
         this.outputAreaShape = null;
@@ -206,7 +208,9 @@ export class Canvas {
     _setupCanvas() {
         this.initCanvas();
         this.canvasInteractions.setupEventListeners();
-        this.canvasIO.initNodeData();
+        // Input images are checked after IndexedDB state has been restored in
+        // loadInitialState(). Starting the check here races with state loading
+        // and can create a second copy of every connected input image.
         this.layers = this.layers.map((layer) => ({
             ...layer,
             opacity: 1
@@ -216,11 +220,37 @@ export class Canvas {
      * Ładuje stan canvas z bazy danych
      */
     async loadInitialState() {
+        if (this.initialStateLoadPromise) {
+            return this.initialStateLoadPromise;
+        }
+        const loadPromise = this._loadInitialState();
+        this.initialStateLoadPromise = loadPromise;
+        try {
+            await loadPromise;
+        }
+        finally {
+            if (this.initialStateLoadPromise === loadPromise) {
+                this.initialStateLoadPromise = null;
+            }
+        }
+    }
+    async _loadInitialState() {
         log.info("Loading initial state for node:", this.node.id);
         const loaded = await this.canvasState.loadStateFromDB();
+        this.initialStateLoaded = true;
         if (!loaded) {
             log.info("No saved state found, initializing from node data.");
             await this.canvasIO.initNodeData();
+        }
+        else {
+            // A workflow can be restored with connected inputs. Check them
+            // only after the persisted layers are present so the input loader
+            // can recognize already imported images.
+            await this.canvasIO.checkForInputData({
+                allowImage: true,
+                allowMask: false,
+                reason: 'initial_state_loaded',
+            });
         }
         this.saveState();
         this.render();
