@@ -8,6 +8,11 @@ import {withErrorHandling} from "../shared/ErrorHandler.js";
 import {HistoryStack, type HistoryInfo} from "./CanvasHistory.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from '../shared/types';
+import type {
+    PersistedCanvasState,
+    PersistedLayer,
+    StateSaverMessage,
+} from '../persistence/contracts.js';
 
 const log = createModuleLogger('CanvasState');
 
@@ -301,7 +306,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         const stateKey = getCanvasStateKey(this.canvas.node);
         log.info("Preparing state to be sent to worker for key:", stateKey);
         const layers = await this._prepareLayers();
-        const state = {
+        const state: PersistedCanvasState = {
             layers: layers.filter(layer => layer !== null),
             viewport: this.canvas.viewport,
             width: this.canvas.width,
@@ -316,10 +321,11 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
 
         if (this.stateSaverWorker) {
             log.info("Posting state to worker for background saving.");
-            this.stateSaverWorker.postMessage({
+            const message: StateSaverMessage = {
                 stateKey,
                 state: state
-            });
+            };
+            this.stateSaverWorker.postMessage(message);
             this.canvas.render();
         } else {
             log.warn("State saver worker not available. Saving on main thread.");
@@ -331,7 +337,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
      * Przygotowuje warstwy do zapisu
      * @returns {Promise<(Omit<Layer, 'image'> & { imageId: string })[]>} Przygotowane warstwy
      */
-    async _prepareLayers(): Promise<(Omit<Layer, 'image'> & { imageId: string })[]> {
+    async _prepareLayers(): Promise<PersistedLayer[]> {
         const preparedLayers = await Promise.all(this.canvas.layers.map(async (layer: Layer, index: number) => {
             const newLayer: Omit<Layer, 'image'> & { imageId: string } = { ...layer, imageId: layer.imageId || '' };
             delete (newLayer as any).image;
@@ -351,7 +357,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
             }
             return newLayer;
         }));
-        return preparedLayers.filter((layer): layer is Omit<Layer, 'image'> & { imageId: string } => layer !== null);
+        return preparedLayers.filter((layer): layer is PersistedLayer => layer !== null);
     }
 
     saveState(replaceLast = false): void {

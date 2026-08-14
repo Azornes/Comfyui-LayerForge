@@ -1,4 +1,5 @@
 import {STATE_STORE, executeDBStoreRequest} from './db_shared.js';
+import {isStateSaverMessage, type PersistedCanvasState} from './contracts.js';
 
 console.log('[StateWorker] Worker script loaded and running.');
 
@@ -12,7 +13,7 @@ function error(...args: any[]): void {
 
 const dbLogger = {info: log, error};
 
-async function setCanvasState(id: string, state: any): Promise<void> {
+async function setCanvasState(id: string, state: PersistedCanvasState): Promise<void> {
     await executeDBStoreRequest<void>(
         dbLogger,
         [STATE_STORE],
@@ -30,14 +31,15 @@ async function setCanvasState(id: string, state: any): Promise<void> {
     );
 }
 
-self.onmessage = async function(e: MessageEvent<{ state: any, stateKey: string }>): Promise<void> {
+self.onmessage = async function(e: MessageEvent<unknown>): Promise<void> {
     log('Message received from main thread:', e.data ? 'data received' : 'no data');
-    const { state, stateKey } = e.data;
 
-    if (!state || !stateKey) {
+    if (!isStateSaverMessage(e.data)) {
         error('Invalid data received from main thread');
         return;
     }
+
+    const { state, stateKey } = e.data;
 
     try {
         log(`Saving state for key: ${stateKey}`);

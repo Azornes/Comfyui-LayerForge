@@ -173,6 +173,8 @@ test('the worker uses shared database infrastructure for canvas-state persistenc
   assert.match(sharedSource, /export const IMAGE_STORE_NAME = 'CanvasImages'/);
   assert.match(sharedSource, /export const DB_VERSION = 3/);
   assert.match(workerSource, /from '\.\/db_shared\.js'/);
+  assert.match(workerSource, /from '\.\/contracts\.js'/);
+  assert.match(workerSource, /isStateSaverMessage\(e\.data\)/);
   assert.match(workerSource, /executeDBStoreRequest<void>\(\s*dbLogger,\s*\[STATE_STORE\]/s);
   assert.doesNotMatch(workerSource, /const DB_NAME/);
   assert.doesNotMatch(workerSource, /function openDB/);

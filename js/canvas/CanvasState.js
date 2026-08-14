@@ -282,10 +282,11 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         }
         if (this.stateSaverWorker) {
             log.info("Posting state to worker for background saving.");
-            this.stateSaverWorker.postMessage({
+            const message = {
                 stateKey,
                 state: state
-            });
+            };
+            this.stateSaverWorker.postMessage(message);
             this.canvas.render();
         }
         else {

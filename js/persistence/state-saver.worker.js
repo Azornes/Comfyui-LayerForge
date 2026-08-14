@@ -1,4 +1,5 @@
 import { STATE_STORE, executeDBStoreRequest } from './db_shared.js';
+import { isStateSaverMessage } from './contracts.js';
 console.log('[StateWorker] Worker script loaded and running.');
 function log(...args) {
     console.log('[StateWorker]', ...args);
@@ -17,11 +18,11 @@ async function setCanvasState(id, state) {
 }
 self.onmessage = async function (e) {
     log('Message received from main thread:', e.data ? 'data received' : 'no data');
-    const { state, stateKey } = e.data;
-    if (!state || !stateKey) {
+    if (!isStateSaverMessage(e.data)) {
         error('Invalid data received from main thread');
         return;
     }
+    const { state, stateKey } = e.data;
     try {
         log(`Saving state for key: ${stateKey}`);
         await setCanvasState(stateKey, state);

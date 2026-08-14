@@ -5,22 +5,17 @@ import {
     STATE_STORE,
     executeDBStoreRequest,
 } from "./db_shared.js";
+import type {
+    CanvasImageRecord,
+    CanvasStateRecord,
+    PersistedCanvasState,
+} from "./contracts.js";
 
 const log = createModuleLogger('db');
 
-interface CanvasStateDB {
-    id: string;
-    state: any;
-}
-
-interface CanvasImageDB {
-    imageId: string;
-    imageSrc: string;
-}
-
-export async function getCanvasState(id: string): Promise<any | null> {
+export async function getCanvasState(id: string): Promise<PersistedCanvasState | null> {
     log.info(`Getting state for id: ${id}`);
-    const result = await executeDBStoreRequest<CanvasStateDB | undefined>(
+    const result = await executeDBStoreRequest<CanvasStateRecord | undefined>(
         log,
         ALL_STORES,
         STATE_STORE,
@@ -33,7 +28,7 @@ export async function getCanvasState(id: string): Promise<any | null> {
     return result ? result.state : null;
 }
 
-export async function setCanvasState(id: string, state: any): Promise<void> {
+export async function setCanvasState(id: string, state: PersistedCanvasState): Promise<void> {
     log.info(`Setting state for id: ${id}`);
     await executeDBStoreRequest<void>(
         log,
@@ -77,7 +72,7 @@ export async function saveImage(imageId: string, imageSrc: string | ImageBitmap)
 
 export async function getImage(imageId: string): Promise<string | ImageBitmap | null> {
     log.info(`Getting image with id: ${imageId}`);
-    const result = await executeDBStoreRequest<CanvasImageDB | undefined>(
+    const result = await executeDBStoreRequest<CanvasImageRecord | undefined>(
         log,
         ALL_STORES,
         IMAGE_STORE,
