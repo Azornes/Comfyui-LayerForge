@@ -27,6 +27,7 @@ import {generateUniqueFileName, createCanvas} from "../utils/common_utils.js";
 import { loadImageFromBlob } from "../media/image_utils.js";
 import {createModuleLogger} from "../log_system/log_funcs.js";
 import {showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification} from "../utils/notification_utils.js";
+import {tooltipManager} from "../utils/tooltip_manager.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "../utils/icon_loader.js";
 import { exportCanvasImage, type CanvasExportAction } from "../media/canvas_export_utils.js";
 import { getFlattenedCanvasBlob, type CanvasBlobVariant } from "../media/canvas_blob_utils.js";
@@ -253,61 +254,12 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
         }
     };
 
-    const helpTooltip = $el("div.lf-painter-tooltip", {
-        id: `painter-help-tooltip-${node.id}`,
-    }) as HTMLDivElement;
-
     const [standardShortcuts, maskShortcuts, systemClipboardTooltip, clipspaceClipboardTooltip] = await Promise.all([
         loadTemplate('./templates/standard_shortcuts.html'),
         loadTemplate('./templates/mask_shortcuts.html'),
         loadTemplate('./templates/system_clipboard_tooltip.html'),
         loadTemplate('./templates/clipspace_clipboard_tooltip.html')
     ]);
-
-    document.body.appendChild(helpTooltip);
-
-    const showTooltip = (buttonElement: HTMLElement, content: string) => {
-        helpTooltip.innerHTML = content;
-        helpTooltip.style.visibility = 'hidden';
-        helpTooltip.style.display = 'block';
-
-        const buttonRect = buttonElement.getBoundingClientRect();
-        const tooltipRect = helpTooltip.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        let left = buttonRect.left;
-        let top = buttonRect.bottom + 5;
-
-        if (left + tooltipRect.width > viewportWidth) {
-            left = viewportWidth - tooltipRect.width - 10;
-        }
-
-        if (top + tooltipRect.height > viewportHeight) {
-            top = buttonRect.top - tooltipRect.height - 5;
-        }
-
-        if (left < 10) left = 10;
-        if (top < 10) top = 10;
-
-        helpTooltip.style.left = `${left}px`;
-        helpTooltip.style.top = `${top}px`;
-        helpTooltip.style.visibility = 'visible';
-    };
-
-    const hideTooltip = () => {
-        helpTooltip.style.display = 'none';
-    };
-
-    const showMattingTooltip = (target: HTMLElement, content: string): void => {
-        helpTooltip.classList.add('lf-matting-tooltip');
-        showTooltip(target, content);
-    };
-
-    const hideMattingTooltip = (): void => {
-        hideTooltip();
-        helpTooltip.classList.remove('lf-matting-tooltip');
-    };
 
     const createMattingTooltipBadge = (labelText: string, tooltipText: string): HTMLSpanElement => {
         const badge = document.createElement('span');
@@ -316,26 +268,22 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
         badge.tabIndex = 0;
         badge.dataset.tooltip = tooltipText;
         badge.setAttribute('aria-label', `More information about ${labelText}`);
-
-        const show = (): void => {
-            const content = badge.dataset.tooltip;
-            if (content) showMattingTooltip(badge, content);
-        };
-        const hide = (): void => hideMattingTooltip();
-
-        badge.addEventListener('mouseenter', show);
-        badge.addEventListener('focus', show);
-        badge.addEventListener('mouseleave', hide);
-        badge.addEventListener('blur', hide);
         badge.addEventListener('click', (event) => event.preventDefault());
         return badge;
     };
 
     let mattingSettingsBackdrop: HTMLDivElement | null = null;
+    let mattingSettingsDialog: HTMLDivElement | null = null;
+    let mattingSettingsTooltipRootCleanup: (() => void) | null = null;
     let mattingSettingsEscapeHandler: ((event: KeyboardEvent) => void) | null = null;
 
     const closeMattingSettings = () => {
-        hideMattingTooltip();
+        if (mattingSettingsDialog) {
+            tooltipManager.hideTooltip(mattingSettingsDialog);
+        }
+        mattingSettingsTooltipRootCleanup?.();
+        mattingSettingsTooltipRootCleanup = null;
+        mattingSettingsDialog = null;
         if (mattingSettingsEscapeHandler) {
             document.removeEventListener('keydown', mattingSettingsEscapeHandler);
             mattingSettingsEscapeHandler = null;
@@ -389,7 +337,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
         closeButton.type = 'button';
         closeButton.className = 'lf-matting-settings-close';
         closeButton.textContent = '×';
-        closeButton.title = 'Close Matting settings';
+        tooltipManager.setTooltip(closeButton, 'Close Matting settings');
         closeButton.setAttribute('aria-label', 'Close Matting settings');
         closeButton.onclick = closeMattingSettings;
 
@@ -435,7 +383,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
             remoteModelOptions.forEach((option) => {
                 const suffix = option.downloaded ? ' (downloaded)' : '';
                 const remoteOption = new Option(`${option.label}${suffix}`, option.path);
-                if (option.description) remoteOption.title = option.description;
+                if (option.description) tooltipManager.setTooltip(remoteOption, option.description);
                 remoteGroup.appendChild(remoteOption);
             });
             modelSelect.appendChild(remoteGroup);
@@ -635,6 +583,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
         };
         document.addEventListener('keydown', mattingSettingsEscapeHandler);
 
+        mattingSettingsDialog = dialog;
+        mattingSettingsTooltipRootCleanup = tooltipManager.observeRoot(dialog);
         mattingSettingsBackdrop = backdrop;
         document.body.appendChild(backdrop);
         closeButton.focus();
@@ -644,6 +594,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
     let inputMenuOutsideHandler: ((event: PointerEvent) => void) | null = null;
     let inputMenuEscapeHandler: ((event: KeyboardEvent) => void) | null = null;
     let inputMenuRepositionHandler: (() => void) | null = null;
+    let inputMenuTooltipRootCleanup: (() => void) | null = null;
 
     const closeInputMenu = (): void => {
         if (inputMenuOutsideHandler) {
@@ -659,6 +610,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
             window.removeEventListener('scroll', inputMenuRepositionHandler, true);
             inputMenuRepositionHandler = null;
         }
+        inputMenuTooltipRootCleanup?.();
+        inputMenuTooltipRootCleanup = null;
         inputMenu?.remove();
         inputMenu = null;
         showInputsButton?.setAttribute('aria-expanded', 'false');
@@ -737,7 +690,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
             item.type = 'button';
             item.className = 'lf-input-reference';
             item.setAttribute('role', 'menuitem');
-            item.title = 'Add this input image to the canvas';
+            tooltipManager.setTooltip(item, 'Add this input image to the canvas');
 
             const thumbnail = document.createElement('img');
             thumbnail.className = 'lf-input-reference-thumb';
@@ -760,7 +713,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
             unlink.type = 'button';
             unlink.className = 'lf-input-reference-unlink';
             unlink.textContent = 'Unlink';
-            unlink.title = 'Disconnect this image input from LayerForge';
+            tooltipManager.setTooltip(unlink, 'Disconnect this image input from LayerForge');
             unlink.setAttribute('aria-label', `Unlink ${fallbackLabel}`);
 
             item.addEventListener('pointerdown', (event) => {
@@ -818,6 +771,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
         showInputsButton.setAttribute('aria-expanded', 'true');
         document.body.appendChild(menu);
         renderInputMenu(menu);
+        inputMenuTooltipRootCleanup = tooltipManager.observeRoot(menu);
 
         inputMenuOutsideHandler = (event: PointerEvent): void => {
             const target = event.target as Node | null;
@@ -866,9 +820,9 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                     textContent: "?",
                     onmouseenter: (e: MouseEvent) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
-                        showTooltip(e.target as HTMLElement, content);
+                        tooltipManager.showTooltip(e.currentTarget as HTMLElement, content, { html: true });
                     },
-                    onmouseleave: hideTooltip
+                    onmouseleave: (e: MouseEvent) => tooltipManager.hideTooltip(e.currentTarget as HTMLElement)
                 }),
                 $el("button.lf-painter-button.lf-primary", {
                     textContent: "Add Image",
@@ -942,18 +896,18 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
     // Helper function to update tooltip content if it's currently visible
     const updateTooltipIfVisible = () => {
         // Only update if tooltip is currently visible
-        if (helpTooltip.style.display === 'block') {
+        if (tooltipManager.isVisibleFor(switchEl)) {
             const tooltipContent = getCurrentTooltipContent();
-            showTooltip(switchEl, tooltipContent);
+            tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
         }
     };
 
     // Tooltip logic
     switchEl.addEventListener("mouseenter", () => {
         const tooltipContent = getCurrentTooltipContent();
-        showTooltip(switchEl, tooltipContent);
+        tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
     });
-    switchEl.addEventListener("mouseleave", hideTooltip);
+    switchEl.addEventListener("mouseleave", () => tooltipManager.hideTooltip(switchEl));
 
     // Dynamic icon update on toggle
     const input = switchEl.querySelector('input[type="checkbox"]') as HTMLInputElement;
@@ -1931,6 +1885,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
             height: "100%"
         }
     }, [controlPanel, canvasContainer, layersPanelContainer]) as HTMLDivElement;
+    const unregisterTooltips = tooltipManager.observeRoot(mainContainer);
 
     const stopEditableClipboardLeak = (event: ClipboardEvent) => {
         if (isLayerForgeEditableElement(event.target) || isLayerForgeEditableFocused()) {
@@ -2064,7 +2019,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         isEditorOpen = false;
         openEditorBtn.textContent = "⛶";
-        openEditorBtn.title = "Open in Editor";
+        tooltipManager.setTooltip(openEditorBtn, "Open in Editor");
 
         // Remove ESC key listener when editor closes
         document.removeEventListener('keydown', handleEscKey);
@@ -2110,7 +2065,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         isEditorOpen = true;
         openEditorBtn.textContent = "X";
-        openEditorBtn.title = "Close Editor (ESC)";
+        tooltipManager.setTooltip(openEditorBtn, "Close Editor (ESC)");
 
         // Add ESC key listener when editor opens
         document.addEventListener('keydown', handleEscKey);
@@ -2171,6 +2126,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         panel: controlPanel,
         destroy: () => {
             widgetDestroyed = true;
+            unregisterTooltips();
             mattingAbortController?.abort();
             closeInputMenu();
             closeMattingSettings();
@@ -2540,10 +2496,6 @@ export function registerLayerForgeExtension(): void {
                     (window as any).canvasExecutionStates.delete(this.id);
                 }
 
-                const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
-                if (tooltip) {
-                    tooltip.remove();
-                }
                 const backdrop = document.querySelector('.lf-painter-modal-backdrop');
                 if (backdrop && (this as any).canvasWidget && backdrop.contains((this as any).canvasWidget.canvas.canvas)) {
                     document.body.removeChild(backdrop);

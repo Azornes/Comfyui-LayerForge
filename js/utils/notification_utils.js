@@ -9,6 +9,7 @@ description: Notification Utilities (Toast System)
 // ==========================================
 // Comment out or adjust this import if copying to a project that does not use AzLogs
 import { createModuleLogger } from "../log_system/log_funcs.js";
+import { tooltipManager } from "./tooltip_manager.js";
 const CONFIG = {
     // Project display name (used in notifications tag and message prefix cleaning)
     PROJECT_NAME: "Layer Forge",
@@ -204,7 +205,7 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
                 window.MLOpenContextMenu?.(event, event.currentTarget);
             };
             if (options?.contextMenuTooltip) {
-                notification.dataset.tooltip = options.contextMenuTooltip;
+                tooltipManager.setTooltip(notification, options.contextMenuTooltip);
             }
         }
         catch (e) {
@@ -317,6 +318,7 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
         }
         notification.style.animation = `${CONFIG.CSS_PREFIX}fadeout 0.3s ease-out forwards`;
         notification.addEventListener('animationend', () => {
+            tooltipManager.hideTooltip(notification);
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
                 if (container && container.children.length === 0) {

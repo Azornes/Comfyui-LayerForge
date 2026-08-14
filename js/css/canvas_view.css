@@ -566,7 +566,7 @@
     background-color: rgba(0,0,0,0.1);
 }
 
-.lf-painter-tooltip {
+.lf-global-tooltip {
     position: fixed;
     display: none;
     background: #2B2B2B;
@@ -575,7 +575,7 @@
     border-top: 2px solid #4a90e2;
     border-radius: 6px;
     padding: 12px 18px;
-    z-index: 9999;
+    z-index: 1000001;
     font-size: 12px;
     line-height: 1.5;
     width: auto;
@@ -585,66 +585,68 @@
     transform-origin: top left;
     transition: transform 0.2s ease;
     will-change: transform;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
-.lf-painter-tooltip.lf-scale-down {
+.lf-global-tooltip.lf-scale-down {
     transform: scale(0.9);
     transform-origin: top;
 }
 
-.lf-painter-tooltip.lf-scale-down-more {
+.lf-global-tooltip.lf-scale-down-more {
     transform: scale(0.8);
     transform-origin: top;
 }
 
-.lf-painter-tooltip table {
+.lf-global-tooltip table {
     width: 100%;
     border-collapse: collapse;
     margin: 8px 0;
 }
 
-.lf-painter-tooltip table td {
+.lf-global-tooltip table td {
     padding: 4px 8px;
     vertical-align: middle;
     transition: background-color 0.2s;
 }
 
-.lf-painter-tooltip table td:first-child {
+.lf-global-tooltip table td:first-child {
     width: auto;
     white-space: nowrap;
     min-width: fit-content;
 }
 
-.lf-painter-tooltip table td:last-child {
+.lf-global-tooltip table td:last-child {
     width: auto;
 }
 
-.lf-painter-tooltip table tr:nth-child(odd) td {
+.lf-global-tooltip table tr:nth-child(odd) td {
     background-color: rgba(255, 255, 255, 0.02);
 }
-.lf-painter-tooltip table tr:hover td {
+.lf-global-tooltip table tr:hover td {
     background-color: rgba(74, 144, 226, 0.15);
 }
 
 @media (max-width: 600px) {
-    .lf-painter-tooltip {
+    .lf-global-tooltip {
         font-size: 11px;
         padding: 8px 12px;
     }
-    .lf-painter-tooltip table td {
+    .lf-global-tooltip table td {
         padding: 2px 4px;
     }
-    .lf-painter-tooltip kbd {
+    .lf-global-tooltip kbd {
         padding: 1px 4px;
         font-size: 10px;
     }
-    .lf-painter-tooltip table td:first-child {
+    .lf-global-tooltip table td:first-child {
         width: 40%;
     }
-    .lf-painter-tooltip table td:last-child {
+    .lf-global-tooltip table td:last-child {
         width: 60%;
     }
-    .lf-painter-tooltip h4 {
+    .lf-global-tooltip h4 {
         font-size: 12px;
         margin-top: 8px;
         margin-bottom: 4px;
@@ -652,49 +654,49 @@
 }
 
 @media (max-width: 400px) {
-    .lf-painter-tooltip {
+    .lf-global-tooltip {
         font-size: 10px;
         padding: 6px 8px;
     }
-    .lf-painter-tooltip table td {
+    .lf-global-tooltip table td {
         padding: 1px 3px;
     }
-    .lf-painter-tooltip kbd {
+    .lf-global-tooltip kbd {
         padding: 0px 3px;
         font-size: 9px;
     }
-    .lf-painter-tooltip table td:first-child {
+    .lf-global-tooltip table td:first-child {
         width: 35%;
     }
-    .lf-painter-tooltip table td:last-child {
+    .lf-global-tooltip table td:last-child {
         width: 65%;
     }
-    .lf-painter-tooltip h4 {
+    .lf-global-tooltip h4 {
         font-size: 11px;
         margin-top: 6px;
         margin-bottom: 3px;
     }
 }
 
-.lf-painter-tooltip::-webkit-scrollbar {
+.lf-global-tooltip::-webkit-scrollbar {
     width: 8px;
 }
 
-.lf-painter-tooltip::-webkit-scrollbar-track {
+.lf-global-tooltip::-webkit-scrollbar-track {
     background: #2a2a2a;
     border-radius: 4px;
 }
 
-.lf-painter-tooltip::-webkit-scrollbar-thumb {
+.lf-global-tooltip::-webkit-scrollbar-thumb {
     background: #555;
     border-radius: 4px;
 }
 
-.lf-painter-tooltip::-webkit-scrollbar-thumb:hover {
+.lf-global-tooltip::-webkit-scrollbar-thumb:hover {
     background: #666;
 }
 
-.lf-painter-tooltip h4 {
+.lf-global-tooltip h4 {
     margin-top: 10px;
     margin-bottom: 6px;
     color: #4a90e2;
@@ -703,17 +705,17 @@
     font-size: 14px;
     font-weight: 600;
 }
-.lf-painter-tooltip h4:first-child {
+.lf-global-tooltip h4:first-child {
     margin-top: 0;
 }
 
-.lf-painter-tooltip ul {
+.lf-global-tooltip ul {
     list-style: none;
     padding-left: 10px;
     margin: 0;
 }
 
-.lf-painter-tooltip kbd {
+.lf-global-tooltip kbd {
     background-color: #444;
     border: 1px solid #555;
     border-bottom-width: 2px;
@@ -902,22 +904,6 @@
     outline: none;
     background: rgba(78, 161, 255, 0.18);
     border-color: rgba(78, 161, 255, 0.65);
-}
-
-.lf-painter-tooltip.lf-matting-tooltip {
-    min-width: 220px;
-    max-width: min(320px, calc(100vw - 24px));
-    padding: 8px 10px;
-    color: #f2f2f2;
-    font-size: 12px;
-    font-weight: 400;
-    line-height: 1.5;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-    background: rgba(34, 34, 38, 0.98);
-    border: 1px solid #555;
-    border-radius: 8px;
-    z-index: 1000001;
 }
 
 .lf-matting-settings-select {

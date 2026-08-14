@@ -183,22 +183,3 @@
 #lf-custom-shape-menu .lf-checkbox-container input:checked ~ .lf-custom-checkbox::after {
     display: block;
 }
-
-.lf-layerforge-tooltip {
-    position: fixed;
-    background-color: #2f2f2f;
-    color: #e0e0e0;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    line-height: 1.4;
-    max-width: 250px;
-    word-wrap: break-word;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    border: 1px solid #202020;
-    z-index: 10000;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out;
-}

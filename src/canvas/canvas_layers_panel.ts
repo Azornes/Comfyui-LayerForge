@@ -2,6 +2,7 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "../utils/icon_loader.js";
 import { createCanvas } from "../utils/common_utils.js";
 import { addStylesheet, getUrl } from "../utils/resource_manager.js";
+import { tooltipManager } from "../utils/tooltip_manager.js";
 import type { Canvas } from './canvas';
 import type { Layer } from '../shared/types';
 
@@ -121,10 +122,10 @@ export class CanvasLayersPanel {
         this.container.tabIndex = 0; // Umożliwia fokus na panelu
         this.container.innerHTML = `
             <div class="lf-layers-panel-header">
-                <div class="lf-master-visibility-toggle" title="Toggle all layers visibility"></div>
+                <div class="lf-master-visibility-toggle" data-tooltip="Toggle all layers visibility"></div>
                 <span class="lf-layers-panel-title">Layers</span>
                 <div class="lf-layers-panel-controls">
-                    <button class="lf-layers-btn" id="lf-delete-layer-btn" title="Delete layer"></button>
+                    <button class="lf-layers-btn" id="lf-delete-layer-btn" data-tooltip="Delete layer"></button>
                 </div>
             </div>
             <div class="lf-layers-container" id="lf-layers-container">
@@ -320,7 +321,7 @@ export class CanvasLayersPanel {
         }
 
         layerRow.innerHTML = `
-            <div class="lf-layer-visibility-toggle" data-layer-index="${index}" title="Toggle layer visibility"></div>
+            <div class="lf-layer-visibility-toggle" data-layer-index="${index}" data-tooltip="Toggle layer visibility"></div>
             <div class="lf-layer-thumbnail" data-layer-index="${index}"></div>
             <span class="lf-layer-name" data-layer-index="${index}">${layer.name}</span>
         `;
@@ -655,9 +656,9 @@ export class CanvasLayersPanel {
 
         if (deleteBtn) {
             deleteBtn.disabled = !hasSelectedLayers;
-            deleteBtn.title = hasSelectedLayers
+            tooltipManager.setTooltip(deleteBtn, hasSelectedLayers
                 ? `Delete ${this.canvas.canvasSelection.selectedLayers.length} selected layer(s)`
-                : 'No layers selected';
+                : 'No layers selected');
         }
 
         log.debug(`Button states updated - delete button ${hasSelectedLayers ? 'enabled' : 'disabled'}`);

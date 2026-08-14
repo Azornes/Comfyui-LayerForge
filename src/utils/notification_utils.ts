@@ -10,6 +10,7 @@ description: Notification Utilities (Toast System)
 // ==========================================
 // Comment out or adjust this import if copying to a project that does not use AzLogs
 import { createModuleLogger } from "../log_system/log_funcs.js";
+import { tooltipManager } from "./tooltip_manager.js";
 
 // ==========================================
 // 2. CONFIGURATION
@@ -236,7 +237,7 @@ export function showNotification(
                 (window as any).MLOpenContextMenu?.(event, event.currentTarget);
             };
             if (options?.contextMenuTooltip) {
-                notification.dataset.tooltip = options.contextMenuTooltip;
+                tooltipManager.setTooltip(notification, options.contextMenuTooltip);
             }
         } catch (e) {
             console.error('Failed to encode context menu model:', e);
@@ -371,6 +372,7 @@ export function showNotification(
         }
         notification.style.animation = `${CONFIG.CSS_PREFIX}fadeout 0.3s ease-out forwards`;
         notification.addEventListener('animationend', () => {
+            tooltipManager.hideTooltip(notification);
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
                 if (container && container.children.length === 0) {

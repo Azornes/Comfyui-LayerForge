@@ -15,6 +15,7 @@ import { createCanvas } from "../utils/common_utils.js";
 import { loadImageFromBlob } from "../media/image_utils.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { showErrorNotification, showSuccessNotification, showInfoNotification, showWarningNotification } from "../utils/notification_utils.js";
+import { tooltipManager } from "../utils/tooltip_manager.js";
 import { iconLoader, LAYERFORGE_TOOLS } from "../utils/icon_loader.js";
 import { exportCanvasImage } from "../media/canvas_export_utils.js";
 import { getFlattenedCanvasBlob } from "../media/canvas_blob_utils.js";
@@ -169,51 +170,12 @@ async function createCanvasWidget(node, widget, _app) {
             knobIconEl.textContent = fallbackText;
         }
     };
-    const helpTooltip = $el("div.lf-painter-tooltip", {
-        id: `painter-help-tooltip-${node.id}`,
-    });
     const [standardShortcuts, maskShortcuts, systemClipboardTooltip, clipspaceClipboardTooltip] = await Promise.all([
         loadTemplate('./templates/standard_shortcuts.html'),
         loadTemplate('./templates/mask_shortcuts.html'),
         loadTemplate('./templates/system_clipboard_tooltip.html'),
         loadTemplate('./templates/clipspace_clipboard_tooltip.html')
     ]);
-    document.body.appendChild(helpTooltip);
-    const showTooltip = (buttonElement, content) => {
-        helpTooltip.innerHTML = content;
-        helpTooltip.style.visibility = 'hidden';
-        helpTooltip.style.display = 'block';
-        const buttonRect = buttonElement.getBoundingClientRect();
-        const tooltipRect = helpTooltip.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        let left = buttonRect.left;
-        let top = buttonRect.bottom + 5;
-        if (left + tooltipRect.width > viewportWidth) {
-            left = viewportWidth - tooltipRect.width - 10;
-        }
-        if (top + tooltipRect.height > viewportHeight) {
-            top = buttonRect.top - tooltipRect.height - 5;
-        }
-        if (left < 10)
-            left = 10;
-        if (top < 10)
-            top = 10;
-        helpTooltip.style.left = `${left}px`;
-        helpTooltip.style.top = `${top}px`;
-        helpTooltip.style.visibility = 'visible';
-    };
-    const hideTooltip = () => {
-        helpTooltip.style.display = 'none';
-    };
-    const showMattingTooltip = (target, content) => {
-        helpTooltip.classList.add('lf-matting-tooltip');
-        showTooltip(target, content);
-    };
-    const hideMattingTooltip = () => {
-        hideTooltip();
-        helpTooltip.classList.remove('lf-matting-tooltip');
-    };
     const createMattingTooltipBadge = (labelText, tooltipText) => {
         const badge = document.createElement('span');
         badge.className = 'lf-matting-tooltip-badge';
@@ -221,23 +183,20 @@ async function createCanvasWidget(node, widget, _app) {
         badge.tabIndex = 0;
         badge.dataset.tooltip = tooltipText;
         badge.setAttribute('aria-label', `More information about ${labelText}`);
-        const show = () => {
-            const content = badge.dataset.tooltip;
-            if (content)
-                showMattingTooltip(badge, content);
-        };
-        const hide = () => hideMattingTooltip();
-        badge.addEventListener('mouseenter', show);
-        badge.addEventListener('focus', show);
-        badge.addEventListener('mouseleave', hide);
-        badge.addEventListener('blur', hide);
         badge.addEventListener('click', (event) => event.preventDefault());
         return badge;
     };
     let mattingSettingsBackdrop = null;
+    let mattingSettingsDialog = null;
+    let mattingSettingsTooltipRootCleanup = null;
     let mattingSettingsEscapeHandler = null;
     const closeMattingSettings = () => {
-        hideMattingTooltip();
+        if (mattingSettingsDialog) {
+            tooltipManager.hideTooltip(mattingSettingsDialog);
+        }
+        mattingSettingsTooltipRootCleanup?.();
+        mattingSettingsTooltipRootCleanup = null;
+        mattingSettingsDialog = null;
         if (mattingSettingsEscapeHandler) {
             document.removeEventListener('keydown', mattingSettingsEscapeHandler);
             mattingSettingsEscapeHandler = null;
@@ -283,7 +242,7 @@ async function createCanvasWidget(node, widget, _app) {
         closeButton.type = 'button';
         closeButton.className = 'lf-matting-settings-close';
         closeButton.textContent = '×';
-        closeButton.title = 'Close Matting settings';
+        tooltipManager.setTooltip(closeButton, 'Close Matting settings');
         closeButton.setAttribute('aria-label', 'Close Matting settings');
         closeButton.onclick = closeMattingSettings;
         header.append(title, closeButton);
@@ -322,7 +281,7 @@ async function createCanvasWidget(node, widget, _app) {
                 const suffix = option.downloaded ? ' (downloaded)' : '';
                 const remoteOption = new Option(`${option.label}${suffix}`, option.path);
                 if (option.description)
-                    remoteOption.title = option.description;
+                    tooltipManager.setTooltip(remoteOption, option.description);
                 remoteGroup.appendChild(remoteOption);
             });
             modelSelect.appendChild(remoteGroup);
@@ -482,6 +441,8 @@ async function createCanvasWidget(node, widget, _app) {
             }
         };
         document.addEventListener('keydown', mattingSettingsEscapeHandler);
+        mattingSettingsDialog = dialog;
+        mattingSettingsTooltipRootCleanup = tooltipManager.observeRoot(dialog);
         mattingSettingsBackdrop = backdrop;
         document.body.appendChild(backdrop);
         closeButton.focus();
@@ -490,6 +451,7 @@ async function createCanvasWidget(node, widget, _app) {
     let inputMenuOutsideHandler = null;
     let inputMenuEscapeHandler = null;
     let inputMenuRepositionHandler = null;
+    let inputMenuTooltipRootCleanup = null;
     const closeInputMenu = () => {
         if (inputMenuOutsideHandler) {
             document.removeEventListener('pointerdown', inputMenuOutsideHandler);
@@ -504,6 +466,8 @@ async function createCanvasWidget(node, widget, _app) {
             window.removeEventListener('scroll', inputMenuRepositionHandler, true);
             inputMenuRepositionHandler = null;
         }
+        inputMenuTooltipRootCleanup?.();
+        inputMenuTooltipRootCleanup = null;
         inputMenu?.remove();
         inputMenu = null;
         showInputsButton?.setAttribute('aria-expanded', 'false');
@@ -576,7 +540,7 @@ async function createCanvasWidget(node, widget, _app) {
             item.type = 'button';
             item.className = 'lf-input-reference';
             item.setAttribute('role', 'menuitem');
-            item.title = 'Add this input image to the canvas';
+            tooltipManager.setTooltip(item, 'Add this input image to the canvas');
             const thumbnail = document.createElement('img');
             thumbnail.className = 'lf-input-reference-thumb';
             thumbnail.src = reference.image.currentSrc || reference.image.src;
@@ -596,7 +560,7 @@ async function createCanvasWidget(node, widget, _app) {
             unlink.type = 'button';
             unlink.className = 'lf-input-reference-unlink';
             unlink.textContent = 'Unlink';
-            unlink.title = 'Disconnect this image input from LayerForge';
+            tooltipManager.setTooltip(unlink, 'Disconnect this image input from LayerForge');
             unlink.setAttribute('aria-label', `Unlink ${fallbackLabel}`);
             item.addEventListener('pointerdown', (event) => {
                 event.preventDefault();
@@ -648,6 +612,7 @@ async function createCanvasWidget(node, widget, _app) {
         showInputsButton.setAttribute('aria-expanded', 'true');
         document.body.appendChild(menu);
         renderInputMenu(menu);
+        inputMenuTooltipRootCleanup = tooltipManager.observeRoot(menu);
         inputMenuOutsideHandler = (event) => {
             const target = event.target;
             if (target && (menu.contains(target) || showInputsButton.contains(target)))
@@ -695,9 +660,9 @@ async function createCanvasWidget(node, widget, _app) {
                     textContent: "?",
                     onmouseenter: (e) => {
                         const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
-                        showTooltip(e.target, content);
+                        tooltipManager.showTooltip(e.currentTarget, content, { html: true });
                     },
-                    onmouseleave: hideTooltip
+                    onmouseleave: (e) => tooltipManager.hideTooltip(e.currentTarget)
                 }),
                 $el("button.lf-painter-button.lf-primary", {
                     textContent: "Add Image",
@@ -770,17 +735,17 @@ async function createCanvasWidget(node, widget, _app) {
                         // Helper function to update tooltip content if it's currently visible
                         const updateTooltipIfVisible = () => {
                             // Only update if tooltip is currently visible
-                            if (helpTooltip.style.display === 'block') {
+                            if (tooltipManager.isVisibleFor(switchEl)) {
                                 const tooltipContent = getCurrentTooltipContent();
-                                showTooltip(switchEl, tooltipContent);
+                                tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
                             }
                         };
                         // Tooltip logic
                         switchEl.addEventListener("mouseenter", () => {
                             const tooltipContent = getCurrentTooltipContent();
-                            showTooltip(switchEl, tooltipContent);
+                            tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
                         });
-                        switchEl.addEventListener("mouseleave", hideTooltip);
+                        switchEl.addEventListener("mouseleave", () => tooltipManager.hideTooltip(switchEl));
                         // Dynamic icon update on toggle
                         const input = switchEl.querySelector('input[type="checkbox"]');
                         const knobIcon = switchEl.querySelector('.lf-switch-knob .lf-switch-icon');
@@ -1660,6 +1625,7 @@ async function createCanvasWidget(node, widget, _app) {
             height: "100%"
         }
     }, [controlPanel, canvasContainer, layersPanelContainer]);
+    const unregisterTooltips = tooltipManager.observeRoot(mainContainer);
     const stopEditableClipboardLeak = (event) => {
         if (isLayerForgeEditableElement(event.target) || isLayerForgeEditableFocused()) {
             event.stopPropagation();
@@ -1771,7 +1737,7 @@ async function createCanvasWidget(node, widget, _app) {
         }
         isEditorOpen = false;
         openEditorBtn.textContent = "⛶";
-        openEditorBtn.title = "Open in Editor";
+        tooltipManager.setTooltip(openEditorBtn, "Open in Editor");
         // Remove ESC key listener when editor closes
         document.removeEventListener('keydown', handleEscKey);
         setTimeout(() => {
@@ -1808,7 +1774,7 @@ async function createCanvasWidget(node, widget, _app) {
         document.body.appendChild(backdrop);
         isEditorOpen = true;
         openEditorBtn.textContent = "X";
-        openEditorBtn.title = "Close Editor (ESC)";
+        tooltipManager.setTooltip(openEditorBtn, "Close Editor (ESC)");
         // Add ESC key listener when editor opens
         document.addEventListener('keydown', handleEscKey);
         setTimeout(() => {
@@ -1857,6 +1823,7 @@ async function createCanvasWidget(node, widget, _app) {
         panel: controlPanel,
         destroy: () => {
             widgetDestroyed = true;
+            unregisterTooltips();
             mattingAbortController?.abort();
             closeInputMenu();
             closeMattingSettings();
@@ -2176,10 +2143,6 @@ export function registerLayerForgeExtension() {
                     log.info(`Deregistered CanvasNode instance for ID: ${this.id}`);
                     if (window.canvasExecutionStates) {
                         window.canvasExecutionStates.delete(this.id);
-                    }
-                    const tooltip = document.getElementById(`painter-help-tooltip-${this.id}`);
-                    if (tooltip) {
-                        tooltip.remove();
                     }
                     const backdrop = document.querySelector('.lf-painter-modal-backdrop');
                     if (backdrop && this.canvasWidget && backdrop.contains(this.canvasWidget.canvas.canvas)) {

@@ -1,4 +1,5 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
+import { tooltipManager } from "../utils/tooltip_manager.js";
 const log = createModuleLogger('BatchPreviewManager');
 export class BatchPreviewManager {
     constructor(canvas, initialPosition = { x: 0, y: 0 }, generationArea = null) {
@@ -96,7 +97,7 @@ export class BatchPreviewManager {
     _createButton(innerHTML, title) {
         const button = document.createElement('button');
         button.innerHTML = innerHTML;
-        button.title = title;
+        tooltipManager.setTooltip(button, title);
         button.style.cssText = `
             background: #555;
             color: white;

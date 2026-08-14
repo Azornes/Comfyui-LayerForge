@@ -1,5 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { addStylesheet, getUrl } from "../utils/resource_manager.js";
+import { tooltipManager } from "../utils/tooltip_manager.js";
 const log = createModuleLogger('CustomShapeMenu');
 export class CustomShapeMenu {
     constructor(canvas) {
@@ -9,7 +10,6 @@ export class CustomShapeMenu {
         this.worldX = 0;
         this.worldY = 0;
         this.uiInitialized = false;
-        this.tooltip = null;
     }
     show() {
         if (!this.canvas.outputAreaShape) {
@@ -29,11 +29,11 @@ export class CustomShapeMenu {
     }
     hide() {
         if (this.element) {
+            tooltipManager.hideTooltip(this.element);
             this.element.remove();
             this.element = null;
             this.uiInitialized = false;
         }
-        this.hideTooltip();
     }
     updateScreenPosition() {
         if (!this.element)
@@ -65,7 +65,7 @@ export class CustomShapeMenu {
         // Minimize button (top right)
         const minimizeBtn = document.createElement('button');
         minimizeBtn.innerHTML = "–";
-        minimizeBtn.title = "Minimize menu";
+        tooltipManager.setTooltip(minimizeBtn, "Minimize menu");
         minimizeBtn.className = 'lf-custom-shape-minimize-btn';
         minimizeBtn.style.position = 'absolute';
         minimizeBtn.style.top = '4px';
@@ -380,7 +380,7 @@ export class CustomShapeMenu {
             clickHandler(e);
         };
         if (tooltipText) {
-            this._addTooltip(container, tooltipText);
+            tooltipManager.setTooltip(container, tooltipText);
         }
         return container;
     }
@@ -493,61 +493,6 @@ export class CustomShapeMenu {
         };
         // Start the viewport change detection
         requestAnimationFrame(checkViewportChange);
-    }
-    _addTooltip(element, text) {
-        element.addEventListener('mouseenter', (e) => {
-            this.showTooltip(text, e);
-        });
-        element.addEventListener('mouseleave', () => {
-            this.hideTooltip();
-        });
-        element.addEventListener('mousemove', (e) => {
-            if (this.tooltip && this.tooltip.style.display === 'block') {
-                this.updateTooltipPosition(e);
-            }
-        });
-    }
-    showTooltip(text, event) {
-        this.hideTooltip(); // Hide any existing tooltip
-        this.tooltip = document.createElement('div');
-        this.tooltip.textContent = text;
-        this.tooltip.className = 'lf-layerforge-tooltip';
-        document.body.appendChild(this.tooltip);
-        this.updateTooltipPosition(event);
-        // Fade in the tooltip
-        requestAnimationFrame(() => {
-            if (this.tooltip) {
-                this.tooltip.style.opacity = '1';
-            }
-        });
-    }
-    updateTooltipPosition(event) {
-        if (!this.tooltip)
-            return;
-        const tooltipRect = this.tooltip.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        let x = event.clientX + 10;
-        let y = event.clientY - 10;
-        // Adjust if tooltip would go off the right edge
-        if (x + tooltipRect.width > viewportWidth) {
-            x = event.clientX - tooltipRect.width - 10;
-        }
-        // Adjust if tooltip would go off the bottom edge
-        if (y + tooltipRect.height > viewportHeight) {
-            y = event.clientY - tooltipRect.height - 10;
-        }
-        // Ensure tooltip doesn't go off the left or top edges
-        x = Math.max(5, x);
-        y = Math.max(5, y);
-        this.tooltip.style.left = `${x}px`;
-        this.tooltip.style.top = `${y}px`;
-    }
-    hideTooltip() {
-        if (this.tooltip) {
-            this.tooltip.remove();
-            this.tooltip = null;
-        }
     }
     _updateCanvasSize() {
         if (!this.canvas.outputAreaExtensionEnabled) {
