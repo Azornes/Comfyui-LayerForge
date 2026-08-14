@@ -3,7 +3,7 @@ import { ComfyApp } from "../../../scripts/app.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { showInfoNotification, showSuccessNotification, showErrorNotification } from "../utils/NotificationUtils.js";
 import { uploadCanvasAsImage, uploadImageBlob } from "../media/ImageUploadUtils.js";
-import { applyMaskResultToTool } from "./MaskProcessingUtils.js";
+import { applyMaskResultToTool } from "./MaskResultUtils.js";
 import { updateNodePreview } from "../media/PreviewUtils.js";
 import { validateAndFixClipspace } from "../utils/ClipspaceUtils.js";
 const log = createModuleLogger('SAMDetectorIntegration');

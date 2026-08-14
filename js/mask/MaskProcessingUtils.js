@@ -1,6 +1,5 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "../utils/CommonUtils.js";
-import { convertToImage } from "../media/ImageUtils.js";
 import { withErrorHandling, createValidationError } from "../shared/ErrorHandler.js";
 const log = createModuleLogger('MaskProcessingUtils');
 async function processImagePixels(sourceImage, targetWidth, targetHeight, pixelTransform, contextErrorMessage) {
@@ -47,19 +46,6 @@ export const processImageToMask = withErrorHandling(async function (sourceImage,
     log.debug('Mask processing completed');
     return tempCanvas;
 }, 'processImageToMask');
-export async function createMaskImageFromResult(sourceImage, options) {
-    const processedMask = await processImageToMask(sourceImage, {
-        targetWidth: options.targetWidth,
-        targetHeight: options.targetHeight,
-        invertAlpha: options.invertAlpha ?? true
-    });
-    return convertToImage(processedMask);
-}
-export async function applyMaskResultToTool(sourceImage, options, resolveTarget) {
-    const maskImage = await createMaskImageFromResult(sourceImage, options);
-    resolveTarget().setMask(maskImage);
-    return maskImage;
-}
 /**
  * Processes image data with custom pixel transformation
  * @param sourceImage - Source image or canvas element

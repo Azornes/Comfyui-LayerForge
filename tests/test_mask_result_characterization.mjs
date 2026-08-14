@@ -5,7 +5,7 @@ import test from 'node:test';
 import {
   applyMaskResultToTool,
   createMaskImageFromResult,
-} from '../js/mask/MaskProcessingUtils.js';
+} from '../js/mask/MaskResultUtils.js';
 
 function installMaskConversionStubs(sourcePixels) {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -140,9 +140,16 @@ test('mask result application processes before resolving and updating the target
 });
 
 test('mask integrations share conversion but retain their own side effects', async () => {
+  const processingSource = await readFile(new URL('../src/mask/MaskProcessingUtils.ts', import.meta.url), 'utf8');
+  const resultSource = await readFile(new URL('../src/mask/MaskResultUtils.ts', import.meta.url), 'utf8');
   const maskEditorSource = await readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8');
   const samSource = await readFile(new URL('../src/mask/SAMDetectorIntegration.ts', import.meta.url), 'utf8');
 
+  assert.match(resultSource, /from "\.\/MaskProcessingUtils\.js"/);
+  assert.match(resultSource, /export async function applyMaskResultToTool/);
+  assert.doesNotMatch(processingSource, /createMaskImageFromResult|applyMaskResultToTool/);
+  assert.match(maskEditorSource, /from "\.\/MaskResultUtils\.js"/);
+  assert.match(samSource, /from "\.\/MaskResultUtils\.js"/);
   assert.match(maskEditorSource, /applyMaskResultToTool\(/);
   assert.match(samSource, /applyMaskResultToTool\(/);
   assert.doesNotMatch(maskEditorSource, /processImageToMask|convertToImage/);
