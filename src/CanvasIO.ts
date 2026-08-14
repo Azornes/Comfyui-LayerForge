@@ -33,6 +33,7 @@ export interface ConnectedInputImage {
     sourceId: number;
     sourceSlot: number;
     imageIndex: number;
+    connectionIndex: number;
     sourceLabel: string;
 }
 
@@ -128,6 +129,7 @@ export class CanvasIO {
     }
 
     getConnectedInputImages(): ConnectedInputImage[] {
+        let connectionIndex = 0;
         return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot }) => {
             const sourceLabel = String(
                 sourceNode.title
@@ -142,6 +144,7 @@ export class CanvasIO {
                 sourceId,
                 sourceSlot,
                 imageIndex,
+                connectionIndex: ++connectionIndex,
                 sourceLabel,
             }));
         });

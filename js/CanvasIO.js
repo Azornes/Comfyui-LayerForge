@@ -89,6 +89,7 @@ export class CanvasIO {
         return sources;
     }
     getConnectedInputImages() {
+        let connectionIndex = 0;
         return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot }) => {
             const sourceLabel = String(sourceNode.title
                 || sourceNode.label
@@ -100,6 +101,7 @@ export class CanvasIO {
                 sourceId,
                 sourceSlot,
                 imageIndex,
+                connectionIndex: ++connectionIndex,
                 sourceLabel,
             }));
         });

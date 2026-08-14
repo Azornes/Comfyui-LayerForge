@@ -724,7 +724,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
         }
 
         references.forEach((reference, index) => {
-            const fallbackLabel = `${reference.sourceLabel} · Image ${reference.imageIndex + 1}`;
+            const connectionLabel = `Image ${reference.connectionIndex}`;
+            const fallbackLabel = `${reference.sourceLabel} · ${connectionLabel}`;
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'lf-input-reference';
@@ -744,7 +745,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, app: ComfyApp): 
             label.textContent = getInputImageFileLabel(reference.image, `Image ${index + 1}`);
             const detail = document.createElement('span');
             detail.className = 'lf-input-reference-detail';
-            detail.textContent = `${reference.sourceLabel} · Image ${reference.imageIndex + 1}`;
+            detail.textContent = `${reference.sourceLabel} · ${connectionLabel}`;
             text.append(label, detail);
             item.append(thumbnail, text);
 

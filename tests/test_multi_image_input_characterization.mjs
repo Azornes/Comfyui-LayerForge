@@ -31,6 +31,7 @@ test('LayerForge exposes an ordered virtual multi-image input contract', () => {
   assert.match(canvasViewSource, /lf-inputs-menu/);
   assert.match(canvasViewSource, /addSelectedInputImage/);
   assert.match(canvasIOSource, /getConnectedInputImages\(\)/);
+  assert.match(canvasIOSource, /connectionIndex: \+\+connectionIndex/);
 });
 
 test('CanvasIO uses virtual source links for immediate canvas loading', () => {
