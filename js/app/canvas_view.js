@@ -1716,9 +1716,212 @@ async function createCanvasWidget(node, widget, _app) {
     }
     const openEditorBtn = controlPanel.querySelector(`#open-editor-btn-${node.id}`);
     let backdrop = null;
+    let modalContent = null;
+    let workflowOverviewToggleButton = null;
+    let workflowOverviewResizeObserver = null;
+    let workflowOverviewWindowResizeHandler = null;
+    let workflowOverviewLayoutFrame = null;
+    let workflowOverviewToggleRequest = 0;
+    let lastModalBounds = { left: Number.NaN, right: Number.NaN };
     let originalParent = null;
     let isEditorOpen = false;
     let viewportAdjustment = { x: 0, y: 0 };
+    const workflowOverviewPanelSelector = '[data-testid="properties-panel"]';
+    const nativeWorkflowOverviewToggleSelector = 'button[aria-label="Toggle properties panel"]:not(.lf-workflow-overview-toggle)';
+    const isVisibleElement = (element) => {
+        if (!(element instanceof HTMLElement)) {
+            return false;
+        }
+        const styles = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return styles.display !== "none" &&
+            styles.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0;
+    };
+    const getWorkflowOverviewPanel = () => {
+        const panel = document.querySelector(workflowOverviewPanelSelector);
+        return isVisibleElement(panel) ? panel : null;
+    };
+    const findNativeWorkflowOverviewToggle = () => {
+        const labeledButton = document.querySelector(nativeWorkflowOverviewToggleSelector);
+        if (isVisibleElement(labeledButton)) {
+            return labeledButton;
+        }
+        const panelCloseButton = document.querySelector(workflowOverviewPanelSelector + ' button[aria-pressed="true"]');
+        if (isVisibleElement(panelCloseButton)) {
+            return panelCloseButton;
+        }
+        return Array.from(document.querySelectorAll("button:not(.lf-workflow-overview-toggle)")).find((button) => {
+            if (!isVisibleElement(button)) {
+                return false;
+            }
+            return Array.from(button.querySelectorAll("i")).some((icon) => icon.className.includes("icon-[lucide--panel-"));
+        }) ?? null;
+    };
+    const isWorkflowOverviewOpen = () => {
+        return getWorkflowOverviewPanel() !== null;
+    };
+    const getWorkflowOverviewLayout = () => {
+        const panel = getWorkflowOverviewPanel();
+        if (!panel) {
+            return null;
+        }
+        const splitterPanel = panel.closest('[data-pc-name="splitterpanel"]');
+        const panelElement = splitterPanel ?? panel;
+        const panelRect = panelElement.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        let panelIsOnRight = panelRect.left >= viewportWidth / 2;
+        let gutter = null;
+        if (splitterPanel) {
+            const previousSibling = splitterPanel.previousElementSibling;
+            const nextSibling = splitterPanel.nextElementSibling;
+            const previousGutter = previousSibling instanceof HTMLElement &&
+                previousSibling.classList.contains("p-splitter-gutter")
+                ? previousSibling
+                : null;
+            const nextGutter = nextSibling instanceof HTMLElement &&
+                nextSibling.classList.contains("p-splitter-gutter")
+                ? nextSibling
+                : null;
+            if (previousGutter && !nextGutter) {
+                panelIsOnRight = true;
+                gutter = previousGutter;
+            }
+            else if (nextGutter && !previousGutter) {
+                panelIsOnRight = false;
+                gutter = nextGutter;
+            }
+            else if (splitterPanel.parentElement?.firstElementChild === splitterPanel) {
+                panelIsOnRight = false;
+            }
+            else if (splitterPanel.parentElement?.lastElementChild === splitterPanel) {
+                panelIsOnRight = true;
+            }
+        }
+        const gutterRect = gutter?.getBoundingClientRect();
+        if (panelIsOnRight) {
+            const boundary = gutterRect?.left ?? Math.max(0, panelRect.left - 8);
+            return {
+                left: 0,
+                right: Math.max(0, viewportWidth - boundary),
+                observedElements: gutter ? [panelElement, gutter] : [panelElement],
+            };
+        }
+        const boundary = gutterRect?.right ?? Math.min(viewportWidth, panelRect.right + 8);
+        return {
+            left: Math.min(viewportWidth, boundary),
+            right: 0,
+            observedElements: gutter ? [panelElement, gutter] : [panelElement],
+        };
+    };
+    const updateWorkflowOverviewButton = () => {
+        if (!workflowOverviewToggleButton) {
+            return;
+        }
+        const isOpen = isWorkflowOverviewOpen();
+        workflowOverviewToggleButton.setAttribute("aria-pressed", String(isOpen));
+        workflowOverviewToggleButton.title = isOpen
+            ? "Close Workflow Overview"
+            : "Open Workflow Overview";
+        workflowOverviewToggleButton.classList.toggle("lf-workflow-overview-open", isOpen);
+    };
+    const applyWorkflowOverviewLayout = () => {
+        updateWorkflowOverviewButton();
+        if (!modalContent) {
+            return;
+        }
+        const layout = getWorkflowOverviewLayout();
+        const left = layout?.left ?? 0;
+        const right = layout?.right ?? 0;
+        modalContent.style.left = left + "px";
+        modalContent.style.right = right + "px";
+        if (lastModalBounds.left !== left || lastModalBounds.right !== right) {
+            lastModalBounds = { left, right };
+            canvas.render();
+            if (node.onResize) {
+                node.onResize();
+            }
+        }
+    };
+    const scheduleWorkflowOverviewLayoutUpdate = () => {
+        if (workflowOverviewLayoutFrame !== null) {
+            return;
+        }
+        workflowOverviewLayoutFrame = window.requestAnimationFrame(() => {
+            workflowOverviewLayoutFrame = null;
+            applyWorkflowOverviewLayout();
+        });
+    };
+    const attachWorkflowOverviewResizeObserver = () => {
+        workflowOverviewResizeObserver?.disconnect();
+        workflowOverviewResizeObserver = null;
+        if (typeof ResizeObserver === "undefined") {
+            scheduleWorkflowOverviewLayoutUpdate();
+            return;
+        }
+        const layout = getWorkflowOverviewLayout();
+        if (!layout) {
+            scheduleWorkflowOverviewLayoutUpdate();
+            return;
+        }
+        const observer = new ResizeObserver(scheduleWorkflowOverviewLayoutUpdate);
+        layout.observedElements.forEach((element) => observer.observe(element));
+        workflowOverviewResizeObserver = observer;
+        scheduleWorkflowOverviewLayoutUpdate();
+    };
+    const startWorkflowOverviewLayoutTracking = () => {
+        if (!workflowOverviewWindowResizeHandler) {
+            workflowOverviewWindowResizeHandler = scheduleWorkflowOverviewLayoutUpdate;
+            window.addEventListener("resize", workflowOverviewWindowResizeHandler);
+        }
+        attachWorkflowOverviewResizeObserver();
+        scheduleWorkflowOverviewLayoutUpdate();
+    };
+    const stopWorkflowOverviewLayoutTracking = () => {
+        workflowOverviewResizeObserver?.disconnect();
+        workflowOverviewResizeObserver = null;
+        if (workflowOverviewWindowResizeHandler) {
+            window.removeEventListener("resize", workflowOverviewWindowResizeHandler);
+            workflowOverviewWindowResizeHandler = null;
+        }
+        if (workflowOverviewLayoutFrame !== null) {
+            window.cancelAnimationFrame(workflowOverviewLayoutFrame);
+            workflowOverviewLayoutFrame = null;
+        }
+        lastModalBounds = { left: Number.NaN, right: Number.NaN };
+    };
+    const waitForWorkflowOverviewState = (expectedState) => {
+        return new Promise((resolve) => {
+            const deadline = performance.now() + 1000;
+            const checkState = () => {
+                if (!isEditorOpen ||
+                    isWorkflowOverviewOpen() === expectedState ||
+                    performance.now() >= deadline) {
+                    resolve();
+                    return;
+                }
+                window.requestAnimationFrame(checkState);
+            };
+            checkState();
+        });
+    };
+    const toggleWorkflowOverview = async () => {
+        const requestId = ++workflowOverviewToggleRequest;
+        const nativeToggle = findNativeWorkflowOverviewToggle();
+        if (!nativeToggle) {
+            log.warn("Could not find ComfyUI's Workflow Overview toggle.");
+            return;
+        }
+        const expectedState = !isWorkflowOverviewOpen();
+        nativeToggle.click();
+        await waitForWorkflowOverviewState(expectedState);
+        if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
+            return;
+        }
+        attachWorkflowOverviewResizeObserver();
+        applyWorkflowOverviewLayout();
+    };
     /**
      * Adjusts the viewport when entering fullscreen mode.
      */
@@ -1745,11 +1948,19 @@ async function createCanvasWidget(node, widget, _app) {
         viewportAdjustment = { x: 0, y: 0 };
     };
     const closeEditor = () => {
-        if (originalParent && backdrop) {
+        if (!isEditorOpen) {
+            return;
+        }
+        stopWorkflowOverviewLayoutTracking();
+        if (originalParent) {
             originalParent.appendChild(mainContainer);
-            document.body.removeChild(backdrop);
+        }
+        if (backdrop?.parentNode) {
+            backdrop.parentNode.removeChild(backdrop);
         }
         isEditorOpen = false;
+        modalContent = null;
+        workflowOverviewToggleButton = null;
         openEditorBtn.textContent = "⛶";
         tooltipManager.setTooltip(openEditorBtn, "Open in Editor");
         // Remove ESC key listener when editor closes
@@ -1782,11 +1993,28 @@ async function createCanvasWidget(node, widget, _app) {
             return;
         }
         backdrop = $el("div.lf-painter-modal-backdrop");
-        const modalContent = $el("div.lf-painter-modal-content");
+        modalContent = $el("div.lf-painter-modal-content");
+        workflowOverviewToggleButton = document.createElement("button");
+        workflowOverviewToggleButton.type = "button";
+        workflowOverviewToggleButton.className =
+            "lf-painter-button lf-icon-button lf-workflow-overview-toggle";
+        workflowOverviewToggleButton.setAttribute("aria-label", "Toggle Workflow Overview");
+        workflowOverviewToggleButton.setAttribute("aria-pressed", "false");
+        workflowOverviewToggleButton.title = "Open Workflow Overview";
+        const workflowOverviewIcon = document.createElement("i");
+        workflowOverviewIcon.className = "icon-[lucide--panel-right] size-4";
+        workflowOverviewIcon.setAttribute("aria-hidden", "true");
+        workflowOverviewToggleButton.appendChild(workflowOverviewIcon);
+        workflowOverviewToggleButton.onclick = () => {
+            void toggleWorkflowOverview();
+        };
         modalContent.appendChild(mainContainer);
+        modalContent.appendChild(workflowOverviewToggleButton);
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
         isEditorOpen = true;
+        applyWorkflowOverviewLayout();
+        startWorkflowOverviewLayoutTracking();
         openEditorBtn.textContent = "X";
         tooltipManager.setTooltip(openEditorBtn, "Close Editor (ESC)");
         // Add ESC key listener when editor opens
@@ -1837,6 +2065,16 @@ async function createCanvasWidget(node, widget, _app) {
         panel: controlPanel,
         destroy: () => {
             widgetDestroyed = true;
+            stopWorkflowOverviewLayoutTracking();
+            if (isEditorOpen) {
+                document.removeEventListener('keydown', handleEscKey);
+                if (backdrop?.parentNode) {
+                    backdrop.parentNode.removeChild(backdrop);
+                }
+                isEditorOpen = false;
+                modalContent = null;
+                workflowOverviewToggleButton = null;
+            }
             unregisterTooltips();
             mattingAbortController?.abort();
             closeInputMenu();
