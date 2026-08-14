@@ -355,8 +355,8 @@ def register_matting_routes():
 
 __all__ = [
     "check_matting_model",
-    "get_matting_settings",
     "get_matting_progress",
+    "get_matting_settings",
     "matting",
     "register_matting_routes",
     "save_matting_settings",

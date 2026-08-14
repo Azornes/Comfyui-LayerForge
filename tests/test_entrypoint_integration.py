@@ -981,3 +981,316 @@ def test_empty_execution_returns_comfyui_compatible_fallback_tensors(layerforge_
 
     assert tuple(image.shape) == (1, 512, 512, 3)
     assert tuple(mask.shape) == (1, 512, 512)
+
+
+def test_legacy_route_handlers_cover_cache_and_file_responses(layerforge_runtime, monkeypatch, tmp_path):
+    from PIL import Image
+
+    routes_module = sys.modules[f"{layerforge_runtime.package_name}.python.routes"]
+    responses = _record_matting_responses(monkeypatch, routes_module)
+    node_class = layerforge_runtime.node.LayerForgeNode
+    node_class._canvas_data_storage.clear()
+    node_class._canvas_cache["image"] = Image.new("RGB", (2, 1), (255, 0, 0))
+    node_class._canvas_cache["mask"] = Image.new("L", (2, 1), 128)
+
+    class JsonRequest:
+        def __init__(self, payload):
+            self.payload = payload
+            self.match_info = {}
+
+        async def json(self):
+            return self.payload
+
+    get_input = layerforge_runtime.routes.registered[("GET", "/layerforge/get_input_data/{node_id}")]
+    clear_input = layerforge_runtime.routes.registered[("POST", "/layerforge/clear_input_data/{node_id}")]
+    get_canvas = layerforge_runtime.routes.registered[("GET", "/ycnode/get_canvas_data/{node_id}")]
+    get_latest_images = layerforge_runtime.routes.registered[("GET", "/layerforge/get-latest-images/{since}")]
+    get_latest_image = layerforge_runtime.routes.registered[("GET", "/ycnode/get_latest_image")]
+    load_image = layerforge_runtime.routes.registered[("POST", "/ycnode/load_image_from_path")]
+
+    node_class._canvas_data_storage["route-node_input"] = {"input_image": "image-data"}
+    input_request = JsonRequest(None)
+    input_request.match_info = {"node_id": "route-node"}
+    found = asyncio.run(get_input(input_request))
+    assert found.payload == {"success": True, "has_input": True, "data": {"input_image": "image-data"}}
+
+    cleared = asyncio.run(clear_input(input_request))
+    assert cleared.payload["success"] is True
+    assert "route-node_input" not in node_class._canvas_data_storage
+    missing = asyncio.run(get_input(input_request))
+    assert missing.payload == {"success": True, "has_input": False}
+
+    canvas_response = asyncio.run(get_canvas(JsonRequest(None)))
+    assert canvas_response.payload["success"] is True
+    assert canvas_response.payload["data"]["image"].startswith("data:image/png;base64,")
+    assert canvas_response.payload["data"]["mask"].startswith("data:image/png;base64,")
+
+    latest_paths = [str(tmp_path / "first.png"), str(tmp_path / "second.png")]
+    monkeypatch.setattr(
+        node_class,
+        "get_latest_images",
+        classmethod(lambda cls, since: latest_paths if since == 1.5 else []),
+    )
+    monkeypatch.setattr(routes_module, "file_to_data_url", lambda path: f"data:{path}")
+    latest_request = JsonRequest(None)
+    latest_request.match_info = {"since": "1500"}
+    latest_response = asyncio.run(get_latest_images(latest_request))
+    assert latest_response.payload == {
+        "success": True,
+        "images": [f"data:{path}" for path in latest_paths],
+    }
+
+    monkeypatch.setattr(node_class, "get_latest_image", classmethod(lambda cls: latest_paths[1]))
+    latest_image_response = asyncio.run(get_latest_image(JsonRequest(None)))
+    assert latest_image_response.payload == {"success": True, "image_data": f"data:{latest_paths[1]}"}
+
+    image_path = tmp_path / "loaded.png"
+    Image.new("RGBA", (3, 2), (255, 0, 0, 128)).save(image_path)
+    loaded = asyncio.run(load_image(JsonRequest({"file_path": str(image_path)})))
+    assert loaded.payload["success"] is True
+    assert loaded.payload["width"] == 3
+    assert loaded.payload["height"] == 2
+
+    not_found = asyncio.run(load_image(JsonRequest({"file_path": str(tmp_path / "missing.png")})))
+    assert not_found.status == 404
+    invalid_path = tmp_path / "file.txt"
+    invalid_path.write_text("not an image", encoding="utf-8")
+    invalid = asyncio.run(load_image(JsonRequest({"file_path": str(invalid_path)})))
+    assert invalid.status == 400
+    required = asyncio.run(load_image(JsonRequest({})))
+    assert required.status == 400
+
+    corrupt_path = tmp_path / "corrupt.png"
+    corrupt_path.write_bytes(b"not-an-image")
+    corrupt = asyncio.run(load_image(JsonRequest({"file_path": str(corrupt_path)})))
+    assert corrupt.status == 500
+    assert len(responses) >= 10
+
+
+def test_matting_settings_and_progress_endpoints_validate_requests(layerforge_runtime, monkeypatch):
+    api_module = layerforge_runtime.matting_api
+    responses = _record_matting_responses(monkeypatch, api_module)
+    saved_payloads = []
+
+    monkeypatch.setattr(
+        api_module,
+        "get_public_settings",
+        lambda: {"model_path": "auto", "hf_token_configured": False},
+    )
+    monkeypatch.setattr(api_module, "get_matting_status", lambda node_id: {"node_id": node_id, "status": "idle"})
+    monkeypatch.setattr(api_module, "save_settings", lambda payload: saved_payloads.append(payload))
+
+    class Request:
+        def __init__(self, payload, query=None, error=None):
+            self.payload = payload
+            self.query = query or {}
+            self.error = error
+
+        async def json(self):
+            if self.error:
+                raise self.error
+            return self.payload
+
+    settings = asyncio.run(api_module.get_matting_settings(Request(None)))
+    assert settings.payload == {"settings": {"model_path": "auto", "hf_token_configured": False}}
+
+    progress = asyncio.run(api_module.get_matting_progress(Request(None, {"node_id": "node-7"})))
+    assert progress.payload == {"node_id": "node-7", "status": "idle"}
+
+    saved = asyncio.run(api_module.save_matting_settings(Request({"mode": "mask_only"})))
+    assert saved.payload == {"success": True, "settings": {"model_path": "auto", "hf_token_configured": False}}
+    assert saved_payloads == [{"mode": "mask_only"}]
+
+    invalid_json = asyncio.run(api_module.save_matting_settings(Request(None, error=ValueError("bad json"))))
+    assert invalid_json.status == 400
+    invalid_shape = asyncio.run(api_module.save_matting_settings(Request(["not", "an", "object"])))
+    assert invalid_shape.status == 400
+
+    def fail_to_save(payload):
+        raise RuntimeError(f"cannot save {payload}")
+
+    monkeypatch.setattr(api_module, "save_settings", fail_to_save)
+    failed = asyncio.run(api_module.save_matting_settings(Request({"mode": "remove_background"})))
+    assert failed.status == 500
+    assert len(responses) == 6
+
+
+def test_matting_endpoint_returns_masks_and_releases_lock(layerforge_runtime, monkeypatch):
+    import torch
+
+    api_module = layerforge_runtime.matting_api
+    responses = _record_matting_responses(monkeypatch, api_module)
+    calls = []
+
+    class FakeMatting:
+        model_path = "loaded-model"
+
+        def execute(self, image, model_path, **kwargs):
+            calls.append((tuple(image.shape), model_path, kwargs))
+            return image * 0.5, torch.full((1, 1, 2, 2), 0.75)
+
+    monkeypatch.setattr(api_module, "BiRefNetMatting", FakeMatting)
+    monkeypatch.setattr(
+        api_module,
+        "convert_base64_to_tensor",
+        lambda encoded: (torch.ones((1, 3, 2, 2)), None),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "convert_tensor_to_base64",
+        lambda tensor, alpha_mask=None, original_alpha=None: f"encoded-{tuple(tensor.shape)}",
+    )
+
+    class Request:
+        async def json(self):
+            return {
+                "image": "data:image/png;base64,stub",
+                "model_path": "remote:portrait",
+                "mode": "remove_background",
+                "threshold": 0.7,
+                "refinement": 2,
+                "node_id": "node-1",
+            }
+
+    response = asyncio.run(api_module.matting(Request()))
+    assert response.payload["mode"] == "remove_background"
+    assert response.payload["model_path"] == "loaded-model"
+    assert response.payload["matted_image"] == "encoded-(1, 3, 2, 2)"
+    assert response.payload["alpha_mask"] == "encoded-(1, 1, 2, 2)"
+    assert response.payload["draw_mask"] == "encoded-(1, 1, 2, 2)"
+    assert calls[0][1] == "remote:portrait"
+    assert calls[0][2]["node_id"] == "node-1"
+    assert api_module._matting_lock is None
+
+    monkeypatch.setattr(
+        api_module,
+        "convert_base64_to_tensor",
+        lambda encoded: (torch.ones((1, 3, 2, 2)), torch.ones((1, 1, 2, 2))),
+    )
+    async def mask_json():
+        return {
+            "image": "data:image/png;base64,stub",
+            "mode": "mask_only",
+        }
+
+    response = asyncio.run(
+        api_module.matting(
+            SimpleNamespace(json=mask_json)
+        )
+    )
+    assert response.payload["mode"] == "mask_only"
+    assert len(responses) == 2
+
+
+@pytest.mark.parametrize(
+    ("error", "status"),
+    [
+        (RuntimeError("offline"), 400),
+        (RuntimeError("model failed"), 500),
+        (ValueError("connection reset"), 400),
+        (ValueError("invalid input"), 500),
+    ],
+)
+def test_matting_endpoint_translates_model_errors(layerforge_runtime, monkeypatch, error, status):
+    import torch
+
+    api_module = layerforge_runtime.matting_api
+    _record_matting_responses(monkeypatch, api_module)
+
+    class FailingMatting:
+        def execute(self, *args, **kwargs):
+            raise error
+
+    monkeypatch.setattr(api_module, "BiRefNetMatting", FailingMatting)
+    monkeypatch.setattr(
+        api_module,
+        "convert_base64_to_tensor",
+        lambda encoded: (torch.ones((1, 3, 2, 2)), None),
+    )
+
+    class Request:
+        async def json(self):
+            return {"image": "data:image/png;base64,stub"}
+
+    response = asyncio.run(api_module.matting(Request()))
+    assert response.status == status
+    assert api_module._matting_lock is None
+
+
+def test_image_tensor_conversion_supports_grayscale_and_alpha(layerforge_runtime):
+    import torch
+    from PIL import Image
+
+    image_utils = layerforge_runtime.image_utils
+    grayscale = Image.new("L", (2, 1), 128)
+    buffer = io.BytesIO()
+    grayscale.save(buffer, format="PNG")
+    encoded = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+    grayscale_tensor, alpha = image_utils.convert_base64_to_tensor(encoded)
+    assert tuple(grayscale_tensor.shape) == (1, 3, 1, 2)
+    assert alpha is None
+
+    rgb_tensor = torch.ones((1, 3, 2, 2), dtype=torch.float32)
+    alpha_mask = torch.full((1, 1, 2, 2), 0.25, dtype=torch.float32)
+    original_alpha = torch.full((1, 1, 2, 2), 0.75, dtype=torch.float32)
+    encoded_rgba = image_utils.convert_tensor_to_base64(rgb_tensor, alpha_mask, original_alpha)
+    rgba = Image.open(io.BytesIO(base64.b64decode(encoded_rgba.split(",", 1)[1])))
+    assert rgba.mode == "RGBA"
+    assert rgba.getpixel((0, 0))[3] == pytest.approx(63, abs=1)
+
+    encoded_l = image_utils.convert_tensor_to_base64(torch.ones((1, 1, 2, 2), dtype=torch.float32))
+    grayscale_result = Image.open(io.BytesIO(base64.b64decode(encoded_l.split(",", 1)[1])))
+    assert grayscale_result.mode == "L"
+
+
+def test_node_cache_flow_and_cleanup_helpers_preserve_state(layerforge_runtime, monkeypatch):
+    from PIL import Image
+
+    node_class = layerforge_runtime.node.LayerForgeNode
+    node_class._canvas_cache.update(
+        {
+            "image": None,
+            "mask": None,
+            "data_flow_status": {},
+            "persistent_cache": {},
+            "last_execution_id": None,
+        }
+    )
+    node_class._websocket_data = {}
+    node = node_class()
+
+    image = Image.new("RGB", (2, 1), (0, 255, 0))
+    mask = Image.new("L", (2, 1), 255)
+    node_class._canvas_cache["image"] = image
+    node_class._canvas_cache["mask"] = mask
+    node.update_persistent_cache()
+    assert node_class._canvas_cache["persistent_cache"] == {"image": image, "mask": mask}
+
+    node.track_data_flow("render", "complete", {"layers": 2})
+    assert node.get_flow_status(node.flow_id)["status"] == "complete"
+    assert node.get_flow_status()[node.flow_id]["data_info"] == {"layers": 2}
+    assert node.get_cached_data() == {"image": image, "mask": mask}
+    assert node.api_get_data("node-1")["success"] is True
+    node.store_image(image)
+    assert node.get_cached_image().startswith("data:image/png;base64,")
+
+    node_class._canvas_cache["persistent_cache"] = {"image": image, "mask": mask}
+    node_class._canvas_cache["last_execution_id"] = "execution-1"
+    monkeypatch.setattr(node, "get_execution_id", lambda: "execution-1")
+    node.restore_cache()
+    assert node_class._canvas_cache["image"] is image
+    assert node_class._canvas_cache["mask"] is mask
+
+    monkeypatch.setattr(layerforge_runtime.node.time, "time", lambda: 1000)
+    node_class._websocket_data = {
+        -1: {"timestamp": 999},
+        2: {"timestamp": 600},
+        3: {"timestamp": 950},
+    }
+    node_class._cleanup_old_websocket_data()
+    assert set(node_class._websocket_data) == {3}
+
+    assert node.add_image_to_canvas("invalid") is None
+    assert node.add_mask_to_canvas("invalid", None) is None
+    node_class.setup_routes()

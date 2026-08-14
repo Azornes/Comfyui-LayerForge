@@ -7,8 +7,8 @@ from aiohttp import web
 from PIL import Image
 from server import PromptServer
 
-from .matting.api import register_matting_routes
 from .image_serialization import file_to_data_url, pil_to_data_url
+from .matting.api import register_matting_routes
 from .node import log
 
 

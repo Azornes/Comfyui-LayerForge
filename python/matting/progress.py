@@ -3,7 +3,6 @@
 import threading
 import time
 
-
 _MIN_PROGRESS_INTERVAL = 0.1
 _MIN_PROGRESS_DELTA = 0.5
 _PROGRESS_STATE_TTL = 120.0
@@ -134,10 +133,13 @@ class MattingProgressAdapter:
         )
 
         now = time.monotonic()
-        if not force and progress < 100.0:
-            if now - self.last_report_time < _MIN_PROGRESS_INTERVAL:
-                if abs(progress - self.last_reported) < _MIN_PROGRESS_DELTA:
-                    return
+        if (
+            not force
+            and progress < 100.0
+            and now - self.last_report_time < _MIN_PROGRESS_INTERVAL
+            and abs(progress - self.last_reported) < _MIN_PROGRESS_DELTA
+        ):
+            return
 
         self.last_reported = progress
         self.last_report_time = now
@@ -231,9 +233,9 @@ def call_huggingface_download(download_function, download_kwargs, model_label, n
 
 
 __all__ = [
+    "MattingProgressAdapter",
     "call_huggingface_download",
     "create_huggingface_tqdm_class",
     "get_matting_status",
-    "MattingProgressAdapter",
     "send_matting_status",
 ]

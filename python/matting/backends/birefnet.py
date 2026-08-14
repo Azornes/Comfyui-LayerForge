@@ -8,9 +8,9 @@ from ..catalog import (
     _BIREFNET_DEFAULT_LOCAL_FILENAME,
     _BIREFNET_FILENAME,
     _BIREFNET_MODEL_CATALOG,
+    _BIREFNET_REMOTE_PREFIX,
     _BIREFNET_REPOSITORY,
     _BIREFNET_REQUIRED_KEYS,
-    _BIREFNET_REMOTE_PREFIX,
 )
 from ..paths import (
     _get_birefnet_base_paths,
@@ -238,8 +238,8 @@ __all__ = [
     "_find_existing_birefnet_default_checkpoint",
     "_find_existing_birefnet_remote_checkpoint",
     "_find_local_birefnet_model",
-    "_get_comfy_birefnet_loader",
     "_get_birefnet_remote_model",
+    "_get_comfy_birefnet_loader",
     "_is_native_birefnet_checkpoint",
     "_iter_birefnet_checkpoint_paths",
 ]

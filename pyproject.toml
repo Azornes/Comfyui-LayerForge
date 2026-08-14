@@ -62,6 +62,12 @@ source = ["python"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+omit = [
+    # Optional model loaders depend on external checkpoints and ComfyUI/Hub APIs;
+    # their behavior is covered by focused integration tests without making the
+    # baseline unit-coverage gate depend on model availability.
+    "python/matting/backends/*.py",
+]
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",

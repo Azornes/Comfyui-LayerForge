@@ -9,7 +9,6 @@ import threading
 from pathlib import Path
 from typing import Any, Mapping
 
-
 SETTINGS_FILE = Path(__file__).resolve().parents[2] / "layerforge_settings.json"
 DEFAULT_SETTINGS = {
     "model_path": "",

@@ -9,8 +9,13 @@ from .backends.birefnet import (
     _iter_birefnet_checkpoint_paths,
 )
 from .backends.rmbg import _find_existing_rmbg_model
-from .catalog import _BIREFNET_MODEL_CATALOG, _BIREFNET_PROJECT_URL, _BIREFNET_REMOTE_PREFIX
-from .catalog import _RMBG_MODEL_CATALOG, _RMBG_REMOTE_PREFIX
+from .catalog import (
+    _BIREFNET_MODEL_CATALOG,
+    _BIREFNET_PROJECT_URL,
+    _BIREFNET_REMOTE_PREFIX,
+    _RMBG_MODEL_CATALOG,
+    _RMBG_REMOTE_PREFIX,
+)
 from .paths import _get_birefnet_base_paths, _get_managed_birefnet_paths, _get_rmbg_model_roots
 
 

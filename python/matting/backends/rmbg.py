@@ -307,7 +307,7 @@ __all__ = [
     "_find_local_rmbg_model",
     "_get_rmbg_model_loader",
     "_get_rmbg_model_status_message",
-    "_get_rmbg_transformers_status",
     "_get_rmbg_remote_model",
+    "_get_rmbg_transformers_status",
     "_is_rmbg_model_directory",
 ]

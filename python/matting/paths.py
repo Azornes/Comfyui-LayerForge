@@ -4,8 +4,7 @@ import os
 
 import folder_paths
 
-from .catalog import _BIREFNET_DEFAULT_LOCAL_FILENAME, _BIREFNET_MODEL_CATALOG
-from .catalog import _RMBG_MODEL_CATALOG
+from .catalog import _BIREFNET_DEFAULT_LOCAL_FILENAME, _BIREFNET_MODEL_CATALOG, _RMBG_MODEL_CATALOG
 
 
 def _get_birefnet_base_paths():
