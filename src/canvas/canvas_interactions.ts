@@ -296,9 +296,21 @@ export class CanvasInteractions {
         const coords = this.getMouseCoordinates(e);
         const mods = this.getModifierState(e);
 
-        if (this.interaction.mode === 'drawingMask') {
-            this.canvas.maskTool.handleMouseDown(coords.world, coords.view);
-            // Don't render here - mask tool will handle its own drawing
+        // In mask mode the mask tool receives all mouse buttons by default.
+        // Resolve the button while the mask tool is active so a previous
+        // panning interaction can never make the next left click pan too.
+        if (this.canvas.maskTool.isActive) {
+            if (e.button === 1) {
+                this.preventEventDefaults(e);
+                if (this.canvas.maskTool.isDrawing) {
+                    this.canvas.maskTool.handleMouseUp(coords.view);
+                }
+                this.startPanning(e, false);
+            } else {
+                this.interaction.mode = 'drawingMask';
+                this.canvas.maskTool.handleMouseDown(coords.world, coords.view);
+                // Don't render here - mask tool will handle its own drawing
+            }
             return;
         }
 
@@ -408,6 +420,13 @@ export class CanvasInteractions {
                 break;
             case 'panning':
                 this.panViewport(e);
+                if (this.canvas.maskTool.isActive) {
+                    // Panning changes the world-to-screen transform. Redraw
+                    // the cursor from the new world coordinates so the brush
+                    // outline stays under the actual mouse position.
+                    const pannedCoords = this.getMouseCoordinates(e);
+                    this.canvas.canvasRenderer.drawMaskBrushCursor(pannedCoords.world);
+                }
                 break;
             case 'dragging':
                 this.dragLayers(coords.world);
@@ -527,6 +546,9 @@ export class CanvasInteractions {
             this.canvas.maskTool.handleMouseLeave();
             if (this.canvas.maskTool.isDrawing) {
                 this.canvas.maskTool.handleMouseUp(coords.view);
+            }
+            if (this.interaction.mode !== 'none' && this.interaction.mode !== 'drawingMask') {
+                this.resetInteractionState();
             }
             this.canvas.render();
             return;
@@ -909,6 +931,7 @@ export class CanvasInteractions {
         }
         this.interaction.mode = 'panning';
         this.interaction.panStart = { x: e.clientX, y: e.clientY };
+        this.canvas.canvas.style.cursor = 'grabbing';
     }
 
     startCanvasResize(worldCoords: Point): void {
