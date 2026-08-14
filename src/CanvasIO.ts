@@ -10,6 +10,7 @@ import {
     getLayerForgeImageInputSlot,
     getLayerForgeMaskInputSlot,
     hasLayerForgeImageInput,
+    removeLayerForgeImageInputLink,
 } from "./utils/MultiImageInputUtils.js";
 import type { Canvas } from './Canvas';
 import type { Layer, Shape, AddMode } from './types';
@@ -26,6 +27,7 @@ interface ConnectedImageSource {
     sourceNode: any;
     sourceId: number;
     sourceSlot: number;
+    connectionType: 'virtual' | 'native';
 }
 
 export interface ConnectedInputImage {
@@ -35,6 +37,7 @@ export interface ConnectedInputImage {
     imageIndex: number;
     connectionIndex: number;
     sourceLabel: string;
+    connectionType: 'virtual' | 'native';
 }
 
 function imageBatchIdentity(sources: readonly string[]): string {
@@ -103,18 +106,22 @@ export class CanvasIO {
 
         const sources: ConnectedImageSource[] = [];
         const seen = new Set<string>();
-        const addSource = (sourceId: number, sourceSlot: number): void => {
+        const addSource = (
+            sourceId: number,
+            sourceSlot: number,
+            connectionType: 'virtual' | 'native',
+        ): void => {
             const sourceNode = graph.getNodeById?.(sourceId);
             if (!sourceNode?.imgs?.length) return;
 
-            const key = `${sourceId}:${sourceSlot}`;
+            const key = `${connectionType}:${sourceId}:${sourceSlot}`;
             if (seen.has(key)) return;
             seen.add(key);
-            sources.push({ sourceNode, sourceId, sourceSlot });
+            sources.push({ sourceNode, sourceId, sourceSlot, connectionType });
         };
 
         for (const link of getLayerForgeImageInputLinks(this.canvas.node)) {
-            addSource(link.source_id, link.source_slot);
+            addSource(link.source_id, link.source_slot, 'virtual');
         }
 
         const nativeLinkId = this.getImageInputSlot()?.link;
@@ -122,7 +129,9 @@ export class CanvasIO {
         if (nativeLink) {
             const sourceId = Number(nativeLink.origin_id ?? nativeLink.originId);
             const sourceSlot = Number(nativeLink.origin_slot ?? nativeLink.originSlot ?? 0);
-            if (Number.isFinite(sourceId)) addSource(sourceId, Number.isFinite(sourceSlot) ? sourceSlot : 0);
+            if (Number.isFinite(sourceId)) {
+                addSource(sourceId, Number.isFinite(sourceSlot) ? sourceSlot : 0, 'native');
+            }
         }
 
         return sources;
@@ -130,7 +139,7 @@ export class CanvasIO {
 
     getConnectedInputImages(): ConnectedInputImage[] {
         let connectionIndex = 0;
-        return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot }) => {
+        return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot, connectionType }) => {
             const sourceLabel = String(
                 sourceNode.title
                 || sourceNode.label
@@ -146,8 +155,55 @@ export class CanvasIO {
                 imageIndex,
                 connectionIndex: ++connectionIndex,
                 sourceLabel,
+                connectionType,
             }));
         });
+    }
+
+    unlinkConnectedInputImage(
+        reference: Pick<ConnectedInputImage, 'sourceId' | 'sourceSlot' | 'connectionType'>,
+    ): boolean {
+        const node = this.canvas.node as any;
+        const sourceId = Number(reference.sourceId);
+        const sourceSlot = Number(reference.sourceSlot);
+        if (!Number.isFinite(sourceId) || !Number.isFinite(sourceSlot)) return false;
+
+        if (reference.connectionType === 'virtual') {
+            const links = getLayerForgeImageInputLinks(node);
+            const linkIndex = links.findIndex(link => (
+                link.source_id === sourceId && link.source_slot === sourceSlot
+            ));
+            if (linkIndex < 0 || !removeLayerForgeImageInputLink(node, linkIndex)) return false;
+        } else {
+            const input = this.getImageInputSlot();
+            const linkId = input?.link;
+            const nativeLink = this.getGraphLink(linkId);
+            if (!input || linkId == null || !nativeLink) return false;
+
+            const nativeSourceId = Number(nativeLink.origin_id ?? nativeLink.originId);
+            const nativeSourceSlot = Number(nativeLink.origin_slot ?? nativeLink.originSlot ?? 0);
+            if (nativeSourceId !== sourceId || nativeSourceSlot !== sourceSlot) return false;
+
+            const inputIndex = Math.max(0, node.inputs?.indexOf(input) ?? 0);
+            if (typeof node.disconnectInput === 'function') {
+                node.disconnectInput(inputIndex);
+            } else {
+                const graph = node.graph;
+                graph?.removeLink?.(linkId);
+                input.link = null;
+            }
+        }
+
+        this.canvas.inputDataLoaded = false;
+        this.canvas.lastLoadedImageSrc = undefined;
+        this.canvas.lastLoadedLinkId = undefined;
+        node.setDirtyCanvas?.(true, true);
+        node.graph?.setDirtyCanvas?.(true, true);
+        node.graph?.change?.();
+        (globalThis as any).app?.graph?.change?.();
+        this.canvas.render();
+        log.info(`Unlinked connected input image from source ${sourceId}:${sourceSlot}.`);
+        return true;
     }
 
     private hasImageInput(): boolean {

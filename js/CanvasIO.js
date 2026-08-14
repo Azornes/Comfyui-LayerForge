@@ -5,7 +5,7 @@ import { webSocketManager } from "./utils/WebSocketManager.js";
 import { scaleImageToFit, loadImage, blobToDataUrl, tensorToImageData, createImageFromImageData } from "./utils/ImageUtils.js";
 import { postImageBlob } from "./utils/ImageUploadUtils.js";
 import { getImageAddMode, isFitOnAddEnabled } from "./utils/CanvasInputUtils.js";
-import { getLayerForgeImageInputLinks, getLayerForgeImageInputSlot, getLayerForgeMaskInputSlot, hasLayerForgeImageInput, } from "./utils/MultiImageInputUtils.js";
+import { getLayerForgeImageInputLinks, getLayerForgeImageInputSlot, getLayerForgeMaskInputSlot, hasLayerForgeImageInput, removeLayerForgeImageInputLink, } from "./utils/MultiImageInputUtils.js";
 const log = createModuleLogger('CanvasIO');
 function imageBatchIdentity(sources) {
     return sources.join('|');
@@ -65,32 +65,33 @@ export class CanvasIO {
             return [];
         const sources = [];
         const seen = new Set();
-        const addSource = (sourceId, sourceSlot) => {
+        const addSource = (sourceId, sourceSlot, connectionType) => {
             const sourceNode = graph.getNodeById?.(sourceId);
             if (!sourceNode?.imgs?.length)
                 return;
-            const key = `${sourceId}:${sourceSlot}`;
+            const key = `${connectionType}:${sourceId}:${sourceSlot}`;
             if (seen.has(key))
                 return;
             seen.add(key);
-            sources.push({ sourceNode, sourceId, sourceSlot });
+            sources.push({ sourceNode, sourceId, sourceSlot, connectionType });
         };
         for (const link of getLayerForgeImageInputLinks(this.canvas.node)) {
-            addSource(link.source_id, link.source_slot);
+            addSource(link.source_id, link.source_slot, 'virtual');
         }
         const nativeLinkId = this.getImageInputSlot()?.link;
         const nativeLink = this.getGraphLink(nativeLinkId);
         if (nativeLink) {
             const sourceId = Number(nativeLink.origin_id ?? nativeLink.originId);
             const sourceSlot = Number(nativeLink.origin_slot ?? nativeLink.originSlot ?? 0);
-            if (Number.isFinite(sourceId))
-                addSource(sourceId, Number.isFinite(sourceSlot) ? sourceSlot : 0);
+            if (Number.isFinite(sourceId)) {
+                addSource(sourceId, Number.isFinite(sourceSlot) ? sourceSlot : 0, 'native');
+            }
         }
         return sources;
     }
     getConnectedInputImages() {
         let connectionIndex = 0;
-        return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot }) => {
+        return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot, connectionType }) => {
             const sourceLabel = String(sourceNode.title
                 || sourceNode.label
                 || sourceNode.comfyClass
@@ -103,8 +104,52 @@ export class CanvasIO {
                 imageIndex,
                 connectionIndex: ++connectionIndex,
                 sourceLabel,
+                connectionType,
             }));
         });
+    }
+    unlinkConnectedInputImage(reference) {
+        const node = this.canvas.node;
+        const sourceId = Number(reference.sourceId);
+        const sourceSlot = Number(reference.sourceSlot);
+        if (!Number.isFinite(sourceId) || !Number.isFinite(sourceSlot))
+            return false;
+        if (reference.connectionType === 'virtual') {
+            const links = getLayerForgeImageInputLinks(node);
+            const linkIndex = links.findIndex(link => (link.source_id === sourceId && link.source_slot === sourceSlot));
+            if (linkIndex < 0 || !removeLayerForgeImageInputLink(node, linkIndex))
+                return false;
+        }
+        else {
+            const input = this.getImageInputSlot();
+            const linkId = input?.link;
+            const nativeLink = this.getGraphLink(linkId);
+            if (!input || linkId == null || !nativeLink)
+                return false;
+            const nativeSourceId = Number(nativeLink.origin_id ?? nativeLink.originId);
+            const nativeSourceSlot = Number(nativeLink.origin_slot ?? nativeLink.originSlot ?? 0);
+            if (nativeSourceId !== sourceId || nativeSourceSlot !== sourceSlot)
+                return false;
+            const inputIndex = Math.max(0, node.inputs?.indexOf(input) ?? 0);
+            if (typeof node.disconnectInput === 'function') {
+                node.disconnectInput(inputIndex);
+            }
+            else {
+                const graph = node.graph;
+                graph?.removeLink?.(linkId);
+                input.link = null;
+            }
+        }
+        this.canvas.inputDataLoaded = false;
+        this.canvas.lastLoadedImageSrc = undefined;
+        this.canvas.lastLoadedLinkId = undefined;
+        node.setDirtyCanvas?.(true, true);
+        node.graph?.setDirtyCanvas?.(true, true);
+        node.graph?.change?.();
+        globalThis.app?.graph?.change?.();
+        this.canvas.render();
+        log.info(`Unlinked connected input image from source ${sourceId}:${sourceSlot}.`);
+        return true;
     }
     hasImageInput() {
         return hasLayerForgeImageInput(this.canvas.node);

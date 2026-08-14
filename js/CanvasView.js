@@ -567,6 +567,8 @@ async function createCanvasWidget(node, widget, app) {
         references.forEach((reference, index) => {
             const connectionLabel = `Image ${reference.connectionIndex}`;
             const fallbackLabel = `${reference.sourceLabel} · ${connectionLabel}`;
+            const row = document.createElement('div');
+            row.className = 'lf-input-reference-row';
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'lf-input-reference';
@@ -587,6 +589,12 @@ async function createCanvasWidget(node, widget, app) {
             detail.textContent = `${reference.sourceLabel} · ${connectionLabel}`;
             text.append(label, detail);
             item.append(thumbnail, text);
+            const unlink = document.createElement('button');
+            unlink.type = 'button';
+            unlink.className = 'lf-input-reference-unlink';
+            unlink.textContent = 'Unlink';
+            unlink.title = 'Disconnect this image input from LayerForge';
+            unlink.setAttribute('aria-label', `Unlink ${fallbackLabel}`);
             item.addEventListener('pointerdown', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -602,7 +610,23 @@ async function createCanvasWidget(node, widget, app) {
                     item.disabled = false;
                 });
             });
-            list.appendChild(item);
+            unlink.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            unlink.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                unlink.disabled = true;
+                const unlinked = canvas.canvasIO.unlinkConnectedInputImage(reference);
+                if (unlinked) {
+                    renderInputMenu(menu);
+                    requestAnimationFrame(positionInputMenu);
+                }
+                unlink.disabled = false;
+            });
+            row.append(item, unlink);
+            list.appendChild(row);
         });
         menu.appendChild(list);
     };

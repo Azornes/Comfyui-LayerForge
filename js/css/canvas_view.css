@@ -237,11 +237,20 @@
     overflow-y: auto;
 }
 
+.lf-input-reference-row {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+}
+
 .lf-input-reference {
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
     gap: 8px;
-    width: 100%;
+    width: auto;
+    min-width: 0;
     min-height: 56px;
     padding: 5px;
     box-sizing: border-box;
@@ -262,6 +271,33 @@
 }
 
 .lf-input-reference:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.lf-input-reference-unlink {
+    flex: 0 0 auto;
+    align-self: stretch;
+    min-width: 54px;
+    padding: 4px 7px;
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(220, 76, 76, 0.18);
+    border: 1px solid rgba(255, 120, 120, 0.4);
+    border-radius: 5px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+}
+
+.lf-input-reference-unlink:hover,
+.lf-input-reference-unlink:focus-visible {
+    color: #fff;
+    background: rgba(220, 76, 76, 0.42);
+    border-color: rgba(255, 150, 150, 0.78);
+    outline: none;
+}
+
+.lf-input-reference-unlink:disabled {
     cursor: wait;
     opacity: 0.6;
 }
