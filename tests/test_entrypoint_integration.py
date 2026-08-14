@@ -87,7 +87,7 @@ def _install_runtime_stubs(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "tqdm", tqdm)
 
     # Avoid creating project log files while the entry point is imported.
-    from python.log_system import logger
+    from python.log_system.logger import logger
 
     monkeypatch.setattr(logger, "configure", lambda config: logger)
 
@@ -112,10 +112,12 @@ def _import_layerforge(monkeypatch, tmp_path):
         entrypoint=package,
         node=sys.modules[f"{package_name}.python.node"],
         image_utils=sys.modules[f"{package_name}.python.image_utils"],
-        matting=sys.modules[f"{package_name}.python.matting"],
         matting_api=sys.modules[f"{package_name}.python.matting.api"],
         matting_birefnet=sys.modules[f"{package_name}.python.matting.backends.birefnet"],
         matting_rmbg=sys.modules[f"{package_name}.python.matting.backends.rmbg"],
+        matting_catalog=sys.modules[f"{package_name}.python.matting.catalog"],
+        matting_options=sys.modules[f"{package_name}.python.matting.options"],
+        matting_paths=sys.modules[f"{package_name}.python.matting.paths"],
         matting_settings=sys.modules[f"{package_name}.python.matting.settings"],
         matting_service=sys.modules[f"{package_name}.python.matting.service"],
         matting_progress=sys.modules[f"{package_name}.python.matting.progress"],
@@ -420,7 +422,6 @@ def test_websocket_and_cached_image_decoding_preserve_image_and_mask_modes(layer
 def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, monkeypatch):
     import torch
 
-    node_module = layerforge_runtime.matting
     service_module = layerforge_runtime.matting_service
     calls = {}
 
@@ -440,10 +441,10 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
         "_ensure_birefnet_checkpoint",
         lambda model_path=None: "native-birefnet.safetensors",
     )
-    node_module.BiRefNetMatting._model_cache.clear()
+    service_module.BiRefNetMatting._model_cache.clear()
 
     image = torch.rand((1, 3, 2, 4), dtype=torch.float32)
-    matted_image, alpha_mask = node_module.BiRefNetMatting().execute(
+    matted_image, alpha_mask = service_module.BiRefNetMatting().execute(
         image,
         model_path=None,
         threshold=0,
@@ -458,7 +459,6 @@ def test_matting_adapter_uses_native_loader_and_bhwc_input(layerforge_runtime, m
 def test_matting_adapter_translates_comfyui_interrupt(layerforge_runtime, monkeypatch):
     import torch
 
-    node_module = layerforge_runtime.matting
     service_module = layerforge_runtime.matting_service
 
     class FakeInterruptProcessingException(BaseException):
@@ -486,10 +486,10 @@ def test_matting_adapter_translates_comfyui_interrupt(layerforge_runtime, monkey
         "_ensure_birefnet_checkpoint",
         lambda model_path=None: "interrupting-birefnet.safetensors",
     )
-    node_module.BiRefNetMatting._model_cache.clear()
+    service_module.BiRefNetMatting._model_cache.clear()
 
     with pytest.raises(service_module.MattingInterruptedError, match="interrupted"):
-        node_module.BiRefNetMatting().execute(
+        service_module.BiRefNetMatting().execute(
             torch.ones((1, 3, 2, 4), dtype=torch.float32),
             model_path=None,
             threshold=0,
@@ -498,12 +498,11 @@ def test_matting_adapter_translates_comfyui_interrupt(layerforge_runtime, monkey
 
 
 def test_matting_model_status_preserves_unsupported_and_error_responses(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     api_module = layerforge_runtime.matting_api
-    responses = _record_matting_responses(monkeypatch, node_module)
+    responses = _record_matting_responses(monkeypatch, api_module)
 
     monkeypatch.setattr(api_module, "_get_comfy_birefnet_loader", lambda: None)
-    unsupported = _run_matting_model_check(node_module)
+    unsupported = _run_matting_model_check(api_module)
 
     assert unsupported.payload["available"] is False
     assert unsupported.payload["reason"] == "unsupported_comfyui"
@@ -519,7 +518,7 @@ def test_matting_model_status_preserves_unsupported_and_error_responses(layerfor
         raise RuntimeError("catalog unavailable")
 
     monkeypatch.setattr(api_module, "_get_birefnet_model_options", fail_to_read_options)
-    failed = _run_matting_model_check(node_module)
+    failed = _run_matting_model_check(api_module)
 
     assert failed.payload == {
         "available": False,
@@ -531,9 +530,8 @@ def test_matting_model_status_preserves_unsupported_and_error_responses(layerfor
 
 
 def test_matting_model_status_preserves_remote_model_responses(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     api_module = layerforge_runtime.matting_api
-    responses = _record_matting_responses(monkeypatch, node_module)
+    responses = _record_matting_responses(monkeypatch, api_module)
     model_options = [{"path": "remote:portrait", "label": "Portrait"}]
     remote_model = {"label": "Portrait"}
 
@@ -546,7 +544,7 @@ def test_matting_model_status_preserves_remote_model_responses(layerforge_runtim
         lambda model: "/models/portrait.safetensors",
     )
 
-    ready = _run_matting_model_check(node_module, "remote:portrait")
+    ready = _run_matting_model_check(api_module, "remote:portrait")
 
     assert ready.payload == {
         "available": True,
@@ -559,7 +557,7 @@ def test_matting_model_status_preserves_remote_model_responses(layerforge_runtim
     assert ready.status == 200
 
     monkeypatch.setattr(api_module, "_find_existing_birefnet_remote_checkpoint", lambda model: None)
-    missing = _run_matting_model_check(node_module, "remote:portrait")
+    missing = _run_matting_model_check(api_module, "remote:portrait")
 
     assert missing.payload == {
         "available": False,
@@ -574,9 +572,8 @@ def test_matting_model_status_preserves_remote_model_responses(layerforge_runtim
 
 
 def test_matting_model_status_preserves_local_and_automatic_responses(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     api_module = layerforge_runtime.matting_api
-    responses = _record_matting_responses(monkeypatch, node_module)
+    responses = _record_matting_responses(monkeypatch, api_module)
     model_options = [{"path": "/models/custom.safetensors", "label": "custom.safetensors"}]
 
     monkeypatch.setattr(api_module, "_get_comfy_birefnet_loader", lambda: object())
@@ -588,7 +585,7 @@ def test_matting_model_status_preserves_local_and_automatic_responses(layerforge
         lambda model_path=None: "/models/custom.safetensors",
     )
 
-    selected = _run_matting_model_check(node_module, "/models/custom.safetensors")
+    selected = _run_matting_model_check(api_module, "/models/custom.safetensors")
 
     assert selected.payload == {
         "available": True,
@@ -601,7 +598,7 @@ def test_matting_model_status_preserves_local_and_automatic_responses(layerforge
     assert selected.status == 200
 
     monkeypatch.setattr(api_module, "_find_local_birefnet_model", lambda model_path=None: None)
-    unavailable = _run_matting_model_check(node_module, "/models/missing.safetensors")
+    unavailable = _run_matting_model_check(api_module, "/models/missing.safetensors")
 
     assert unavailable.payload == {
         "available": False,
@@ -617,7 +614,7 @@ def test_matting_model_status_preserves_local_and_automatic_responses(layerforge
         "_find_local_birefnet_model",
         lambda model_path=None: "/models/automatic.safetensors",
     )
-    automatic = _run_matting_model_check(node_module)
+    automatic = _run_matting_model_check(api_module)
 
     assert automatic.payload == {
         "available": True,
@@ -634,7 +631,7 @@ def test_matting_model_status_preserves_local_and_automatic_responses(layerforge
         "_get_birefnet_base_paths",
         lambda: ["/models/background_removal"],
     )
-    not_downloaded = _run_matting_model_check(node_module)
+    not_downloaded = _run_matting_model_check(api_module)
 
     assert not_downloaded.payload == {
         "available": False,
@@ -650,7 +647,6 @@ def test_matting_model_status_preserves_local_and_automatic_responses(layerforge
 def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtime, monkeypatch):
     import torch
 
-    node_module = layerforge_runtime.matting
     service_module = layerforge_runtime.matting_service
 
     class NativeBiRefNet:
@@ -667,10 +663,10 @@ def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtim
         "_ensure_birefnet_checkpoint",
         lambda model_path=None: "native-birefnet.safetensors",
     )
-    node_module.BiRefNetMatting._model_cache.clear()
+    service_module.BiRefNetMatting._model_cache.clear()
 
     image = torch.ones((1, 3, 2, 4), dtype=torch.float32)
-    matting = node_module.BiRefNetMatting()
+    matting = service_module.BiRefNetMatting()
 
     removed_foreground, inverted_mask = matting.execute(
         image,
@@ -703,12 +699,13 @@ def test_matting_adapter_supports_inverted_and_mask_only_modes(layerforge_runtim
 
 
 def test_matting_model_options_include_downloadable_official_variants(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     birefnet_module = layerforge_runtime.matting_birefnet
+    options_module = layerforge_runtime.matting_options
+    catalog_module = layerforge_runtime.matting_catalog
 
     monkeypatch.setattr(birefnet_module, "_iter_birefnet_checkpoint_paths", lambda: iter(()))
 
-    options = node_module._get_birefnet_model_options()
+    options = options_module._get_birefnet_model_options()
     remote_options = [option for option in options if option["source"] == "remote"]
 
     assert remote_options
@@ -719,7 +716,7 @@ def test_matting_model_options_include_downloadable_official_variants(layerforge
     birefnet_options = [option for option in remote_options if option["backend"] == "birefnet"]
     assert all(option["project_url"] == "https://github.com/ZhengPeng7/BiRefNet" for option in birefnet_options)
     assert any(option["path"] == "remote:portrait" for option in remote_options)
-    portrait = next(option for option in node_module._BIREFNET_MODEL_CATALOG if option["id"] == "portrait")
+    portrait = next(option for option in catalog_module._BIREFNET_MODEL_CATALOG if option["id"] == "portrait")
     assert portrait["local_filename"] == "BiRefNet-portrait.safetensors"
 
     rmbg_option = next(option for option in remote_options if option["path"] == "remote:rmbg_2_0")
@@ -729,10 +726,10 @@ def test_matting_model_options_include_downloadable_official_variants(layerforge
 
 
 def test_selected_remote_matting_model_is_sent_to_downloader(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     birefnet_module = layerforge_runtime.matting_birefnet
+    catalog_module = layerforge_runtime.matting_catalog
     selected_model = next(
-        model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait"
+        model for model in catalog_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait"
     )
     downloaded = {}
 
@@ -751,20 +748,23 @@ def test_selected_remote_matting_model_is_sent_to_downloader(layerforge_runtime,
 
 
 def test_remote_matting_checkpoint_path_uses_background_removal_root(layerforge_runtime):
-    node_module = layerforge_runtime.matting
-    model = next(model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait")
+    import folder_paths
 
-    expected = Path(layerforge_runtime.matting.folder_paths.models_dir) / "background_removal" / model[
+    catalog_module = layerforge_runtime.matting_catalog
+    paths_module = layerforge_runtime.matting_paths
+    model = next(model for model in catalog_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait")
+
+    expected = Path(folder_paths.models_dir) / "background_removal" / model[
         "local_filename"
     ]
 
-    assert Path(node_module._get_birefnet_remote_checkpoint_path(model)) == expected
+    assert Path(paths_module._get_birefnet_remote_checkpoint_path(model)) == expected
 
 
 def test_remote_matting_download_uses_background_removal_root(layerforge_runtime, monkeypatch, tmp_path):
-    node_module = layerforge_runtime.matting
     birefnet_module = layerforge_runtime.matting_birefnet
-    model = next(model for model in node_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait")
+    catalog_module = layerforge_runtime.matting_catalog
+    model = next(model for model in catalog_module._BIREFNET_MODEL_CATALOG if model["id"] == "portrait")
     download = {}
 
     def fake_hf_hub_download(**kwargs):
@@ -834,16 +834,18 @@ def test_matting_progress_status_is_available_without_websocket_delivery(layerfo
 
 
 def test_rmbg_model_path_uses_background_removal_subdirectory(layerforge_runtime):
-    node_module = layerforge_runtime.matting
-    model = node_module._RMBG_MODEL_CATALOG[0]
+    import folder_paths
 
-    expected = Path(layerforge_runtime.matting.folder_paths.models_dir) / "background_removal" / "RMBG-2.0"
+    catalog_module = layerforge_runtime.matting_catalog
+    paths_module = layerforge_runtime.matting_paths
+    model = catalog_module._RMBG_MODEL_CATALOG[0]
 
-    assert Path(node_module._get_rmbg_model_directory(model)) == expected
+    expected = Path(folder_paths.models_dir) / "background_removal" / "RMBG-2.0"
+
+    assert Path(paths_module._get_rmbg_model_directory(model)) == expected
 
 
 def test_rmbg_checkpoint_is_not_selected_as_native_birefnet(layerforge_runtime, monkeypatch, tmp_path):
-    node_module = layerforge_runtime.matting
     birefnet_module = layerforge_runtime.matting_birefnet
     model_dir = Path(tmp_path) / "models" / "background_removal" / "RMBG-2.0"
     model_dir.mkdir(parents=True)
@@ -858,9 +860,9 @@ def test_rmbg_checkpoint_is_not_selected_as_native_birefnet(layerforge_runtime, 
 
 
 def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, monkeypatch, tmp_path):
-    node_module = layerforge_runtime.matting
     rmbg_module = layerforge_runtime.matting_rmbg
-    model = node_module._RMBG_MODEL_CATALOG[0]
+    catalog_module = layerforge_runtime.matting_catalog
+    model = catalog_module._RMBG_MODEL_CATALOG[0]
     download = {}
 
     def fake_snapshot_download(**kwargs):
@@ -882,7 +884,7 @@ def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, 
     monkeypatch.setitem(sys.modules, "huggingface_hub", huggingface_hub)
     monkeypatch.setattr(rmbg_module, "get_huggingface_token", lambda: "hf-test-token")
 
-    result = node_module._download_rmbg_model(model)
+    result = rmbg_module._download_rmbg_model(model)
     expected_dir = Path(tmp_path) / "models" / "background_removal" / "RMBG-2.0"
 
     assert Path(download["local_dir"]) == expected_dir
@@ -890,7 +892,7 @@ def test_rmbg_download_uses_background_removal_subdirectory(layerforge_runtime, 
     assert "*.safetensors" in download["allow_patterns"]
     assert download["token"] == "hf-test-token"
     assert Path(result) == expected_dir
-    assert node_module._is_rmbg_model_directory(result)
+    assert rmbg_module._is_rmbg_model_directory(result)
 
 
 def test_rmbg_adapter_returns_batched_hw_mask(layerforge_runtime):
@@ -900,7 +902,7 @@ def test_rmbg_adapter_returns_batched_hw_mask(layerforge_runtime):
         def __call__(self, image):
             return (None, torch.zeros((image.shape[0], 1, 1024, 1024), device=image.device))
 
-    adapter = layerforge_runtime.matting.RMBG2Model(
+    adapter = layerforge_runtime.matting_rmbg.RMBG2Model(
         FakeRMBGModel(),
         torch.device("cpu"),
     )
@@ -913,14 +915,13 @@ def test_rmbg_adapter_returns_batched_hw_mask(layerforge_runtime):
 
 
 def test_rmbg_model_status_does_not_require_native_birefnet_loader(layerforge_runtime, monkeypatch):
-    node_module = layerforge_runtime.matting
     api_module = layerforge_runtime.matting_api
-    _record_matting_responses(monkeypatch, node_module)
+    _record_matting_responses(monkeypatch, api_module)
 
     monkeypatch.setattr(api_module, "_get_rmbg_model_loader", lambda: object())
     monkeypatch.setattr(api_module, "_find_existing_rmbg_model", lambda model: None)
 
-    status = _run_matting_model_check(node_module, "remote:rmbg_2_0")
+    status = _run_matting_model_check(api_module, "remote:rmbg_2_0")
 
     assert status.payload["available"] is False
     assert status.payload["reason"] == "not_downloaded"

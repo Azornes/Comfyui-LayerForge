@@ -36,7 +36,7 @@ export class MaskEditorIntegration {
         });
         this.savedMaskState = await this.saveMaskState();
         this.maskEditorCancelled = false;
-        if (!predefinedMask && this.maskTool && this.maskTool.maskCanvas) {
+        if (!predefinedMask && this.maskTool) {
             try {
                 log.debug('Creating mask from current mask tool');
                 predefinedMask = await this.createMaskFromCurrentMask();
@@ -304,10 +304,10 @@ export class MaskEditorIntegration {
      * @returns {Promise<Image>} Promise zwracający obiekt Image z maską
      */
     async createMaskFromCurrentMask() {
-        if (!this.maskTool || !this.maskTool.maskCanvas) {
+        if (!this.maskTool) {
             throw new Error("No mask canvas available");
         }
-        return loadImage(this.maskTool.maskCanvas.toDataURL());
+        return loadImage(this.maskTool.getMask().toDataURL());
     }
     waitWhileMaskEditing() {
         if (mask_editor_showing(app)) {
@@ -326,10 +326,10 @@ export class MaskEditorIntegration {
      * @returns {Object} Zapisany stan maski
      */
     async saveMaskState() {
-        if (!this.maskTool || !this.maskTool.maskCanvas) {
+        if (!this.maskTool) {
             return null;
         }
-        const maskCanvas = this.maskTool.maskCanvas;
+        const maskCanvas = this.maskTool.getMask();
         const savedCanvas = cloneCanvas(maskCanvas);
         return {
             maskData: savedCanvas,
@@ -348,8 +348,12 @@ export class MaskEditorIntegration {
             return;
         }
         if (savedState.maskData) {
-            const maskCtx = this.maskTool.maskCtx;
-            maskCtx.clearRect(0, 0, this.maskTool.maskCanvas.width, this.maskTool.maskCanvas.height);
+            const maskCanvas = this.maskTool.getMask();
+            const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+            if (!maskCtx) {
+                return;
+            }
+            maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
             maskCtx.drawImage(savedState.maskData, 0, 0);
         }
         if (savedState.maskPosition) {

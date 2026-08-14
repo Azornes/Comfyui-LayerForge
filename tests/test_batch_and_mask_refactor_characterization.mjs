@@ -39,12 +39,13 @@ test('mask editor variants share one drawing helper but retain their own side ef
   assert.match(newEditorBody, /messageBroker\.publish\('saveState'\)/);
   assert.doesNotMatch(oldEditorBody, /messageBroker\.publish\('saveState'\)/);
   assert.match(maskEditorSource, /private async renderProcessedMask\(/);
+  const renderHelperBody = getMethodBody(maskEditorSource, 'renderProcessedMask', 'processMaskForEditor');
   assert.equal(
-    (maskEditorSource.match(/maskCtx\.clearRect\(0, 0, maskCanvas\.width, maskCanvas\.height\)/g) ?? []).length,
+    (renderHelperBody.match(/maskCtx\.clearRect\(0, 0, maskCanvas\.width, maskCanvas\.height\)/g) ?? []).length,
     1
   );
   assert.equal(
-    (maskEditorSource.match(/maskCtx\.drawImage\(processedMask, 0, 0\)/g) ?? []).length,
+    (renderHelperBody.match(/maskCtx\.drawImage\(processedMask, 0, 0\)/g) ?? []).length,
     1
   );
 });

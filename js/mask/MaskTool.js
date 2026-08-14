@@ -63,13 +63,6 @@ export class MaskTool {
         this.pendingPreviewParams = null;
         this.initMaskCanvas();
     }
-    // Temporary compatibility getters - will be replaced with chunked system
-    get maskCanvas() {
-        return this.activeMaskCanvas;
-    }
-    get maskCtx() {
-        return this.activeMaskCtx;
-    }
     initPreviewCanvas() {
         if (this.previewCanvas.parentElement) {
             this.previewCanvas.parentElement.removeChild(this.previewCanvas);
@@ -1386,7 +1379,7 @@ export class MaskTool {
     }
     resize(width, height) {
         this.initPreviewCanvas();
-        const oldMask = this.maskCanvas;
+        const oldMask = this.activeMaskCanvas;
         const oldX = this.x;
         const oldY = this.y;
         const oldWidth = oldMask.width;

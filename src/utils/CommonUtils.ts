@@ -1,5 +1,4 @@
 import type { Layer, Point } from '../shared/types';
-export type { Point } from '../shared/types';
 
 /**
  * CommonUtils - Wspólne funkcje pomocnicze

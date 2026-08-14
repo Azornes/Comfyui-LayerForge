@@ -121,7 +121,7 @@ test('CanvasState layer source loading has no local Image construction', () => {
 });
 
 test('Mask editor image loaders preserve their rejection and cleanup policies', () => {
-  assert.match(maskEditorSource, /return loadImage\(this\.maskTool\.maskCanvas\.toDataURL\(\)\)/);
+  assert.match(maskEditorSource, /return loadImage\(this\.maskTool\.getMask\(\)\.toDataURL\(\)\)/);
   assert.match(maskEditorSource, /resultImage = await loadImage\(this\.node\.imgs\[0\]\.src\)/);
   assert.match(maskEditorSource, /this\.node\.imgs = \[\]/);
 });

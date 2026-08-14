@@ -152,15 +152,6 @@ export class MaskTool {
         this.initMaskCanvas();
     }
 
-    // Temporary compatibility getters - will be replaced with chunked system
-    get maskCanvas(): HTMLCanvasElement {
-        return this.activeMaskCanvas;
-    }
-
-    get maskCtx(): CanvasRenderingContext2D {
-        return this.activeMaskCtx;
-    }
-
     initPreviewCanvas(): void {
         if (this.previewCanvas.parentElement) {
             this.previewCanvas.parentElement.removeChild(this.previewCanvas);
@@ -1736,7 +1727,7 @@ export class MaskTool {
 
     resize(width: number, height: number): void {
         this.initPreviewCanvas();
-        const oldMask = this.maskCanvas;
+        const oldMask = this.activeMaskCanvas;
         const oldX = this.x;
         const oldY = this.y;
         const oldWidth = oldMask.width;

@@ -19,7 +19,7 @@ _OUTPUT_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
 _MAX_IMAGE_INPUTS = 32
 
 try:
-    from .log_system import create_module_logger
+    from .log_system.log_funcs import create_module_logger
 
     log = create_module_logger(__name__)
     log.info("Logger initialized for LayerForge node")

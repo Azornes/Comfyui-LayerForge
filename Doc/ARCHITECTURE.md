@@ -14,8 +14,8 @@ be edited independently.
 | `mask/` | Mask editing, pixel processing, SAM, and matting integrations |
 | `media/` | Image/blob conversion, in-memory image cache, preview, upload, and export helpers |
 | `persistence/` | IndexedDB state, reference tracking, and state worker |
-| `shared/` | Cross-domain types, configuration, errors, and logging adapters |
-| `utils/` | Small compatibility and UI helpers that have not yet earned a domain |
+| `shared/` | Cross-domain types and errors |
+| `utils/` | Small cross-cutting and UI helpers that have not yet earned a domain |
 | `log_system/` | Canonical logging implementation |
 
 ## Canonical modules
