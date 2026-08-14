@@ -8,21 +8,69 @@ const log = createModuleLogger('MaskUtils');
 
 export function new_editor(app: ComfyApp): boolean {
     if (!app) return false;
-    return !!app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
+
+    // The old editor switch was removed from the current ComfyUI frontend.
+    // Keep honoring it when an older frontend still exposes the setting, but
+    // detect the Vue mask editor by its public DOM hooks otherwise.
+    if (document.querySelector(
+        '.mask-editor-dialog, [data-testid="mask-editor-root"], #maskEditorCanvasContainer'
+    )) {
+        return true;
+    }
+
+    try {
+        const setting = app.ui?.settings?.getSettingValue?.('Comfy.MaskEditor.UseNewEditor');
+        if (typeof setting === 'boolean') {
+            return setting;
+        }
+    } catch (error) {
+        log.debug("Could not read the legacy mask editor setting", error);
+    }
+
+    return false;
 }
 
 function get_mask_editor_element(app: ComfyApp): HTMLElement | null {
-    return new_editor(app) ? document.getElementById('maskEditor') : document.getElementById('maskCanvas')?.parentElement ?? null;
+    const currentEditor = document.querySelector<HTMLElement>(
+        '.mask-editor-dialog, [data-testid="mask-editor-root"], #maskEditorCanvasContainer, #maskEditor'
+    );
+    if (currentEditor) {
+        return currentEditor.closest<HTMLElement>('[role="dialog"]') ?? currentEditor;
+    }
+
+    return new_editor(app)
+        ? document.getElementById('maskEditor')
+        : document.getElementById('maskCanvas')?.parentElement ?? null;
+}
+
+/**
+ * Returns the native mask layer canvas for both the legacy and Vue editors.
+ * The Vue editor intentionally keeps the canvases private, so its mask layer
+ * is identified by the stable canvas order/class used by its template.
+ */
+export function get_mask_editor_canvas(app: ComfyApp): HTMLCanvasElement | null {
+    const legacyCanvas = document.getElementById('maskCanvas') as HTMLCanvasElement | null;
+    if (legacyCanvas) {
+        return legacyCanvas;
+    }
+
+    const editorElement = get_mask_editor_element(app);
+    if (!editorElement) {
+        return null;
+    }
+
+    const canvases = Array.from(editorElement.querySelectorAll<HTMLCanvasElement>('canvas'));
+    return canvases.find((canvas) => canvas.classList.contains('z-30')) ?? canvases[2] ?? null;
 }
 
 export function mask_editor_showing(app: ComfyApp): boolean {
     const editor = get_mask_editor_element(app);
-    return !!editor && editor.style.display !== "none";
+    return !!editor && !editor.hidden && editor.style.display !== "none" && editor.getAttribute('aria-hidden') !== 'true';
 }
 
 export function hide_mask_editor(app: ComfyApp): void {
     if (mask_editor_showing(app)) {
-        const editor = document.getElementById('maskEditor');
+        const editor = get_mask_editor_element(app);
         if (editor) {
             editor.style.display = 'none';
         }
@@ -34,6 +82,16 @@ function get_mask_editor_cancel_button(app: ComfyApp): HTMLElement | null {
     if (cancelButton) {
         log.debug("Found cancel button by ID: maskEditor_topBarCancelButton");
         return cancelButton;
+    }
+
+    const editorElement = get_mask_editor_element(app);
+    const editorButtons = editorElement?.querySelectorAll<HTMLElement>('button, input[type="button"]');
+    for (const button of editorButtons ?? []) {
+        const text = button.textContent || (button as HTMLInputElement).value || '';
+        if (text.toLowerCase().includes('cancel')) {
+            log.debug("Found mask editor cancel button in editor dialog");
+            return button;
+        }
     }
 
     const cancelSelectors = [
@@ -63,7 +121,6 @@ function get_mask_editor_cancel_button(app: ComfyApp): HTMLElement | null {
         }
     }
 
-    const editorElement = get_mask_editor_element(app);
     if (editorElement) {
         const childNodes = editorElement?.parentElement?.lastChild?.childNodes;
         if (childNodes && childNodes.length > 2 && childNodes[2] instanceof HTMLElement) {
@@ -79,7 +136,17 @@ function get_mask_editor_save_button(app: ComfyApp): HTMLElement | null {
     if (saveButton) {
         return saveButton;
     }
+
     const editorElement = get_mask_editor_element(app);
+    const editorButtons = editorElement?.querySelectorAll<HTMLElement>('button, input[type="button"]');
+    for (const button of editorButtons ?? []) {
+        const text = button.textContent || (button as HTMLInputElement).value || '';
+        if (text.toLowerCase().includes('save')) {
+            log.debug("Found mask editor save button in editor dialog");
+            return button;
+        }
+    }
+
     if (editorElement) {
         const childNodes = editorElement?.parentElement?.lastChild?.childNodes;
         if (childNodes && childNodes.length > 2 && childNodes[2] instanceof HTMLElement) {
@@ -110,9 +177,11 @@ export function mask_editor_listen_for_cancel(app: ComfyApp, callback: () => voi
             const globalClickHandler = (event: MouseEvent) => {
                 const target = event.target as HTMLElement;
                 const text = target.textContent || (target as HTMLInputElement).value || '';
+                const id = target?.id || '';
+                const className = typeof target?.className === 'string' ? target.className : '';
                 if (target && (text.toLowerCase().includes('cancel') ||
-                    target.id.toLowerCase().includes('cancel') ||
-                    target.className.toLowerCase().includes('cancel'))) {
+                    id.toLowerCase().includes('cancel') ||
+                    className.toLowerCase().includes('cancel'))) {
                     log.info("Cancel detected via global click handler");
                     callback();
                     document.removeEventListener('click', globalClickHandler);

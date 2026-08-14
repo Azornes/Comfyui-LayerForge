@@ -45,6 +45,9 @@ export interface ComfyNode {
     type: string;
     widgets: ComfyWidget[];
     imgs?: HTMLImageElement[];
+    images?: Array<{ filename: string; subfolder?: string; type?: string }>;
+    imageIndex?: number;
+    previewMediaType?: string;
     size?: [number, number];
     onResize?: () => void;
     setDirtyCanvas?: (dirty: boolean, propagate: boolean) => void;

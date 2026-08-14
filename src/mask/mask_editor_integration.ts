@@ -10,10 +10,10 @@ import { uploadCanvasAsImage, uploadCanvasWithMaskAsImage, uploadImageBlob } fro
 import { processMaskForViewport } from "./mask_processing_utils.js";
 import { applyMaskResultToTool } from "./mask_result_utils.js";
 import { updateNodePreview } from "../media/preview_utils.js";
-import { mask_editor_showing, mask_editor_listen_for_cancel } from "./mask_utils.js";
-import { cloneCanvas } from "../utils/common_utils.js";
+import { get_mask_editor_canvas, mask_editor_showing, mask_editor_listen_for_cancel, new_editor } from "./mask_utils.js";
+import { cloneCanvas, createCanvas } from "../utils/common_utils.js";
 import { getFlattenedCanvasBlob } from "../media/canvas_blob_utils.js";
-import { loadImage } from "../media/image_utils.js";
+import { loadImage, loadImageFromBlob } from "../media/image_utils.js";
 
 const log = createModuleLogger('MaskEditorIntegration');
 
@@ -25,12 +25,18 @@ export class MaskEditorIntegration {
     node: any;
     pendingMask: any;
     savedMaskState: any;
+    savedNodeImageState: any;
+    openedImageRef: any;
+    openedImageUrl: string | null;
     constructor(canvas: any) {
         this.canvas = canvas;
         this.node = canvas.node;
         this.maskTool = canvas.maskTool;
 
         this.savedMaskState = null;
+        this.savedNodeImageState = null;
+        this.openedImageRef = null;
+        this.openedImageUrl = null;
         this.maskEditorCancelled = false;
         this.pendingMask = null;
         this.editorWasShowing = false;
@@ -49,6 +55,7 @@ export class MaskEditorIntegration {
         });
 
         this.savedMaskState = await this.saveMaskState();
+        this.savedNodeImageState = this.saveNodeImageState();
         this.maskEditorCancelled = false;
 
         if (!predefinedMask && this.maskTool) {
@@ -64,7 +71,7 @@ export class MaskEditorIntegration {
         this.pendingMask = predefinedMask;
 
         let blob;
-        if (sendCleanImage) {
+        if (predefinedMask || sendCleanImage) {
             log.debug('Getting flattened canvas as blob (clean image)');
             blob = await getFlattenedCanvasBlob(this.canvas, 'plain');
         } else {
@@ -74,7 +81,19 @@ export class MaskEditorIntegration {
 
         if (!blob) {
             log.warn("Canvas is empty, cannot open mask editor.");
+            this.clearEditorSessionState();
             return;
+        }
+
+        if (predefinedMask || sendCleanImage) {
+            // The native editor treats the uploaded image alpha as its mask.
+            // LayerForge layers can legitimately contain transparent pixels,
+            // so make the clean editor input fully opaque before opening it.
+            try {
+                blob = await this.makeOpaqueMaskEditorImage(blob);
+            } catch (error) {
+                log.warn('Could not make the mask editor input opaque; using the original clean image', error);
+            }
         }
 
         log.debug('Canvas blob created successfully, size:', blob.size);
@@ -86,6 +105,15 @@ export class MaskEditorIntegration {
             });
 
             this.node.imgs = [uploadResult.imageElement];
+            // Image.src is normalized by the browser; keep the same form for
+            // the cancel/no-result comparison below.
+            this.openedImageUrl = this.node.imgs[0].src || uploadResult.imageUrl;
+            this.openedImageRef = this.createImageRef(uploadResult);
+
+            // The current Vue editor prioritizes node.images over node.imgs.
+            // Point both contracts at the temporary LayerForge upload so the
+            // editor never falls back to an older ComfyUI preview.
+            this.node.images = [{ ...this.openedImageRef }];
 
             log.info('Opening ComfyUI mask editor');
             ComfyApp.copyToClipspace(this.node);
@@ -104,6 +132,8 @@ export class MaskEditorIntegration {
 
         } catch (error) {
             log.error("Error preparing image for mask editor:", error);
+            this.restoreNodeImageState();
+            this.clearEditorSessionState();
             showErrorNotification(`Error: ${(error as Error).message}`);
         }
     }
@@ -168,44 +198,23 @@ export class MaskEditorIntegration {
 
             if (mask_editor_showing(app)) {
 
-                const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
                 let editorReady = false;
 
-                if (useNewEditor) {
+                const maskCanvas = get_mask_editor_canvas(app);
+                if (maskCanvas) {
+                    editorReady = !!(maskCanvas.getContext('2d') && maskCanvas.width > 0 && maskCanvas.height > 0);
+                    if (editorReady) {
+                        log.info(new_editor(app) ? "Vue mask editor detected as ready" : "Legacy mask editor detected as ready");
+                    }
+                }
 
+                if (!editorReady) {
                     const MaskEditorDialog = window.MaskEditorDialog;
-                    if (MaskEditorDialog && MaskEditorDialog.instance) {
-
+                    if (MaskEditorDialog?.instance) {
                         try {
-                            const messageBroker = MaskEditorDialog.instance.getMessageBroker();
-                            if (messageBroker) {
-                                editorReady = true;
-                                log.info("New mask editor detected as ready via MessageBroker");
-                            }
+                            editorReady = !!MaskEditorDialog.instance.getMessageBroker();
                         } catch {
-
                             editorReady = false;
-                        }
-                    }
-
-                    if (!editorReady) {
-                        const maskEditorElement = document.getElementById('maskEditor');
-                        if (maskEditorElement && maskEditorElement.style.display !== 'none') {
-
-                            const canvas = maskEditorElement.querySelector('canvas');
-                            if (canvas) {
-                                editorReady = true;
-                                log.info("New mask editor detected as ready via DOM element");
-                            }
-                        }
-                    }
-                } else {
-
-                    const maskCanvas = document.getElementById('maskCanvas') as HTMLCanvasElement;
-                    if (maskCanvas) {
-                        editorReady = !!(maskCanvas.getContext('2d') && maskCanvas.width > 0 && maskCanvas.height > 0);
-                        if (editorReady) {
-                            log.info("Old mask editor detected as ready");
                         }
                     }
                 }
@@ -252,20 +261,9 @@ export class MaskEditorIntegration {
     async applyMaskToEditor(maskData: any) {
         try {
 
-            const useNewEditor = app.ui.settings.getSettingValue('Comfy.MaskEditor.UseNewEditor');
-
-            if (useNewEditor) {
-
-                const MaskEditorDialog = window.MaskEditorDialog;
-                if (MaskEditorDialog && MaskEditorDialog.instance) {
-
-                    await this.applyMaskToNewEditor(maskData);
-                } else {
-                    log.warn("New editor setting enabled but instance not found, trying old editor");
-                    await this.applyMaskToOldEditor(maskData);
-                }
+            if (new_editor(app) || window.MaskEditorDialog?.instance) {
+                await this.applyMaskToNewEditor(maskData);
             } else {
-
                 await this.applyMaskToOldEditor(maskData);
             }
 
@@ -290,20 +288,33 @@ export class MaskEditorIntegration {
     async applyMaskToNewEditor(maskData: any) {
 
         const MaskEditorDialog = window.MaskEditorDialog;
-        if (!MaskEditorDialog || !MaskEditorDialog.instance) {
-            throw new Error("New mask editor instance not found");
+        if (MaskEditorDialog?.instance) {
+            const editor = MaskEditorDialog.instance;
+            const messageBroker = editor.getMessageBroker();
+
+            const maskCanvas = await messageBroker.pull('maskCanvas');
+            const maskCtx = await messageBroker.pull('maskCtx');
+            const maskColor = await messageBroker.pull('getMaskColor');
+
+            await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
+
+            messageBroker.publish('saveState');
+            return;
         }
 
-        const editor = MaskEditorDialog.instance;
-        const messageBroker = editor.getMessageBroker();
+        const maskCanvas = get_mask_editor_canvas(app);
+        if (!maskCanvas) {
+            throw new Error("Current mask editor canvas not found");
+        }
 
-        const maskCanvas = await messageBroker.pull('maskCanvas');
-        const maskCtx = await messageBroker.pull('maskCtx');
-        const maskColor = await messageBroker.pull('getMaskColor');
+        const maskCtx = maskCanvas.getContext('2d', {willReadFrequently: true});
+        if (!maskCtx) {
+            throw new Error("Current mask editor context not found");
+        }
 
-        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, maskColor);
-
-        messageBroker.publish('saveState');
+        // The current editor starts with its Black blend mode by default.
+        await this.renderProcessedMask(maskData, maskCanvas, maskCtx, {r: 0, g: 0, b: 0});
+        await this.synchronizeNativeMaskEditorState();
     }
 
     /**
@@ -374,6 +385,163 @@ export class MaskEditorIntegration {
         }
 
         return loadImage(this.maskTool.getMask().toDataURL());
+    }
+
+    private async makeOpaqueMaskEditorImage(blob: Blob): Promise<Blob> {
+        const image = await loadImageFromBlob(blob);
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        const { canvas, ctx } = createCanvas(width, height, '2d', { willReadFrequently: true });
+
+        if (!ctx) {
+            throw new Error('Could not create a canvas for the mask editor input');
+        }
+
+        ctx.drawImage(image, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        for (let i = 3; i < imageData.data.length; i += 4) {
+            imageData.data[i] = 255;
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        return await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((result) => {
+                if (result) {
+                    resolve(result);
+                } else {
+                    reject(new Error('Could not encode the opaque mask editor input as PNG'));
+                }
+            }, 'image/png');
+        });
+    }
+
+    /**
+     * Synchronizes the direct canvas write with the current Vue editor's
+     * private history/GPU state. The native editor initializes its GPU
+     * texture from the canvas before external integrations can write the
+     * predefined mask, so a canvas-only update is lost on the next brush
+     * stroke. There is no public mask-seeding API; the store is accessed only
+     * when the current Vue implementation exposes it through its mounted app.
+     */
+    private async synchronizeNativeMaskEditorState(): Promise<void> {
+        const store = this.getNativeMaskEditorStore();
+        const history = store?.canvasHistory;
+
+        if (!history?.saveInitialState || !history?.saveState) {
+            log.warn('Native mask editor store is unavailable; predefined mask may not survive the first brush stroke');
+            return;
+        }
+
+        try {
+            // Rebase undo/redo so the predefined mask is the initial state,
+            // then advance the index once to trigger the native GPU watcher.
+            history.saveInitialState();
+            history.saveState();
+
+            // The GPU watcher updates on the next Vue render cycle. Give it a
+            // frame before the user can start painting.
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            log.debug('Synchronized predefined mask with native history and GPU state');
+        } catch (error) {
+            log.warn('Could not synchronize predefined mask with native history/GPU state', error);
+        }
+    }
+
+    private getNativeMaskEditorStore(): any | null {
+        const roots = Array.from(document.querySelectorAll<HTMLElement>('#vue-app, [data-v-app]'));
+        const editorElement = document.querySelector<HTMLElement>(
+            '#maskEditorCanvasContainer, [data-testid="mask-editor-root"], .mask-editor-dialog'
+        );
+
+        if (editorElement) {
+            roots.unshift(editorElement);
+        }
+
+        for (const root of roots) {
+            const vueApp = (root as any).__vue_app__;
+            const store = this.findMaskEditorStore(vueApp?._context ?? vueApp?.config);
+            if (store) {
+                return store;
+            }
+
+            let component = (root as any).__vueParentComponent;
+            while (component) {
+                const componentStore = this.findMaskEditorStore(component.appContext);
+                if (componentStore) {
+                    return componentStore;
+                }
+                component = component.parent;
+            }
+        }
+
+        return null;
+    }
+
+    private findMaskEditorStore(context: any): any | null {
+        const pinia = context?.config?.globalProperties?.$pinia ?? context?.globalProperties?.$pinia;
+        return pinia?._s?.get?.('maskEditor') ?? null;
+    }
+
+    private saveNodeImageState() {
+        return {
+            images: Array.isArray(this.node.images) ? [...this.node.images] : this.node.images,
+            imgs: Array.isArray(this.node.imgs) ? [...this.node.imgs] : this.node.imgs
+        };
+    }
+
+    private restoreNodeImageState() {
+        if (!this.savedNodeImageState) {
+            return;
+        }
+
+        this.node.images = this.savedNodeImageState.images;
+        this.node.imgs = this.savedNodeImageState.imgs;
+    }
+
+    private createImageRef(uploadResult: any) {
+        const data = uploadResult.data ?? {};
+        return {
+            filename: data.name ?? uploadResult.filename,
+            subfolder: data.subfolder ?? '',
+            type: data.type ?? 'temp'
+        };
+    }
+
+    private isSameImageRef(left: any, right: any): boolean {
+        return !!left && !!right &&
+            left.filename === right.filename &&
+            (left.subfolder ?? '') === (right.subfolder ?? '') &&
+            (left.type ?? '') === (right.type ?? '');
+    }
+
+    private getServerResultUrl(): string | null {
+        const resultRef = this.node.images?.[0];
+        if (!resultRef?.filename || this.isSameImageRef(resultRef, this.openedImageRef)) {
+            return null;
+        }
+
+        const params = new URLSearchParams({
+            filename: resultRef.filename,
+            type: resultRef.type ?? 'output',
+            subfolder: resultRef.subfolder ?? ''
+        });
+        return api.apiURL(`/view?${params.toString()}`);
+    }
+
+    private getPreviewResultSource(): string | null {
+        const preview = this.node.imgs?.[this.node.imageIndex ?? 0];
+        if (!preview?.src || preview.src === this.openedImageUrl) {
+            return null;
+        }
+
+        return preview.src;
+    }
+
+    private clearEditorSessionState() {
+        this.savedMaskState = null;
+        this.savedNodeImageState = null;
+        this.openedImageRef = null;
+        this.openedImageUrl = null;
     }
 
     waitWhileMaskEditing() {
@@ -462,22 +630,35 @@ export class MaskEditorIntegration {
                 await this.restoreMaskState(this.savedMaskState);
             }
 
+            this.restoreNodeImageState();
             this.maskEditorCancelled = false;
-            this.savedMaskState = null;
+            this.clearEditorSessionState();
 
             return;
         }
 
-        if (!this.node.imgs || this.node.imgs.length === 0 || !this.node.imgs[0].src) {
+        const previewResultSource = this.getPreviewResultSource();
+        const serverResultUrl = this.getServerResultUrl();
+        if (!previewResultSource && !serverResultUrl) {
             log.warn("Mask editor was closed without a result.");
+            await this.restoreMaskState(this.savedMaskState);
+            this.restoreNodeImageState();
+            this.clearEditorSessionState();
             return;
         }
 
-        log.debug("Processing mask editor result, image source:", this.node.imgs[0].src.substring(0, 100) + '...');
+        log.debug("Processing mask editor result", {
+            source: previewResultSource ?? serverResultUrl,
+            sourceType: previewResultSource ? 'preview' : 'server-reference'
+        });
 
         let resultImage: HTMLImageElement;
         try {
-            resultImage = await loadImage(this.node.imgs[0].src);
+            if (previewResultSource) {
+                resultImage = await loadImage(this.node.imgs[0].src);
+            } else {
+                resultImage = await loadImage(serverResultUrl as string);
+            }
 
             log.debug("Result image loaded successfully", {
                 width: resultImage.width,
@@ -486,6 +667,9 @@ export class MaskEditorIntegration {
         } catch (error) {
             log.error("Failed to load image from mask editor.", error);
             this.node.imgs = [];
+            await this.restoreMaskState(this.savedMaskState);
+            this.restoreNodeImageState();
+            this.clearEditorSessionState();
             return;
         }
 
@@ -506,7 +690,7 @@ export class MaskEditorIntegration {
         // Update node preview using PreviewUtils
         await updateNodePreview(this.canvas, this.node, true);
 
-        this.savedMaskState = null;
+        this.clearEditorSessionState();
         log.info("Mask editor result processed successfully");
     }
 }
