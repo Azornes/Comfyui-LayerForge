@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [utilitySource, canvasViewSource, canvasIOSource] = await Promise.all([
+const [utilitySource, canvasViewSource, connectionsSource, canvasIOSource] = await Promise.all([
   readFile(new URL('../src/utils/MultiImageInputUtils.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/LayerForgeConnections.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
 ]);
 
@@ -13,20 +14,20 @@ test('LayerForge exposes an ordered virtual multi-image input contract', () => {
   assert.match(utilitySource, /LAYERFORGE_MAX_IMAGE_INPUTS = 32/);
   assert.match(utilitySource, /addLayerForgeImageInputLink/);
   assert.match(utilitySource, /getLayerForgeImageInputSlot/);
-  assert.match(canvasViewSource, /installLayerForgeMultiImagePromptPatch/);
-  assert.match(canvasViewSource, /input_image_\$\{index \+ 1\}/);
-  assert.match(canvasViewSource, /scheduleLayerForgeImageConnectionConversion/);
-  assert.match(canvasViewSource, /pruneLayerForgeTransportInputs/);
-  assert.match(canvasViewSource, /drawLayerForgeVirtualLinks/);
-  assert.match(canvasViewSource, /installLayerForgeVirtualWirePatch/);
-  assert.match(canvasViewSource, /bezierCurveTo/);
-  assert.match(canvasViewSource, /hitTestLayerForgeVirtualLinks/);
-  assert.match(canvasViewSource, /Remove connection/);
-  assert.match(canvasViewSource, /removeLayerForgeImageInputLink/);
-  assert.match(canvasViewSource, /installLayerForgeQuickCreateCapture/);
-  assert.match(canvasViewSource, /createLayerForgeLoadImageNode/);
-  assert.match(canvasViewSource, /content: 'Load image'/);
-  assert.match(canvasViewSource, /scheduleLayerForgeQuickCreateMenu/);
+  assert.match(connectionsSource, /installLayerForgeMultiImagePromptPatch/);
+  assert.match(connectionsSource, /input_image_\$\{index \+ 1\}/);
+  assert.match(connectionsSource, /scheduleLayerForgeImageConnectionConversion/);
+  assert.match(connectionsSource, /pruneLayerForgeTransportInputs/);
+  assert.match(connectionsSource, /drawLayerForgeVirtualLinks/);
+  assert.match(connectionsSource, /installLayerForgeVirtualWirePatch/);
+  assert.match(connectionsSource, /bezierCurveTo/);
+  assert.match(connectionsSource, /hitTestLayerForgeVirtualLinks/);
+  assert.match(connectionsSource, /Remove connection/);
+  assert.match(connectionsSource, /removeLayerForgeImageInputLink/);
+  assert.match(connectionsSource, /installLayerForgeQuickCreateCapture/);
+  assert.match(connectionsSource, /createLayerForgeLoadImageNode/);
+  assert.match(connectionsSource, /content: 'Load image'/);
+  assert.match(connectionsSource, /scheduleLayerForgeQuickCreateMenu/);
   assert.match(canvasViewSource, /Show Inputs/);
   assert.match(canvasViewSource, /lf-inputs-menu/);
   assert.match(canvasViewSource, /addSelectedInputImage/);
