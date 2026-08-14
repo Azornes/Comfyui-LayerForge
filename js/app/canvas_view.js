@@ -2009,6 +2009,13 @@ async function createCanvasWidget(node, widget, _app) {
             if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
                 return;
             }
+            if (expectedState) {
+                // Moving the LayerForge widget into fullscreen can cause
+                // ComfyUI to re-apply the previously selected node. Re-sync
+                // after the move as well, so an already-open properties panel
+                // switches from LayerForge details to the global Nodes view.
+                clearWorkflowOverviewSelection();
+            }
             const panel = document.querySelector(workflowOverviewPanelSelector);
             const nodesTab = panel?.querySelector(workflowOverviewNodesTabSelector) ?? null;
             // Vue may need one extra frame to mount the global overview tabs after

@@ -2348,6 +2348,14 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                 return;
             }
 
+            if (expectedState) {
+                // Moving the LayerForge widget into fullscreen can cause
+                // ComfyUI to re-apply the previously selected node. Re-sync
+                // after the move as well, so an already-open properties panel
+                // switches from LayerForge details to the global Nodes view.
+                clearWorkflowOverviewSelection();
+            }
+
             const panel = document.querySelector<HTMLElement>(workflowOverviewPanelSelector);
             const nodesTab = panel?.querySelector<HTMLButtonElement>(
                 workflowOverviewNodesTabSelector
