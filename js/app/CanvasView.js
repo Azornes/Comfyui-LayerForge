@@ -22,7 +22,7 @@ import { loadPreviewImage } from "../media/PreviewUtils.js";
 import { getImageAddMode } from "../utils/CanvasInputUtils.js";
 import { clearLayerForgeImageInputLinks, getLayerForgeImageInputLinks, getLayerForgeMaskInputSlot, hasLayerForgeImageInput, } from "../utils/MultiImageInputUtils.js";
 import { fetchMattingModelStatus, fetchMattingSettings, saveMattingSettings as saveMattingSettingsToServer, } from "../utils/MattingUtils.js";
-import { setupSAMDetectorHook } from "../mask/SAMDetectorIntegration.js";
+import { cancelSAMDetectorMonitoring, setupSAMDetectorHook } from "../mask/SAMDetectorIntegration.js";
 const log = createModuleLogger('Canvas_view');
 const DEFAULT_MATTING_SETTINGS = {
     modelPath: '',
@@ -141,6 +141,8 @@ async function createCanvasWidget(node, widget, _app) {
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
     });
+    let widgetDestroyed = false;
+    let mattingAbortController = null;
     /**
      * Helper function to update the icon of a switch component.
      * @param knobIconEl The HTML element for the switch's knob icon.
@@ -925,12 +927,21 @@ async function createCanvasWidget(node, widget, _app) {
                     title: "Perform background removal on the selected layer",
                     onclick: async (e) => {
                         const button = e.target.closest('.lf-matting-button');
-                        if (button.classList.contains('lf-loading'))
+                        if (widgetDestroyed || button.classList.contains('lf-loading'))
                             return;
+                        const operationController = new AbortController();
+                        mattingAbortController = operationController;
                         const mattingSettings = await loadMattingSettings();
+                        if (widgetDestroyed || operationController.signal.aborted) {
+                            if (mattingAbortController === operationController)
+                                mattingAbortController = null;
+                            return;
+                        }
                         try {
                             // First check if model is available
                             const { data: modelStatus } = await fetchMattingModelStatus(mattingSettings.modelPath);
+                            if (widgetDestroyed || operationController.signal.aborted)
+                                return;
                             if (!modelStatus.available) {
                                 switch (modelStatus.reason) {
                                     case 'missing_dependency':
@@ -968,7 +979,7 @@ async function createCanvasWidget(node, widget, _app) {
                             startMattingSpinner();
                             if (modelStatus.reason === 'not_downloaded') {
                                 setMattingDownloadProgress(0);
-                                startMattingProgressPolling();
+                                startMattingProgressPolling(operationController.signal);
                             }
                             if (modelStatus.available) {
                                 showInfoNotification(`Starting ${getMattingModeLabel(mattingSettings.mode).toLowerCase()}...`, 2000);
@@ -979,9 +990,12 @@ async function createCanvasWidget(node, widget, _app) {
                             const selectedLayer = canvas.canvasSelection.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
                             const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
+                            if (widgetDestroyed || operationController.signal.aborted)
+                                return;
                             const response = await fetch("/matting", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
+                                signal: operationController.signal,
                                 body: JSON.stringify({
                                     image: imageData,
                                     model_path: mattingSettings.modelPath || "auto",
@@ -991,6 +1005,8 @@ async function createCanvasWidget(node, widget, _app) {
                                 })
                             });
                             const result = await response.json();
+                            if (widgetDestroyed || operationController.signal.aborted)
+                                return;
                             if (!response.ok) {
                                 let errorMsg = `Server error: ${response.status} - ${response.statusText}`;
                                 if (result && result.error) {
@@ -1022,6 +1038,8 @@ async function createCanvasWidget(node, widget, _app) {
                                 const drawMaskImage = new Image();
                                 drawMaskImage.src = result.draw_mask;
                                 await drawMaskImage.decode();
+                                if (widgetDestroyed || operationController.signal.aborted || canvas.layers[selectedLayerIndex] !== selectedLayer)
+                                    return;
                                 canvas.maskTool.setMaskForLayer(drawMaskImage, selectedLayer);
                                 showSuccessNotification(mattingSettings.mode === 'mask_only_inverted'
                                     ? 'Inverted mask applied to Draw Mask.'
@@ -1031,6 +1049,8 @@ async function createCanvasWidget(node, widget, _app) {
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
+                            if (widgetDestroyed || operationController.signal.aborted || canvas.layers[selectedLayerIndex] !== selectedLayer)
+                                return;
                             const newLayer = { ...selectedLayer, image: mattedImage, flipH: false, flipV: false };
                             delete newLayer.imageId;
                             canvas.layers[selectedLayerIndex] = newLayer;
@@ -1043,6 +1063,8 @@ async function createCanvasWidget(node, widget, _app) {
                             showSuccessNotification(`${getMattingModeLabel(mattingSettings.mode)} successfully!`);
                         }
                         catch (error) {
+                            if (widgetDestroyed || operationController.signal.aborted)
+                                return;
                             log.error("Matting error:", error);
                             const errorMessage = error.message || "An unknown error occurred.";
                             if (!errorMessage.includes("Network Connection Error") &&
@@ -1052,6 +1074,8 @@ async function createCanvasWidget(node, widget, _app) {
                             }
                         }
                         finally {
+                            if (mattingAbortController === operationController)
+                                mattingAbortController = null;
                             stopMattingProgressPolling();
                             stopMattingSpinner();
                             setMattingDownloadProgress(null);
@@ -1377,12 +1401,12 @@ async function createCanvasWidget(node, widget, _app) {
             mattingProgressPollTimer = null;
         }
     };
-    const pollMattingProgress = async () => {
-        if (!mattingProgressPolling)
+    const pollMattingProgress = async (signal) => {
+        if (!mattingProgressPolling || signal?.aborted)
             return;
         try {
-            const response = await fetch(`/matting/progress?node_id=${encodeURIComponent(String(node.id))}`, { cache: 'no-store' });
-            if (response.ok) {
+            const response = await fetch(`/matting/progress?node_id=${encodeURIComponent(String(node.id))}`, { cache: 'no-store', signal });
+            if (response.ok && mattingProgressPolling && !signal?.aborted && !widgetDestroyed) {
                 handleMattingStatus({ detail: await response.json() });
             }
         }
@@ -1390,17 +1414,17 @@ async function createCanvasWidget(node, widget, _app) {
             // WebSocket events remain the primary path; polling is a best-effort fallback.
         }
         finally {
-            if (mattingProgressPolling) {
+            if (mattingProgressPolling && !signal?.aborted && !widgetDestroyed) {
                 mattingProgressPollTimer = window.setTimeout(() => {
-                    void pollMattingProgress();
+                    void pollMattingProgress(signal);
                 }, 250);
             }
         }
     };
-    const startMattingProgressPolling = () => {
+    const startMattingProgressPolling = (signal) => {
         stopMattingProgressPolling();
         mattingProgressPolling = true;
-        void pollMattingProgress();
+        void pollMattingProgress(signal);
     };
     if (mattingButton) {
         api.addEventListener('matting_status', handleMattingStatus);
@@ -1832,6 +1856,8 @@ async function createCanvasWidget(node, widget, _app) {
         canvas: canvas,
         panel: controlPanel,
         destroy: () => {
+            widgetDestroyed = true;
+            mattingAbortController?.abort();
             closeInputMenu();
             closeMattingSettings();
             stopMattingProgressPolling();
@@ -2138,6 +2164,7 @@ export function registerLayerForgeExtension() {
                 const onRemoved = nodeType.prototype.onRemoved;
                 nodeType.prototype.onRemoved = function () {
                     log.info(`Cleaning up canvas node ${this.id}`);
+                    cancelSAMDetectorMonitoring(this);
                     // Clean up temp file tracker for this node (just remove from tracker)
                     const nodeKey = `node-${this.id}`;
                     const tempFileTracker = window.layerForgeTempFileTracker;

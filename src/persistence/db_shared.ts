@@ -68,8 +68,9 @@ export function createDBRequest(
         }
 
         request.onerror = (event) => {
-            log.error(errorMessage, (event.target as IDBRequest).error);
-            reject(errorMessage);
+            const error = (event.target as IDBRequest).error ?? new Error(errorMessage);
+            log.error(errorMessage, error);
+            reject(error);
         };
 
         request.onsuccess = (event) => {
@@ -121,8 +122,9 @@ export function openLayerForgeDB(
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
         request.onerror = (event) => {
-            log.error('IndexedDB error:', (event.target as IDBOpenDBRequest).error);
-            reject('Error opening IndexedDB.');
+            const error = (event.target as IDBOpenDBRequest).error ?? new Error('Error opening IndexedDB.');
+            log.error('IndexedDB error:', error);
+            reject(error);
         };
 
         request.onsuccess = (event) => {

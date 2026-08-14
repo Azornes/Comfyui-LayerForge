@@ -7,6 +7,37 @@ import { applyMaskResultToTool } from "./MaskResultUtils.js";
 import { updateNodePreview } from "../media/PreviewUtils.js";
 import { validateAndFixClipspace } from "../utils/ClipspaceUtils.js";
 const log = createModuleLogger('SAMDetectorIntegration');
+function scheduleSAMMonitoringTimeout(node, callback, delay) {
+    const existingTimers = node.samMonitoringTimers;
+    const timers = existingTimers ?? new Set();
+    if (!existingTimers)
+        node.samMonitoringTimers = timers;
+    const timer = setTimeout(() => {
+        timers.delete(timer);
+        callback();
+    }, delay);
+    timers.add(timer);
+}
+function clearSAMMonitoringTimers(node) {
+    const timers = node.samMonitoringTimers;
+    if (!timers)
+        return;
+    for (const timer of timers)
+        clearTimeout(timer);
+    timers.clear();
+    delete node.samMonitoringTimers;
+}
+export function cancelSAMDetectorMonitoring(node) {
+    node.samMonitoringCancelled = true;
+    node.samMonitoringActive = false;
+    clearSAMMonitoringTimers(node);
+    const observer = node.samModalObserver;
+    if (observer) {
+        observer.disconnect();
+        delete node.samModalObserver;
+    }
+    delete node.samOriginalImgSrc;
+}
 /**
  * SAM Detector Integration for LayerForge
  * Handles automatic clipspace integration and mask application from Impact Pack's SAM Detector
@@ -34,6 +65,8 @@ export function startSAMDetectorMonitoring(node) {
         return;
     }
     node.samMonitoringActive = true;
+    node.samMonitoringCancelled = false;
+    clearSAMMonitoringTimers(node);
     log.info("Starting SAM Detector modal monitoring for node", node.id);
     // Store original image source for comparison
     const originalImgSrc = node.imgs?.[0]?.src;
@@ -48,6 +81,8 @@ function monitorSAMDetectorModal(node) {
     let attempts = 0;
     const maxAttempts = 10; // Try for 5 seconds total
     const findModal = () => {
+        if (!node.samMonitoringActive || node.samMonitoringCancelled)
+            return;
         attempts++;
         log.debug(`Looking for SAM Detector modal, attempt ${attempts}/${maxAttempts}`);
         // Look for SAM Detector specific elements instead of generic modal
@@ -74,7 +109,7 @@ function monitorSAMDetectorModal(node) {
         if (!modal) {
             if (attempts < maxAttempts) {
                 log.debug(`SAM Detector modal not found on attempt ${attempts}, retrying in 500ms...`);
-                setTimeout(findModal, 500);
+                scheduleSAMMonitoringTimeout(node, findModal, 500);
                 return;
             }
             else {
@@ -114,7 +149,7 @@ function monitorSAMDetectorModal(node) {
                         if (display === 'none') {
                             log.info("SAM Detector modal hidden via style");
                             // Add delay to allow SAM Detector to process and save the mask
-                            setTimeout(() => {
+                            scheduleSAMMonitoringTimeout(node, () => {
                                 handleSAMDetectorModalClosed(node);
                             }, 1000); // 1 second delay
                             observer.disconnect();
@@ -138,7 +173,7 @@ function monitorSAMDetectorModal(node) {
         // Store observer reference for cleanup
         node.samModalObserver = observer;
         // Fallback timeout in case observer doesn't catch the closure
-        setTimeout(() => {
+        scheduleSAMMonitoringTimeout(node, () => {
             if (node.samMonitoringActive) {
                 log.debug("SAM Detector modal monitoring timeout, cleaning up");
                 observer.disconnect();
@@ -158,6 +193,7 @@ function handleSAMDetectorModalClosed(node) {
     }
     log.info("SAM Detector modal closed for node", node.id);
     node.samMonitoringActive = false;
+    clearSAMMonitoringTimers(node);
     // Clean up observer
     if (node.samModalObserver) {
         node.samModalObserver.disconnect();
@@ -193,6 +229,8 @@ function monitorSAMDetectorChanges(node) {
             log.debug("SAM monitoring stopped for node", node.id);
             return;
         }
+        if (node.samMonitoringCancelled)
+            return;
         log.debug(`SAM monitoring check ${checkCount}/${maxChecks} for node ${node.id}`);
         // Check if the node's image has been updated (this happens when "Save to node" is clicked)
         if (node.imgs && node.imgs.length > 0) {
@@ -207,7 +245,7 @@ function monitorSAMDetectorChanges(node) {
         }
         // Continue monitoring if not exceeded max checks
         if (checkCount < maxChecks && node.samMonitoringActive) {
-            setTimeout(checkForChanges, 100);
+            scheduleSAMMonitoringTimeout(node, checkForChanges, 100);
         }
         else {
             log.debug("SAM Detector monitoring timeout or stopped for node", node.id);
@@ -215,11 +253,13 @@ function monitorSAMDetectorChanges(node) {
         }
     };
     // Start monitoring after a short delay
-    setTimeout(checkForChanges, 500);
+    scheduleSAMMonitoringTimeout(node, checkForChanges, 500);
 }
 // Function to handle SAM Detector result (using same logic as MaskEditorIntegration.handleMaskEditorClose)
 async function handleSAMDetectorResult(node, resultImage) {
     try {
+        if (node.samMonitoringCancelled)
+            return;
         log.info("Handling SAM Detector result for node", node.id);
         log.debug("Result image source:", resultImage.src.substring(0, 100) + '...');
         const canvasWidget = node.canvasWidget;
@@ -303,6 +343,8 @@ async function handleSAMDetectorResult(node, resultImage) {
             showErrorNotification("Failed to load SAM Detector result. The mask file may not be available.");
             return;
         }
+        if (node.samMonitoringCancelled)
+            return;
         // Process image to mask using MaskProcessingUtils
         log.debug("Processing image to mask using utils");
         let actualCanvas;
@@ -311,6 +353,9 @@ async function handleSAMDetectorResult(node, resultImage) {
             targetHeight: resultImage.height,
             invertAlpha: true
         }, () => {
+            if (node.samMonitoringCancelled) {
+                throw new Error("SAM Detector monitoring was cancelled");
+            }
             // Apply mask to LayerForge canvas using MaskTool.setMask method
             log.debug("Checking canvas and maskTool availability", {
                 hasCanvas: !!canvas,
@@ -340,16 +385,22 @@ async function handleSAMDetectorResult(node, resultImage) {
             log.debug("Applying SAM mask to canvas using setMask method");
             return maskTool;
         });
+        if (node.samMonitoringCancelled)
+            return;
         // Update canvas and save state (same as MaskEditorIntegration)
         actualCanvas.render();
         actualCanvas.saveState();
         // Update node preview using PreviewUtils
         await updateNodePreview(actualCanvas, node, true);
+        if (node.samMonitoringCancelled)
+            return;
         log.info("SAM Detector mask applied successfully to LayerForge canvas");
         // Show success notification
         showSuccessNotification("SAM Detector mask applied to LayerForge!");
     }
     catch (error) {
+        if (node.samMonitoringCancelled)
+            return;
         log.error("Error processing SAM Detector result:", error);
         // Show error notification
         showErrorNotification(`Failed to apply SAM mask: ${error.message}`);

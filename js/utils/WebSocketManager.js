@@ -1,10 +1,13 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../shared/ErrorHandler.js";
 const log = createModuleLogger('WebSocketManager');
-class WebSocketManager {
+export class WebSocketManager {
     constructor(url) {
         this.url = url;
         this.connect = withErrorHandling(() => {
+            if (this.destroyed) {
+                return;
+            }
             if (this.socket && this.socket.readyState === WebSocket.OPEN) {
                 log.debug("WebSocket is already open.");
                 return;
@@ -18,14 +21,19 @@ class WebSocketManager {
             }
             this.isConnecting = true;
             log.info(`Connecting to WebSocket at ${this.url}...`);
-            this.socket = new WebSocket(this.url);
-            this.socket.onopen = () => {
+            const socket = new WebSocket(this.url);
+            this.socket = socket;
+            socket.onopen = () => {
+                if (this.socket !== socket || this.destroyed)
+                    return;
                 this.isConnecting = false;
                 this.reconnectAttempts = 0;
                 log.info("WebSocket connection established.");
                 this.flushMessageQueue();
             };
-            this.socket.onmessage = (event) => {
+            socket.onmessage = (event) => {
+                if (this.socket !== socket || this.destroyed)
+                    return;
                 try {
                     const data = JSON.parse(event.data);
                     log.debug("Received message:", data);
@@ -42,8 +50,13 @@ class WebSocketManager {
                     log.error("Error parsing incoming WebSocket message:", error);
                 }
             };
-            this.socket.onclose = (event) => {
+            socket.onclose = (event) => {
+                if (this.socket !== socket)
+                    return;
                 this.isConnecting = false;
+                this.socket = null;
+                if (this.destroyed)
+                    return;
                 if (event.wasClean) {
                     log.info(`WebSocket closed cleanly, code=${event.code}, reason=${event.reason}`);
                 }
@@ -52,9 +65,11 @@ class WebSocketManager {
                     this.handleReconnect();
                 }
             };
-            this.socket.onerror = (error) => {
+            socket.onerror = (error) => {
+                if (this.socket !== socket || this.destroyed)
+                    return;
                 this.isConnecting = false;
-                throw createNetworkError("WebSocket connection error", { error, url: this.url });
+                log.error("WebSocket connection error", createNetworkError("WebSocket connection error", { error, url: this.url }));
             };
         }, 'WebSocketManager.connect');
         this.sendMessage = withErrorHandling(async (data, requiresAck = false) => {
@@ -65,11 +80,13 @@ class WebSocketManager {
             if (requiresAck && !nodeId) {
                 throw createValidationError("A nodeId is required for messages that need acknowledgment", { data, requiresAck });
             }
+            if (this.destroyed) {
+                throw createNetworkError("WebSocket manager is destroyed", { url: this.url });
+            }
             return new Promise((resolve, reject) => {
                 const message = JSON.stringify(data);
                 if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                    this.socket.send(message);
-                    log.debug("Sent message:", data);
+                    const resolvesWithoutAck = !requiresAck;
                     if (requiresAck && nodeId) {
                         log.debug(`Message for nodeId ${nodeId} requires ACK. Setting up callback.`);
                         const timeout = setTimeout(() => {
@@ -88,8 +105,21 @@ class WebSocketManager {
                             }
                         });
                     }
-                    else {
-                        resolve(); // Resolve immediately if no ACK is needed
+                    try {
+                        this.socket.send(message);
+                        log.debug("Sent message:", data);
+                        if (resolvesWithoutAck)
+                            resolve();
+                    }
+                    catch (error) {
+                        if (requiresAck && nodeId) {
+                            const callback = this.ackCallbacks.get(nodeId);
+                            this.ackCallbacks.delete(nodeId);
+                            callback?.reject(error);
+                        }
+                        else {
+                            reject(error);
+                        }
                     }
                 }
                 else {
@@ -114,17 +144,24 @@ class WebSocketManager {
         this.messageQueue = [];
         this.isConnecting = false;
         this.reconnectAttempts = 0;
+        this.reconnectTimer = null;
         this.maxReconnectAttempts = 10;
         this.reconnectInterval = 5000; // 5 seconds
         this.ackCallbacks = new Map();
         this.messageIdCounter = 0;
+        this.destroyed = false;
         this.connect();
     }
     handleReconnect() {
+        if (this.destroyed || this.reconnectTimer !== null)
+            return;
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             log.info(`Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
-            setTimeout(() => this.connect(), this.reconnectInterval);
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                void this.connect();
+            }, this.reconnectInterval);
         }
         else {
             log.error("Max reconnect attempts reached. Giving up.");
@@ -138,6 +175,25 @@ class WebSocketManager {
                 this.socket.send(message);
             }
         }
+    }
+    destroy() {
+        if (this.destroyed)
+            return;
+        this.destroyed = true;
+        this.isConnecting = false;
+        if (this.reconnectTimer !== null) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        const socket = this.socket;
+        this.socket = null;
+        socket?.close();
+        const error = createNetworkError("WebSocket manager was destroyed", { url: this.url });
+        for (const callback of this.ackCallbacks.values()) {
+            callback.reject(error);
+        }
+        this.ackCallbacks.clear();
+        this.messageQueue = [];
     }
 }
 const protocol = location.protocol === "https:" ? "wss:" : "ws:";

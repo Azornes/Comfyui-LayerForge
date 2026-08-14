@@ -49,7 +49,7 @@ import {
     type MattingServerSettings,
     type MattingSettingsUpdate,
 } from "../utils/MattingUtils.js";
-import { registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "../mask/SAMDetectorIntegration.js";
+import { cancelSAMDetectorMonitoring, registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "../mask/SAMDetectorIntegration.js";
 import type { ComfyNode, Layer, AddMode } from '../shared/types';
 
 const log = createModuleLogger('Canvas_view');
@@ -216,6 +216,8 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
     const canvas = new Canvas(node, widget, {
         onStateChange: () => updateOutput(node, canvas)
     });
+    let widgetDestroyed = false;
+    let mattingAbortController: AbortController | null = null;
 
     /**
      * Helper function to update the icon of a switch component.
@@ -1138,13 +1140,21 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                     title: "Perform background removal on the selected layer",
                     onclick: async (e: MouseEvent) => {
                         const button = (e.target as HTMLElement).closest('.lf-matting-button') as HTMLButtonElement;
-                        if (button.classList.contains('lf-loading')) return;
+                        if (widgetDestroyed || button.classList.contains('lf-loading')) return;
+
+                        const operationController = new AbortController();
+                        mattingAbortController = operationController;
 
                         const mattingSettings = await loadMattingSettings();
+                        if (widgetDestroyed || operationController.signal.aborted) {
+                            if (mattingAbortController === operationController) mattingAbortController = null;
+                            return;
+                        }
 
                         try {
                             // First check if model is available
                             const { data: modelStatus } = await fetchMattingModelStatus(mattingSettings.modelPath);
+                            if (widgetDestroyed || operationController.signal.aborted) return;
                             
                             if (!modelStatus.available) {
                                 switch (modelStatus.reason) {
@@ -1191,7 +1201,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                             startMattingSpinner();
                             if (modelStatus.reason === 'not_downloaded') {
                                 setMattingDownloadProgress(0);
-                                startMattingProgressPolling();
+                                startMattingProgressPolling(operationController.signal);
                             }
                             
                             if (modelStatus.available) {
@@ -1205,9 +1215,11 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                             const selectedLayer = canvas.canvasSelection.selectedLayers[0];
                             const selectedLayerIndex = canvas.layers.indexOf(selectedLayer);
                             const imageData = await canvas.canvasLayers.getLayerImageData(selectedLayer);
+                            if (widgetDestroyed || operationController.signal.aborted) return;
                             const response = await fetch("/matting", {
                                 method: "POST",
                                 headers: {"Content-Type": "application/json"},
+                                signal: operationController.signal,
                                 body: JSON.stringify({
                                     image: imageData,
                                     model_path: mattingSettings.modelPath || "auto",
@@ -1218,6 +1230,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                             });
 
                             const result = await response.json();
+                            if (widgetDestroyed || operationController.signal.aborted) return;
 
                             if (!response.ok) {
                                 let errorMsg = `Server error: ${response.status} - ${response.statusText}`;
@@ -1249,6 +1262,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                                 const drawMaskImage = new Image();
                                 drawMaskImage.src = result.draw_mask;
                                 await drawMaskImage.decode();
+                                if (widgetDestroyed || operationController.signal.aborted || canvas.layers[selectedLayerIndex] !== selectedLayer) return;
                                 canvas.maskTool.setMaskForLayer(drawMaskImage, selectedLayer);
                                 showSuccessNotification(
                                     mattingSettings.mode === 'mask_only_inverted'
@@ -1261,6 +1275,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                             const mattedImage = new Image();
                             mattedImage.src = result.matted_image;
                             await mattedImage.decode();
+                            if (widgetDestroyed || operationController.signal.aborted || canvas.layers[selectedLayerIndex] !== selectedLayer) return;
                             
                             const newLayer = {...selectedLayer, image: mattedImage, flipH: false, flipV: false} as Layer;
                             delete (newLayer as any).imageId;
@@ -1277,6 +1292,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                             showSuccessNotification(`${getMattingModeLabel(mattingSettings.mode)} successfully!`);
 
                         } catch (error: any) {
+                            if (widgetDestroyed || operationController.signal.aborted) return;
                             log.error("Matting error:", error);
                             const errorMessage = error.message || "An unknown error occurred.";
                             if (!errorMessage.includes("Network Connection Error") && 
@@ -1285,6 +1301,7 @@ async function createCanvasWidget(node: ComfyNode, widget: any, _app: ComfyApp):
                                 showErrorNotification(`Matting Failed: ${errorMessage}`);
                             }
                         } finally {
+                            if (mattingAbortController === operationController) mattingAbortController = null;
                             stopMattingProgressPolling();
                             stopMattingSpinner();
                             setMattingDownloadProgress(null);
@@ -1620,32 +1637,32 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         }
     };
 
-    const pollMattingProgress = async (): Promise<void> => {
-        if (!mattingProgressPolling) return;
+    const pollMattingProgress = async (signal?: AbortSignal): Promise<void> => {
+        if (!mattingProgressPolling || signal?.aborted) return;
 
         try {
             const response = await fetch(
                 `/matting/progress?node_id=${encodeURIComponent(String(node.id))}`,
-                { cache: 'no-store' },
+                { cache: 'no-store', signal },
             );
-            if (response.ok) {
+            if (response.ok && mattingProgressPolling && !signal?.aborted && !widgetDestroyed) {
                 handleMattingStatus({ detail: await response.json() });
             }
         } catch {
             // WebSocket events remain the primary path; polling is a best-effort fallback.
         } finally {
-            if (mattingProgressPolling) {
+            if (mattingProgressPolling && !signal?.aborted && !widgetDestroyed) {
                 mattingProgressPollTimer = window.setTimeout(() => {
-                    void pollMattingProgress();
+                    void pollMattingProgress(signal);
                 }, 250);
             }
         }
     };
 
-    const startMattingProgressPolling = (): void => {
+    const startMattingProgressPolling = (signal: AbortSignal): void => {
         stopMattingProgressPolling();
         mattingProgressPolling = true;
-        void pollMattingProgress();
+        void pollMattingProgress(signal);
     };
 
     if (mattingButton) {
@@ -2153,6 +2170,8 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         canvas: canvas,
         panel: controlPanel,
         destroy: () => {
+            widgetDestroyed = true;
+            mattingAbortController?.abort();
             closeInputMenu();
             closeMattingSettings();
             stopMattingProgressPolling();
@@ -2504,6 +2523,7 @@ export function registerLayerForgeExtension(): void {
             const onRemoved = nodeType.prototype.onRemoved;
             nodeType.prototype.onRemoved = function (this: ComfyNode) {
                 log.info(`Cleaning up canvas node ${this.id}`);
+                cancelSAMDetectorMonitoring(this);
 
                 // Clean up temp file tracker for this node (just remove from tracker)
                 const nodeKey = `node-${this.id}`;

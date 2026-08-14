@@ -8,6 +8,10 @@ import {withErrorHandling} from "../shared/ErrorHandler.js";
 import {HistoryStack, type HistoryInfo} from "./CanvasHistory.js";
 import type { Canvas } from './Canvas';
 import type { Layer, ComfyNode } from '../shared/types';
+import {
+    CURRENT_PERSISTED_STATE_VERSION,
+    migratePersistedCanvasState,
+} from '../persistence/contracts.js';
 import type {
     PersistedCanvasState,
     PersistedLayer,
@@ -105,9 +109,10 @@ export class CanvasState {
                 return false;
             }
             const stateKey = getCanvasStateKey(this.canvas.node);
-            const savedState = await getCanvasState(stateKey);
+            const rawSavedState = await getCanvasState(stateKey);
+            const savedState = migratePersistedCanvasState(rawSavedState);
             if (!savedState) {
-                log.info("No saved state found in IndexedDB for key:", stateKey);
+                log.info("No usable saved state found in IndexedDB for key:", stateKey);
                 return false;
             }
             log.info("Found saved state in IndexedDB.");
@@ -307,6 +312,7 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         log.info("Preparing state to be sent to worker for key:", stateKey);
         const layers = await this._prepareLayers();
         const state: PersistedCanvasState = {
+            version: CURRENT_PERSISTED_STATE_VERSION,
             layers: layers.filter(layer => layer !== null),
             viewport: this.canvas.viewport,
             width: this.canvas.width,
