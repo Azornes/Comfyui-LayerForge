@@ -844,6 +844,13 @@ export class CanvasInteractions {
     }
 
     updateCursor(worldCoords: Point): void {
+        // The brush outline is the mask-mode feedback. Do not replace it
+        // with layer drag/transform cursors while hovering over an image.
+        if (this.canvas.maskTool.isActive) {
+            this.canvas.canvas.style.cursor = this.interaction.mode === 'panning' ? 'grabbing' : 'default';
+            return;
+        }
+
         // If actively rotating, show grabbing cursor
         if (this.interaction.mode === 'rotating') {
             this.canvas.canvas.style.cursor = 'grabbing';
