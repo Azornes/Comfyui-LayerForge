@@ -1727,8 +1727,75 @@ async function createCanvasWidget(node, widget, _app) {
     let originalParent = null;
     let isEditorOpen = false;
     let viewportAdjustment = { x: 0, y: 0 };
+    let workflowOverviewSelectionSnapshot = null;
+    let workflowOverviewSelectionCleared = false;
     const workflowOverviewPanelSelector = '[data-testid="properties-panel"]';
+    const workflowOverviewNodesTabSelector = workflowOverviewPanelSelector + ' [data-testid="panel-tab-nodes"]';
     const nativeWorkflowOverviewToggleSelector = 'button[aria-label="Toggle properties panel"]:not(.lf-workflow-overview-toggle)';
+    const getComfyCanvas = () => _app?.canvas ?? app?.canvas;
+    const getComfySelectedItems = (comfyCanvas) => {
+        const selectedItems = comfyCanvas?.selectedItems;
+        if (selectedItems && typeof selectedItems[Symbol.iterator] === "function") {
+            return Array.from(selectedItems);
+        }
+        const selectedNodes = comfyCanvas?.selected_nodes;
+        if (selectedNodes && typeof selectedNodes === "object") {
+            return Object.values(selectedNodes);
+        }
+        return [];
+    };
+    const notifyComfySelectionChanged = (comfyCanvas) => {
+        comfyCanvas?.onSelectionChange?.(comfyCanvas.selected_nodes ?? {});
+        comfyCanvas?.setDirty?.(true, true);
+    };
+    const clearWorkflowOverviewSelection = () => {
+        if (workflowOverviewSelectionCleared) {
+            return;
+        }
+        const comfyCanvas = getComfyCanvas();
+        if (!comfyCanvas) {
+            return;
+        }
+        workflowOverviewSelectionSnapshot = getComfySelectedItems(comfyCanvas);
+        if (typeof comfyCanvas.deselectAll === "function") {
+            comfyCanvas.deselectAll();
+        }
+        else if (comfyCanvas.selectedItems?.clear) {
+            for (const item of workflowOverviewSelectionSnapshot) {
+                item.selected = false;
+                item.onDeselected?.();
+            }
+            comfyCanvas.selectedItems.clear();
+            comfyCanvas.selected_nodes = {};
+            notifyComfySelectionChanged(comfyCanvas);
+        }
+        workflowOverviewSelectionCleared = true;
+    };
+    const restoreWorkflowOverviewSelection = () => {
+        if (!workflowOverviewSelectionCleared) {
+            return;
+        }
+        const comfyCanvas = getComfyCanvas();
+        const selection = workflowOverviewSelectionSnapshot ?? [];
+        if (comfyCanvas) {
+            if (typeof comfyCanvas.selectNodes === "function") {
+                comfyCanvas.selectNodes(selection);
+            }
+            else if (typeof comfyCanvas.selectItems === "function") {
+                comfyCanvas.selectItems(selection);
+            }
+            else if (comfyCanvas.selectedItems?.clear) {
+                comfyCanvas.selectedItems.clear();
+                for (const item of selection) {
+                    item.selected = true;
+                    comfyCanvas.selectedItems.add(item);
+                }
+                notifyComfySelectionChanged(comfyCanvas);
+            }
+        }
+        workflowOverviewSelectionSnapshot = null;
+        workflowOverviewSelectionCleared = false;
+    };
     const isVisibleElement = (element) => {
         if (!(element instanceof HTMLElement)) {
             return false;
@@ -1907,6 +1974,27 @@ async function createCanvasWidget(node, widget, _app) {
             checkState();
         });
     };
+    const waitForWorkflowOverviewNodesTab = () => {
+        return new Promise((resolve) => {
+            const deadline = performance.now() + 1000;
+            const selectNodesTab = () => {
+                if (!isEditorOpen || performance.now() >= deadline) {
+                    resolve();
+                    return;
+                }
+                const nodesTab = document.querySelector(workflowOverviewNodesTabSelector);
+                if (isVisibleElement(nodesTab)) {
+                    if (nodesTab.getAttribute("aria-selected") !== "true") {
+                        nodesTab.click();
+                    }
+                    resolve();
+                    return;
+                }
+                window.requestAnimationFrame(selectNodesTab);
+            };
+            selectNodesTab();
+        });
+    };
     const toggleWorkflowOverview = async () => {
         const requestId = ++workflowOverviewToggleRequest;
         const nativeToggle = findNativeWorkflowOverviewToggle();
@@ -1915,10 +2003,16 @@ async function createCanvasWidget(node, widget, _app) {
             return;
         }
         const expectedState = !isWorkflowOverviewOpen();
+        if (expectedState) {
+            clearWorkflowOverviewSelection();
+        }
         nativeToggle.click();
         await waitForWorkflowOverviewState(expectedState);
         if (!isEditorOpen || requestId !== workflowOverviewToggleRequest) {
             return;
+        }
+        if (expectedState) {
+            await waitForWorkflowOverviewNodesTab();
         }
         attachWorkflowOverviewResizeObserver();
         applyWorkflowOverviewLayout();
@@ -1960,6 +2054,7 @@ async function createCanvasWidget(node, widget, _app) {
             backdrop.parentNode.removeChild(backdrop);
         }
         isEditorOpen = false;
+        restoreWorkflowOverviewSelection();
         modalContent = null;
         workflowOverviewToggleButton = null;
         openEditorBtn.textContent = "⛶";
@@ -1993,6 +2088,7 @@ async function createCanvasWidget(node, widget, _app) {
             log.error("Could not find original parent of the canvas container!");
             return;
         }
+        clearWorkflowOverviewSelection();
         backdrop = $el("div.lf-painter-modal-backdrop");
         modalContent = $el("div.lf-painter-modal-content");
         workflowOverviewToggleButton = document.createElement("button");
@@ -2016,6 +2112,9 @@ async function createCanvasWidget(node, widget, _app) {
         isEditorOpen = true;
         applyWorkflowOverviewLayout();
         startWorkflowOverviewLayoutTracking();
+        if (isWorkflowOverviewOpen()) {
+            void waitForWorkflowOverviewNodesTab();
+        }
         openEditorBtn.textContent = "X";
         tooltipManager.setTooltip(openEditorBtn, "Close Editor (ESC)");
         // Add ESC key listener when editor opens
@@ -2073,6 +2172,8 @@ async function createCanvasWidget(node, widget, _app) {
                     backdrop.parentNode.removeChild(backdrop);
                 }
                 isEditorOpen = false;
+                workflowOverviewSelectionSnapshot = null;
+                workflowOverviewSelectionCleared = false;
                 modalContent = null;
                 workflowOverviewToggleButton = null;
             }
