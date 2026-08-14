@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -14,7 +16,6 @@ concurrency:
 jobs:
   frontend:
     name: Frontend tests, lint, and typecheck
-    if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -33,6 +34,12 @@ jobs:
       - name: Run JavaScript tests
         run: npm test
 
+      - name: Run architecture boundary tests
+        run: node --test tests/test_architecture_boundaries.mjs
+
+      - name: Run critical frontend coverage
+        run: npm run test:coverage:critical
+
       - name: Run ESLint
         run: npm run lint
 
@@ -41,7 +48,6 @@ jobs:
 
   backend:
     name: Python tests, coverage, and static checks
-    if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -73,7 +79,31 @@ jobs:
           if-no-files-found: error
 
       - name: Run Ruff
-        run: python -m ruff check __init__.py canvas_node.py python tests
+        run: python -m ruff check __init__.py python tests
 
       - name: Check Python syntax
-        run: python -m compileall -q __init__.py canvas_node.py python tests
+        run: python -m compileall -q __init__.py python tests
+
+  generated-frontend:
+    name: Generated frontend is synchronized
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build generated frontend
+        run: .\\build.bat
+
+      - name: Verify generated frontend has no diff
+        shell: bash
+        run: git diff --exit-code -- js

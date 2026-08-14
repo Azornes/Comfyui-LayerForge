@@ -46,8 +46,7 @@ venv/*
 tsconfig.json
 src_web
 src_web/*
-Media
-Media/*
+/Media/
 config.json
 js/config.js
 python/config.py
