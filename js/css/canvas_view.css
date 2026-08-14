@@ -203,6 +203,108 @@
     justify-content: center;
 }
 
+.lf-inputs-menu {
+    position: fixed;
+    z-index: 1000000;
+    width: min(340px, calc(100vw - 16px));
+    max-height: min(420px, calc(100vh - 16px));
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    overflow: hidden;
+    color: #e9e9e9;
+    background: rgba(38, 38, 38, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 7px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+}
+
+.lf-inputs-menu-title {
+    padding: 3px 4px 7px;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    font-weight: 600;
+}
+
+.lf-inputs-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.lf-input-reference {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 56px;
+    padding: 5px;
+    box-sizing: border-box;
+    color: #e8e8e8;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid transparent;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+}
+
+.lf-input-reference:hover,
+.lf-input-reference:focus-visible {
+    background: rgba(74, 134, 228, 0.24);
+    border-color: rgba(124, 204, 255, 0.75);
+    outline: none;
+}
+
+.lf-input-reference:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.lf-input-reference-thumb {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 48px;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 3px;
+}
+
+.lf-input-reference-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 3px;
+}
+
+.lf-input-reference-label,
+.lf-input-reference-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lf-input-reference-label {
+    color: #fff;
+    font-weight: 550;
+}
+
+.lf-input-reference-detail {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 11px;
+}
+
+.lf-inputs-menu-empty {
+    padding: 14px 8px;
+    color: rgba(255, 255, 255, 0.62);
+    text-align: center;
+}
+
 /* --- Clipboard Switch Modern --- */
 .lf-clipboard-switch {
     position: relative;

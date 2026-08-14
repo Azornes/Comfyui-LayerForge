@@ -17,7 +17,7 @@ const [canvasIOSource, canvasViewSource, interactionsSource, inputUtilsSource] =
 test('image entry points use the shared fit_on_add policy', () => {
   assert.match(inputUtilsSource, /export function isFitOnAddEnabled\(/);
   assert.match(inputUtilsSource, /export function getImageAddMode\(/);
-  assert.equal((canvasIOSource.match(/getImageAddMode\(this/g) ?? []).length, 2);
+  assert.equal((canvasIOSource.match(/getImageAddMode\(this/g) ?? []).length, 3);
   assert.equal((canvasIOSource.match(/isFitOnAddEnabled\(this/g) ?? []).length, 2);
   assert.equal((canvasViewSource.match(/getImageAddMode\(node/g) ?? []).length, 2);
   assert.equal((interactionsSource.match(/getImageAddMode\(this/g) ?? []).length, 1);

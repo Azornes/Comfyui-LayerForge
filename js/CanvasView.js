@@ -483,6 +483,170 @@ async function createCanvasWidget(node, widget, app) {
         document.body.appendChild(backdrop);
         closeButton.focus();
     };
+    let inputMenu = null;
+    let inputMenuOutsideHandler = null;
+    let inputMenuEscapeHandler = null;
+    let inputMenuRepositionHandler = null;
+    const closeInputMenu = () => {
+        if (inputMenuOutsideHandler) {
+            document.removeEventListener('pointerdown', inputMenuOutsideHandler);
+            inputMenuOutsideHandler = null;
+        }
+        if (inputMenuEscapeHandler) {
+            document.removeEventListener('keydown', inputMenuEscapeHandler);
+            inputMenuEscapeHandler = null;
+        }
+        if (inputMenuRepositionHandler) {
+            window.removeEventListener('resize', inputMenuRepositionHandler);
+            window.removeEventListener('scroll', inputMenuRepositionHandler, true);
+            inputMenuRepositionHandler = null;
+        }
+        inputMenu?.remove();
+        inputMenu = null;
+        showInputsButton?.setAttribute('aria-expanded', 'false');
+    };
+    const positionInputMenu = () => {
+        if (!inputMenu || !showInputsButton)
+            return;
+        const buttonRect = showInputsButton.getBoundingClientRect();
+        const menuWidth = inputMenu.offsetWidth || 320;
+        const menuHeight = inputMenu.offsetHeight || 180;
+        let left = buttonRect.left;
+        let top = buttonRect.bottom + 6;
+        if (left + menuWidth > window.innerWidth - 8) {
+            left = window.innerWidth - menuWidth - 8;
+        }
+        if (top + menuHeight > window.innerHeight - 8) {
+            top = buttonRect.top - menuHeight - 6;
+        }
+        inputMenu.style.left = `${Math.max(8, Math.round(left))}px`;
+        inputMenu.style.top = `${Math.max(8, Math.round(top))}px`;
+    };
+    const getInputImageFileLabel = (image, fallback) => {
+        const source = String(image.currentSrc || image.src || '');
+        if (!source || /^data:/i.test(source))
+            return fallback;
+        let rawName = '';
+        try {
+            const parsedSource = new URL(source, window.location.href);
+            rawName = parsedSource.searchParams.get('filename')
+                || parsedSource.pathname.split('/').pop()
+                || '';
+        }
+        catch {
+            rawName = source.split(/[?#]/, 1)[0].split('/').pop() || '';
+        }
+        try {
+            const decodedName = decodeURIComponent(rawName).trim();
+            if (decodedName && decodedName.length <= 80)
+                return decodedName;
+        }
+        catch {
+            if (rawName && rawName.length <= 80)
+                return rawName;
+        }
+        return fallback;
+    };
+    const renderInputMenu = (menu) => {
+        menu.replaceChildren();
+        const title = document.createElement('div');
+        title.className = 'lf-inputs-menu-title';
+        title.textContent = 'Connected input images';
+        menu.appendChild(title);
+        const references = canvas.canvasIO.getConnectedInputImages();
+        const list = document.createElement('div');
+        list.className = 'lf-inputs-menu-list';
+        if (references.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'lf-inputs-menu-empty';
+            empty.textContent = 'Connect an image input to see it here.';
+            list.appendChild(empty);
+            menu.appendChild(list);
+            return;
+        }
+        references.forEach((reference, index) => {
+            const fallbackLabel = `${reference.sourceLabel} · Image ${reference.imageIndex + 1}`;
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'lf-input-reference';
+            item.setAttribute('role', 'menuitem');
+            item.title = 'Add this input image to the canvas';
+            const thumbnail = document.createElement('img');
+            thumbnail.className = 'lf-input-reference-thumb';
+            thumbnail.src = reference.image.currentSrc || reference.image.src;
+            thumbnail.alt = fallbackLabel;
+            thumbnail.draggable = false;
+            const text = document.createElement('span');
+            text.className = 'lf-input-reference-text';
+            const label = document.createElement('span');
+            label.className = 'lf-input-reference-label';
+            label.textContent = getInputImageFileLabel(reference.image, `Image ${index + 1}`);
+            const detail = document.createElement('span');
+            detail.className = 'lf-input-reference-detail';
+            detail.textContent = `${reference.sourceLabel} · Image ${reference.imageIndex + 1}`;
+            text.append(label, detail);
+            item.append(thumbnail, text);
+            item.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            item.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                item.disabled = true;
+                void canvas.canvasIO.addSelectedInputImage(reference.image).then((added) => {
+                    if (added)
+                        closeInputMenu();
+                }).finally(() => {
+                    item.disabled = false;
+                });
+            });
+            list.appendChild(item);
+        });
+        menu.appendChild(list);
+    };
+    function toggleInputMenu() {
+        if (inputMenu) {
+            closeInputMenu();
+            return;
+        }
+        const menu = document.createElement('div');
+        menu.className = 'lf-inputs-menu';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', 'Connected input images');
+        menu.addEventListener('pointerdown', (event) => event.stopPropagation());
+        menu.addEventListener('click', (event) => event.stopPropagation());
+        inputMenu = menu;
+        showInputsButton.setAttribute('aria-expanded', 'true');
+        document.body.appendChild(menu);
+        renderInputMenu(menu);
+        inputMenuOutsideHandler = (event) => {
+            const target = event.target;
+            if (target && (menu.contains(target) || showInputsButton.contains(target)))
+                return;
+            closeInputMenu();
+        };
+        inputMenuEscapeHandler = (event) => {
+            if (event.key !== 'Escape')
+                return;
+            event.preventDefault();
+            closeInputMenu();
+            showInputsButton.focus();
+        };
+        inputMenuRepositionHandler = positionInputMenu;
+        document.addEventListener('pointerdown', inputMenuOutsideHandler);
+        document.addEventListener('keydown', inputMenuEscapeHandler);
+        window.addEventListener('resize', inputMenuRepositionHandler);
+        window.addEventListener('scroll', inputMenuRepositionHandler, true);
+        positionInputMenu();
+    }
+    const showInputsButton = $el("button.lf-painter-button.lf-primary", {
+        textContent: "Show Inputs",
+        title: "Show connected input images",
+        onclick: toggleInputMenu,
+    });
+    showInputsButton.setAttribute('aria-haspopup', 'menu');
+    showInputsButton.setAttribute('aria-expanded', 'false');
     const controlPanel = $el("div.painterControlPanel", {}, [
         $el("div.controls.lf-painter-controls", {
             style: {
@@ -534,6 +698,7 @@ async function createCanvasWidget(node, widget, app) {
                     title: "Import image from another node",
                     onclick: () => canvas.canvasIO.importLatestImage()
                 }),
+                showInputsButton,
                 $el("div.lf-painter-clipboard-group", {}, [
                     $el("button.lf-painter-button.lf-primary", {
                         textContent: "Paste Image",
@@ -1642,6 +1807,7 @@ async function createCanvasWidget(node, widget, app) {
         canvas: canvas,
         panel: controlPanel,
         destroy: () => {
+            closeInputMenu();
             closeMattingSettings();
             stopMattingProgressPolling();
             stopMattingSpinner();

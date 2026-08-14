@@ -28,6 +28,14 @@ interface ConnectedImageSource {
     sourceSlot: number;
 }
 
+export interface ConnectedInputImage {
+    image: HTMLImageElement;
+    sourceId: number;
+    sourceSlot: number;
+    imageIndex: number;
+    sourceLabel: string;
+}
+
 function imageBatchIdentity(sources: readonly string[]): string {
     return sources.join('|');
 }
@@ -117,6 +125,26 @@ export class CanvasIO {
         }
 
         return sources;
+    }
+
+    getConnectedInputImages(): ConnectedInputImage[] {
+        return this.getConnectedImageSources().flatMap(({ sourceNode, sourceId, sourceSlot }) => {
+            const sourceLabel = String(
+                sourceNode.title
+                || sourceNode.label
+                || sourceNode.comfyClass
+                || sourceNode.type
+                || `Node ${sourceId}`
+            );
+
+            return (sourceNode.imgs as HTMLImageElement[]).map((image, imageIndex) => ({
+                image,
+                sourceId,
+                sourceSlot,
+                imageIndex,
+                sourceLabel,
+            }));
+        });
     }
 
     private hasImageInput(): boolean {
@@ -1051,6 +1079,27 @@ export class CanvasIO {
         } catch (error: any) {
             log.error("Error importing latest image:", error);
             showErrorNotification(`Failed to import latest image: ${error.message}`);
+            return false;
+        }
+    }
+
+    async addSelectedInputImage(image: HTMLImageElement): Promise<boolean> {
+        try {
+            if (!image) return false;
+
+            const addMode = getImageAddMode(this.canvas.node.widgets);
+            await this.canvas.canvasLayers.addLayerWithImage(
+                image,
+                { name: 'Input Image' },
+                addMode,
+                this.canvas.outputAreaBounds,
+            );
+            this.canvas.render();
+            log.info("Selected connected input image added to the canvas.");
+            return true;
+        } catch (error) {
+            log.error("Error adding selected connected input image:", error);
+            showErrorNotification("Failed to add the selected input image to the canvas.");
             return false;
         }
     }

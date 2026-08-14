@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [utilitySource, canvasViewSource] = await Promise.all([
+const [utilitySource, canvasViewSource, canvasIOSource] = await Promise.all([
   readFile(new URL('../src/utils/MultiImageInputUtils.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8'),
 ]);
 
 test('LayerForge exposes an ordered virtual multi-image input contract', () => {
@@ -26,6 +27,10 @@ test('LayerForge exposes an ordered virtual multi-image input contract', () => {
   assert.match(canvasViewSource, /createLayerForgeLoadImageNode/);
   assert.match(canvasViewSource, /content: 'Load image'/);
   assert.match(canvasViewSource, /scheduleLayerForgeQuickCreateMenu/);
+  assert.match(canvasViewSource, /Show Inputs/);
+  assert.match(canvasViewSource, /lf-inputs-menu/);
+  assert.match(canvasViewSource, /addSelectedInputImage/);
+  assert.match(canvasIOSource, /getConnectedInputImages\(\)/);
 });
 
 test('CanvasIO uses virtual source links for immediate canvas loading', () => {
