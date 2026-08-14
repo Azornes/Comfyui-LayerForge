@@ -1,5 +1,8 @@
 export interface TooltipOptions {
     html?: boolean;
+    interactive?: boolean;
+    persistent?: boolean;
+    onDismiss?: () => void;
 }
 
 const TOOLTIP_SELECTOR = '[data-tooltip], [title]';
@@ -15,7 +18,11 @@ export class TooltipManager {
     private tooltipTarget: HTMLElement | null = null;
     private readonly observedRoots = new Map<HTMLElement, MutationObserver>();
     private viewportFrame: number | null = null;
+    private hideTimer: number | null = null;
+    private tooltipDismissCallback: (() => void) | null = null;
     private viewportListenersAttached = false;
+    private tooltipInteractionListenersAttached = false;
+    private documentListenersAttached = false;
 
     observeRoot(root: HTMLElement): () => void {
         this.ensureTooltipElement();
@@ -73,11 +80,60 @@ export class TooltipManager {
             if (target.dataset[TOOLTIP_BOUND_ATTRIBUTE] === '1') return;
 
             target.dataset[TOOLTIP_BOUND_ATTRIBUTE] = '1';
-            target.addEventListener('mouseenter', () => this.showTooltip(target));
+            target.addEventListener('mouseenter', () => {
+                this.cancelScheduledHide();
+                this.showTooltip(target);
+            });
             target.addEventListener('focus', () => this.showTooltip(target));
-            target.addEventListener('mouseleave', () => this.hideTooltip(target));
-            target.addEventListener('blur', () => this.hideTooltip(target));
+            target.addEventListener('mouseleave', () => this.handleTargetLeave(target));
+            target.addEventListener('blur', () => this.handleTargetLeave(target));
         });
+    }
+
+    private handleTargetLeave(target: HTMLElement): void {
+        if (
+            this.tooltipTarget === target
+            && this.tooltipElement?.getAttribute('data-persistent') === 'true'
+        ) {
+            return;
+        }
+
+        if (
+            this.tooltipTarget === target
+            && this.tooltipElement?.getAttribute('data-interactive') === 'true'
+        ) {
+            this.scheduleHide(target);
+            return;
+        }
+
+        this.hideTooltip(target);
+    }
+
+    scheduleHideTooltip(scope?: HTMLElement): void {
+        this.scheduleHide(scope);
+    }
+
+    private scheduleHide(scope?: HTMLElement): void {
+        this.cancelScheduledHide();
+
+        if (typeof window === 'undefined') {
+            this.hideTooltip(scope);
+            return;
+        }
+
+        this.hideTimer = window.setTimeout(() => {
+            this.hideTimer = null;
+            this.hideTooltip(scope);
+        }, 120);
+    }
+
+    private cancelScheduledHide(): void {
+        if (this.hideTimer === null) return;
+
+        if (typeof window !== 'undefined') {
+            window.clearTimeout(this.hideTimer);
+        }
+        this.hideTimer = null;
     }
 
     normalizeTooltipTarget(target: HTMLElement): void {
@@ -117,8 +173,13 @@ export class TooltipManager {
     }
 
     showTooltip(target: HTMLElement, contentOverride?: string, options: TooltipOptions = {}): void {
+        this.cancelScheduledHide();
         if (!target || !this.ensureTooltipElement()) return;
         if ('isConnected' in target && !target.isConnected) return;
+
+        if (this.tooltipTarget && this.tooltipTarget !== target) {
+            this.hideTooltip();
+        }
 
         this.normalizeTooltipTarget(target);
         const content = contentOverride !== undefined
@@ -131,7 +192,21 @@ export class TooltipManager {
 
         this.tooltipTarget = target;
         tooltip.replaceChildren();
-        if (options.html || target.getAttribute('data-tooltip-html') === 'true') {
+        const renderAsHtml = options.html || target.getAttribute('data-tooltip-html') === 'true';
+        const isInteractive = renderAsHtml && options.interactive !== false;
+        tooltip.setAttribute('data-content-mode', renderAsHtml ? 'html' : 'text');
+        if (isInteractive) {
+            tooltip.setAttribute('data-interactive', 'true');
+        } else {
+            tooltip.removeAttribute('data-interactive');
+        }
+        if (options.persistent) {
+            tooltip.setAttribute('data-persistent', 'true');
+        } else {
+            tooltip.removeAttribute('data-persistent');
+        }
+        this.tooltipDismissCallback = options.onDismiss ?? null;
+        if (renderAsHtml) {
             tooltip.innerHTML = content;
         } else {
             tooltip.textContent = content;
@@ -152,19 +227,36 @@ export class TooltipManager {
             return;
         }
 
+        this.cancelScheduledHide();
         this.tooltipTarget = null;
-        if (!this.tooltipElement) return;
+        const dismissCallback = this.tooltipDismissCallback;
+        this.tooltipDismissCallback = null;
+        if (!this.tooltipElement) {
+            dismissCallback?.();
+            return;
+        }
 
         this.tooltipElement.style.display = 'none';
+        this.tooltipElement.style.maxHeight = '';
         this.tooltipElement.replaceChildren();
         this.tooltipElement.removeAttribute('data-visible');
+        this.tooltipElement.removeAttribute('data-content-mode');
+        this.tooltipElement.removeAttribute('data-interactive');
+        this.tooltipElement.removeAttribute('data-persistent');
         this.tooltipElement.setAttribute('aria-hidden', 'true');
+        dismissCallback?.();
     }
 
     destroy(): void {
         this.observedRoots.forEach((observer) => observer.disconnect());
         this.observedRoots.clear();
         this.hideTooltip();
+
+        if (this.tooltipInteractionListenersAttached && this.tooltipElement) {
+            this.tooltipElement.removeEventListener('mouseenter', this.handleTooltipMouseEnter);
+            this.tooltipElement.removeEventListener('mouseleave', this.handleTooltipMouseLeave);
+            this.tooltipInteractionListenersAttached = false;
+        }
 
         if (this.viewportFrame !== null && typeof window !== 'undefined') {
             window.cancelAnimationFrame(this.viewportFrame);
@@ -175,6 +267,12 @@ export class TooltipManager {
             window.removeEventListener('resize', this.handleViewportChange);
             window.removeEventListener('scroll', this.handleViewportChange, true);
             this.viewportListenersAttached = false;
+        }
+
+        if (this.documentListenersAttached && typeof document !== 'undefined') {
+            document.removeEventListener('pointerdown', this.handleDocumentPointerDown, true);
+            document.removeEventListener('keydown', this.handleDocumentKeyDown, true);
+            this.documentListenersAttached = false;
         }
 
         this.tooltipElement?.remove();
@@ -199,6 +297,18 @@ export class TooltipManager {
             document.body.appendChild(this.tooltipElement);
         }
 
+        if (!this.tooltipInteractionListenersAttached) {
+            this.tooltipElement.addEventListener('mouseenter', this.handleTooltipMouseEnter);
+            this.tooltipElement.addEventListener('mouseleave', this.handleTooltipMouseLeave);
+            this.tooltipInteractionListenersAttached = true;
+        }
+
+        if (!this.documentListenersAttached) {
+            document.addEventListener('pointerdown', this.handleDocumentPointerDown, true);
+            document.addEventListener('keydown', this.handleDocumentKeyDown, true);
+            this.documentListenersAttached = true;
+        }
+
         if (!this.viewportListenersAttached && typeof window !== 'undefined') {
             window.addEventListener('resize', this.handleViewportChange);
             window.addEventListener('scroll', this.handleViewportChange, true);
@@ -207,6 +317,48 @@ export class TooltipManager {
 
         return this.tooltipElement;
     }
+
+    private readonly handleTooltipMouseEnter = (): void => {
+        this.cancelScheduledHide();
+    };
+
+    private readonly handleTooltipMouseLeave = (): void => {
+        if (this.tooltipElement?.getAttribute('data-persistent') === 'true') return;
+        this.scheduleHide();
+    };
+
+    private readonly handleDocumentPointerDown = (event: PointerEvent): void => {
+        if (
+            !this.tooltipTarget
+            || this.tooltipElement?.getAttribute('data-persistent') !== 'true'
+        ) {
+            return;
+        }
+
+        const eventTarget = event.target;
+        if (
+            eventTarget instanceof Node
+            && (this.tooltipTarget.contains(eventTarget) || this.tooltipElement?.contains(eventTarget))
+        ) {
+            return;
+        }
+
+        this.hideTooltip();
+    };
+
+    private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => {
+        if (
+            event.key !== 'Escape'
+            || !this.tooltipTarget
+            || this.tooltipElement?.getAttribute('data-persistent') !== 'true'
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        this.hideTooltip();
+    };
 
     private readonly handleViewportChange = (): void => {
         if (!this.tooltipTarget || !this.tooltipElement) return;
@@ -224,6 +376,7 @@ export class TooltipManager {
         if (!this.tooltipElement || this.tooltipTarget !== target) return;
 
         const rect = target.getBoundingClientRect();
+        this.tooltipElement.style.maxHeight = '';
         const tooltipRect = this.tooltipElement.getBoundingClientRect();
         const margin = 12;
         const viewportWidth = window.innerWidth || document.documentElement.clientWidth;

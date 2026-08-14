@@ -640,6 +640,27 @@ async function createCanvasWidget(node, widget, _app) {
     });
     showInputsButton.setAttribute('aria-haspopup', 'menu');
     showInputsButton.setAttribute('aria-expanded', 'false');
+    const shortcutHelpButton = $el("button.lf-painter-button.lf-icon-button", {
+        textContent: "?",
+        "aria-label": "Show keyboard shortcuts",
+        "aria-haspopup": "dialog",
+        "aria-expanded": "false",
+        onclick: (e) => {
+            e.stopPropagation();
+            const button = e.currentTarget;
+            if (tooltipManager.isVisibleFor(button)) {
+                tooltipManager.hideTooltip(button);
+                return;
+            }
+            const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
+            tooltipManager.showTooltip(button, content, {
+                html: true,
+                persistent: true,
+                onDismiss: () => button.setAttribute('aria-expanded', 'false')
+            });
+            button.setAttribute('aria-expanded', 'true');
+        }
+    });
     const controlPanel = $el("div.painterControlPanel", {}, [
         $el("div.controls.lf-painter-controls", {
             style: {
@@ -656,14 +677,7 @@ async function createCanvasWidget(node, widget, _app) {
                     textContent: "⛶",
                     title: "Open in Editor",
                 }),
-                $el("button.lf-painter-button.lf-icon-button", {
-                    textContent: "?",
-                    onmouseenter: (e) => {
-                        const content = canvas.maskTool.isActive ? maskShortcuts : standardShortcuts;
-                        tooltipManager.showTooltip(e.currentTarget, content, { html: true });
-                    },
-                    onmouseleave: (e) => tooltipManager.hideTooltip(e.currentTarget)
-                }),
+                shortcutHelpButton,
                 $el("button.lf-painter-button.lf-primary", {
                     textContent: "Add Image",
                     title: "Add image from file",
@@ -737,13 +751,13 @@ async function createCanvasWidget(node, widget, _app) {
                             // Only update if tooltip is currently visible
                             if (tooltipManager.isVisibleFor(switchEl)) {
                                 const tooltipContent = getCurrentTooltipContent();
-                                tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
+                                tooltipManager.showTooltip(switchEl, tooltipContent, { html: true, interactive: false });
                             }
                         };
                         // Tooltip logic
                         switchEl.addEventListener("mouseenter", () => {
                             const tooltipContent = getCurrentTooltipContent();
-                            tooltipManager.showTooltip(switchEl, tooltipContent, { html: true });
+                            tooltipManager.showTooltip(switchEl, tooltipContent, { html: true, interactive: false });
                         });
                         switchEl.addEventListener("mouseleave", () => tooltipManager.hideTooltip(switchEl));
                         // Dynamic icon update on toggle

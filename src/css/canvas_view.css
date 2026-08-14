@@ -585,8 +585,22 @@
     transform-origin: top left;
     transition: transform 0.2s ease;
     will-change: transform;
-    white-space: pre-line;
+    white-space: normal;
     overflow-wrap: anywhere;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+    max-height: calc(100vh - 24px);
+    text-align: left;
+}
+
+.lf-global-tooltip[data-content-mode="text"] {
+    white-space: pre-line;
+}
+
+.lf-global-tooltip[data-interactive="true"] {
+    pointer-events: auto;
+    cursor: default;
 }
 
 .lf-global-tooltip.lf-scale-down {
