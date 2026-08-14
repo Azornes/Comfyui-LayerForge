@@ -18,6 +18,30 @@ be edited independently.
 | `utils/` | Small compatibility and UI helpers that have not yet earned a domain |
 | `log_system/` | Canonical logging implementation |
 
+## Canonical modules
+
+These modules are the main seams between the frontend domains:
+
+- `app/CanvasView.ts` composes the canvas runtime without registering a second
+  ComfyUI extension as an import side effect.
+- `app/LayerForgeConnections.ts` owns graph identity, workflow connections,
+  and ComfyUI event/WebSocket integration.
+- `canvas/CanvasHistory.ts` owns bounded undo/redo stacks and snapshot
+  cloning.
+- `io/CanvasIO.ts` owns image input/output transport and render/export
+  coordination.
+- `media/ImageCache.ts` owns in-memory image identity and cache lifetime;
+  IndexedDB persistence remains under `persistence/`.
+- `mask/MaskResultUtils.ts` owns shared mask-result conversion and application;
+  editor-specific side effects stay in the individual integrations.
+- `persistence/contracts.ts` owns the shared persisted-state and worker-message
+  contracts used by the database and persistence worker.
+
+New code should use these seams instead of reaching into another domain's
+implementation details. If a dependency cannot follow the direction below,
+introduce a narrow contract or move the shared behavior to the lowest domain
+that owns it.
+
 ## Dependency direction
 
 `app/` is the composition layer and may depend on the other frontend domains.
@@ -35,3 +59,8 @@ the registration function from `src/app/CanvasView.ts`; the implementation
 module itself must not register the extension as an import side effect.
 
 The dependency rules are covered by `tests/test_architecture_boundaries.mjs`.
+
+Frontend contract and characterization tests live in `tests/*.mjs`. Run
+`npm test`, `npm run lint`, and `npx tsc --noEmit` after frontend changes; run
+`build.bat` first when TypeScript, CSS, or template sources changed so the
+tracked `js/` output stays synchronized with `src/`.

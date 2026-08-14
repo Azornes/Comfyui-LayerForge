@@ -36,11 +36,21 @@ The generated files in `js/` are served by ComfyUI. Keep `src/` as the source of
 The frontend is organized by responsibility:
 
 - `src/CanvasView.ts` is the stable ComfyUI bootstrap. Its implementation is in `src/app/CanvasView.ts`.
+- `src/app/LayerForgeConnections.ts` contains graph identity, workflow
+  connections, and ComfyUI event/WebSocket integration used by the canvas.
 - `src/canvas/` contains the canvas facade, layers, state, rendering, selection, tools, and interactions.
+- `src/canvas/CanvasHistory.ts` contains the bounded undo/redo snapshot model.
 - `src/io/` contains ComfyUI input and output handling.
 - `src/mask/` contains mask editing, mask algorithms, and detector/editor integrations.
+- `src/mask/MaskResultUtils.ts` contains shared mask-result conversion and
+  application helpers; SAM and matting integrations retain their own side
+  effects.
 - `src/media/` contains image, blob, upload, preview, and export helpers.
+- `src/media/ImageCache.ts` contains the in-memory image cache. IndexedDB image
+  persistence and reference tracking remain in `src/persistence/`.
 - `src/persistence/` contains IndexedDB and image-reference persistence.
+- `src/persistence/contracts.ts` contains shared persisted-state and worker
+  message contracts.
 - `src/shared/` contains shared types, configuration, error handling, and compatibility exports.
 - `src/utils/` contains smaller cross-cutting browser and ComfyUI helpers.
 
