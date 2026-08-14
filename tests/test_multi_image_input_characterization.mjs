@@ -4,8 +4,8 @@ import test from 'node:test';
 
 const [utilitySource, canvasViewSource, canvasIOSource] = await Promise.all([
   readFile(new URL('../src/utils/MultiImageInputUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
 ]);
 
 test('LayerForge exposes an ordered virtual multi-image input contract', () => {

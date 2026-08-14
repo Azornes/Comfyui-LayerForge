@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [canvasIOSource, canvasSource] = await Promise.all([
-  readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/Canvas.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/Canvas.ts', import.meta.url), 'utf8'),
 ]);
 
 test('CanvasIO preserves ordered source and backend image identity semantics', () => {

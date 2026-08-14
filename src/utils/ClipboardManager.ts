@@ -1,8 +1,8 @@
 import {createModuleLogger} from "../log_system/log_funcs.js";
 import { showNotification, showInfoNotification, showErrorNotification, showWarningNotification } from "./NotificationUtils.js";
-import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
+import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../shared/ErrorHandler.js";
 import { safeClipspacePaste } from "./ClipspaceUtils.js";
-import { loadImage, loadImageFromBlob } from "./ImageUtils.js";
+import { loadImage, loadImageFromBlob } from "../media/ImageUtils.js";
 
 // @ts-ignore
 import {api} from "../../../scripts/api.js";
@@ -11,7 +11,7 @@ import {app} from "../../../scripts/app.js";
 // @ts-ignore
 import {ComfyApp} from "../../../scripts/app.js";
 
-import type { AddMode, CanvasForClipboard, ClipboardPreference } from "../types.js";
+import type { AddMode, CanvasForClipboard, ClipboardPreference } from "../shared/types.js";
 
 const log = createModuleLogger('ClipboardManager');
 

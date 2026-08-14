@@ -8,9 +8,9 @@ import {
 } from '../js/utils/CanvasInputUtils.js';
 
 const [canvasIOSource, canvasViewSource, interactionsSource, inputUtilsSource] = await Promise.all([
-  readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasView.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasInteractions.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasInteractions.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/CanvasInputUtils.ts', import.meta.url), 'utf8'),
 ]);
 

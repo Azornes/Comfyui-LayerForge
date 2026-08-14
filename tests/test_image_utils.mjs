@@ -8,8 +8,8 @@ import {
   prepareImageForCanvas,
   tensorToImageData,
   validateImageData,
-} from '../js/utils/ImageUtils.js';
-import { ErrorTypes } from '../js/ErrorHandler.js';
+} from '../js/media/ImageUtils.js';
+import { ErrorTypes } from '../js/shared/ErrorHandler.js';
 
 test('image validation accepts tensor-like payloads and normalizes array data', () => {
   const payload = [{

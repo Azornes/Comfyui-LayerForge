@@ -1,8 +1,8 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { showNotification, showInfoNotification, showErrorNotification, showWarningNotification } from "./NotificationUtils.js";
-import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../ErrorHandler.js";
+import { withErrorHandling, createValidationError, createNetworkError, createFileError } from "../shared/ErrorHandler.js";
 import { safeClipspacePaste } from "./ClipspaceUtils.js";
-import { loadImage, loadImageFromBlob } from "./ImageUtils.js";
+import { loadImage, loadImageFromBlob } from "../media/ImageUtils.js";
 // @ts-ignore
 import { api } from "../../../scripts/api.js";
 const log = createModuleLogger('ClipboardManager');

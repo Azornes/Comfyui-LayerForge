@@ -5,7 +5,7 @@ import test from 'node:test';
 import { fetchMattingModelStatus } from '../js/utils/MattingUtils.js';
 
 const canvasViewSource = await readFile(
-  new URL('../src/CanvasView.ts', import.meta.url),
+  new URL('../src/app/CanvasView.ts', import.meta.url),
   'utf8',
 );
 

@@ -1,0 +1,197 @@
+import type { Canvas as CanvasClass } from '../canvas/Canvas';
+import type { CanvasLayers } from '../canvas/CanvasLayers';
+
+export interface ComfyWidget {
+    name: string;
+    type: string;
+    value: any;
+    callback?: (value: any) => void;
+    options?: any;
+}
+
+export interface Layer {
+    id: string;
+    image: HTMLImageElement;
+    imageId: string;
+    /** Stable identity of an image that was automatically imported from an input connection. */
+    layerForgeInputImageIdentity?: string;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    originalWidth: number;
+    originalHeight: number;
+    rotation: number;
+    zIndex: number;
+    blendMode: string;
+    opacity: number;
+    visible: boolean;
+    mask?: Float32Array;
+    flipH?: boolean;
+    flipV?: boolean;
+    blendArea?: number;
+    cropMode?: boolean;           // czy warstwa jest w trybie crop
+    cropBounds?: {               // granice przycinania
+        x: number;              // offset od lewej krawędzi obrazu
+        y: number;              // offset od górnej krawędzi obrazu  
+        width: number;          // szerokość widocznego obszaru
+        height: number;         // wysokość widocznego obszaru
+    };
+}
+
+export interface ComfyNode {
+    id: number;
+    type: string;
+    widgets: ComfyWidget[];
+    imgs?: HTMLImageElement[];
+    size?: [number, number];
+    onResize?: () => void;
+    setDirtyCanvas?: (dirty: boolean, propagate: boolean) => void;
+    graph?: any;
+    onRemoved?: () => void;
+    addDOMWidget?: (name: string, type: string, element: HTMLElement) => void;
+    inputs?: Array<{ link: any; name?: string; type?: string }>;
+}
+
+declare global {
+    interface Window {
+        MaskEditorDialog?: {
+            instance?: {
+                getMessageBroker: () => any;
+            };
+        };
+    }
+
+    interface HTMLElement {
+        getContext?(contextId: '2d', options?: any): CanvasRenderingContext2D | null;
+        width: number;
+        height: number;
+    }
+}
+
+export interface Canvas {
+    layers: Layer[];
+    selectedLayer: Layer | null;
+    canvasSelection: any;
+    lastMousePosition: Point;
+    width: number;
+    height: number;
+    node: ComfyNode;
+    viewport: { x: number, y: number, zoom: number };
+    canvas: HTMLCanvasElement;
+    offscreenCanvas: HTMLCanvasElement;
+    isMouseOver: boolean;
+    maskTool: any;
+    canvasLayersPanel: any;
+    canvasState: any;
+    widget?: { value: string };
+    imageReferenceManager: any;
+    imageCache: any;
+    dataInitialized: boolean;
+    pendingDataCheck: number | null;
+    pendingInputDataCheck: number | null;
+    pendingBatchContext: any;
+    canvasLayers: any;
+    inputDataLoaded: boolean;
+    lastLoadedLinkId: any;
+    lastLoadedMaskLinkId: any;
+    lastLoadedImageSrc?: string;
+    outputAreaBounds: OutputAreaBounds;
+    saveState: () => void;
+    render: () => void;
+    updateSelection: (layers: Layer[]) => void;
+    requestSaveState: (immediate?: boolean) => void;
+    saveToServer: (fileName: string) => Promise<any>;
+    removeLayersByIds: (ids: string[]) => void;
+    batchPreviewManagers: any[];
+    getMouseWorldCoordinates: (e: MouseEvent) => Point;
+    getMouseViewCoordinates: (e: MouseEvent) => Point;
+    updateOutputAreaSize: (width: number, height: number) => void;
+    undo: () => void;
+    redo: () => void;
+}
+
+// A simplified interface for the Canvas class, containing only what ClipboardManager needs.
+export interface CanvasForClipboard {
+    canvasLayers: CanvasLayersForClipboard;
+    node: ComfyNode;
+}
+
+// A simplified interface for the CanvasLayers class.
+export interface CanvasLayersForClipboard {
+    internalClipboard: Layer[];
+    pasteLayers(): void;
+    addLayerWithImage(image: HTMLImageElement, layerProps: Partial<Layer>, addMode: string): Promise<Layer | null>;
+}
+
+export type AddMode = 'mouse' | 'fit' | 'center' | 'default';
+
+export type ClipboardPreference = 'system' | 'clipspace';
+
+export interface WebSocketMessage {
+    type: string;
+    nodeId?: string;
+    [key: string]: any;
+}
+
+export interface AckCallback {
+    resolve: (value: WebSocketMessage | PromiseLike<WebSocketMessage>) => void;
+    reject: (reason?: any) => void;
+}
+
+export type AckCallbacks = Map<string, AckCallback>;
+
+export interface CanvasState {
+    layersUndoStack: Layer[][];
+    layersRedoStack: Layer[][];
+    maskUndoStack: HTMLCanvasElement[];
+    maskRedoStack: HTMLCanvasElement[];
+    saveMaskState(): void;
+}
+
+export interface Point {
+    x: number;
+    y: number;
+}
+
+export interface Shape {
+    points: Point[];
+    isClosed: boolean;
+}
+
+export interface OutputAreaBounds {
+    x: number;      // Pozycja w świecie (może być ujemna)
+    y: number;      // Pozycja w świecie (może być ujemna)  
+    width: number;  // Szerokość output area
+    height: number; // Wysokość output area
+}
+
+export interface Viewport {
+    x: number;
+    y: number;
+    zoom: number;
+}
+
+export interface Tensor {
+    data: Float32Array;
+    shape: number[];
+    width: number;
+    height: number;
+}
+
+export type CachedImage = string | ImageBitmap;
+
+export interface ImageCacheContract {
+    get(key: string): CachedImage | undefined;
+    set(key: string, image: CachedImage): void;
+    has(key: string): boolean;
+    delete(key: string): boolean;
+    clear(): void;
+}
+
+export interface ImageDataPixel {
+    data: Uint8ClampedArray;
+    width: number;
+    height: number;
+}

@@ -5,7 +5,7 @@ import test from 'node:test';
 import { createCanvas, createCanvasWithContext } from '../js/utils/CommonUtils.js';
 
 const maskToolSource = await readFile(
-  new URL('../src/MaskTool.ts', import.meta.url),
+  new URL('../src/mask/MaskTool.ts', import.meta.url),
   'utf8',
 );
 

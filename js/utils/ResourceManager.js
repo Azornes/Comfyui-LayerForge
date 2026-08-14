@@ -1,7 +1,7 @@
 // @ts-ignore
 import { $el } from "../../../scripts/ui.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
-import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
+import { withErrorHandling, createValidationError, createNetworkError } from "../shared/ErrorHandler.js";
 const log = createModuleLogger('ResourceManager');
 export const addStylesheet = withErrorHandling(function (url) {
     if (!url) {

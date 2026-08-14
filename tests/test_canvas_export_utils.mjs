@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { exportCanvasImage } from '../js/utils/CanvasExportUtils.js';
+import { exportCanvasImage } from '../js/media/CanvasExportUtils.js';
 
 function installBrowserStubs() {
   const globalKeys = ['ClipboardItem', 'URL', 'document', 'navigator', 'window'];

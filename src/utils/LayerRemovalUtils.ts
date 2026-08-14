@@ -1,4 +1,4 @@
-import type { Layer } from '../types';
+import type { Layer } from '../shared/types';
 
 export interface LayerRemovalCanvas {
     layers: Layer[];

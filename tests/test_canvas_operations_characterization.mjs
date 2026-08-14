@@ -5,9 +5,9 @@ import test from 'node:test';
 import { cloneCanvas } from '../js/utils/CommonUtils.js';
 
 const [layersSource, stateSource, maskEditorSource, commonUtilsSource] = await Promise.all([
-  readFile(new URL('../src/CanvasLayers.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasState.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/utils/CommonUtils.ts', import.meta.url), 'utf8'),
 ]);
 

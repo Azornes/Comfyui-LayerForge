@@ -3,8 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [canvasIOSource, maskEditorSource] = await Promise.all([
-  readFile(new URL('../src/CanvasIO.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/io/CanvasIO.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/mask/MaskEditorIntegration.ts', import.meta.url), 'utf8'),
 ]);
 
 function getMethodBody(source, methodName, nextMethodName) {

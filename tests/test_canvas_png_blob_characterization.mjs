@@ -3,11 +3,11 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const canvasIOSource = await readFile(
-  new URL('../src/CanvasIO.ts', import.meta.url),
+  new URL('../src/io/CanvasIO.ts', import.meta.url),
   'utf8'
 );
 const canvasIOCompiledSource = await readFile(
-  new URL('../js/CanvasIO.js', import.meta.url),
+  new URL('../js/io/CanvasIO.js', import.meta.url),
   'utf8'
 );
 

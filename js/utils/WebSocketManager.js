@@ -1,5 +1,5 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
-import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
+import { withErrorHandling, createValidationError, createNetworkError } from "../shared/ErrorHandler.js";
 const log = createModuleLogger('WebSocketManager');
 class WebSocketManager {
     constructor(url) {

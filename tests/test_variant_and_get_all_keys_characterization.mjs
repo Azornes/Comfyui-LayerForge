@@ -3,10 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const [blobSource, exportSource, dbSource, sharedSource] = await Promise.all([
-  readFile(new URL('../src/utils/CanvasBlobUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/utils/CanvasExportUtils.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/db.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/db_shared.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/CanvasBlobUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/media/CanvasExportUtils.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/persistence/db.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/persistence/db_shared.ts', import.meta.url), 'utf8'),
 ]);
 
 test('canvas export uses the canonical blob variant union', () => {

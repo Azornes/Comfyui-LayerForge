@@ -7,12 +7,12 @@ const commonUtilsSource = await readFile(
   'utf8',
 );
 const typesSource = await readFile(
-  new URL('../src/types.ts', import.meta.url),
+  new URL('../src/shared/types.ts', import.meta.url),
   'utf8',
 );
 
 test('Point has one canonical definition and CommonUtils re-exports it', () => {
   assert.doesNotMatch(commonUtilsSource, /export interface Point/);
-  assert.match(commonUtilsSource, /export type \{ Point \} from ['"]\.\.\/types['"];?/);
+  assert.match(commonUtilsSource, /export type \{ Point \} from ['"]\.\.\/shared\/types['"];?/);
   assert.match(typesSource, /export interface Point \{\s+x: number;\s+y: number;\s+\}/);
 });

@@ -1,6 +1,6 @@
 import {createModuleLogger} from "../log_system/log_funcs.js";
-import { withErrorHandling, createValidationError, createNetworkError } from "../ErrorHandler.js";
-import type { WebSocketMessage, AckCallbacks } from "../types.js";
+import { withErrorHandling, createValidationError, createNetworkError } from "../shared/ErrorHandler.js";
+import type { WebSocketMessage, AckCallbacks } from "../shared/types.js";
 
 const log = createModuleLogger('WebSocketManager');
 

@@ -5,7 +5,7 @@ import {
   createPreviewFromBlob,
   createPreviewFromCanvas,
   loadPreviewImage,
-} from '../js/utils/PreviewUtils.js';
+} from '../js/media/PreviewUtils.js';
 
 function installPreviewStubs({ fail = false } = {}) {
   const originalImage = Object.getOwnPropertyDescriptor(globalThis, 'Image');

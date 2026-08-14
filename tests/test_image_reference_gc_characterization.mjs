@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { ImageReferenceManager } from '../js/ImageReferenceManager.js';
+import { ImageReferenceManager } from '../js/persistence/ImageReferenceManager.js';
 
 const source = await readFile(
-  new URL('../src/ImageReferenceManager.ts', import.meta.url),
+  new URL('../src/persistence/ImageReferenceManager.ts', import.meta.url),
   'utf8'
 );
 

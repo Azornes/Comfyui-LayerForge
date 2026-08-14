@@ -1,4 +1,4 @@
-import type { AddMode } from '../types';
+import type { AddMode } from '../shared/types';
 
 export function isFitOnAddEnabled(
     widgets?: readonly { name: string; value?: unknown }[]

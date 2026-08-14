@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ErrorTypes } from '../js/ErrorHandler.js';
+import { ErrorTypes } from '../js/shared/ErrorHandler.js';
 import {
   processImageToMask,
   processImageWithTransform,
-} from '../js/utils/MaskProcessingUtils.js';
+} from '../js/mask/MaskProcessingUtils.js';
 
 function installCanvasStub(sourcePixels) {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');

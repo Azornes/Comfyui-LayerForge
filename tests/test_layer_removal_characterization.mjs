@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { CanvasSelection } from '../js/CanvasSelection.js';
+import { CanvasSelection } from '../js/canvas/CanvasSelection.js';
 import { removeLayersWithLifecycle } from '../js/utils/LayerRemovalUtils.js';
 
 const [canvasSource, selectionSource] = await Promise.all([
-  readFile(new URL('../src/Canvas.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasSelection.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/Canvas.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasSelection.ts', import.meta.url), 'utf8'),
 ]);
 
 function createCanvas(layers) {

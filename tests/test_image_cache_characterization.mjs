@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { ImageCache } from '../js/ImageCache.js';
+import { ImageCache } from '../js/persistence/ImageCache.js';
 
 const sourceFiles = await Promise.all([
-  readFile(new URL('../src/ImageCache.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/Canvas.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasLayers.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasState.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/CanvasView.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/persistence/ImageCache.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/Canvas.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasLayers.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/canvas/CanvasState.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/app/CanvasView.ts', import.meta.url), 'utf8'),
 ]);
 
 test('image cache preserves key/value storage and clearing behavior', () => {

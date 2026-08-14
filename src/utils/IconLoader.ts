@@ -1,6 +1,6 @@
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { createCanvas } from "./CommonUtils.js";
-import { withErrorHandling, createValidationError } from "../ErrorHandler.js";
+import { withErrorHandling, createValidationError } from "../shared/ErrorHandler.js";
 
 const log = createModuleLogger('IconLoader');
 
