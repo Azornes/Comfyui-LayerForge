@@ -643,6 +643,7 @@ export class MaskTool {
         this.isActive = true;
         this.previewCanvas.style.display = 'block';
         this.canvasInstance.interaction.mode = 'drawingMask';
+        this.canvasInstance.canvas.style.cursor = 'default';
         if (this.canvasInstance.canvasState.maskUndoStack.length === 0) {
             this.canvasInstance.canvasState.saveMaskState();
         }
@@ -653,6 +654,7 @@ export class MaskTool {
         this.isActive = false;
         this.previewCanvas.style.display = 'none';
         this.canvasInstance.interaction.mode = 'none';
+        this.canvasInstance.canvas.style.cursor = 'default';
         this.canvasInstance.updateHistoryButtons();
         log.info("Mask tool deactivated");
     }
