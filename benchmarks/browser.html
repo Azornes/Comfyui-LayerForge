@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LayerForge Canvas Benchmark</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: system-ui, sans-serif;
+            background: #1b1d21;
+            color: #f0f2f5;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+        }
+
+        button {
+            padding: 8px 14px;
+            border: 1px solid #687080;
+            border-radius: 5px;
+            background: #2c6eac;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        label {
+            margin-right: 16px;
+        }
+
+        input {
+            width: 190px;
+            margin: 0 6px;
+            padding: 5px;
+            color: inherit;
+            background: #242830;
+            border: 1px solid #687080;
+            border-radius: 4px;
+        }
+
+        #status {
+            min-height: 1.4em;
+            margin: 16px 0;
+            color: #b7c4d8;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-top: 16px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        th, td {
+            padding: 5px 9px;
+            border: 1px solid #424852;
+            text-align: right;
+        }
+
+        th:first-child, td:first-child,
+        th:nth-child(2), td:nth-child(2),
+        th:nth-child(3), td:nth-child(3) {
+            text-align: left;
+        }
+
+        pre {
+            max-height: 520px;
+            overflow: auto;
+            padding: 12px;
+            background: #111317;
+            border: 1px solid #424852;
+        }
+
+        .note {
+            max-width: 900px;
+            color: #b7c4d8;
+        }
+    </style>
+</head>
+<body>
+    <h1>LayerForge Canvas benchmark</h1>
+    <p class="note">
+        This is a ComfyUI-free browser benchmark. It measures representative Canvas 2D
+        compositing and PNG export, plus the real LayerForge distance-transform helpers.
+        It is intentionally not a replacement for a ComfyUI workflow smoke test.
+    </p>
+    <p>
+        <label>Sizes <input id="sizes" value="512,1024"></label>
+        <label>Layer counts <input id="layerCounts" value="1,4,8,16"></label>
+        <label>Iterations <input id="iterations" value="3" type="number" min="1" max="20"></label>
+        <button id="run">Run benchmark</button>
+    </p>
+    <div id="status">Ready.</div>
+    <div id="results"></div>
+    <pre id="json"></pre>
+
+    <script type="module">
+        import {
+            calculateDistanceTransform,
+            rasterizeDistanceFieldMask,
+        } from '../js/mask/mask_pixel_utils.js';
+
+        const variants = ['plain', 'crop', 'blend', 'mask'];
+        const outputCanvas = document.createElement('canvas');
+        const statusElement = document.getElementById('status');
+        const resultsElement = document.getElementById('results');
+        const jsonElement = document.getElementById('json');
+        const runButton = document.getElementById('run');
+
+        function parseList(value) {
+            return value
+                .split(',')
+                .map(item => Number.parseInt(item.trim(), 10))
+                .filter(Number.isFinite)
+                .filter(item => item > 0);
+        }
+
+        function percentile(sortedValues, fraction) {
+            const index = Math.min(
+                sortedValues.length - 1,
+                Math.max(0, Math.ceil(sortedValues.length * fraction) - 1),
+            );
+            return sortedValues[index];
+        }
+
+        async function measure(operation, iterations) {
+            for (let index = 0; index < Math.min(2, iterations); index += 1) {
+                await operation();
+            }
+
+            const samples = [];
+            for (let index = 0; index < iterations; index += 1) {
+                const startedAt = performance.now();
+                await operation();
+                samples.push(performance.now() - startedAt);
+            }
+
+            samples.sort((left, right) => left - right);
+            return {
+                medianMs: percentile(samples, 0.5),
+                p95Ms: percentile(samples, 0.95),
+                minMs: samples[0],
+                maxMs: samples[samples.length - 1],
+            };
+        }
+
+        function makeLayerCanvas(size, index) {
+            const layerSize = Math.max(64, Math.round(size * 0.66));
+            const canvas = document.createElement('canvas');
+            canvas.width = layerSize;
+            canvas.height = layerSize;
+            const context = canvas.getContext('2d');
+            const gradient = context.createLinearGradient(0, 0, layerSize, layerSize);
+            const hue = (index * 47) % 360;
+            gradient.addColorStop(0, `hsla(${hue}, 80%, 62%, 0.9)`);
+            gradient.addColorStop(1, `hsla(${(hue + 90) % 360}, 80%, 30%, 0.9)`);
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, layerSize, layerSize);
+            context.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            context.beginPath();
+            context.arc(layerSize * 0.5, layerSize * 0.5, layerSize * 0.32, 0, Math.PI * 2);
+            context.fill();
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = layerSize;
+            tempCanvas.height = layerSize;
+            const tempContext = tempCanvas.getContext('2d');
+
+            const blendMask = document.createElement('canvas');
+            blendMask.width = layerSize;
+            blendMask.height = layerSize;
+            const maskContext = blendMask.getContext('2d');
+            const radial = maskContext.createRadialGradient(
+                layerSize / 2,
+                layerSize / 2,
+                layerSize * 0.18,
+                layerSize / 2,
+                layerSize / 2,
+                layerSize * 0.52,
+            );
+            radial.addColorStop(0, 'rgba(255,255,255,1)');
+            radial.addColorStop(1, 'rgba(255,255,255,0)');
+            maskContext.fillStyle = radial;
+            maskContext.fillRect(0, 0, layerSize, layerSize);
+
+            return { canvas, tempCanvas, tempContext, blendMask };
+        }
+
+        function makeLayers(size, count) {
+            return Array.from({ length: count }, (_, index) => ({
+                ...makeLayerCanvas(size, index),
+                index,
+                x: size / 2 + ((index % 4) - 1.5) * size * 0.035,
+                y: size / 2 + (Math.floor(index / 4) - 1.5) * size * 0.035,
+                rotation: ((index * 7) % 24) * Math.PI / 180,
+                opacity: 0.72 + (index % 3) * 0.08,
+            }));
+        }
+
+        function drawLayer(context, layer, variant) {
+            const layerSize = layer.canvas.width;
+            context.save();
+            context.translate(layer.x, layer.y);
+            context.rotate(layer.rotation);
+            context.globalAlpha = layer.opacity;
+            context.globalCompositeOperation = layer.index % 3 === 0 ? 'source-over' : 'multiply';
+
+            if (variant === 'blend') {
+                layer.tempContext.clearRect(0, 0, layerSize, layerSize);
+                layer.tempContext.globalCompositeOperation = 'source-over';
+                layer.tempContext.drawImage(layer.canvas, 0, 0);
+                layer.tempContext.globalCompositeOperation = 'destination-in';
+                layer.tempContext.drawImage(layer.blendMask, 0, 0);
+                context.drawImage(layer.tempCanvas, -layerSize / 2, -layerSize / 2);
+            } else if (variant === 'crop') {
+                const crop = layerSize * 0.1;
+                context.drawImage(
+                    layer.canvas,
+                    crop,
+                    crop,
+                    layerSize - crop * 2,
+                    layerSize - crop * 2,
+                    -layerSize / 2,
+                    -layerSize / 2,
+                    layerSize,
+                    layerSize,
+                );
+            } else {
+                context.drawImage(layer.canvas, -layerSize / 2, -layerSize / 2);
+            }
+
+            context.restore();
+        }
+
+        function renderScene(size, layers, variant) {
+            outputCanvas.width = size;
+            outputCanvas.height = size;
+            const context = outputCanvas.getContext('2d');
+            context.clearRect(0, 0, size, size);
+            context.fillStyle = '#606060';
+            context.fillRect(0, 0, size, size);
+
+            for (const layer of layers) {
+                drawLayer(context, layer, variant);
+            }
+
+            if (variant === 'mask') {
+                const maskCanvas = document.createElement('canvas');
+                maskCanvas.width = size;
+                maskCanvas.height = size;
+                const maskContext = maskCanvas.getContext('2d');
+                const radial = maskContext.createRadialGradient(
+                    size / 2,
+                    size / 2,
+                    size * 0.2,
+                    size / 2,
+                    size / 2,
+                    size * 0.7,
+                );
+                radial.addColorStop(0, 'rgba(255,255,255,1)');
+                radial.addColorStop(1, 'rgba(255,255,255,0)');
+                maskContext.fillStyle = radial;
+                maskContext.fillRect(0, 0, size, size);
+                context.globalCompositeOperation = 'destination-in';
+                context.drawImage(maskCanvas, 0, 0);
+                context.globalCompositeOperation = 'source-over';
+            }
+        }
+
+        function exportPng() {
+            return new Promise(resolve => {
+                outputCanvas.toBlob(blob => resolve(blob?.size ?? 0), 'image/png');
+            });
+        }
+
+        async function benchmarkDistanceTransform(size, iterations) {
+            const binaryMask = new Uint8Array(size * size);
+            const center = size / 2;
+            const radius = size * 0.36;
+            for (let y = 0; y < size; y += 1) {
+                for (let x = 0; x < size; x += 1) {
+                    const dx = x - center;
+                    const dy = y - center;
+                    binaryMask[y * size + x] = dx * dx + dy * dy <= radius * radius ? 1 : 0;
+                }
+            }
+
+            const distance = calculateDistanceTransform(binaryMask, size, size);
+            const output = new Uint8ClampedArray(size * size * 4);
+            const distanceStats = await measure(
+                () => calculateDistanceTransform(binaryMask, size, size),
+                iterations,
+            );
+            const rasterStats = await measure(
+                () => rasterizeDistanceFieldMask(distance, binaryMask, size * 0.1, output),
+                iterations,
+            );
+            return { distanceTransform: distanceStats, rasterizeDistanceField: rasterStats };
+        }
+
+        function renderTable(rows) {
+            const table = document.createElement('table');
+            table.innerHTML = `
+                <thead><tr>
+                    <th>Size</th><th>Layers</th><th>Variant</th>
+                    <th>Render median (ms)</th><th>Render p95 (ms)</th>
+                    <th>PNG median (ms)</th><th>PNG bytes</th>
+                </tr></thead>
+                <tbody></tbody>`;
+            const body = table.querySelector('tbody');
+            for (const row of rows) {
+                const element = document.createElement('tr');
+                element.innerHTML = `
+                    <td>${row.size}</td>
+                    <td>${row.layers}</td>
+                    <td>${row.variant}</td>
+                    <td>${row.render.medianMs.toFixed(3)}</td>
+                    <td>${row.render.p95Ms.toFixed(3)}</td>
+                    <td>${row.export.medianMs.toFixed(3)}</td>
+                    <td>${row.pngBytes}</td>`;
+                body.appendChild(element);
+            }
+            resultsElement.replaceChildren(table);
+        }
+
+        async function runBenchmark() {
+            const sizes = parseList(document.getElementById('sizes').value);
+            const layerCounts = parseList(document.getElementById('layerCounts').value);
+            const iterations = Math.max(1, Number.parseInt(document.getElementById('iterations').value, 10) || 1);
+            const rows = [];
+            const distanceTransforms = {};
+            const total = sizes.length * layerCounts.length * variants.length;
+            let completed = 0;
+
+            runButton.disabled = true;
+            resultsElement.replaceChildren();
+            jsonElement.textContent = '';
+
+            try {
+                for (const size of sizes) {
+                    distanceTransforms[size] = await benchmarkDistanceTransform(size, iterations);
+                    for (const layerCount of layerCounts) {
+                        const layers = makeLayers(size, layerCount);
+                        for (const variant of variants) {
+                            statusElement.textContent = `Running ${completed + 1}/${total}: ${size}px, ${layerCount} layers, ${variant}`;
+                            renderScene(size, layers, variant);
+                            const render = await measure(() => renderScene(size, layers, variant), iterations);
+                            const exported = await measure(exportPng, iterations);
+                            rows.push({
+                                size,
+                                layers: layerCount,
+                                variant,
+                                render,
+                                export: exported,
+                                pngBytes: await exportPng(),
+                            });
+                            completed += 1;
+                        }
+                    }
+                }
+
+                const report = {
+                    benchmark: 'layerforge-browser-canvas-representative',
+                    runtime: {
+                        userAgent: navigator.userAgent,
+                        devicePixelRatio: window.devicePixelRatio,
+                    },
+                    config: { sizes, layerCounts, variants, iterations },
+                    distanceTransforms,
+                    rows,
+                };
+                renderTable(rows);
+                jsonElement.textContent = JSON.stringify(report, null, 2);
+                statusElement.textContent = `Complete: ${rows.length} scenarios.`;
+            } catch (error) {
+                statusElement.textContent = `Failed: ${error instanceof Error ? error.message : error}`;
+                throw error;
+            } finally {
+                runButton.disabled = false;
+            }
+        }
+
+        runButton.addEventListener('click', () => {
+            runBenchmark().catch(error => console.error(error));
+        });
+    </script>
+</body>
+</html>
