@@ -7,6 +7,7 @@ export class CanvasInteractions {
     constructor(canvas) {
         this.pendingTransformMove = null;
         this.transformMoveAnimationFrame = null;
+        this.zoomEndTimer = null;
         // Bound event handlers to enable proper removeEventListener and avoid leaks
         this.onMouseDown = (e) => this.handleMouseDown(e);
         this.onMouseMove = (e) => this.handleMouseMove(e);
@@ -68,7 +69,18 @@ export class CanvasInteractions {
         e.preventDefault();
         e.stopPropagation();
     }
+    scheduleZoomInteractionEnd() {
+        if (this.zoomEndTimer !== null) {
+            window.clearTimeout(this.zoomEndTimer);
+        }
+        this.zoomEndTimer = window.setTimeout(() => {
+            this.zoomEndTimer = null;
+            this.canvas.canvasRenderer.endZoomInteraction();
+            this.canvas.render();
+        }, 140);
+    }
     performZoomOperation(worldCoords, zoomFactor) {
+        this.canvas.canvasRenderer.beginZoomInteraction();
         const mouseBufferX = (worldCoords.x - this.canvas.viewport.x) * this.canvas.viewport.zoom;
         const mouseBufferY = (worldCoords.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
         const newZoom = Math.max(0.1, Math.min(10, this.canvas.viewport.zoom * zoomFactor));
@@ -80,6 +92,7 @@ export class CanvasInteractions {
             this.canvas.maskTool.handleViewportChange();
         }
         this.canvas.onViewportChange?.();
+        this.scheduleZoomInteractionEnd();
     }
     renderAndSave(shouldSave = false) {
         this.canvas.render();
@@ -193,6 +206,11 @@ export class CanvasInteractions {
     }
     teardownEventListeners() {
         this.cancelPendingTransformMove();
+        if (this.zoomEndTimer !== null) {
+            window.clearTimeout(this.zoomEndTimer);
+            this.zoomEndTimer = null;
+        }
+        this.canvas.canvasRenderer.endZoomInteraction();
         this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown);
         this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove);
         this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp);

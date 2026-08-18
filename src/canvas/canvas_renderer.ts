@@ -1,5 +1,5 @@
 import {createModuleLogger} from "../log_system/log_funcs.js";
-import { getBoundsFromPoints, getLayerWorldBounds, isPointInRotatedLayer, localToWorld, worldToLocal } from "../utils/common_utils.js";
+import { createCanvas, getBoundsFromPoints, getLayerWorldBounds, isPointInRotatedLayer, localToWorld, worldToLocal } from "../utils/common_utils.js";
 
 const log = createModuleLogger('CanvasRenderer');
 
@@ -18,6 +18,13 @@ interface DragRenderState {
     height: number;
 }
 
+interface ZoomSnapshotState {
+    canvas: HTMLCanvasElement;
+    viewport: { x: number; y: number; zoom: number };
+    displayWidth: number;
+    displayHeight: number;
+}
+
 export class CanvasRenderer {
     canvas: any;
     isDirty: any;
@@ -25,6 +32,8 @@ export class CanvasRenderer {
     renderAnimationFrame: any;
     renderInterval: any;
     private dragRenderState: DragRenderState | null;
+    private zoomInteractionActive: boolean;
+    private zoomSnapshot: ZoomSnapshotState | null;
     // Overlay used to preview in-progress mask strokes (separate from cursor overlay)
     strokeOverlayCanvas!: HTMLCanvasElement;
     strokeOverlayCtx!: CanvasRenderingContext2D;
@@ -35,10 +44,186 @@ export class CanvasRenderer {
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
         this.dragRenderState = null;
+        this.zoomInteractionActive = false;
+        this.zoomSnapshot = null;
         
         // Initialize overlay canvases
         this.initOverlay();
         this.initStrokeOverlay();
+    }
+
+    /**
+     * Starts a short-lived zoom interaction cache. The cache contains the
+     * already composited scene, so rapid wheel events can scale one bitmap
+     * instead of recompositing every blend layer on every frame.
+     */
+    public beginZoomInteraction(): void {
+        if (this.zoomInteractionActive) return;
+
+        // Mask drawing and other active transforms need live rendering because
+        // their scene can change while the viewport is moving.
+        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
+        if (this.canvas.maskTool?.isActive || (interactionMode && interactionMode !== 'none')) {
+            return;
+        }
+
+        this.zoomInteractionActive = true;
+        this.dragRenderState = null;
+        this.releaseZoomSnapshot();
+        this.zoomSnapshot = this.createZoomSnapshot();
+    }
+
+    /**
+     * Ends the zoom cache and forces the next frame through the normal,
+     * full-quality compositor.
+     */
+    public endZoomInteraction(): void {
+        if (!this.zoomInteractionActive && !this.zoomSnapshot) return;
+
+        this.zoomInteractionActive = false;
+        this.dragRenderState = null;
+        this.releaseZoomSnapshot();
+    }
+
+    private releaseZoomSnapshot(): void {
+        if (this.zoomSnapshot) {
+            this.zoomSnapshot.canvas.width = 0;
+            this.zoomSnapshot.canvas.height = 0;
+        }
+        this.zoomSnapshot = null;
+    }
+
+    private getCanvasFill(): string {
+        if (typeof getComputedStyle === 'function') {
+            const canvasFill = getComputedStyle(this.canvas.canvas)
+                .getPropertyValue('--lf-canvas-fill')
+                .trim();
+            if (canvasFill) return canvasFill;
+        }
+        return 'rgba(96, 96, 96, 0.72)';
+    }
+
+    private getZoomSnapshotScale(displayWidth: number, displayHeight: number): number {
+        // A modest overscan keeps zooming out cached for several wheel steps.
+        // Cap the backing surface so a large editor widget cannot allocate an
+        // unexpectedly large temporary bitmap.
+        const requestedScale = 1.5;
+        const maxSnapshotPixels = 16_000_000;
+        const requestedPixels = displayWidth * displayHeight * requestedScale * requestedScale;
+        if (requestedPixels <= maxSnapshotPixels) return requestedScale;
+
+        return Math.max(1, Math.sqrt(maxSnapshotPixels / (displayWidth * displayHeight)));
+    }
+
+    private createZoomSnapshot(): ZoomSnapshotState | null {
+        const displayWidth = Math.max(
+            1,
+            this.canvas.offscreenCanvas.width || this.canvas.canvas.clientWidth || 1
+        );
+        const displayHeight = Math.max(
+            1,
+            this.canvas.offscreenCanvas.height || this.canvas.canvas.clientHeight || 1
+        );
+        const zoom = this.canvas.viewport.zoom;
+        const snapshotScale = this.getZoomSnapshotScale(displayWidth, displayHeight);
+        const snapshotWidth = Math.max(1, Math.ceil(displayWidth * snapshotScale));
+        const snapshotHeight = Math.max(1, Math.ceil(displayHeight * snapshotScale));
+        const extraWorldWidth = (snapshotWidth - displayWidth) / zoom;
+        const extraWorldHeight = (snapshotHeight - displayHeight) / zoom;
+        const snapshotViewport = {
+            x: this.canvas.viewport.x - extraWorldWidth / 2,
+            y: this.canvas.viewport.y - extraWorldHeight / 2,
+            zoom,
+        };
+
+        const surface = createCanvas(snapshotWidth, snapshotHeight, '2d', {
+            alpha: false,
+            willReadFrequently: true,
+        });
+        if (!surface.ctx) return null;
+
+        const ctx = surface.ctx;
+        ctx.clearRect(0, 0, snapshotWidth, snapshotHeight);
+        ctx.fillStyle = this.getCanvasFill();
+        ctx.fillRect(0, 0, snapshotWidth, snapshotHeight);
+
+        ctx.save();
+        ctx.scale(snapshotViewport.zoom, snapshotViewport.zoom);
+        ctx.translate(-snapshotViewport.x, -snapshotViewport.y);
+        this.drawGrid(ctx, snapshotViewport, snapshotWidth, snapshotHeight);
+        this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
+        this.drawVisibleMask(ctx);
+        ctx.restore();
+
+        return {
+            canvas: surface.canvas,
+            viewport: snapshotViewport,
+            displayWidth,
+            displayHeight,
+        };
+    }
+
+    private canUseZoomSnapshot(
+        viewport: { x: number; y: number; zoom: number },
+        displayWidth: number,
+        displayHeight: number
+    ): boolean {
+        const snapshot = this.zoomSnapshot;
+        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
+        if (!this.zoomInteractionActive || !snapshot || interactionMode !== 'none') return false;
+        if (snapshot.displayWidth !== displayWidth || snapshot.displayHeight !== displayHeight) return false;
+
+        const visibleLeft = viewport.x;
+        const visibleTop = viewport.y;
+        const visibleRight = viewport.x + displayWidth / viewport.zoom;
+        const visibleBottom = viewport.y + displayHeight / viewport.zoom;
+        const snapshotRight = snapshot.viewport.x + snapshot.canvas.width / snapshot.viewport.zoom;
+        const snapshotBottom = snapshot.viewport.y + snapshot.canvas.height / snapshot.viewport.zoom;
+        const epsilon = 1 / Math.max(viewport.zoom, snapshot.viewport.zoom, 0.0001);
+
+        return visibleLeft >= snapshot.viewport.x - epsilon &&
+            visibleTop >= snapshot.viewport.y - epsilon &&
+            visibleRight <= snapshotRight + epsilon &&
+            visibleBottom <= snapshotBottom + epsilon;
+    }
+
+    private drawZoomSnapshot(
+        ctx: CanvasRenderingContext2D,
+        viewport: { x: number; y: number; zoom: number }
+    ): void {
+        const snapshot = this.zoomSnapshot;
+        if (!snapshot) return;
+
+        const scale = viewport.zoom / snapshot.viewport.zoom;
+        const offsetX = (snapshot.viewport.x - viewport.x) * viewport.zoom;
+        const offsetY = (snapshot.viewport.y - viewport.y) * viewport.zoom;
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.drawImage(
+            snapshot.canvas,
+            offsetX,
+            offsetY,
+            snapshot.canvas.width * scale,
+            snapshot.canvas.height * scale
+        );
+        ctx.restore();
+    }
+
+    private drawVisibleMask(ctx: CanvasRenderingContext2D): void {
+        const maskImage = this.canvas.maskTool?.getMask();
+        if (!maskImage || !this.canvas.maskTool.isOverlayVisible) return;
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = this.canvas.maskTool.isActive
+            ? this.canvas.maskTool.previewOpacity
+            : 1.0;
+        ctx.drawImage(maskImage, this.canvas.maskTool.x, this.canvas.maskTool.y);
+        ctx.restore();
     }
 
     private getDragSelectionSignature(selectedLayers: any[]): string {
@@ -290,9 +475,7 @@ export class CanvasRenderer {
         // Keep the canvas readable while allowing the node's native color to
         // tint the editor underneath it. Clear first so alpha does not build
         // up on every render frame.
-        const canvasFill = typeof getComputedStyle === 'function'
-            ? getComputedStyle(this.canvas.canvas).getPropertyValue('--lf-canvas-fill').trim()
-            : '';
+        const canvasFill = this.getCanvasFill();
         if (canReuseDragFrame) {
             // Preserve unchanged pixels from the previous drag frame. Every
             // layer, mask, grid line, and interaction overlay is redrawn only
@@ -304,58 +487,55 @@ export class CanvasRenderer {
             });
             ctx.clip();
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-            ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
+            ctx.fillStyle = canvasFill;
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         } else {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-            ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
+            ctx.fillStyle = canvasFill;
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         }
+
+        const canUseZoomSnapshot = this.canUseZoomSnapshot(
+            this.canvas.viewport,
+            canvasWidth,
+            canvasHeight
+        );
 
         ctx.save();
         ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
         ctx.translate(-this.canvas.viewport.x, -this.canvas.viewport.y);
 
-        this.drawGrid(ctx);
-
-        // Use a screen-space cache for stationary layer groups while moving
-        // selected layers. The cache replays non-source-over modes in z-order.
-        if (isDraggingLayers && selectedLayers.length > 0) {
-            this.canvas.canvasLayers.drawLayersDuringDrag(
-                ctx,
-                this.canvas.layers,
-                selectedLayers,
-                this.canvas.viewport,
-                canvasWidth,
-                canvasHeight
-            );
-        } else {
-            this.canvas.canvasLayers.clearDragSceneCache();
-            this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
-        }
-        
-        // Draw mask AFTER layers but BEFORE all preview outlines
-        const maskImage = this.canvas.maskTool.getMask();
-        if (maskImage && this.canvas.maskTool.isOverlayVisible) {
+        if (canUseZoomSnapshot) {
+            // The snapshot already contains the background, grid, mask, and
+            // all composited layers. Restore the screen transform for one
+            // inexpensive bitmap scale, then restore the world transform so
+            // selection and interaction overlays remain live.
+            ctx.restore();
+            this.drawZoomSnapshot(ctx, this.canvas.viewport);
             ctx.save();
+            ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
+            ctx.translate(-this.canvas.viewport.x, -this.canvas.viewport.y);
+        } else {
+            this.drawGrid(ctx);
 
-            if (this.canvas.maskTool.isActive) {
-                // In draw mask mode, use the previewOpacity value from the slider
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = this.canvas.maskTool.previewOpacity;
+            // Use a screen-space cache for stationary layer groups while moving
+            // selected layers. The cache replays non-source-over modes in z-order.
+            if (isDraggingLayers && selectedLayers.length > 0) {
+                this.canvas.canvasLayers.drawLayersDuringDrag(
+                    ctx,
+                    this.canvas.layers,
+                    selectedLayers,
+                    this.canvas.viewport,
+                    canvasWidth,
+                    canvasHeight
+                );
             } else {
-                // When not in draw mask mode, show mask at full opacity
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.globalAlpha = 1.0;
+                this.canvas.canvasLayers.clearDragSceneCache();
+                this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
             }
 
-            // Renderuj maskę w jej pozycji światowej (bez przesunięcia względem bounds)
-            const maskWorldX = this.canvas.maskTool.x;
-            const maskWorldY = this.canvas.maskTool.y;
-            ctx.drawImage(maskImage, maskWorldX, maskWorldY);
-
-            ctx.globalAlpha = 1.0;
-            ctx.restore();
+            // Draw mask AFTER layers but BEFORE all preview outlines.
+            this.drawVisibleMask(ctx);
         }
         
         // Draw selection frames for selected layers
@@ -527,14 +707,19 @@ export class CanvasRenderer {
         }
     }
 
-    drawGrid(ctx: any) {
+    drawGrid(
+        ctx: any,
+        viewport: { x: number; y: number; zoom: number } = this.canvas.viewport,
+        width: number = this.canvas.offscreenCanvas.width,
+        height: number = this.canvas.offscreenCanvas.height
+    ) {
         const gridSize = 64;
-        const lineWidth = 0.5 / this.canvas.viewport.zoom;
+        const lineWidth = 0.5 / viewport.zoom;
 
-        const viewLeft = this.canvas.viewport.x;
-        const viewTop = this.canvas.viewport.y;
-        const viewRight = this.canvas.viewport.x + this.canvas.offscreenCanvas.width / this.canvas.viewport.zoom;
-        const viewBottom = this.canvas.viewport.y + this.canvas.offscreenCanvas.height / this.canvas.viewport.zoom;
+        const viewLeft = viewport.x;
+        const viewTop = viewport.y;
+        const viewRight = viewport.x + width / viewport.zoom;
+        const viewBottom = viewport.y + height / viewport.zoom;
 
         ctx.beginPath();
         ctx.strokeStyle = '#707070';
