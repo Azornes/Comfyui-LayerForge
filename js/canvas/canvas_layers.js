@@ -440,6 +440,8 @@ export class CanvasLayers {
         ctx.imageSmoothingQuality = 'high';
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
+        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
+        const isDraggingLayers = interactionMode === 'dragging';
         // Check if we should render blend area live only in specific cases:
         // 1. When user is actively resizing in crop mode (transforming crop bounds) - only for the specific layer being transformed
         // 2. When user is actively resizing in transform mode (scaling layer) - only for the specific layer being transformed
@@ -461,9 +463,12 @@ export class CanvasLayers {
         const isTransformingScaleSet = this.layersTransformingScale.has(layer.id);
         // Check if this layer is being scaled by wheel or buttons (continues live rendering until cache is ready)
         const isWheelScaling = this.layersWheelScaling.has(layer.id);
-        const shouldRenderLive = isTransformingCropBounds || isTransformingScale || isThisLayerBeingAdjusted || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling;
+        const shouldRenderLive = !isDraggingLayers && (isTransformingCropBounds || isTransformingScale || isThisLayerBeingAdjusted || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling);
         // Check if we should use cached processed image or render live
-        const processedImage = this.getProcessedImage(layer);
+        const processedImage = this.getProcessedImage(layer, {
+            cacheOnly: isDraggingLayers,
+            allowCacheWhileAdjusting: isDraggingLayers,
+        });
         // For scaling operations, try to find the BEST matching cache for this layer
         let bestMatchingCache = null;
         if (isTransformingScale || isTransformingScaleSet || isWheelScaling) {
@@ -696,7 +701,8 @@ export class CanvasLayers {
      * Get processed image with all effects applied (blend area, crop, etc.)
      * Uses live rendering for layers being actively adjusted, debounced processing for others
      */
-    getProcessedImage(layer) {
+    getProcessedImage(layer, options = {}) {
+        const { cacheOnly = false, allowCacheWhileAdjusting = false } = options;
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
         const needsCropEffect = layer.cropBounds && layer.originalWidth && layer.originalHeight;
@@ -705,7 +711,7 @@ export class CanvasLayers {
             return null;
         }
         // If this layer is being actively adjusted (blend area slider), don't use cache
-        if (this.layersAdjustingBlendArea.has(layer.id)) {
+        if (this.layersAdjustingBlendArea.has(layer.id) && !allowCacheWhileAdjusting) {
             return null; // Force live rendering
         }
         // If this layer is being scaled (wheel/buttons), don't schedule new cache creation
@@ -724,6 +730,12 @@ export class CanvasLayers {
         if (this.processedImageCache.has(cacheKey)) {
             log.debug(`Using cached processed image for layer ${layer.id}`);
             return this.processedImageCache.get(cacheKey) || null;
+        }
+        // During a layer drag, never start full-resolution blend processing
+        // from the render loop. Use the source image until a cache is ready;
+        // the interaction-end path will schedule the processed cache later.
+        if (cacheOnly) {
+            return null;
         }
         // Use debounced processing - schedule creation but don't create immediately
         this.scheduleProcessedImageCreation(layer, cacheKey);
