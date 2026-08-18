@@ -82,6 +82,7 @@ export class CanvasLayers {
     private processedImageDebounceTimers: Map<string, number> = new Map();
     private processedImageBuildTimers: Map<string, number> = new Map();
     private processedImageBuilds: Map<string, Promise<boolean>> = new Map();
+    private latestProcessedImageKeys: Map<string, string> = new Map();
     private readonly PROCESSED_IMAGE_DEBOUNCE_DELAY = 1000; // 1 second
     private globalDebounceTimer: number | null = null;
     private lastRenderTime: number = 0;
@@ -98,6 +99,7 @@ export class CanvasLayers {
         this.processedImageDebounceTimers = new Map();
         this.processedImageBuildTimers = new Map();
         this.processedImageBuilds = new Map();
+        this.latestProcessedImageKeys = new Map();
         this.blendModes = [
             { name: 'normal', label: 'Normal' },
             {name: 'multiply', label: 'Multiply'},
@@ -890,6 +892,31 @@ export class CanvasLayers {
         return mode !== undefined && mode !== 'none';
     }
 
+    private isLatestProcessedImageKey(layerId: string, cacheKey: string): boolean {
+        return this.latestProcessedImageKeys.get(layerId) === cacheKey;
+    }
+
+    private setLatestProcessedImageKey(layerId: string, cacheKey: string): void {
+        this.latestProcessedImageKeys.set(layerId, cacheKey);
+
+        // Keep only the newest pending timer and processed bitmap for this
+        // layer. In-flight promises cannot be cancelled, so their result is
+        // discarded by buildProcessedImage when it becomes stale.
+        for (const [pendingKey, timer] of this.processedImageBuildTimers.entries()) {
+            if (pendingKey.startsWith(`${layerId}_`) && pendingKey !== cacheKey) {
+                clearTimeout(timer);
+                this.processedImageBuildTimers.delete(pendingKey);
+            }
+        }
+
+        for (const cachedKey of this.processedImageCache.keys()) {
+            if (cachedKey.startsWith(`${layerId}_`) && cachedKey !== cacheKey) {
+                this.releaseProcessedImage(this.processedImageCache.get(cachedKey));
+                this.processedImageCache.delete(cachedKey);
+            }
+        }
+    }
+
     /**
      * Get processed image with all effects applied (blend area, crop, etc.)
      * Uses live rendering for layers being actively adjusted, debounced processing for others
@@ -949,6 +976,8 @@ export class CanvasLayers {
      * Schedule processed image creation after debounce delay
      */
     private scheduleProcessedImageCreation(layer: Layer, cacheKey: string): void {
+        this.setLatestProcessedImageKey(layer.id, cacheKey);
+
         // A render can request the same missing cache many times. Keep one
         // timer/build per cache key instead of resetting the delay each frame.
         if (this.processedImageCache.has(cacheKey) ||
@@ -960,6 +989,10 @@ export class CanvasLayers {
         // Schedule new timer
         const timer = window.setTimeout(() => {
             this.processedImageBuildTimers.delete(cacheKey);
+
+            if (!this.isLatestProcessedImageKey(layer.id, cacheKey)) {
+                return;
+            }
 
             // Distance-field generation is synchronous and can block for a
             // large image. Never start it while pointer/key interaction is in
@@ -1065,6 +1098,13 @@ export class CanvasLayers {
     }
 
     private buildProcessedImage(layer: Layer, cacheKey: string, operationName: string): Promise<boolean> {
+        const latestKey = this.latestProcessedImageKeys.get(layer.id);
+        if (latestKey && latestKey !== cacheKey) {
+            return Promise.resolve(false);
+        }
+
+        this.setLatestProcessedImageKey(layer.id, cacheKey);
+
         if (this.processedImageCache.has(cacheKey)) {
             return Promise.resolve(true);
         }
@@ -1079,6 +1119,13 @@ export class CanvasLayers {
                 log.info(`Creating ${operationName} for layer ${layer.id}`);
                 const processedImage = await this.createProcessedImage(layer);
                 if (!processedImage) return false;
+
+                // The layer may have changed while the async bitmap was
+                // being created. Do not retain or display a stale result.
+                if (!this.isLatestProcessedImageKey(layer.id, cacheKey)) {
+                    this.releaseProcessedImage(processedImage);
+                    return false;
+                }
 
                 this.setProcessedImageCache(cacheKey, processedImage);
                 log.debug(`Cached ${operationName} for layer ${layer.id}`);
@@ -1135,6 +1182,8 @@ export class CanvasLayers {
      * Invalidate processed image cache for a specific layer
      */
     public invalidateProcessedImageCache(layerId: string): void {
+        this.latestProcessedImageKeys.delete(layerId);
+
         const keysToDelete: string[] = [];
         for (const key of this.processedImageCache.keys()) {
             if (key.startsWith(`${layerId}_`)) {
@@ -1168,6 +1217,8 @@ export class CanvasLayers {
      * Clear all processed image cache
      */
     public clearProcessedImageCache(): void {
+        this.latestProcessedImageKeys.clear();
+
         for (const image of this.processedImageCache.values()) {
             this.releaseProcessedImage(image);
         }
