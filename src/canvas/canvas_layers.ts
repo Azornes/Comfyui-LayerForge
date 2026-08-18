@@ -876,6 +876,11 @@ export class CanvasLayers {
         return `${layer.id}_${blendArea}_${cropKey}_${layer.width}_${layer.height}`;
     }
 
+    private isUserInteractionActive(): boolean {
+        const mode = this.canvas.canvasInteractions?.interaction?.mode;
+        return mode !== undefined && mode !== 'none';
+    }
+
     /**
      * Get processed image with all effects applied (blend area, crop, etc.)
      * Uses live rendering for layers being actively adjusted, debounced processing for others
@@ -946,6 +951,15 @@ export class CanvasLayers {
         // Schedule new timer
         const timer = window.setTimeout(() => {
             this.processedImageBuildTimers.delete(cacheKey);
+
+            // Distance-field generation is synchronous and can block for a
+            // large image. Never start it while pointer/key interaction is in
+            // progress; retry after the interaction has been idle.
+            if (this.isUserInteractionActive()) {
+                this.scheduleProcessedImageCreation(layer, cacheKey);
+                return;
+            }
+
             void this.buildProcessedImage(layer, cacheKey, 'debounced processed image');
         }, this.PROCESSED_IMAGE_DEBOUNCE_DELAY);
 
