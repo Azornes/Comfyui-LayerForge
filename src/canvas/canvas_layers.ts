@@ -69,6 +69,8 @@ export class CanvasLayers {
     
     // Debouncing system for processed image creation
     private processedImageDebounceTimers: Map<string, number> = new Map();
+    private processedImageBuildTimers: Map<string, number> = new Map();
+    private processedImageBuilds: Map<string, Promise<boolean>> = new Map();
     private readonly PROCESSED_IMAGE_DEBOUNCE_DELAY = 1000; // 1 second
     private globalDebounceTimer: number | null = null;
     private lastRenderTime: number = 0;
@@ -83,6 +85,8 @@ export class CanvasLayers {
         this.distanceFieldCache = new WeakMap();
         this.processedImageCache = new Map();
         this.processedImageDebounceTimers = new Map();
+        this.processedImageBuildTimers = new Map();
+        this.processedImageBuilds = new Map();
         this.blendModes = [
             { name: 'normal', label: 'Normal' },
             {name: 'multiply', label: 'Multiply'},
@@ -892,34 +896,21 @@ export class CanvasLayers {
      * Schedule processed image creation after debounce delay
      */
     private scheduleProcessedImageCreation(layer: Layer, cacheKey: string): void {
-        // Clear existing timer for this layer
-        const existingTimer = this.processedImageDebounceTimers.get(layer.id);
-        if (existingTimer) {
-            clearTimeout(existingTimer);
+        // A render can request the same missing cache many times. Keep one
+        // timer/build per cache key instead of resetting the delay each frame.
+        if (this.processedImageCache.has(cacheKey) ||
+            this.processedImageBuildTimers.has(cacheKey) ||
+            this.processedImageBuilds.has(cacheKey)) {
+            return;
         }
 
         // Schedule new timer
         const timer = window.setTimeout(() => {
-            void (async () => {
-                log.info(`Creating debounced processed image for layer ${layer.id}`);
-                try {
-                    const processedImage = await this.createProcessedImage(layer);
-                    if (processedImage) {
-                        this.setProcessedImageCache(cacheKey, processedImage);
-                        log.debug(`Cached debounced processed image for layer ${layer.id}`);
-                        // Trigger re-render to show the processed image
-                        this.canvas.render();
-                    }
-                } catch (error) {
-                    log.error('Failed to create debounced processed image:', error);
-                }
-
-                // Clean up timer
-                this.processedImageDebounceTimers.delete(layer.id);
-            })();
+            this.processedImageBuildTimers.delete(cacheKey);
+            void this.buildProcessedImage(layer, cacheKey, 'debounced processed image');
         }, this.PROCESSED_IMAGE_DEBOUNCE_DELAY);
 
-        this.processedImageDebounceTimers.set(layer.id, timer);
+        this.processedImageBuildTimers.set(cacheKey, timer);
     }
 
     /**
@@ -955,32 +946,21 @@ export class CanvasLayers {
      * Process all pending images immediately when user stops interacting
      */
     private async processPendingImages(): Promise<void> {
-        // Clear all pending timers and process immediately
-        for (const [layerId, timer] of this.processedImageDebounceTimers.entries()) {
+        // Clear all pending processed-image timers and process them immediately.
+        const pendingKeys = [...this.processedImageBuildTimers.keys()];
+        for (const cacheKey of pendingKeys) {
+            const timer = this.processedImageBuildTimers.get(cacheKey);
+            if (timer === undefined) continue;
             clearTimeout(timer);
-            
-            // Find the layer and process it
-            const layer = this.canvas.layers.find(l => l.id === layerId);
+
+            this.processedImageBuildTimers.delete(cacheKey);
+            const layer = this.canvas.layers.find(l => this.getProcessedImageCacheKey(l) === cacheKey);
             if (layer) {
-                const cacheKey = this.getProcessedImageCacheKey(layer);
-                if (!this.processedImageCache.has(cacheKey)) {
-                    try {
-                        const processedImage = await this.createProcessedImage(layer);
-                        if (processedImage) {
-                            this.setProcessedImageCache(cacheKey, processedImage);
-                            log.debug(`Processed pending image for layer ${layer.id}`);
-                        }
-                    } catch (error) {
-                        log.error(`Failed to process pending image for layer ${layer.id}:`, error);
-                    }
-                }
+                await this.buildProcessedImage(layer, cacheKey, 'pending processed image');
             }
         }
-        
-        this.processedImageDebounceTimers.clear();
-        
-        // Trigger re-render to show all processed images
-        if (this.processedImageDebounceTimers.size > 0) {
+
+        if (pendingKeys.length > 0) {
             this.canvas.render();
         }
     }
@@ -1020,6 +1000,48 @@ export class CanvasLayers {
         processedImage.crossOrigin = 'anonymous';
         processedImage.src = processedCanvas.toDataURL();
         return processedImage;
+    }
+
+    private buildProcessedImage(layer: Layer, cacheKey: string, operationName: string): Promise<boolean> {
+        if (this.processedImageCache.has(cacheKey)) {
+            return Promise.resolve(true);
+        }
+
+        const existingBuild = this.processedImageBuilds.get(cacheKey);
+        if (existingBuild) {
+            return existingBuild;
+        }
+
+        const build = (async (): Promise<boolean> => {
+            try {
+                log.info(`Creating ${operationName} for layer ${layer.id}`);
+                const processedImage = await this.createProcessedImage(layer);
+                if (!processedImage) return false;
+
+                this.setProcessedImageCache(cacheKey, processedImage);
+                log.debug(`Cached ${operationName} for layer ${layer.id}`);
+                this.canvas.render();
+                return true;
+            } catch (error) {
+                log.error(`Failed to create ${operationName}:`, error);
+                return false;
+            }
+        })();
+
+        this.processedImageBuilds.set(cacheKey, build);
+        void build.then(
+            () => {
+                if (this.processedImageBuilds.get(cacheKey) === build) {
+                    this.processedImageBuilds.delete(cacheKey);
+                }
+            },
+            () => {
+                if (this.processedImageBuilds.get(cacheKey) === build) {
+                    this.processedImageBuilds.delete(cacheKey);
+                }
+            }
+        );
+        return build;
     }
 
     /**
@@ -1063,12 +1085,20 @@ export class CanvasLayers {
             log.debug(`Invalidated processed image cache for key: ${key}`);
         });
 
-        // Also clear any pending timers for this layer
-        const existingTimer = this.processedImageDebounceTimers.get(layerId);
-        if (existingTimer) {
-            clearTimeout(existingTimer);
-            this.processedImageDebounceTimers.delete(layerId);
-            log.debug(`Cleared pending timer for layer ${layerId}`);
+        // Also clear pending processed-image and transform timers for this layer.
+        for (const [cacheKey, timer] of this.processedImageBuildTimers.entries()) {
+            if (cacheKey.startsWith(`${layerId}_`)) {
+                clearTimeout(timer);
+                this.processedImageBuildTimers.delete(cacheKey);
+                log.debug(`Cleared pending processed-image timer for layer ${layerId}`);
+            }
+        }
+        for (const [timerKey, timer] of this.processedImageDebounceTimers.entries()) {
+            if (timerKey === layerId || timerKey.startsWith(`${layerId}_`)) {
+                clearTimeout(timer);
+                this.processedImageDebounceTimers.delete(timerKey);
+                log.debug(`Cleared pending transform timer for layer ${layerId}`);
+            }
         }
     }
 
@@ -1080,6 +1110,11 @@ export class CanvasLayers {
             this.releaseProcessedImage(image);
         }
         this.processedImageCache.clear();
+
+        for (const timer of this.processedImageBuildTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.processedImageBuildTimers.clear();
         
         // Clear all pending timers
         for (const timer of this.processedImageDebounceTimers.values()) {
@@ -1125,21 +1160,10 @@ export class CanvasLayers {
         
         // Create processed image asynchronously with optional delay
         const executeTransform = async () => {
-            try {
-                const processedImage = await this.createProcessedImage(layer);
-                if (processedImage) {
-                    this.setProcessedImageCache(cacheKey, processedImage);
-                    log.debug(`Cached processed image for layer ${layerId} after ${transformName} transform`);
-                    
-                    // Only now remove from live rendering set and trigger re-render
-                    transformingSet.delete(layerId);
-                    this.canvas.render();
-                }
-            } catch (error) {
-                log.error(`Failed to create processed image after ${transformName} transform:`, error);
-                // Fallback: remove from live rendering even if cache creation failed
-                transformingSet.delete(layerId);
-            }
+            const built = await this.buildProcessedImage(layer, cacheKey, `${transformName} transform`);
+            // Fallback: remove from live rendering even if cache creation failed.
+            transformingSet.delete(layerId);
+            if (!built) this.canvas.render();
         };
         
         if (delay > 0) {
@@ -1623,26 +1647,14 @@ export class CanvasLayers {
                 const layerId = selectedLayer.id;
                 const cacheKey = this.getProcessedImageCacheKey(selectedLayer);
                 
-                // Create processed image asynchronously
-                setTimeout(() => {
-                    void (async () => {
-                        try {
-                            const processedImage = await this.createProcessedImage(selectedLayer);
-                            if (processedImage) {
-                                this.setProcessedImageCache(cacheKey, processedImage);
-                                log.debug(`Cached processed image for layer ${layerId} after slider change`);
-
-                                // Only now remove from live rendering set and trigger re-render
-                                this.layersAdjustingBlendArea.delete(layerId);
-                                this.canvas.render();
-                            }
-                        } catch (error) {
-                            log.error('Failed to create processed image after slider change:', error);
-                            // Fallback: remove from live rendering set even if cache creation failed
-                            this.layersAdjustingBlendArea.delete(layerId);
-                        }
-                    })();
-                }, 0); // Use setTimeout to make it asynchronous
+                // Create the processed image asynchronously and deduplicate it
+                // with any request made by the render loop.
+                void this.buildProcessedImage(selectedLayer, cacheKey, 'slider processed image')
+                    .then((built) => {
+                        this.layersAdjustingBlendArea.delete(layerId);
+                        // A successful build already rendered the new cache.
+                        if (!built) this.canvas.render();
+                    });
             }
             this.canvas.saveState();
         });
