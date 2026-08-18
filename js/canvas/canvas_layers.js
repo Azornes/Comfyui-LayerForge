@@ -788,6 +788,24 @@ export class CanvasLayers {
         });
         return surface.canvas;
     }
+    prepareDragLayerPreviews(layers) {
+        const previewOptions = {
+            viewport: this.canvas.viewport,
+            width: Math.max(1, this.canvas.offscreenCanvas.width || this.canvas.canvas.clientWidth || 1),
+            height: Math.max(1, this.canvas.offscreenCanvas.height || this.canvas.canvas.clientHeight || 1)
+        };
+        for (const layer of layers) {
+            if (!layer.image)
+                continue;
+            const processedImage = this.getProcessedImage(layer, {
+                cacheOnly: true,
+                allowStaleCacheWhileDragging: true
+            });
+            if (processedImage) {
+                this.getOrCreateDragLayerPreview(layer, processedImage, previewOptions);
+            }
+        }
+    }
     isUserInteractionActive() {
         const mode = this.canvas.canvasInteractions?.interaction?.mode;
         return mode !== undefined && mode !== 'none';

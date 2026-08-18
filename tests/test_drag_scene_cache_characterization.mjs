@@ -10,6 +10,10 @@ const canvasRendererSource = await readFile(
   new URL('../js/canvas/canvas_renderer.js', import.meta.url),
   'utf8'
 );
+const canvasInteractionsSource = await readFile(
+  new URL('../js/canvas/canvas_interactions.js', import.meta.url),
+  'utf8'
+);
 
 function extractMethod(methodName) {
   const start = canvasLayersSource.indexOf(`    ${methodName}(`);
@@ -97,6 +101,8 @@ test('drag scene cache groups source-over layers and replays non-normal modes', 
   assert.match(canvasRendererSource, /getDragDirtyRect/);
   assert.match(canvasRendererSource, /ctx\.clip\(\)/);
   assert.match(canvasLayersSource, /getOrCreateDragLayerPreview/);
+  assert.match(canvasLayersSource, /prepareDragLayerPreviews/);
   assert.match(canvasLayersSource, /dragPreview: \{ viewport, width, height \}/);
   assert.match(canvasLayersSource, /ctx\.drawImage\(preview, -layer\.width \/ 2/);
+  assert.match(canvasInteractionsSource, /prepareDragLayerPreviews\(this\.canvas\.canvasSelection\.selectedLayers\)/);
 });

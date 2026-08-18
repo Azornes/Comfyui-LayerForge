@@ -454,6 +454,7 @@ export class CanvasInteractions {
         const grabIconLayer = this.getGrabIconAtPosition(coords.world.x, coords.world.y);
         if (grabIconLayer) {
             // Start dragging the selected layer(s) without changing selection
+            this.canvas.canvasLayers.prepareDragLayerPreviews(this.canvas.canvasSelection.selectedLayers);
             this.interaction.mode = 'potential-drag';
             this.interaction.dragStart = { ...coords.world };
             return;
@@ -1006,6 +1007,7 @@ export class CanvasInteractions {
             }
         }
 
+        this.canvas.canvasLayers.prepareDragLayerPreviews(this.canvas.canvasSelection.selectedLayers);
         this.interaction.mode = 'potential-drag';
         this.interaction.dragStart = { ...worldCoords };
     }
