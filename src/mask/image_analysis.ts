@@ -5,41 +5,34 @@ import { withErrorHandling, createValidationError } from "../shared/error_handle
 
 const log = createModuleLogger('ImageAnalysis');
 
-/**
- * Creates a distance field mask based on the alpha channel of an image.
- * The mask will have gradients from the edges of visible pixels inward.
- * @param image - The source image to analyze
- * @param blendArea - The percentage (0-100) of the area to apply blending
- * @returns HTMLCanvasElement containing the distance field mask
- */
-/**
- * Synchronous version of createDistanceFieldMask for use in synchronous rendering
- */
-export function createDistanceFieldMaskSync(image: HTMLImageElement, blendArea: number): HTMLCanvasElement {
+export interface DistanceFieldData {
+    width: number;
+    height: number;
+    distanceField: Float32Array;
+    binaryMask: Uint8Array | null;
+    maxDistance: number;
+    maskCanvas: HTMLCanvasElement;
+}
+
+export function createDistanceFieldDataSync(image: HTMLImageElement | HTMLCanvasElement): DistanceFieldData | null {
     if (!image) {
-        log.error("Image is required for distance field mask");
-        return createCanvas(1, 1).canvas;
-    }
-    if (typeof blendArea !== 'number' || blendArea < 0 || blendArea > 100) {
-        log.error("Blend area must be a number between 0 and 100");
-        return createCanvas(1, 1).canvas;
-    }
-    
-    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
-    
-    if (!ctx) {
-        log.error('Failed to create canvas context for distance field mask');
-        return canvas;
+        log.error("Image is required for distance field data");
+        return null;
     }
 
-    // Draw the image to extract pixel data
+    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
+    if (!ctx) {
+        log.error('Failed to create canvas context for distance field data');
+        return null;
+    }
+
+    // Draw the source once. Pixel geometry does not depend on blendArea.
     ctx.drawImage(image, 0, 0);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     const width = canvas.width;
     const height = canvas.height;
 
-    // Check if image has transparency (any alpha < 255)
     let hasTransparency = false;
     for (let i = 0; i < width * height; i++) {
         if (data[i * 4 + 3] < 255) {
@@ -50,44 +43,81 @@ export function createDistanceFieldMaskSync(image: HTMLImageElement, blendArea: 
 
     let distanceField: Float32Array;
     let binaryMask: Uint8Array | null = null;
-    let maxDistance: number;
 
     if (hasTransparency) {
-        // For images with transparency, use alpha-based distance transform
         binaryMask = new Uint8Array(width * height);
         for (let i = 0; i < width * height; i++) {
             binaryMask[i] = data[i * 4 + 3] > 0 ? 1 : 0;
         }
         distanceField = calculateDistanceTransform(binaryMask, width, height);
     } else {
-        // For opaque images, calculate distance from edges of the rectangle
         distanceField = calculateDistanceFromEdges(width, height);
     }
 
-    // Find the maximum distance to normalize
-    maxDistance = 0;
+    let maxDistance = 0;
     for (let i = 0; i < distanceField.length; i++) {
         if (distanceField[i] > maxDistance) {
             maxDistance = distanceField[i];
         }
     }
 
-    // Create the gradient mask based on blendArea
+    return {
+        width,
+        height,
+        distanceField,
+        binaryMask,
+        maxDistance,
+        // Reuse this backing canvas when only blendArea changes.
+        maskCanvas: canvas
+    };
+}
+
+export function rasterizeDistanceFieldMaskSync(data: DistanceFieldData, blendArea: number): HTMLCanvasElement {
+    const { maskCanvas, width, height, distanceField, binaryMask, maxDistance } = data;
+    const ctx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+        log.error('Failed to create canvas context for distance field mask');
+        return maskCanvas;
+    }
+
     const maskData = ctx.createImageData(width, height);
     const threshold = maxDistance * (blendArea / 100);
     rasterizeDistanceFieldMask(distanceField, binaryMask, threshold, maskData.data);
 
-    // Clear canvas and put the mask data
     ctx.clearRect(0, 0, width, height);
     ctx.putImageData(maskData, 0, 0);
+    return maskCanvas;
+}
 
-    return canvas;
+/**
+ * Creates a distance field mask based on the alpha channel of an image.
+ * The mask will have gradients from the edges of visible pixels inward.
+ * @param image - The source image to analyze
+ * @param blendArea - The percentage (0-100) of the area to apply blending
+ * @returns HTMLCanvasElement containing the distance field mask
+ */
+/**
+ * Synchronous version of createDistanceFieldMask for use in synchronous rendering
+ */
+export function createDistanceFieldMaskSync(image: HTMLImageElement | HTMLCanvasElement, blendArea: number): HTMLCanvasElement {
+    if (!image) {
+        log.error("Image is required for distance field mask");
+        return createCanvas(1, 1).canvas;
+    }
+    if (typeof blendArea !== 'number' || blendArea < 0 || blendArea > 100) {
+        log.error("Blend area must be a number between 0 and 100");
+        return createCanvas(1, 1).canvas;
+    }
+
+    const data = createDistanceFieldDataSync(image);
+    if (!data) return createCanvas(image.width, image.height).canvas;
+    return rasterizeDistanceFieldMaskSync(data, blendArea);
 }
 
 /**
  * Async version with error handling for use in async contexts
  */
-export const createDistanceFieldMask = withErrorHandling(function(image: HTMLImageElement, blendArea: number): HTMLCanvasElement {
+export const createDistanceFieldMask = withErrorHandling(function(image: HTMLImageElement | HTMLCanvasElement, blendArea: number): HTMLCanvasElement {
     return createDistanceFieldMaskSync(image, blendArea);
 }, 'createDistanceFieldMask');
 

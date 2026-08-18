@@ -7,7 +7,7 @@ const canvasLayersSource = await readFile(
   'utf8'
 );
 
-function createDistanceFieldMethods(createMask) {
+function createDistanceFieldMethods(createData, rasterizeMask) {
   const helperStart = canvasLayersSource.indexOf('    getOrCreateDistanceFieldMask(');
   const methodStart = canvasLayersSource.indexOf('    getDistanceFieldMaskSync(');
   const methodEnd = canvasLayersSource.indexOf('\n    _drawLayers', methodStart);
@@ -18,28 +18,41 @@ function createDistanceFieldMethods(createMask) {
   const helperSource = canvasLayersSource.slice(helperStart, methodStart).trim();
   const methodSource = canvasLayersSource.slice(methodStart, methodEnd).trim();
   return new Function(
-    'createDistanceFieldMaskSync',
+    'createDistanceFieldDataSync',
+    'rasterizeDistanceFieldMaskSync',
     'log',
     `return {
       getOrCreateDistanceFieldMask: ({ ${helperSource} }).getOrCreateDistanceFieldMask,
       getDistanceFieldMaskSync: ({ ${methodSource} }).getDistanceFieldMaskSync,
     };`,
-  )(createMask, { info() {}, error() {} });
+  )(createData, rasterizeMask, { info() {}, error() {} });
 }
 
-test('distance-field cache preserves image/canvas ownership and blend-area keys', () => {
+test('distance-field cache reuses geometry and one mask canvas per source', () => {
   const originalCanvasElement = globalThis.HTMLCanvasElement;
   class CanvasStub {}
   globalThis.HTMLCanvasElement = CanvasStub;
 
   const calls = [];
-  const createMask = (source, blendArea) => {
-    calls.push({ source, blendArea });
-    return { source, blendArea, width: 8, height: 6 };
+  const createData = (source) => {
+    const maskCanvas = { source };
+    calls.push({ type: 'data', source });
+    return {
+      width: 8,
+      height: 6,
+      distanceField: new Float32Array(48),
+      binaryMask: null,
+      maxDistance: 10,
+      maskCanvas,
+    };
   };
-  const methods = createDistanceFieldMethods(createMask);
+  const rasterizeMask = (data, blendArea) => {
+    calls.push({ type: 'mask', source: data.maskCanvas.source, blendArea });
+    return data.maskCanvas;
+  };
+  const methods = createDistanceFieldMethods(createData, rasterizeMask);
   const context = {
-    _canvasMaskCache: new Map(),
+    _canvasMaskCache: new WeakMap(),
     distanceFieldCache: new WeakMap(),
     getOrCreateDistanceFieldMask: methods.getOrCreateDistanceFieldMask,
   };
@@ -49,15 +62,17 @@ test('distance-field cache preserves image/canvas ownership and blend-area keys'
   try {
     const imageMask = methods.getDistanceFieldMaskSync.call(context, image, 25);
     assert.equal(methods.getDistanceFieldMaskSync.call(context, image, 25), imageMask);
-    assert.equal(methods.getDistanceFieldMaskSync.call(context, image, 50).blendArea, 50);
+    assert.equal(methods.getDistanceFieldMaskSync.call(context, image, 50), imageMask);
 
     const canvasMask = methods.getDistanceFieldMaskSync.call(context, canvas, 25);
     assert.equal(methods.getDistanceFieldMaskSync.call(context, canvas, 25), canvasMask);
-    assert.equal(calls.length, 3);
-    assert.deepEqual(calls.map(({ source, blendArea }) => [source, blendArea]), [
-      [image, 25],
-      [image, 50],
-      [canvas, 25],
+    assert.equal(calls.length, 5);
+    assert.deepEqual(calls.map(({ type, source, blendArea }) => [type, source, blendArea]), [
+      ['data', image, undefined],
+      ['mask', image, 25],
+      ['mask', image, 50],
+      ['data', canvas, undefined],
+      ['mask', canvas, 25],
     ]);
   } finally {
     if (originalCanvasElement === undefined) {
@@ -68,7 +83,7 @@ test('distance-field cache preserves image/canvas ownership and blend-area keys'
   }
 });
 
-test('distance-field cache does not retain failed mask creation', () => {
+test('distance-field cache does not retain failed geometry creation', () => {
   const originalCanvasElement = globalThis.HTMLCanvasElement;
   class CanvasStub {}
   globalThis.HTMLCanvasElement = CanvasStub;
@@ -77,9 +92,11 @@ test('distance-field cache does not retain failed mask creation', () => {
   const methods = createDistanceFieldMethods(() => {
     attempts += 1;
     throw new Error('distance-field creation failed');
+  }, () => {
+    throw new Error('mask rasterization should not run');
   });
   const context = {
-    _canvasMaskCache: new Map(),
+    _canvasMaskCache: new WeakMap(),
     distanceFieldCache: new WeakMap(),
     getOrCreateDistanceFieldMask: methods.getOrCreateDistanceFieldMask,
   };
