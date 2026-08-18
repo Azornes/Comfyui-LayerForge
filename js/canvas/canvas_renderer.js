@@ -97,20 +97,14 @@ export class CanvasRenderer {
             height: Math.max(0, bottom - top)
         };
     }
-    getDragDirtyRect(currentBounds, width, height) {
+    getDragDirtyRects(currentBounds, width, height) {
         const previousBounds = this.dragRenderState?.bounds;
         if (!previousBounds)
-            return { x: 0, y: 0, width, height };
-        const left = Math.max(0, Math.floor(Math.min(previousBounds.x, currentBounds.x)));
-        const top = Math.max(0, Math.floor(Math.min(previousBounds.y, currentBounds.y)));
-        const right = Math.min(width, Math.ceil(Math.max(previousBounds.x + previousBounds.width, currentBounds.x + currentBounds.width)));
-        const bottom = Math.min(height, Math.ceil(Math.max(previousBounds.y + previousBounds.height, currentBounds.y + currentBounds.height)));
-        return {
-            x: left,
-            y: top,
-            width: Math.max(0, right - left),
-            height: Math.max(0, bottom - top)
-        };
+            return [{ x: 0, y: 0, width, height }];
+        // Keep the old and new areas separate. A single bounding rectangle
+        // would redraw the whole strip between them when the pointer jumps
+        // across multiple frames.
+        return [previousBounds, currentBounds];
     }
     /**
      * Helper function to draw text with background at world coordinates
@@ -210,9 +204,9 @@ export class CanvasRenderer {
             this.dragRenderState.viewport.x === this.canvas.viewport.x &&
             this.dragRenderState.viewport.y === this.canvas.viewport.y &&
             this.dragRenderState.viewport.zoom === this.canvas.viewport.zoom);
-        const dirtyRect = canReuseDragFrame && currentDragBounds
-            ? this.getDragDirtyRect(currentDragBounds, canvasWidth, canvasHeight)
-            : { x: 0, y: 0, width: canvasWidth, height: canvasHeight };
+        const dirtyRects = canReuseDragFrame && currentDragBounds
+            ? this.getDragDirtyRects(currentDragBounds, canvasWidth, canvasHeight)
+            : [{ x: 0, y: 0, width: canvasWidth, height: canvasHeight }];
         // Keep the canvas readable while allowing the node's native color to
         // tint the editor underneath it. Clear first so alpha does not build
         // up on every render frame.
@@ -222,14 +216,16 @@ export class CanvasRenderer {
         if (canReuseDragFrame) {
             // Preserve unchanged pixels from the previous drag frame. Every
             // layer, mask, grid line, and interaction overlay is redrawn only
-            // inside the union of the old and new selection bounds below.
+            // inside the old and new selection bounds below.
             ctx.save();
             ctx.beginPath();
-            ctx.rect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+            dirtyRects.forEach(rect => {
+                ctx.rect(rect.x, rect.y, rect.width, rect.height);
+            });
             ctx.clip();
-            ctx.clearRect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
-            ctx.fillRect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         }
         else {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
