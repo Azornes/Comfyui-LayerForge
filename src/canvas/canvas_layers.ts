@@ -74,6 +74,18 @@ interface DragSceneCache {
     parts: DragScenePart[];
 }
 
+interface DragLayerPreview {
+    source: CanvasImageSource;
+    cacheKey: string;
+    canvas: HTMLCanvasElement;
+}
+
+interface DragPreviewOptions {
+    viewport: { x: number; y: number; zoom: number };
+    width: number;
+    height: number;
+}
+
 export class CanvasLayers {
     private canvas: Canvas;
     private _canvasMaskCache: WeakMap<HTMLCanvasElement, DistanceFieldCacheEntry> = new WeakMap();
@@ -113,6 +125,7 @@ export class CanvasLayers {
     private renderOrderSourceEntries: Layer[] = [];
     private renderOrderSignature = '';
     private dragSceneCache: DragSceneCache | null = null;
+    private dragLayerPreviews: Map<string, DragLayerPreview> = new Map();
     
     // Debouncing system for processed image creation
     private processedImageDebounceTimers: Map<string, number> = new Map();
@@ -138,6 +151,7 @@ export class CanvasLayers {
         this.processedImageBuildTimers = new Map();
         this.processedImageBuilds = new Map();
         this.latestProcessedImageKeys = new Map();
+        this.dragLayerPreviews = new Map();
         this.blendModes = [
             { name: 'normal', label: 'Normal' },
             {name: 'multiply', label: 'Multiply'},
@@ -937,6 +951,54 @@ export class CanvasLayers {
         return `${layer.id}_${blendArea}_${this.getProcessedImageGeometryKey(layer)}`;
     }
 
+    private clearDragLayerPreviews(): void {
+        for (const preview of this.dragLayerPreviews.values()) {
+            preview.canvas.width = 0;
+            preview.canvas.height = 0;
+        }
+        this.dragLayerPreviews.clear();
+    }
+
+    private getOrCreateDragLayerPreview(
+        layer: Layer,
+        source: CanvasImageSource,
+        options: DragPreviewOptions
+    ): HTMLCanvasElement | null {
+        const displayWidth = Math.max(1, Math.ceil(Math.abs(layer.width * options.viewport.zoom)));
+        const displayHeight = Math.max(1, Math.ceil(Math.abs(layer.height * options.viewport.zoom)));
+        const maxPreviewDimension = Math.max(1024, Math.max(options.width, options.height) * 2);
+        const previewScale = Math.min(
+            1,
+            maxPreviewDimension / displayWidth,
+            maxPreviewDimension / displayHeight
+        );
+        const previewWidth = Math.max(1, Math.ceil(displayWidth * previewScale));
+        const previewHeight = Math.max(1, Math.ceil(displayHeight * previewScale));
+        const cacheKey = `${this.getProcessedImageCacheKey(layer)}|${previewWidth}x${previewHeight}`;
+        const existing = this.dragLayerPreviews.get(layer.id);
+        if (existing && existing.source === source && existing.cacheKey === cacheKey) {
+            return existing.canvas;
+        }
+
+        const surface = createCanvas(previewWidth, previewHeight);
+        if (!surface.ctx) return null;
+
+        surface.ctx.imageSmoothingEnabled = true;
+        surface.ctx.imageSmoothingQuality = 'high';
+        surface.ctx.drawImage(source, 0, 0, previewWidth, previewHeight);
+
+        if (existing) {
+            existing.canvas.width = 0;
+            existing.canvas.height = 0;
+        }
+        this.dragLayerPreviews.set(layer.id, {
+            source,
+            cacheKey,
+            canvas: surface.canvas
+        });
+        return surface.canvas;
+    }
+
     private isUserInteractionActive(): boolean {
         const mode = this.canvas.canvasInteractions?.interaction?.mode;
         return mode !== undefined && mode !== 'none';
@@ -1344,6 +1406,7 @@ export class CanvasLayers {
      */
     public clearProcessedImageCache(): void {
         this.latestProcessedImageKeys.clear();
+        this.clearDragLayerPreviews();
 
         const images = new Set<CanvasImageSource>([
             ...this.processedImageCache.values(),
@@ -1609,6 +1672,48 @@ export class CanvasLayers {
         ctx.restore();
     }
 
+    private _drawLayerDuringDrag(
+        ctx: CanvasRenderingContext2D,
+        layer: Layer,
+        previewOptions: DragPreviewOptions
+    ): void {
+        if (!layer.image) return;
+
+        const processedImage = this.getProcessedImage(layer, {
+            cacheOnly: true,
+            allowStaleCacheWhileDragging: true
+        });
+        if (!processedImage) {
+            this._drawLayer(ctx, layer);
+            return;
+        }
+
+        const preview = this.getOrCreateDragLayerPreview(layer, processedImage, previewOptions);
+        if (!preview) {
+            this._drawLayer(ctx, layer);
+            return;
+        }
+
+        ctx.save();
+
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+
+        if (layer.flipH || layer.flipV) {
+            ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        ctx.drawImage(preview, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+
+        ctx.restore();
+    }
+
     private createDragStaticCanvas(
         segment: DragSceneStaticSegment,
         viewport: { x: number; y: number; zoom: number },
@@ -1800,16 +1905,26 @@ export class CanvasLayers {
                 this.drawDragStaticSegment(ctx, segment);
             }
             if (part.dynamicLayers.length > 0) {
-                this._drawLayers(ctx, part.dynamicLayers);
+                this._drawLayers(ctx, part.dynamicLayers, {
+                    dragPreview: { viewport, width, height }
+                });
             }
         }
     }
 
-    private _drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
+    private _drawLayers(
+        ctx: CanvasRenderingContext2D,
+        layers: Layer[],
+        options: { offsetX?: number, offsetY?: number, dragPreview?: DragPreviewOptions } = {}
+    ): void {
         const sortedLayers = this.getRenderOrder(layers);
         sortedLayers.forEach(layer => {
             if (layer.visible) {
-                this._drawLayer(ctx, layer, options);
+                if (options.dragPreview) {
+                    this._drawLayerDuringDrag(ctx, layer, options.dragPreview);
+                } else {
+                    this._drawLayer(ctx, layer, options);
+                }
             }
         });
     }

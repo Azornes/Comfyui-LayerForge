@@ -96,4 +96,7 @@ test('drag scene cache groups source-over layers and replays non-normal modes', 
   assert.match(canvasRendererSource, /canReuseDragFrame/);
   assert.match(canvasRendererSource, /getDragDirtyRect/);
   assert.match(canvasRendererSource, /ctx\.clip\(\)/);
+  assert.match(canvasLayersSource, /getOrCreateDragLayerPreview/);
+  assert.match(canvasLayersSource, /dragPreview: \{ viewport, width, height \}/);
+  assert.match(canvasLayersSource, /ctx\.drawImage\(preview, -layer\.width \/ 2/);
 });

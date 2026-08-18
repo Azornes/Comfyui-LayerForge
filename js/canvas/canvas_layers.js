@@ -41,6 +41,7 @@ export class CanvasLayers {
         this.renderOrderSourceEntries = [];
         this.renderOrderSignature = '';
         this.dragSceneCache = null;
+        this.dragLayerPreviews = new Map();
         // Debouncing system for processed image creation
         this.processedImageDebounceTimers = new Map();
         this.processedImageBuildTimers = new Map();
@@ -148,6 +149,7 @@ export class CanvasLayers {
         this.processedImageBuildTimers = new Map();
         this.processedImageBuilds = new Map();
         this.latestProcessedImageKeys = new Map();
+        this.dragLayerPreviews = new Map();
         this.blendModes = [
             { name: 'normal', label: 'Normal' },
             { name: 'multiply', label: 'Multiply' },
@@ -750,6 +752,42 @@ export class CanvasLayers {
         const blendArea = layer.blendArea ?? 0;
         return `${layer.id}_${blendArea}_${this.getProcessedImageGeometryKey(layer)}`;
     }
+    clearDragLayerPreviews() {
+        for (const preview of this.dragLayerPreviews.values()) {
+            preview.canvas.width = 0;
+            preview.canvas.height = 0;
+        }
+        this.dragLayerPreviews.clear();
+    }
+    getOrCreateDragLayerPreview(layer, source, options) {
+        const displayWidth = Math.max(1, Math.ceil(Math.abs(layer.width * options.viewport.zoom)));
+        const displayHeight = Math.max(1, Math.ceil(Math.abs(layer.height * options.viewport.zoom)));
+        const maxPreviewDimension = Math.max(1024, Math.max(options.width, options.height) * 2);
+        const previewScale = Math.min(1, maxPreviewDimension / displayWidth, maxPreviewDimension / displayHeight);
+        const previewWidth = Math.max(1, Math.ceil(displayWidth * previewScale));
+        const previewHeight = Math.max(1, Math.ceil(displayHeight * previewScale));
+        const cacheKey = `${this.getProcessedImageCacheKey(layer)}|${previewWidth}x${previewHeight}`;
+        const existing = this.dragLayerPreviews.get(layer.id);
+        if (existing && existing.source === source && existing.cacheKey === cacheKey) {
+            return existing.canvas;
+        }
+        const surface = createCanvas(previewWidth, previewHeight);
+        if (!surface.ctx)
+            return null;
+        surface.ctx.imageSmoothingEnabled = true;
+        surface.ctx.imageSmoothingQuality = 'high';
+        surface.ctx.drawImage(source, 0, 0, previewWidth, previewHeight);
+        if (existing) {
+            existing.canvas.width = 0;
+            existing.canvas.height = 0;
+        }
+        this.dragLayerPreviews.set(layer.id, {
+            source,
+            cacheKey,
+            canvas: surface.canvas
+        });
+        return surface.canvas;
+    }
     isUserInteractionActive() {
         const mode = this.canvas.canvasInteractions?.interaction?.mode;
         return mode !== undefined && mode !== 'none';
@@ -1103,6 +1141,7 @@ export class CanvasLayers {
      */
     clearProcessedImageCache() {
         this.latestProcessedImageKeys.clear();
+        this.clearDragLayerPreviews();
         const images = new Set([
             ...this.processedImageCache.values(),
             ...Array.from(this.lastProcessedImageFallbacks.values(), fallback => fallback.image)
@@ -1335,6 +1374,37 @@ export class CanvasLayers {
         }
         ctx.restore();
     }
+    _drawLayerDuringDrag(ctx, layer, previewOptions) {
+        if (!layer.image)
+            return;
+        const processedImage = this.getProcessedImage(layer, {
+            cacheOnly: true,
+            allowStaleCacheWhileDragging: true
+        });
+        if (!processedImage) {
+            this._drawLayer(ctx, layer);
+            return;
+        }
+        const preview = this.getOrCreateDragLayerPreview(layer, processedImage, previewOptions);
+        if (!preview) {
+            this._drawLayer(ctx, layer);
+            return;
+        }
+        ctx.save();
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+        if (layer.flipH || layer.flipV) {
+            ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.globalCompositeOperation = layer.blendMode || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        ctx.drawImage(preview, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        ctx.restore();
+    }
     createDragStaticCanvas(segment, viewport, width, height) {
         const surface = createCanvas(width, height);
         if (!surface.ctx)
@@ -1483,7 +1553,9 @@ export class CanvasLayers {
                 this.drawDragStaticSegment(ctx, segment);
             }
             if (part.dynamicLayers.length > 0) {
-                this._drawLayers(ctx, part.dynamicLayers);
+                this._drawLayers(ctx, part.dynamicLayers, {
+                    dragPreview: { viewport, width, height }
+                });
             }
         }
     }
@@ -1491,7 +1563,12 @@ export class CanvasLayers {
         const sortedLayers = this.getRenderOrder(layers);
         sortedLayers.forEach(layer => {
             if (layer.visible) {
-                this._drawLayer(ctx, layer, options);
+                if (options.dragPreview) {
+                    this._drawLayerDuringDrag(ctx, layer, options.dragPreview);
+                }
+                else {
+                    this._drawLayer(ctx, layer, options);
+                }
             }
         });
     }
