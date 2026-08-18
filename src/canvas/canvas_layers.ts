@@ -933,7 +933,8 @@ export class CanvasLayers {
     }
 
     private getProcessedImageCacheKey(layer: Layer): string {
-        return `${layer.id}_${this.getProcessedImageGeometryKey(layer)}`;
+        const blendArea = layer.blendArea ?? 0;
+        return `${layer.id}_${blendArea}_${this.getProcessedImageGeometryKey(layer)}`;
     }
 
     private isUserInteractionActive(): boolean {

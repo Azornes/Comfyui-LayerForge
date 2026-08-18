@@ -747,7 +747,8 @@ export class CanvasLayers {
         return `${cropKey}_${layer.width}_${layer.height}`;
     }
     getProcessedImageCacheKey(layer) {
-        return `${layer.id}_${this.getProcessedImageGeometryKey(layer)}`;
+        const blendArea = layer.blendArea ?? 0;
+        return `${layer.id}_${blendArea}_${this.getProcessedImageGeometryKey(layer)}`;
     }
     isUserInteractionActive() {
         const mode = this.canvas.canvasInteractions?.interaction?.mode;
