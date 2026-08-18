@@ -8,17 +8,17 @@ export function createDistanceFieldDataSync(image) {
         log.error("Image is required for distance field data");
         return null;
     }
-    const { canvas, ctx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
-    if (!ctx) {
+    const { canvas: analysisCanvas, ctx: analysisCtx } = createCanvas(image.width, image.height, '2d', { willReadFrequently: true });
+    if (!analysisCtx) {
         log.error('Failed to create canvas context for distance field data');
         return null;
     }
     // Draw the source once. Pixel geometry does not depend on blendArea.
-    ctx.drawImage(image, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    analysisCtx.drawImage(image, 0, 0);
+    const imageData = analysisCtx.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height);
     const data = imageData.data;
-    const width = canvas.width;
-    const height = canvas.height;
+    const width = analysisCanvas.width;
+    const height = analysisCanvas.height;
     let hasTransparency = false;
     for (let i = 0; i < width * height; i++) {
         if (data[i * 4 + 3] < 255) {
@@ -26,8 +26,9 @@ export function createDistanceFieldDataSync(image) {
             break;
         }
     }
-    let distanceField;
+    let distanceField = null;
     let binaryMask = null;
+    let isOpaqueRectangle = false;
     if (hasTransparency) {
         binaryMask = new Uint8Array(width * height);
         for (let i = 0; i < width * height; i++) {
@@ -36,13 +37,26 @@ export function createDistanceFieldDataSync(image) {
         distanceField = calculateDistanceTransform(binaryMask, width, height);
     }
     else {
-        distanceField = calculateDistanceFromEdges(width, height);
+        // For a fully opaque image the distance is always the distance to
+        // the nearest rectangle edge. Keep this analytic instead of storing
+        // another 32-bit value for every pixel.
+        isOpaqueRectangle = true;
     }
     let maxDistance = 0;
-    for (let i = 0; i < distanceField.length; i++) {
-        if (distanceField[i] > maxDistance) {
-            maxDistance = distanceField[i];
+    if (distanceField) {
+        for (let i = 0; i < distanceField.length; i++) {
+            if (distanceField[i] > maxDistance) {
+                maxDistance = distanceField[i];
+            }
         }
+    }
+    else if (isOpaqueRectangle) {
+        maxDistance = Math.floor((Math.min(width, height) - 1) / 2);
+    }
+    const { canvas: maskCanvas, ctx: maskCtx } = createCanvas(width, height);
+    if (!maskCtx) {
+        log.error('Failed to create canvas context for distance field mask');
+        return null;
     }
     return {
         width,
@@ -50,23 +64,49 @@ export function createDistanceFieldDataSync(image) {
         distanceField,
         binaryMask,
         maxDistance,
+        isOpaqueRectangle,
         // Reuse this backing canvas when only blendArea changes.
-        maskCanvas: canvas
+        maskCanvas,
+        maskImageData: maskCtx.createImageData(width, height)
     };
 }
 export function rasterizeDistanceFieldMaskSync(data, blendArea) {
     const { maskCanvas, width, height, distanceField, binaryMask, maxDistance } = data;
-    const ctx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    const ctx = maskCanvas.getContext('2d');
     if (!ctx) {
         log.error('Failed to create canvas context for distance field mask');
         return maskCanvas;
     }
-    const maskData = ctx.createImageData(width, height);
+    const maskData = data.maskImageData ?? ctx.createImageData(width, height);
+    data.maskImageData = maskData;
     const threshold = maxDistance * (blendArea / 100);
-    rasterizeDistanceFieldMask(distanceField, binaryMask, threshold, maskData.data);
+    if (data.isOpaqueRectangle) {
+        rasterizeOpaqueRectangleMask(width, height, threshold, maskData.data);
+    }
+    else if (distanceField) {
+        rasterizeDistanceFieldMask(distanceField, binaryMask, threshold, maskData.data);
+    }
     ctx.clearRect(0, 0, width, height);
     ctx.putImageData(maskData, 0, 0);
     return maskCanvas;
+}
+function rasterizeOpaqueRectangleMask(width, height, threshold, outputData) {
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const distance = Math.min(x, width - 1 - x, y, height - 1 - y);
+            const pixelIndex = (y * width + x) * 4;
+            outputData[pixelIndex] = 255;
+            outputData[pixelIndex + 1] = 255;
+            outputData[pixelIndex + 2] = 255;
+            if (distance <= threshold) {
+                const gradientValue = distance / threshold;
+                outputData[pixelIndex + 3] = Math.floor(gradientValue * 255);
+            }
+            else {
+                outputData[pixelIndex + 3] = 255;
+            }
+        }
+    }
 }
 /**
  * Creates a distance field mask based on the alpha channel of an image.
@@ -98,29 +138,6 @@ export function createDistanceFieldMaskSync(image, blendArea) {
 export const createDistanceFieldMask = withErrorHandling(function (image, blendArea) {
     return createDistanceFieldMaskSync(image, blendArea);
 }, 'createDistanceFieldMask');
-/**
- * Calculates distance from edges of a rectangle for opaque images.
- * @param width - Width of the rectangle
- * @param height - Height of the rectangle
- * @returns Float32Array containing distance values from edges
- */
-function calculateDistanceFromEdges(width, height) {
-    const distances = new Float32Array(width * height);
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const idx = y * width + x;
-            // Calculate distance to nearest edge
-            const distToLeft = x;
-            const distToRight = width - 1 - x;
-            const distToTop = y;
-            const distToBottom = height - 1 - y;
-            // Minimum distance to any edge
-            const minDistToEdge = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-            distances[idx] = minDistToEdge;
-        }
-    }
-    return distances;
-}
 /**
  * Creates a simple radial gradient mask (fallback for rectangular areas).
  * @param width - Width of the mask

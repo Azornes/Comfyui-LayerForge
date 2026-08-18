@@ -129,6 +129,22 @@ test('distance-field mask preserves alpha-distance behavior for transparent pixe
   }
 });
 
+test('opaque distance-field mask preserves rectangle-edge alpha without a distance buffer', async () => {
+  const stubs = installCanvasStub(new Array(12).fill(255));
+
+  try {
+    const { createDistanceFieldMaskSync } = await import('../js/mask/image_analysis.js?opaque-characterization');
+    createDistanceFieldMaskSync({ width: 4, height: 3 }, 100);
+
+    assert.deepEqual(
+      Array.from({ length: 12 }, (_, index) => stubs.output.data[index * 4 + 3]),
+      [0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0],
+    );
+  } finally {
+    stubs.restore();
+  }
+});
+
 test('mask consumers use one shared distance transform implementation', async () => {
     const { calculateDistanceTransform } = await import('../js/mask/mask_pixel_utils.js?characterization');
   const imageAnalysisSource = await readFile(new URL('../src/mask/image_analysis.ts', import.meta.url), 'utf8');
