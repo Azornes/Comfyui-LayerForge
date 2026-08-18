@@ -923,6 +923,27 @@ export class CanvasLayers {
     }
 
     /**
+     * Queue full-resolution processed images after a layer drag has finished.
+     * Drag rendering is intentionally cache-only; this is the hand-off point
+     * that restores the final Blend Area/crop result without doing the work
+     * on every pointer frame.
+     */
+    public handleLayerDragEnd(layers: Layer[]): void {
+        for (const layer of layers) {
+            if (!layer.image) continue;
+
+            const hasBlendArea = (layer.blendArea ?? 0) > 0;
+            const hasCropEffect = Boolean(layer.cropBounds && layer.originalWidth && layer.originalHeight);
+            if (!hasBlendArea && !hasCropEffect) continue;
+
+            const cacheKey = this.getProcessedImageCacheKey(layer);
+            if (!this.processedImageCache.has(cacheKey)) {
+                this.scheduleProcessedImageCreation(layer, cacheKey);
+            }
+        }
+    }
+
+    /**
      * Update last render time to track activity for debouncing
      */
     public updateLastRenderTime(): void {

@@ -469,6 +469,9 @@ export class CanvasInteractions {
         if (stateChangingInteraction || duplicatedInDrag) {
             this.renderAndSave(true);
         }
+        if (this.interaction.mode === 'dragging') {
+            this.canvas.canvasLayers.handleLayerDragEnd(this.canvas.canvasSelection.selectedLayers);
+        }
         this.resetInteractionState();
         this.canvas.render();
     }
