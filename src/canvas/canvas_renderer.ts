@@ -3,12 +3,28 @@ import { getBoundsFromPoints, getLayerWorldBounds, isPointInRotatedLayer, localT
 
 const log = createModuleLogger('CanvasRenderer');
 
+interface ScreenRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+interface DragRenderState {
+    selectionSignature: string;
+    bounds: ScreenRect;
+    viewport: { x: number; y: number; zoom: number };
+    width: number;
+    height: number;
+}
+
 export class CanvasRenderer {
     canvas: any;
     isDirty: any;
     lastRenderTime: any;
     renderAnimationFrame: any;
     renderInterval: any;
+    private dragRenderState: DragRenderState | null;
     // Overlay used to preview in-progress mask strokes (separate from cursor overlay)
     strokeOverlayCanvas!: HTMLCanvasElement;
     strokeOverlayCtx!: CanvasRenderingContext2D;
@@ -18,10 +34,86 @@ export class CanvasRenderer {
         this.lastRenderTime = 0;
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
+        this.dragRenderState = null;
         
         // Initialize overlay canvases
         this.initOverlay();
         this.initStrokeOverlay();
+    }
+
+    private getDragSelectionSignature(selectedLayers: any[]): string {
+        return selectedLayers
+            .map(layer => layer.id)
+            .sort()
+            .join('|');
+    }
+
+    private getLayerScreenBounds(
+        layer: any,
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): ScreenRect {
+        const worldBounds = getLayerWorldBounds(layer, { cropAware: true });
+        const padding = 32;
+        const x = Math.floor((worldBounds.x - viewport.x) * viewport.zoom) - padding;
+        const y = Math.floor((worldBounds.y - viewport.y) * viewport.zoom) - padding;
+        const right = Math.ceil((worldBounds.x + worldBounds.width - viewport.x) * viewport.zoom) + padding;
+        const bottom = Math.ceil((worldBounds.y + worldBounds.height - viewport.y) * viewport.zoom) + padding;
+
+        const left = Math.max(0, x);
+        const top = Math.max(0, y);
+        const clampedRight = Math.min(width, right);
+        const clampedBottom = Math.min(height, bottom);
+        return {
+            x: left,
+            y: top,
+            width: Math.max(0, clampedRight - left),
+            height: Math.max(0, clampedBottom - top)
+        };
+    }
+
+    private getDragSelectionBounds(
+        selectedLayers: any[],
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): ScreenRect | null {
+        if (selectedLayers.length === 0) return null;
+
+        const layerBounds = selectedLayers.map(layer => this.getLayerScreenBounds(layer, viewport, width, height));
+        const left = Math.min(...layerBounds.map(bounds => bounds.x));
+        const top = Math.min(...layerBounds.map(bounds => bounds.y));
+        const right = Math.max(...layerBounds.map(bounds => bounds.x + bounds.width));
+        const bottom = Math.max(...layerBounds.map(bounds => bounds.y + bounds.height));
+        return {
+            x: left,
+            y: top,
+            width: Math.max(0, right - left),
+            height: Math.max(0, bottom - top)
+        };
+    }
+
+    private getDragDirtyRect(currentBounds: ScreenRect, width: number, height: number): ScreenRect {
+        const previousBounds = this.dragRenderState?.bounds;
+        if (!previousBounds) return { x: 0, y: 0, width, height };
+
+        const left = Math.max(0, Math.floor(Math.min(previousBounds.x, currentBounds.x)));
+        const top = Math.max(0, Math.floor(Math.min(previousBounds.y, currentBounds.y)));
+        const right = Math.min(
+            width,
+            Math.ceil(Math.max(previousBounds.x + previousBounds.width, currentBounds.x + currentBounds.width))
+        );
+        const bottom = Math.min(
+            height,
+            Math.ceil(Math.max(previousBounds.y + previousBounds.height, currentBounds.y + currentBounds.height))
+        );
+        return {
+            x: left,
+            y: top,
+            width: Math.max(0, right - left),
+            height: Math.max(0, bottom - top)
+        };
     }
 
     /**
@@ -130,16 +222,51 @@ export class CanvasRenderer {
         }
 
         const ctx = this.canvas.offscreenCtx;
+        const canvasWidth = this.canvas.offscreenCanvas.width;
+        const canvasHeight = this.canvas.offscreenCanvas.height;
+        const isDraggingLayers = this.canvas.canvasInteractions?.interaction?.mode === 'dragging';
+        const selectedLayers = this.canvas.canvasSelection.selectedLayers;
+        const selectionSignature = this.getDragSelectionSignature(selectedLayers);
+        const currentDragBounds = isDraggingLayers
+            ? this.getDragSelectionBounds(selectedLayers, this.canvas.viewport, canvasWidth, canvasHeight)
+            : null;
+        const canReuseDragFrame = Boolean(
+            isDraggingLayers &&
+            currentDragBounds &&
+            this.dragRenderState &&
+            this.dragRenderState.selectionSignature === selectionSignature &&
+            this.dragRenderState.width === canvasWidth &&
+            this.dragRenderState.height === canvasHeight &&
+            this.dragRenderState.viewport.x === this.canvas.viewport.x &&
+            this.dragRenderState.viewport.y === this.canvas.viewport.y &&
+            this.dragRenderState.viewport.zoom === this.canvas.viewport.zoom
+        );
+        const dirtyRect = canReuseDragFrame && currentDragBounds
+            ? this.getDragDirtyRect(currentDragBounds, canvasWidth, canvasHeight)
+            : { x: 0, y: 0, width: canvasWidth, height: canvasHeight };
 
         // Keep the canvas readable while allowing the node's native color to
         // tint the editor underneath it. Clear first so alpha does not build
         // up on every render frame.
-        ctx.clearRect(0, 0, this.canvas.offscreenCanvas.width, this.canvas.offscreenCanvas.height);
         const canvasFill = typeof getComputedStyle === 'function'
             ? getComputedStyle(this.canvas.canvas).getPropertyValue('--lf-canvas-fill').trim()
             : '';
-        ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
-        ctx.fillRect(0, 0, this.canvas.offscreenCanvas.width, this.canvas.offscreenCanvas.height);
+        if (canReuseDragFrame) {
+            // Preserve unchanged pixels from the previous drag frame. Every
+            // layer, mask, grid line, and interaction overlay is redrawn only
+            // inside the union of the old and new selection bounds below.
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+            ctx.clip();
+            ctx.clearRect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+            ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
+            ctx.fillRect(dirtyRect.x, dirtyRect.y, dirtyRect.width, dirtyRect.height);
+        } else {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            ctx.fillStyle = canvasFill || 'rgba(96, 96, 96, 0.72)';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        }
 
         ctx.save();
         ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
@@ -148,17 +275,15 @@ export class CanvasRenderer {
         this.drawGrid(ctx);
 
         // Use a screen-space cache for stationary layer groups while moving
-        // selected layers. The fallback keeps the regular compositing path
-        // for blend modes that cannot be safely split around the moving layer.
-        const isDraggingLayers = this.canvas.canvasInteractions?.interaction?.mode === 'dragging';
-        if (isDraggingLayers && this.canvas.canvasSelection.selectedLayers.length > 0) {
+        // selected layers. The cache replays non-source-over modes in z-order.
+        if (isDraggingLayers && selectedLayers.length > 0) {
             this.canvas.canvasLayers.drawLayersDuringDrag(
                 ctx,
                 this.canvas.layers,
-                this.canvas.canvasSelection.selectedLayers,
+                selectedLayers,
                 this.canvas.viewport,
-                this.canvas.offscreenCanvas.width,
-                this.canvas.offscreenCanvas.height
+                canvasWidth,
+                canvasHeight
             );
         } else {
             this.canvas.canvasLayers.clearDragSceneCache();
@@ -235,6 +360,21 @@ export class CanvasRenderer {
         }
 
         ctx.restore();
+        if (canReuseDragFrame) {
+            ctx.restore();
+        }
+
+        if (isDraggingLayers && currentDragBounds) {
+            this.dragRenderState = {
+                selectionSignature,
+                bounds: currentDragBounds,
+                viewport: { ...this.canvas.viewport },
+                width: canvasWidth,
+                height: canvasHeight
+            };
+        } else {
+            this.dragRenderState = null;
+        }
 
         if (this.canvas.canvas.width !== this.canvas.offscreenCanvas.width ||
             this.canvas.canvas.height !== this.canvas.offscreenCanvas.height) {

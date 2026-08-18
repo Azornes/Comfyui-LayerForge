@@ -6,6 +6,10 @@ const canvasLayersSource = await readFile(
   new URL('../js/canvas/canvas_layers.js', import.meta.url),
   'utf8'
 );
+const canvasRendererSource = await readFile(
+  new URL('../js/canvas/canvas_renderer.js', import.meta.url),
+  'utf8'
+);
 
 function extractMethod(methodName) {
   const start = canvasLayersSource.indexOf(`    ${methodName}(`);
@@ -88,4 +92,8 @@ test('drag scene cache groups source-over layers and replays non-normal modes', 
     { blendMode: 'screen', opacity: 0.7, applyLayerOpacity: false },
     { blendMode: 'source-over', opacity: 1, applyLayerOpacity: true },
   ]);
+
+  assert.match(canvasRendererSource, /canReuseDragFrame/);
+  assert.match(canvasRendererSource, /getDragDirtyRect/);
+  assert.match(canvasRendererSource, /ctx\.clip\(\)/);
 });
