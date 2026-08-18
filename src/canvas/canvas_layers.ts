@@ -573,10 +573,14 @@ export class CanvasLayers {
         const isWheelScaling = this.layersWheelScaling.has(layer.id);
         
         const shouldRenderLive = !isDraggingLayers && (isTransformingCropBounds || isTransformingScale || isThisLayerBeingAdjusted || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling);
+        const deferProcessedImage = isDraggingLayers || isTransformingCropBounds || isTransformingScale || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling;
         
         // Check if we should use cached processed image or render live
         const processedImage = this.getProcessedImage(layer, {
-            cacheOnly: isDraggingLayers,
+            // Resize/crop changes create a new cache key every frame. Do not
+            // enqueue intermediate full-resolution builds; the transform-end
+            // path will request the final state once.
+            cacheOnly: deferProcessedImage,
             allowCacheWhileAdjusting: isDraggingLayers,
         });
         
