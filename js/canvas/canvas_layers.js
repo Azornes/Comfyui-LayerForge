@@ -1170,7 +1170,7 @@ export class CanvasLayers {
     getDragSceneCacheKey(sortedLayers, selectedIds, viewport, width, height) {
         const selectedSignature = sortedLayers
             .filter(layer => selectedIds.has(layer.id))
-            .map(layer => layer.id)
+            .map(layer => `${layer.id}:${layer.zIndex}`)
             .join(',');
         const staticSignature = sortedLayers
             .filter(layer => !selectedIds.has(layer.id))
@@ -1188,6 +1188,11 @@ export class CanvasLayers {
                 layer.width,
                 layer.height,
                 layer.rotation,
+                layer.originalWidth,
+                layer.originalHeight,
+                layer.flipH ? 1 : 0,
+                layer.flipV ? 1 : 0,
+                layer.cropMode ? 1 : 0,
                 layer.blendMode || 'normal',
                 layer.opacity,
                 layer.blendArea ?? 0,
@@ -1197,60 +1202,126 @@ export class CanvasLayers {
             .join('|');
         return `${width}x${height}|${viewport.x},${viewport.y},${viewport.zoom}|${selectedSignature}|${staticSignature}`;
     }
-    canUseDragSceneCache(sortedLayers, selectedIds) {
-        let selectedLayerSeen = false;
-        for (const layer of sortedLayers) {
-            if (selectedIds.has(layer.id)) {
-                selectedLayerSeen = true;
-                continue;
-            }
-            // A non-normal layer above a moving layer needs the moving pixels
-            // as its compositing input. Keep the normal renderer for that
-            // case so blend-mode ordering remains pixel-identical.
-            if (selectedLayerSeen && layer.blendMode && !['normal', 'source-over'].includes(layer.blendMode)) {
-                return false;
-            }
-        }
-        return true;
+    isSourceOverBlendMode(layer) {
+        return !layer.blendMode || layer.blendMode === 'normal' || layer.blendMode === 'source-over';
     }
-    createDragStaticCanvas(layers, viewport, width, height) {
+    getDragCanvasBlendMode(layer) {
+        return this.isSourceOverBlendMode(layer) ? 'source-over' : layer.blendMode;
+    }
+    drawLayerContentForDrag(ctx, layer, applyLayerOpacity) {
+        if (!layer.image)
+            return;
+        ctx.save();
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate(layer.rotation * Math.PI / 180);
+        if (layer.flipH || layer.flipV) {
+            ctx.scale(layer.flipH ? -1 : 1, layer.flipV ? -1 : 1);
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = applyLayerOpacity ? (layer.opacity !== undefined ? layer.opacity : 1) : 1;
+        const processedImage = this.getProcessedImage(layer, { cacheOnly: true });
+        if (processedImage) {
+            ctx.drawImage(processedImage, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+        }
+        else if ((layer.blendArea ?? 0) > 0) {
+            // Keep the mask in the prepared texture, but defer the layer's
+            // blend mode to playback so it is evaluated against the real
+            // compositing backdrop.
+            this.drawLayerWithBlendArea(ctx, layer);
+        }
+        else {
+            this.drawLayerImageWithCrop(ctx, layer);
+        }
+        ctx.restore();
+    }
+    createDragStaticCanvas(segment, viewport, width, height) {
         const surface = createCanvas(width, height);
         if (!surface.ctx)
             return null;
         surface.ctx.save();
         surface.ctx.scale(viewport.zoom, viewport.zoom);
         surface.ctx.translate(-viewport.x, -viewport.y);
-        this._drawLayers(surface.ctx, layers);
+        for (const layer of segment.layers) {
+            if (layer.visible) {
+                this.drawLayerContentForDrag(surface.ctx, layer, segment.applyLayerOpacity);
+            }
+        }
         surface.ctx.restore();
         return surface.canvas;
+    }
+    createDragStaticSegments(layers) {
+        const segments = [];
+        let sourceOverLayers = [];
+        const flushSourceOverLayers = () => {
+            if (sourceOverLayers.length === 0)
+                return;
+            segments.push({
+                layers: sourceOverLayers,
+                canvas: null,
+                blendMode: 'source-over',
+                opacity: 1,
+                applyLayerOpacity: true
+            });
+            sourceOverLayers = [];
+        };
+        for (const layer of layers) {
+            if (this.isSourceOverBlendMode(layer)) {
+                sourceOverLayers.push(layer);
+                continue;
+            }
+            flushSourceOverLayers();
+            segments.push({
+                layers: [layer],
+                canvas: null,
+                blendMode: this.getDragCanvasBlendMode(layer),
+                opacity: layer.opacity !== undefined ? layer.opacity : 1,
+                // The non-source-over operation must be replayed against the
+                // actual backdrop, so opacity is applied during playback too.
+                applyLayerOpacity: false
+            });
+        }
+        flushSourceOverLayers();
+        return segments;
     }
     buildDragSceneCache(sortedLayers, selectedIds, selectedLayers, key, viewport, width, height) {
         const parts = [];
         let staticLayers = [];
+        let currentPart = {
+            staticSegments: [],
+            dynamicLayers: []
+        };
+        const flushStaticLayers = () => {
+            if (staticLayers.length === 0)
+                return;
+            currentPart.staticSegments.push(...this.createDragStaticSegments(staticLayers));
+            staticLayers = [];
+        };
         for (const layer of sortedLayers) {
             if (selectedIds.has(layer.id)) {
-                parts.push({
-                    staticLayers,
-                    dynamicLayers: [layer],
-                    canvas: null
-                });
-                staticLayers = [];
+                flushStaticLayers();
+                currentPart.dynamicLayers.push(layer);
+                parts.push(currentPart);
+                currentPart = {
+                    staticSegments: [],
+                    dynamicLayers: []
+                };
             }
             else {
                 staticLayers.push(layer);
             }
         }
-        parts.push({
-            staticLayers,
-            dynamicLayers: [],
-            canvas: null
-        });
+        flushStaticLayers();
+        parts.push(currentPart);
         for (const part of parts) {
-            if (part.staticLayers.length === 0)
-                continue;
-            part.canvas = this.createDragStaticCanvas(part.staticLayers, viewport, width, height);
-            if (!part.canvas)
-                return null;
+            for (const segment of part.staticSegments) {
+                segment.canvas = this.createDragStaticCanvas(segment, viewport, width, height);
+                if (!segment.canvas)
+                    return null;
+            }
         }
         const cachedStaticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
         return {
@@ -1261,21 +1332,25 @@ export class CanvasLayers {
             parts
         };
     }
-    drawDragStaticCanvas(ctx, canvas) {
+    drawDragStaticSegment(ctx, segment) {
+        if (!segment.canvas)
+            return;
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
-        ctx.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = segment.blendMode;
+        ctx.globalAlpha = segment.opacity;
+        ctx.drawImage(segment.canvas, 0, 0);
         ctx.restore();
     }
     clearDragSceneCache() {
         if (!this.dragSceneCache)
             return;
         for (const part of this.dragSceneCache.parts) {
-            if (part.canvas) {
-                part.canvas.width = 0;
-                part.canvas.height = 0;
+            for (const segment of part.staticSegments) {
+                if (segment.canvas) {
+                    segment.canvas.width = 0;
+                    segment.canvas.height = 0;
+                }
             }
         }
         this.dragSceneCache = null;
@@ -1287,11 +1362,6 @@ export class CanvasLayers {
         }
         const sortedLayers = this.getRenderOrder(layers);
         const selectedIds = new Set(selectedLayers.map(layer => layer.id));
-        if (!this.canUseDragSceneCache(sortedLayers, selectedIds)) {
-            this.clearDragSceneCache();
-            this._drawLayers(ctx, layers);
-            return;
-        }
         const key = this.getDragSceneCacheKey(sortedLayers, selectedIds, viewport, width, height);
         const staticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
         const selectedReferencesChanged = !this.dragSceneCache ||
@@ -1312,8 +1382,8 @@ export class CanvasLayers {
             return;
         }
         for (const part of this.dragSceneCache.parts) {
-            if (part.canvas) {
-                this.drawDragStaticCanvas(ctx, part.canvas);
+            for (const segment of part.staticSegments) {
+                this.drawDragStaticSegment(ctx, segment);
             }
             if (part.dynamicLayers.length > 0) {
                 this._drawLayers(ctx, part.dynamicLayers);
