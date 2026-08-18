@@ -1,7 +1,7 @@
 import { getCanvasState, setCanvasState, saveImage, getImage } from "../persistence/db.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { showAlertNotification } from "../utils/notification_utils.js";
-import { generateUUID, cloneLayers, getStateSignature, debounce, createCanvas, cloneCanvas } from "../utils/common_utils.js";
+import { generateUUID, cloneLayers, getStateSignature, createCanvas, cloneCanvas } from "../utils/common_utils.js";
 import { loadImage } from "../media/image_utils.js";
 import { getCanvasStateKey } from "../utils/canvas_state_key.js";
 import { HistoryStack } from "./canvas_history.js";
@@ -35,7 +35,7 @@ export class CanvasState {
         this.saveTimeout = null;
         this.lastSavedStateSignature = null;
         this._loadInProgress = null;
-        this._debouncedSave = null;
+        this.saveStateDebounceTimer = null;
         try {
             // @ts-ignore
             this.stateSaverWorker = new Worker(new URL('../persistence/state_saver.worker.js', import.meta.url), { type: 'module' });
@@ -250,6 +250,13 @@ export class CanvasState {
         }
     }
     async saveStateToDB() {
+        // A direct save (for example after a completed drag) supersedes the
+        // delayed save scheduled by saveLayersState. Avoid serializing and
+        // posting the same state twice.
+        if (this.saveStateDebounceTimer !== null) {
+            clearTimeout(this.saveStateDebounceTimer);
+            this.saveStateDebounceTimer = null;
+        }
         if (!this.canvas.node.id) {
             log.error("Node ID is not available for saving state to DB.");
             return;
@@ -336,10 +343,13 @@ If you see dark images or masks in the output, make sure node_id is set to ${cor
         if (!this.layerHistory.push(this.canvas.layers, replaceLast))
             return;
         this.canvas.updateHistoryButtons();
-        if (!this._debouncedSave) {
-            this._debouncedSave = debounce(this.saveStateToDB.bind(this), 1000);
+        if (this.saveStateDebounceTimer !== null) {
+            clearTimeout(this.saveStateDebounceTimer);
         }
-        this._debouncedSave();
+        this.saveStateDebounceTimer = window.setTimeout(() => {
+            this.saveStateDebounceTimer = null;
+            void this.saveStateToDB();
+        }, 1000);
     }
     saveMaskState(replaceLast = false) {
         if (!this.canvas.maskTool)

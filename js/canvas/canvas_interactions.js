@@ -5,6 +5,8 @@ import { getImageAddMode } from "../utils/canvas_input_utils.js";
 const log = createModuleLogger('CanvasInteractions');
 export class CanvasInteractions {
     constructor(canvas) {
+        this.pendingTransformMove = null;
+        this.transformMoveAnimationFrame = null;
         // Bound event handlers to enable proper removeEventListener and avoid leaks
         this.onMouseDown = (e) => this.handleMouseDown(e);
         this.onMouseMove = (e) => this.handleMouseMove(e);
@@ -86,6 +88,69 @@ export class CanvasInteractions {
             this.canvas.canvasState.saveStateToDB();
         }
     }
+    /**
+     * Coalesce high-frequency pointer events into one transform update per
+     * display frame. The renderer is already frame-limited, so this keeps the
+     * interaction math in step with the frame that will display it without
+     * dropping the latest pointer position.
+     */
+    scheduleTransformMove(world, isShiftPressed = false) {
+        this.pendingTransformMove = {
+            world: { ...world },
+            isShiftPressed,
+        };
+        if (this.transformMoveAnimationFrame === null) {
+            this.transformMoveAnimationFrame = window.requestAnimationFrame(() => {
+                this.transformMoveAnimationFrame = null;
+                this.flushPendingTransformMove();
+            });
+        }
+        // Queue the canvas frame after the interaction frame. This lets the
+        // renderer see the latest transform in the same browser frame when
+        // it has not already queued a render.
+        this.canvas.render();
+    }
+    flushPendingTransformMove() {
+        if (this.transformMoveAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.transformMoveAnimationFrame);
+            this.transformMoveAnimationFrame = null;
+        }
+        const pendingMove = this.pendingTransformMove;
+        this.pendingTransformMove = null;
+        if (!pendingMove)
+            return;
+        switch (this.interaction.mode) {
+            case 'dragging':
+                this.dragLayers(pendingMove.world);
+                break;
+            case 'resizing':
+                this.resizeLayerFromHandle(pendingMove.world, pendingMove.isShiftPressed);
+                break;
+            case 'rotating':
+                this.rotateLayerFromHandle(pendingMove.world, pendingMove.isShiftPressed);
+                break;
+            case 'resizingCanvas':
+                this.updateCanvasResize(pendingMove.world);
+                break;
+            case 'movingCanvas':
+                this.updateCanvasMove(pendingMove.world);
+                break;
+            case 'transformingOutputArea':
+                if (this.interaction.outputAreaTransformHandle) {
+                    this.resizeOutputAreaFromHandle(pendingMove.world, pendingMove.isShiftPressed);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    cancelPendingTransformMove() {
+        if (this.transformMoveAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.transformMoveAnimationFrame);
+            this.transformMoveAnimationFrame = null;
+        }
+        this.pendingTransformMove = null;
+    }
     setDragDropStyling(active) {
         if (active) {
             this.canvas.canvas.style.backgroundColor = 'rgba(45, 90, 160, 0.1)';
@@ -127,6 +192,7 @@ export class CanvasInteractions {
         this.canvas.canvas.addEventListener('contextmenu', this.onContextMenu);
     }
     teardownEventListeners() {
+        this.cancelPendingTransformMove();
         this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown);
         this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove);
         this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp);
@@ -182,6 +248,7 @@ export class CanvasInteractions {
         return null;
     }
     resetInteractionState() {
+        this.cancelPendingTransformMove();
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
         this.originalLayerPositions.clear();
@@ -323,23 +390,23 @@ export class CanvasInteractions {
                 }
                 break;
             case 'dragging':
-                this.dragLayers(coords.world);
+                this.scheduleTransformMove(coords.world);
                 break;
             case 'resizing':
-                this.resizeLayerFromHandle(coords.world, e.shiftKey);
+                this.scheduleTransformMove(coords.world, e.shiftKey);
                 break;
             case 'rotating':
-                this.rotateLayerFromHandle(coords.world, e.shiftKey);
+                this.scheduleTransformMove(coords.world, e.shiftKey);
                 break;
             case 'resizingCanvas':
-                this.updateCanvasResize(coords.world);
+                this.scheduleTransformMove(coords.world);
                 break;
             case 'movingCanvas':
-                this.updateCanvasMove(coords.world);
+                this.scheduleTransformMove(coords.world);
                 break;
             case 'transformingOutputArea':
                 if (this.interaction.outputAreaTransformHandle) {
-                    this.resizeOutputAreaFromHandle(coords.world, e.shiftKey);
+                    this.scheduleTransformMove(coords.world, e.shiftKey);
                 }
                 else {
                     this.updateOutputAreaTransformCursor(coords.world);
@@ -367,6 +434,7 @@ export class CanvasInteractions {
     }
     handleMouseUp(e) {
         const coords = this.getMouseCoordinates(e);
+        this.flushPendingTransformMove();
         if (this.interaction.mode === 'drawingMask') {
             this.canvas.maskTool.handleMouseUp(coords.view);
             // Render only once after drawing is complete
@@ -688,6 +756,7 @@ export class CanvasInteractions {
     }
     handleBlur() {
         log.debug('Window lost focus, resetting key states.');
+        this.flushPendingTransformMove();
         this.interaction.isCtrlPressed = false;
         this.interaction.isMetaPressed = false;
         this.interaction.isAltPressed = false;

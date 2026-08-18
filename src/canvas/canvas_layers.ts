@@ -47,8 +47,25 @@ export class CanvasLayers {
     private blendMenuWorldX: number = 0;
     private blendMenuWorldY: number = 0;
     
-    // Cache for processed images with effects applied
-    private processedImageCache: Map<string, HTMLImageElement> = new Map();
+    // Cache for processed images with effects applied. ImageBitmap avoids the
+    // Base64 round-trip used by the old HTMLImageElement path.
+    private processedImageCache: Map<string, CanvasImageSource> = new Map();
+
+    // Reused surface for live blend-area previews. It grows when necessary
+    // and is cleared between uses instead of being allocated every frame.
+    private liveBlendCanvas: HTMLCanvasElement | null = null;
+    private liveBlendCtx: CanvasRenderingContext2D | null = null;
+    private liveBlendCanvasWidth = 0;
+    private liveBlendCanvasHeight = 0;
+
+    // Layer order changes rarely compared with render frames. Keep the sorted
+    // references and rebuild them when order data or a source layer reference
+    // changes. The reference check also catches in-place layer replacement
+    // (for example, when matting replaces the image but keeps id/zIndex).
+    private renderOrderCache: Layer[] = [];
+    private renderOrderSource: Layer[] | null = null;
+    private renderOrderSourceEntries: Layer[] = [];
+    private renderOrderSignature = '';
     
     // Debouncing system for processed image creation
     private processedImageDebounceTimers: Map<string, number> = new Map();
@@ -542,7 +559,7 @@ export class CanvasLayers {
         const processedImage = this.getProcessedImage(layer);
         
         // For scaling operations, try to find the BEST matching cache for this layer
-        let bestMatchingCache = null;
+        let bestMatchingCache: CanvasImageSource | null = null;
         if (isTransformingScale || isTransformingScaleSet || isWheelScaling) {
             // Look for cache entries that match the current layer state as closely as possible
             const currentCacheKey = this.getProcessedImageCacheKey(layer);
@@ -756,21 +773,48 @@ export class CanvasLayers {
      * Draw layer with live blend area effect during user activity (original behavior)
      */
     private _drawLayerWithLiveBlendArea(ctx: CanvasRenderingContext2D, layer: Layer): void {
-        // Create a temporary canvas for the masked layer
-        const { canvas: tempCanvas, ctx: tempCtx } = createCanvas(layer.width, layer.height);
-        
-        if (tempCtx) {
-            // Draw the layer with blend area to temp canvas
-            this.drawLayerWithBlendArea(tempCtx, layer, 0, 0);
-            
-            // Draw the result with blend mode and opacity
-            ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
-            ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
-            ctx.drawImage(tempCanvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-        } else {
-            // Fallback to normal drawing
-            this._drawLayerImage(ctx, layer);
+        const targetWidth = Math.max(1, Math.ceil(layer.width));
+        const targetHeight = Math.max(1, Math.ceil(layer.height));
+
+        if (!this.liveBlendCanvas || !this.liveBlendCtx) {
+            const surface = createCanvas(targetWidth, targetHeight);
+            this.liveBlendCanvas = surface.canvas;
+            this.liveBlendCtx = surface.ctx;
+            this.liveBlendCanvasWidth = targetWidth;
+            this.liveBlendCanvasHeight = targetHeight;
+        } else if (targetWidth > this.liveBlendCanvasWidth || targetHeight > this.liveBlendCanvasHeight) {
+            // Grow only when needed. Shrinking the canvas would force a new
+            // backing store during every interactive scale step.
+            this.liveBlendCanvasWidth = Math.max(this.liveBlendCanvasWidth, targetWidth);
+            this.liveBlendCanvasHeight = Math.max(this.liveBlendCanvasHeight, targetHeight);
+            this.liveBlendCanvas.width = this.liveBlendCanvasWidth;
+            this.liveBlendCanvas.height = this.liveBlendCanvasHeight;
         }
+
+        const tempCtx = this.liveBlendCtx;
+        if (!tempCtx) {
+            this._drawLayerImage(ctx, layer);
+            return;
+        }
+
+        // Reset state left by destination-in and clear only the area used by
+        // this layer. The reusable canvas may be larger than the current one.
+        tempCtx.setTransform(1, 0, 0, 1, 0, 0);
+        tempCtx.globalCompositeOperation = 'source-over';
+        tempCtx.globalAlpha = 1;
+        tempCtx.clearRect(0, 0, targetWidth, targetHeight);
+
+        // Draw the layer with blend area to the reusable surface.
+        this.drawLayerWithBlendArea(tempCtx, layer, 0, 0);
+
+        // Draw only the current surface region with blend mode and opacity.
+        ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
+        ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
+        ctx.drawImage(
+            this.liveBlendCanvas,
+            0, 0, targetWidth, targetHeight,
+            -layer.width / 2, -layer.height / 2, layer.width, layer.height
+        );
     }
 
     /**
@@ -788,7 +832,7 @@ export class CanvasLayers {
      * Get processed image with all effects applied (blend area, crop, etc.)
      * Uses live rendering for layers being actively adjusted, debounced processing for others
      */
-    private getProcessedImage(layer: Layer): HTMLImageElement | null {
+    private getProcessedImage(layer: Layer): CanvasImageSource | null {
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
         const needsCropEffect = layer.cropBounds && layer.originalWidth && layer.originalHeight;
@@ -840,21 +884,23 @@ export class CanvasLayers {
 
         // Schedule new timer
         const timer = window.setTimeout(() => {
-            log.info(`Creating debounced processed image for layer ${layer.id}`);
-            try {
-                const processedImage = this.createProcessedImage(layer);
-                if (processedImage) {
-                    this.processedImageCache.set(cacheKey, processedImage);
-                    log.debug(`Cached debounced processed image for layer ${layer.id}`);
-                    // Trigger re-render to show the processed image
-                    this.canvas.render();
+            void (async () => {
+                log.info(`Creating debounced processed image for layer ${layer.id}`);
+                try {
+                    const processedImage = await this.createProcessedImage(layer);
+                    if (processedImage) {
+                        this.setProcessedImageCache(cacheKey, processedImage);
+                        log.debug(`Cached debounced processed image for layer ${layer.id}`);
+                        // Trigger re-render to show the processed image
+                        this.canvas.render();
+                    }
+                } catch (error) {
+                    log.error('Failed to create debounced processed image:', error);
                 }
-            } catch (error) {
-                log.error('Failed to create debounced processed image:', error);
-            }
-            
-            // Clean up timer
-            this.processedImageDebounceTimers.delete(layer.id);
+
+                // Clean up timer
+                this.processedImageDebounceTimers.delete(layer.id);
+            })();
         }, this.PROCESSED_IMAGE_DEBOUNCE_DELAY);
 
         this.processedImageDebounceTimers.set(layer.id, timer);
@@ -871,7 +917,7 @@ export class CanvasLayers {
     /**
      * Process all pending images immediately when user stops interacting
      */
-    private processPendingImages(): void {
+    private async processPendingImages(): Promise<void> {
         // Clear all pending timers and process immediately
         for (const [layerId, timer] of this.processedImageDebounceTimers.entries()) {
             clearTimeout(timer);
@@ -882,9 +928,9 @@ export class CanvasLayers {
                 const cacheKey = this.getProcessedImageCacheKey(layer);
                 if (!this.processedImageCache.has(cacheKey)) {
                     try {
-                        const processedImage = this.createProcessedImage(layer);
+                        const processedImage = await this.createProcessedImage(layer);
                         if (processedImage) {
-                            this.processedImageCache.set(cacheKey, processedImage);
+                            this.setProcessedImageCache(cacheKey, processedImage);
                             log.debug(`Processed pending image for layer ${layer.id}`);
                         }
                     } catch (error) {
@@ -905,7 +951,7 @@ export class CanvasLayers {
     /**
      * Create a new processed image with all effects applied
      */
-    private createProcessedImage(layer: Layer): HTMLImageElement | null {
+    private async createProcessedImage(layer: Layer): Promise<CanvasImageSource | null> {
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
 
@@ -921,7 +967,18 @@ export class CanvasLayers {
             this.drawLayerImageWithCrop(processedCtx, layer, 0, 0);
         }
 
-        // Convert canvas to image
+        // Keep the processed pixels in a browser-native bitmap. This avoids
+        // encoding to PNG and decoding a Base64 data URL on the interaction
+        // path. The fallback preserves compatibility with older browsers.
+        if (typeof createImageBitmap === 'function') {
+            try {
+                return await createImageBitmap(processedCanvas);
+            } catch (error) {
+                log.debug('ImageBitmap cache creation failed, using image fallback.', error);
+            }
+        }
+
+        // Convert canvas to image as a compatibility fallback.
         const processedImage = new Image();
         processedImage.crossOrigin = 'anonymous';
         processedImage.src = processedCanvas.toDataURL();
@@ -936,6 +993,23 @@ export class CanvasLayers {
         this.drawLayerImageWithCrop(ctx, layer, 0, 0);
     }
 
+    private releaseProcessedImage(image: CanvasImageSource | undefined): void {
+        if (!image || typeof image !== 'object') return;
+
+        const closableImage = image as CanvasImageSource & { close?: () => void };
+        if (typeof closableImage.close === 'function') {
+            closableImage.close();
+        }
+    }
+
+    private setProcessedImageCache(key: string, image: CanvasImageSource): void {
+        const previousImage = this.processedImageCache.get(key);
+        if (previousImage && previousImage !== image) {
+            this.releaseProcessedImage(previousImage);
+        }
+        this.processedImageCache.set(key, image);
+    }
+
     /**
      * Invalidate processed image cache for a specific layer
      */
@@ -947,6 +1021,7 @@ export class CanvasLayers {
             }
         }
         keysToDelete.forEach(key => {
+            this.releaseProcessedImage(this.processedImageCache.get(key));
             this.processedImageCache.delete(key);
             log.debug(`Invalidated processed image cache for key: ${key}`);
         });
@@ -964,6 +1039,9 @@ export class CanvasLayers {
      * Clear all processed image cache
      */
     public clearProcessedImageCache(): void {
+        for (const image of this.processedImageCache.values()) {
+            this.releaseProcessedImage(image);
+        }
         this.processedImageCache.clear();
         
         // Clear all pending timers
@@ -1009,11 +1087,11 @@ export class CanvasLayers {
         transformingSet.add(layerId);
         
         // Create processed image asynchronously with optional delay
-        const executeTransform = () => {
+        const executeTransform = async () => {
             try {
-                const processedImage = this.createProcessedImage(layer);
+                const processedImage = await this.createProcessedImage(layer);
                 if (processedImage) {
-                    this.processedImageCache.set(cacheKey, processedImage);
+                    this.setProcessedImageCache(cacheKey, processedImage);
                     log.debug(`Cached processed image for layer ${layerId} after ${transformName} transform`);
                     
                     // Only now remove from live rendering set and trigger re-render
@@ -1037,14 +1115,14 @@ export class CanvasLayers {
             
             const timer = window.setTimeout(() => {
                 log.debug(`Creating new cache for layer ${layerId} after ${transformName} scaling stopped`);
-                executeTransform();
+                void executeTransform();
                 this.processedImageDebounceTimers.delete(timerKey);
             }, delay);
             
             this.processedImageDebounceTimers.set(timerKey, timer);
         } else {
             // For crop and scale, use immediate async approach
-            setTimeout(executeTransform, 0);
+            setTimeout(() => void executeTransform(), 0);
         }
     }
 
@@ -1118,12 +1196,29 @@ export class CanvasLayers {
     }
 
     private _drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
-        const sortedLayers = [...layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
+        const sortedLayers = this.getRenderOrder(layers);
         sortedLayers.forEach(layer => {
             if (layer.visible) {
                 this._drawLayer(ctx, layer, options);
             }
         });
+    }
+
+    public getRenderOrder(layers: Layer[] = this.canvas.layers): Layer[] {
+        const signature = layers
+            .map((layer, index) => `${layer.id ?? index}:${layer.zIndex}`)
+            .join('|');
+        const sourceReferencesChanged = layers.length !== this.renderOrderSourceEntries.length ||
+            layers.some((layer, index) => layer !== this.renderOrderSourceEntries[index]);
+
+        if (layers !== this.renderOrderSource || sourceReferencesChanged || signature !== this.renderOrderSignature) {
+            this.renderOrderCache = [...layers].sort((a: Layer, b: Layer) => a.zIndex - b.zIndex);
+            this.renderOrderSource = layers;
+            this.renderOrderSourceEntries = [...layers];
+            this.renderOrderSignature = signature;
+        }
+
+        return this.renderOrderCache;
     }
 
     public drawLayersToContext(ctx: CanvasRenderingContext2D, layers: Layer[], options: { offsetX?: number, offsetY?: number } = {}): void {
@@ -1493,21 +1588,23 @@ export class CanvasLayers {
                 
                 // Create processed image asynchronously
                 setTimeout(() => {
-                    try {
-                        const processedImage = this.createProcessedImage(selectedLayer);
-                        if (processedImage) {
-                            this.processedImageCache.set(cacheKey, processedImage);
-                            log.debug(`Cached processed image for layer ${layerId} after slider change`);
-                            
-                            // Only now remove from live rendering set and trigger re-render
+                    void (async () => {
+                        try {
+                            const processedImage = await this.createProcessedImage(selectedLayer);
+                            if (processedImage) {
+                                this.setProcessedImageCache(cacheKey, processedImage);
+                                log.debug(`Cached processed image for layer ${layerId} after slider change`);
+
+                                // Only now remove from live rendering set and trigger re-render
+                                this.layersAdjustingBlendArea.delete(layerId);
+                                this.canvas.render();
+                            }
+                        } catch (error) {
+                            log.error('Failed to create processed image after slider change:', error);
+                            // Fallback: remove from live rendering set even if cache creation failed
                             this.layersAdjustingBlendArea.delete(layerId);
-                            this.canvas.render();
                         }
-                    } catch (error) {
-                        log.error('Failed to create processed image after slider change:', error);
-                        // Fallback: remove from live rendering even if cache creation failed
-                        this.layersAdjustingBlendArea.delete(layerId);
-                    }
+                    })();
                 }, 0); // Use setTimeout to make it asynchronous
             }
             this.canvas.saveState();

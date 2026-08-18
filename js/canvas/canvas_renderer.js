@@ -130,8 +130,8 @@ export class CanvasRenderer {
             ctx.restore();
         }
         // Draw selection frames for selected layers
-        const sortedLayers = [...this.canvas.layers].sort((a, b) => a.zIndex - b.zIndex);
-        sortedLayers.forEach(layer => {
+        const sortedLayers = this.canvas.canvasLayers.getRenderOrder(this.canvas.layers);
+        sortedLayers.forEach((layer) => {
             if (!layer.image || !layer.visible)
                 return;
             if (this.canvas.canvasSelection.selectedLayers.includes(layer)) {
