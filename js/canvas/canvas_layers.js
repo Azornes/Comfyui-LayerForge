@@ -24,6 +24,8 @@ export class CanvasLayers {
         // Cache for processed images with effects applied. ImageBitmap avoids the
         // Base64 round-trip used by the old HTMLImageElement path.
         this.processedImageCache = new Map();
+        this.processedImageMetadata = new Map();
+        this.lastProcessedImageFallbacks = new Map();
         // Reused surface for live blend-area previews. It grows when necessary
         // and is cleared between uses instead of being allocated every frame.
         this.liveBlendCanvas = null;
@@ -140,6 +142,8 @@ export class CanvasLayers {
         this.clipboardManager = new ClipboardManager(canvas);
         this.distanceFieldCache = new WeakMap();
         this.processedImageCache = new Map();
+        this.processedImageMetadata = new Map();
+        this.lastProcessedImageFallbacks = new Map();
         this.processedImageDebounceTimers = new Map();
         this.processedImageBuildTimers = new Map();
         this.processedImageBuilds = new Map();
@@ -481,6 +485,7 @@ export class CanvasLayers {
             // path will request the final state once.
             cacheOnly: deferProcessedImage,
             allowCacheWhileAdjusting: isDraggingLayers,
+            allowStaleCacheWhileDragging: isDraggingLayers,
         });
         // For scaling operations, try to find the BEST matching cache for this layer
         let bestMatchingCache = null;
@@ -732,12 +737,17 @@ export class CanvasLayers {
     /**
      * Generate a cache key for processed images based on layer properties
      */
-    getProcessedImageCacheKey(layer) {
-        const blendArea = layer.blendArea ?? 0;
+    getProcessedImageGeometryKey(layer) {
         const cropKey = layer.cropBounds ?
             `${layer.cropBounds.x},${layer.cropBounds.y},${layer.cropBounds.width},${layer.cropBounds.height}` :
             'nocrop';
-        return `${layer.id}_${blendArea}_${cropKey}_${layer.width}_${layer.height}`;
+        // Blend Area changes alter pixels, but not the image layout. Keeping
+        // that value out of this compatibility key lets the last valid mask
+        // remain visible while a new blend-area cache is being built.
+        return `${cropKey}_${layer.width}_${layer.height}`;
+    }
+    getProcessedImageCacheKey(layer) {
+        return `${layer.id}_${this.getProcessedImageGeometryKey(layer)}`;
     }
     isUserInteractionActive() {
         const mode = this.canvas.canvasInteractions?.interaction?.mode;
@@ -746,7 +756,47 @@ export class CanvasLayers {
     isLatestProcessedImageKey(layerId, cacheKey) {
         return this.latestProcessedImageKeys.get(layerId) === cacheKey;
     }
-    setLatestProcessedImageKey(layerId, cacheKey) {
+    isProcessedImageReferenced(image) {
+        for (const cachedImage of this.processedImageCache.values()) {
+            if (cachedImage === image)
+                return true;
+        }
+        for (const fallback of this.lastProcessedImageFallbacks.values()) {
+            if (fallback.image === image)
+                return true;
+        }
+        return false;
+    }
+    releaseProcessedImageIfUnreferenced(image) {
+        if (!image || this.isProcessedImageReferenced(image))
+            return;
+        this.releaseProcessedImage(image);
+    }
+    rememberProcessedImageFallback(layerId, cacheKey, image) {
+        const metadata = this.processedImageMetadata.get(cacheKey);
+        if (!metadata)
+            return;
+        const previousFallback = this.lastProcessedImageFallbacks.get(layerId);
+        if (previousFallback?.image === image) {
+            this.lastProcessedImageFallbacks.set(layerId, {
+                cacheKey,
+                image,
+                sourceImage: metadata.sourceImage,
+                geometryKey: metadata.geometryKey
+            });
+            return;
+        }
+        this.lastProcessedImageFallbacks.delete(layerId);
+        this.releaseProcessedImageIfUnreferenced(previousFallback?.image);
+        this.lastProcessedImageFallbacks.set(layerId, {
+            cacheKey,
+            image,
+            sourceImage: metadata.sourceImage,
+            geometryKey: metadata.geometryKey
+        });
+    }
+    setLatestProcessedImageKey(layer, cacheKey) {
+        const layerId = layer.id;
         this.latestProcessedImageKeys.set(layerId, cacheKey);
         // Keep only the newest pending timer and processed bitmap for this
         // layer. In-flight promises cannot be cancelled, so their result is
@@ -759,8 +809,13 @@ export class CanvasLayers {
         }
         for (const cachedKey of this.processedImageCache.keys()) {
             if (cachedKey.startsWith(`${layerId}_`) && cachedKey !== cacheKey) {
-                this.releaseProcessedImage(this.processedImageCache.get(cachedKey));
+                const cachedImage = this.processedImageCache.get(cachedKey);
                 this.processedImageCache.delete(cachedKey);
+                if (cachedImage) {
+                    this.rememberProcessedImageFallback(layerId, cachedKey, cachedImage);
+                }
+                this.processedImageMetadata.delete(cachedKey);
+                this.releaseProcessedImageIfUnreferenced(cachedImage);
             }
         }
     }
@@ -769,7 +824,7 @@ export class CanvasLayers {
      * Uses live rendering for layers being actively adjusted, debounced processing for others
      */
     getProcessedImage(layer, options = {}) {
-        const { cacheOnly = false, allowCacheWhileAdjusting = false } = options;
+        const { cacheOnly = false, allowCacheWhileAdjusting = false, allowStaleCacheWhileDragging = false } = options;
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
         const needsCropEffect = layer.cropBounds && layer.originalWidth && layer.originalHeight;
@@ -798,6 +853,15 @@ export class CanvasLayers {
             log.debug(`Using cached processed image for layer ${layer.id}`);
             return this.processedImageCache.get(cacheKey) || null;
         }
+        if (cacheOnly && allowStaleCacheWhileDragging) {
+            const fallback = this.lastProcessedImageFallbacks.get(layer.id);
+            if (fallback &&
+                fallback.sourceImage === layer.image &&
+                fallback.geometryKey === this.getProcessedImageGeometryKey(layer)) {
+                log.debug(`Using last valid processed image for layer ${layer.id} while cache is rebuilding`);
+                return fallback.image;
+            }
+        }
         // During a layer drag, never start full-resolution blend processing
         // from the render loop. Use the source image until a cache is ready;
         // the interaction-end path will schedule the processed cache later.
@@ -812,7 +876,7 @@ export class CanvasLayers {
      * Schedule processed image creation after debounce delay
      */
     scheduleProcessedImageCreation(layer, cacheKey) {
-        this.setLatestProcessedImageKey(layer.id, cacheKey);
+        this.setLatestProcessedImageKey(layer, cacheKey);
         // A render can request the same missing cache many times. Keep one
         // timer/build per cache key instead of resetting the delay each frame.
         if (this.processedImageCache.has(cacheKey) ||
@@ -925,7 +989,7 @@ export class CanvasLayers {
         if (latestKey && latestKey !== cacheKey) {
             return Promise.resolve(false);
         }
-        this.setLatestProcessedImageKey(layer.id, cacheKey);
+        this.setLatestProcessedImageKey(layer, cacheKey);
         if (this.processedImageCache.has(cacheKey)) {
             return Promise.resolve(true);
         }
@@ -945,7 +1009,7 @@ export class CanvasLayers {
                     this.releaseProcessedImage(processedImage);
                     return false;
                 }
-                this.setProcessedImageCache(cacheKey, processedImage);
+                this.setProcessedImageCache(layer, cacheKey, processedImage);
                 log.debug(`Cached ${operationName} for layer ${layer.id}`);
                 this.canvas.render();
                 return true;
@@ -982,12 +1046,19 @@ export class CanvasLayers {
             closableImage.close();
         }
     }
-    setProcessedImageCache(key, image) {
+    setProcessedImageCache(layer, key, image) {
         const previousImage = this.processedImageCache.get(key);
         if (previousImage && previousImage !== image) {
-            this.releaseProcessedImage(previousImage);
+            this.processedImageCache.delete(key);
+            this.processedImageMetadata.delete(key);
+            this.releaseProcessedImageIfUnreferenced(previousImage);
         }
         this.processedImageCache.set(key, image);
+        this.processedImageMetadata.set(key, {
+            sourceImage: layer.image,
+            geometryKey: this.getProcessedImageGeometryKey(layer)
+        });
+        this.rememberProcessedImageFallback(layer.id, key, image);
     }
     /**
      * Invalidate processed image cache for a specific layer
@@ -1001,8 +1072,13 @@ export class CanvasLayers {
             }
         }
         keysToDelete.forEach(key => {
-            this.releaseProcessedImage(this.processedImageCache.get(key));
+            const cachedImage = this.processedImageCache.get(key);
             this.processedImageCache.delete(key);
+            if (cachedImage) {
+                this.rememberProcessedImageFallback(layerId, key, cachedImage);
+            }
+            this.processedImageMetadata.delete(key);
+            this.releaseProcessedImageIfUnreferenced(cachedImage);
             log.debug(`Invalidated processed image cache for key: ${key}`);
         });
         // Also clear pending processed-image and transform timers for this layer.
@@ -1026,10 +1102,16 @@ export class CanvasLayers {
      */
     clearProcessedImageCache() {
         this.latestProcessedImageKeys.clear();
-        for (const image of this.processedImageCache.values()) {
+        const images = new Set([
+            ...this.processedImageCache.values(),
+            ...Array.from(this.lastProcessedImageFallbacks.values(), fallback => fallback.image)
+        ]);
+        this.processedImageCache.clear();
+        this.processedImageMetadata.clear();
+        this.lastProcessedImageFallbacks.clear();
+        for (const image of images) {
             this.releaseProcessedImage(image);
         }
-        this.processedImageCache.clear();
         for (const timer of this.processedImageBuildTimers.values()) {
             clearTimeout(timer);
         }
@@ -1223,7 +1305,10 @@ export class CanvasLayers {
         ctx.imageSmoothingQuality = 'high';
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = applyLayerOpacity ? (layer.opacity !== undefined ? layer.opacity : 1) : 1;
-        const processedImage = this.getProcessedImage(layer, { cacheOnly: true });
+        const processedImage = this.getProcessedImage(layer, {
+            cacheOnly: true,
+            allowStaleCacheWhileDragging: true
+        });
         if (processedImage) {
             ctx.drawImage(processedImage, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         }
