@@ -41,6 +41,20 @@ interface DistanceFieldCacheEntry {
     lastBlendArea: number | null;
 }
 
+interface DragScenePart {
+    staticLayers: Layer[];
+    dynamicLayers: Layer[];
+    canvas: HTMLCanvasElement | null;
+}
+
+interface DragSceneCache {
+    key: string;
+    staticLayers: Layer[];
+    staticImages: HTMLImageElement[];
+    selectedLayers: Layer[];
+    parts: DragScenePart[];
+}
+
 export class CanvasLayers {
     private canvas: Canvas;
     private _canvasMaskCache: WeakMap<HTMLCanvasElement, DistanceFieldCacheEntry> = new WeakMap();
@@ -77,6 +91,7 @@ export class CanvasLayers {
     private renderOrderSource: Layer[] | null = null;
     private renderOrderSourceEntries: Layer[] = [];
     private renderOrderSignature = '';
+    private dragSceneCache: DragSceneCache | null = null;
     
     // Debouncing system for processed image creation
     private processedImageDebounceTimers: Map<string, number> = new Map();
@@ -1376,6 +1391,208 @@ export class CanvasLayers {
         } else {
             // For images, use the original WeakMap cache
             return this.getOrCreateDistanceFieldMask(imageOrCanvas, this.distanceFieldCache, blendArea);
+        }
+    }
+
+    private getDragSceneCacheKey(
+        sortedLayers: Layer[],
+        selectedIds: Set<string>,
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): string {
+        const selectedSignature = sortedLayers
+            .filter(layer => selectedIds.has(layer.id))
+            .map(layer => layer.id)
+            .join(',');
+        const staticSignature = sortedLayers
+            .filter(layer => !selectedIds.has(layer.id))
+            .map(layer => {
+                const cropKey = layer.cropBounds ?
+                    `${layer.cropBounds.x},${layer.cropBounds.y},${layer.cropBounds.width},${layer.cropBounds.height}` :
+                    'nocrop';
+                return [
+                    layer.id,
+                    layer.imageId,
+                    layer.zIndex,
+                    layer.visible ? 1 : 0,
+                    layer.x,
+                    layer.y,
+                    layer.width,
+                    layer.height,
+                    layer.rotation,
+                    layer.blendMode || 'normal',
+                    layer.opacity,
+                    layer.blendArea ?? 0,
+                    cropKey
+                ].join(':');
+            })
+            .join('|');
+
+        return `${width}x${height}|${viewport.x},${viewport.y},${viewport.zoom}|${selectedSignature}|${staticSignature}`;
+    }
+
+    private canUseDragSceneCache(sortedLayers: Layer[], selectedIds: Set<string>): boolean {
+        let selectedLayerSeen = false;
+        for (const layer of sortedLayers) {
+            if (selectedIds.has(layer.id)) {
+                selectedLayerSeen = true;
+                continue;
+            }
+
+            // A non-normal layer above a moving layer needs the moving pixels
+            // as its compositing input. Keep the normal renderer for that
+            // case so blend-mode ordering remains pixel-identical.
+            if (selectedLayerSeen && layer.blendMode && !['normal', 'source-over'].includes(layer.blendMode)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private createDragStaticCanvas(
+        layers: Layer[],
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): HTMLCanvasElement | null {
+        const surface = createCanvas(width, height);
+        if (!surface.ctx) return null;
+
+        surface.ctx.save();
+        surface.ctx.scale(viewport.zoom, viewport.zoom);
+        surface.ctx.translate(-viewport.x, -viewport.y);
+        this._drawLayers(surface.ctx, layers);
+        surface.ctx.restore();
+        return surface.canvas;
+    }
+
+    private buildDragSceneCache(
+        sortedLayers: Layer[],
+        selectedIds: Set<string>,
+        selectedLayers: Layer[],
+        key: string,
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): DragSceneCache | null {
+        const parts: DragScenePart[] = [];
+        let staticLayers: Layer[] = [];
+
+        for (const layer of sortedLayers) {
+            if (selectedIds.has(layer.id)) {
+                parts.push({
+                    staticLayers,
+                    dynamicLayers: [layer],
+                    canvas: null
+                });
+                staticLayers = [];
+            } else {
+                staticLayers.push(layer);
+            }
+        }
+
+        parts.push({
+            staticLayers,
+            dynamicLayers: [],
+            canvas: null
+        });
+
+        for (const part of parts) {
+            if (part.staticLayers.length === 0) continue;
+            part.canvas = this.createDragStaticCanvas(part.staticLayers, viewport, width, height);
+            if (!part.canvas) return null;
+        }
+
+        const cachedStaticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
+        return {
+            key,
+            staticLayers: cachedStaticLayers,
+            staticImages: cachedStaticLayers.map(layer => layer.image),
+            selectedLayers: [...selectedLayers],
+            parts
+        };
+    }
+
+    private drawDragStaticCanvas(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.drawImage(canvas, 0, 0);
+        ctx.restore();
+    }
+
+    public clearDragSceneCache(): void {
+        if (!this.dragSceneCache) return;
+
+        for (const part of this.dragSceneCache.parts) {
+            if (part.canvas) {
+                part.canvas.width = 0;
+                part.canvas.height = 0;
+            }
+        }
+        this.dragSceneCache = null;
+    }
+
+    public drawLayersDuringDrag(
+        ctx: CanvasRenderingContext2D,
+        layers: Layer[],
+        selectedLayers: Layer[],
+        viewport: { x: number; y: number; zoom: number },
+        width: number,
+        height: number
+    ): void {
+        if (selectedLayers.length === 0) {
+            this._drawLayers(ctx, layers);
+            return;
+        }
+
+        const sortedLayers = this.getRenderOrder(layers);
+        const selectedIds = new Set(selectedLayers.map(layer => layer.id));
+        if (!this.canUseDragSceneCache(sortedLayers, selectedIds)) {
+            this.clearDragSceneCache();
+            this._drawLayers(ctx, layers);
+            return;
+        }
+
+        const key = this.getDragSceneCacheKey(sortedLayers, selectedIds, viewport, width, height);
+        const staticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
+        const selectedReferencesChanged = !this.dragSceneCache ||
+            this.dragSceneCache.selectedLayers.length !== selectedLayers.length ||
+            selectedLayers.some((layer, index) => this.dragSceneCache?.selectedLayers[index] !== layer);
+        const staticReferencesChanged = !this.dragSceneCache ||
+            this.dragSceneCache.staticLayers.length !== staticLayers.length ||
+            staticLayers.some((layer, index) => {
+                return this.dragSceneCache?.staticLayers[index] !== layer ||
+                    this.dragSceneCache?.staticImages[index] !== layer.image;
+            });
+
+        if (!this.dragSceneCache || this.dragSceneCache.key !== key || selectedReferencesChanged || staticReferencesChanged) {
+            this.clearDragSceneCache();
+            this.dragSceneCache = this.buildDragSceneCache(
+                sortedLayers,
+                selectedIds,
+                selectedLayers,
+                key,
+                viewport,
+                width,
+                height
+            );
+        }
+
+        if (!this.dragSceneCache) {
+            this._drawLayers(ctx, layers);
+            return;
+        }
+
+        for (const part of this.dragSceneCache.parts) {
+            if (part.canvas) {
+                this.drawDragStaticCanvas(ctx, part.canvas);
+            }
+            if (part.dynamicLayers.length > 0) {
+                this._drawLayers(ctx, part.dynamicLayers);
+            }
         }
     }
 

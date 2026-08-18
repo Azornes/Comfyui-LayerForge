@@ -10,7 +10,7 @@ const canvasLayersSource = await readFile(
 function createDistanceFieldMethods(createData, rasterizeMask) {
   const helperStart = canvasLayersSource.indexOf('    getOrCreateDistanceFieldMask(');
   const methodStart = canvasLayersSource.indexOf('    getDistanceFieldMaskSync(');
-  const methodEnd = canvasLayersSource.indexOf('\n    _drawLayers', methodStart);
+  const methodEnd = canvasLayersSource.indexOf('\n    getDragSceneCacheKey', methodStart);
   assert.notEqual(helperStart, -1, 'compiled distance-field helper should exist');
   assert.notEqual(methodStart, -1, 'compiled distance-field method should exist');
   assert.notEqual(methodEnd, -1, 'compiled distance-field method should have a following method');

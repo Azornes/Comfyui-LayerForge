@@ -147,8 +147,23 @@ export class CanvasRenderer {
 
         this.drawGrid(ctx);
 
-        // Use CanvasLayers to draw layers with proper blend area support
-        this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
+        // Use a screen-space cache for stationary layer groups while moving
+        // selected layers. The fallback keeps the regular compositing path
+        // for blend modes that cannot be safely split around the moving layer.
+        const isDraggingLayers = this.canvas.canvasInteractions?.interaction?.mode === 'dragging';
+        if (isDraggingLayers && this.canvas.canvasSelection.selectedLayers.length > 0) {
+            this.canvas.canvasLayers.drawLayersDuringDrag(
+                ctx,
+                this.canvas.layers,
+                this.canvas.canvasSelection.selectedLayers,
+                this.canvas.viewport,
+                this.canvas.offscreenCanvas.width,
+                this.canvas.offscreenCanvas.height
+            );
+        } else {
+            this.canvas.canvasLayers.clearDragSceneCache();
+            this.canvas.canvasLayers.drawLayersToContext(ctx, this.canvas.layers);
+        }
         
         // Draw mask AFTER layers but BEFORE all preview outlines
         const maskImage = this.canvas.maskTool.getMask();

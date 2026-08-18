@@ -38,6 +38,7 @@ export class CanvasLayers {
         this.renderOrderSource = null;
         this.renderOrderSourceEntries = [];
         this.renderOrderSignature = '';
+        this.dragSceneCache = null;
         // Debouncing system for processed image creation
         this.processedImageDebounceTimers = new Map();
         this.processedImageBuildTimers = new Map();
@@ -1164,6 +1165,159 @@ export class CanvasLayers {
         else {
             // For images, use the original WeakMap cache
             return this.getOrCreateDistanceFieldMask(imageOrCanvas, this.distanceFieldCache, blendArea);
+        }
+    }
+    getDragSceneCacheKey(sortedLayers, selectedIds, viewport, width, height) {
+        const selectedSignature = sortedLayers
+            .filter(layer => selectedIds.has(layer.id))
+            .map(layer => layer.id)
+            .join(',');
+        const staticSignature = sortedLayers
+            .filter(layer => !selectedIds.has(layer.id))
+            .map(layer => {
+            const cropKey = layer.cropBounds ?
+                `${layer.cropBounds.x},${layer.cropBounds.y},${layer.cropBounds.width},${layer.cropBounds.height}` :
+                'nocrop';
+            return [
+                layer.id,
+                layer.imageId,
+                layer.zIndex,
+                layer.visible ? 1 : 0,
+                layer.x,
+                layer.y,
+                layer.width,
+                layer.height,
+                layer.rotation,
+                layer.blendMode || 'normal',
+                layer.opacity,
+                layer.blendArea ?? 0,
+                cropKey
+            ].join(':');
+        })
+            .join('|');
+        return `${width}x${height}|${viewport.x},${viewport.y},${viewport.zoom}|${selectedSignature}|${staticSignature}`;
+    }
+    canUseDragSceneCache(sortedLayers, selectedIds) {
+        let selectedLayerSeen = false;
+        for (const layer of sortedLayers) {
+            if (selectedIds.has(layer.id)) {
+                selectedLayerSeen = true;
+                continue;
+            }
+            // A non-normal layer above a moving layer needs the moving pixels
+            // as its compositing input. Keep the normal renderer for that
+            // case so blend-mode ordering remains pixel-identical.
+            if (selectedLayerSeen && layer.blendMode && !['normal', 'source-over'].includes(layer.blendMode)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    createDragStaticCanvas(layers, viewport, width, height) {
+        const surface = createCanvas(width, height);
+        if (!surface.ctx)
+            return null;
+        surface.ctx.save();
+        surface.ctx.scale(viewport.zoom, viewport.zoom);
+        surface.ctx.translate(-viewport.x, -viewport.y);
+        this._drawLayers(surface.ctx, layers);
+        surface.ctx.restore();
+        return surface.canvas;
+    }
+    buildDragSceneCache(sortedLayers, selectedIds, selectedLayers, key, viewport, width, height) {
+        const parts = [];
+        let staticLayers = [];
+        for (const layer of sortedLayers) {
+            if (selectedIds.has(layer.id)) {
+                parts.push({
+                    staticLayers,
+                    dynamicLayers: [layer],
+                    canvas: null
+                });
+                staticLayers = [];
+            }
+            else {
+                staticLayers.push(layer);
+            }
+        }
+        parts.push({
+            staticLayers,
+            dynamicLayers: [],
+            canvas: null
+        });
+        for (const part of parts) {
+            if (part.staticLayers.length === 0)
+                continue;
+            part.canvas = this.createDragStaticCanvas(part.staticLayers, viewport, width, height);
+            if (!part.canvas)
+                return null;
+        }
+        const cachedStaticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
+        return {
+            key,
+            staticLayers: cachedStaticLayers,
+            staticImages: cachedStaticLayers.map(layer => layer.image),
+            selectedLayers: [...selectedLayers],
+            parts
+        };
+    }
+    drawDragStaticCanvas(ctx, canvas) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.drawImage(canvas, 0, 0);
+        ctx.restore();
+    }
+    clearDragSceneCache() {
+        if (!this.dragSceneCache)
+            return;
+        for (const part of this.dragSceneCache.parts) {
+            if (part.canvas) {
+                part.canvas.width = 0;
+                part.canvas.height = 0;
+            }
+        }
+        this.dragSceneCache = null;
+    }
+    drawLayersDuringDrag(ctx, layers, selectedLayers, viewport, width, height) {
+        if (selectedLayers.length === 0) {
+            this._drawLayers(ctx, layers);
+            return;
+        }
+        const sortedLayers = this.getRenderOrder(layers);
+        const selectedIds = new Set(selectedLayers.map(layer => layer.id));
+        if (!this.canUseDragSceneCache(sortedLayers, selectedIds)) {
+            this.clearDragSceneCache();
+            this._drawLayers(ctx, layers);
+            return;
+        }
+        const key = this.getDragSceneCacheKey(sortedLayers, selectedIds, viewport, width, height);
+        const staticLayers = sortedLayers.filter(layer => !selectedIds.has(layer.id));
+        const selectedReferencesChanged = !this.dragSceneCache ||
+            this.dragSceneCache.selectedLayers.length !== selectedLayers.length ||
+            selectedLayers.some((layer, index) => this.dragSceneCache?.selectedLayers[index] !== layer);
+        const staticReferencesChanged = !this.dragSceneCache ||
+            this.dragSceneCache.staticLayers.length !== staticLayers.length ||
+            staticLayers.some((layer, index) => {
+                return this.dragSceneCache?.staticLayers[index] !== layer ||
+                    this.dragSceneCache?.staticImages[index] !== layer.image;
+            });
+        if (!this.dragSceneCache || this.dragSceneCache.key !== key || selectedReferencesChanged || staticReferencesChanged) {
+            this.clearDragSceneCache();
+            this.dragSceneCache = this.buildDragSceneCache(sortedLayers, selectedIds, selectedLayers, key, viewport, width, height);
+        }
+        if (!this.dragSceneCache) {
+            this._drawLayers(ctx, layers);
+            return;
+        }
+        for (const part of this.dragSceneCache.parts) {
+            if (part.canvas) {
+                this.drawDragStaticCanvas(ctx, part.canvas);
+            }
+            if (part.dynamicLayers.length > 0) {
+                this._drawLayers(ctx, part.dynamicLayers);
+            }
         }
     }
     _drawLayers(ctx, layers, options = {}) {
