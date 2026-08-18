@@ -15,7 +15,9 @@ import { blobToDataUrl } from "../media/image_utils.js";
 const log = createModuleLogger('CanvasLayers');
 export class CanvasLayers {
     constructor(canvas) {
-        this._canvasMaskCache = new Map();
+        this._canvasMaskCache = new WeakMap();
+        this.cropCanvasCache = new WeakMap();
+        this.MAX_CROP_CANVAS_CACHE_ENTRIES = 8;
         this.blendMenuElement = null;
         this.blendMenuWorldX = 0;
         this.blendMenuWorldY = 0;
@@ -580,6 +582,37 @@ export class CanvasLayers {
         ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
         this.drawLayerImageWithCrop(ctx, layer);
     }
+    getOrCreateCropCanvas(image, cropBounds) {
+        const cacheKey = `${cropBounds.x},${cropBounds.y},${cropBounds.width},${cropBounds.height}`;
+        let imageCache = this.cropCanvasCache.get(image);
+        if (!imageCache) {
+            imageCache = new Map();
+            this.cropCanvasCache.set(image, imageCache);
+        }
+        const cachedCanvas = imageCache.get(cacheKey);
+        if (cachedCanvas) {
+            // Promote the entry so the small cache behaves as an LRU cache.
+            imageCache.delete(cacheKey);
+            imageCache.set(cacheKey, cachedCanvas);
+            return cachedCanvas;
+        }
+        const { canvas, ctx } = createCanvas(cropBounds.width, cropBounds.height);
+        if (!ctx)
+            return null;
+        ctx.drawImage(image, cropBounds.x, cropBounds.y, cropBounds.width, cropBounds.height, 0, 0, cropBounds.width, cropBounds.height);
+        imageCache.set(cacheKey, canvas);
+        while (imageCache.size > this.MAX_CROP_CANVAS_CACHE_ENTRIES) {
+            const oldestKey = imageCache.keys().next().value;
+            if (oldestKey === undefined)
+                break;
+            const oldestCanvas = imageCache.get(oldestKey);
+            imageCache.delete(oldestKey);
+            if (oldestCanvas) {
+                this._canvasMaskCache.delete(oldestCanvas);
+            }
+        }
+        return canvas;
+    }
     /**
      * Zunifikowana funkcja do tworzenia maski blend area dla warstwy
      * @param layer Warstwa dla której tworzymy maskę
@@ -588,11 +621,9 @@ export class CanvasLayers {
     createBlendAreaMask(layer) {
         const blendArea = layer.blendArea ?? 0;
         if (layer.cropBounds && layer.originalWidth && layer.originalHeight) {
-            // Create a cropped canvas
             const s = layer.cropBounds;
-            const { canvas: cropCanvas, ctx: cropCtx } = createCanvas(s.width, s.height);
-            if (cropCtx) {
-                cropCtx.drawImage(layer.image, s.x, s.y, s.width, s.height, 0, 0, s.width, s.height);
+            const cropCanvas = this.getOrCreateCropCanvas(layer.image, s);
+            if (cropCanvas) {
                 // Generate distance field mask for the cropped region
                 const maskCanvas = this.getDistanceFieldMaskSync(cropCanvas, blendArea);
                 if (maskCanvas) {
@@ -1052,11 +1083,10 @@ export class CanvasLayers {
         }
     }
     getDistanceFieldMaskSync(imageOrCanvas, blendArea) {
-        // Use a WeakMap for images, and a Map for canvases (since canvases are not always stable references)
+        // Use WeakMaps so cached masks do not keep image/crop resources alive.
         if (imageOrCanvas instanceof HTMLCanvasElement) {
-            // For canvases, use a Map on this instance (not WeakMap)
             if (!this._canvasMaskCache)
-                this._canvasMaskCache = new Map();
+                this._canvasMaskCache = new WeakMap();
             let canvasCache = this._canvasMaskCache.get(imageOrCanvas);
             if (!canvasCache) {
                 canvasCache = new Map();
