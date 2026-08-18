@@ -20,7 +20,10 @@ export class CanvasRenderer {
             .join('|');
     }
     getLayerScreenBounds(layer, viewport, width, height) {
-        const worldBounds = getLayerWorldBounds(layer, { cropAware: true });
+        // The drag path can draw a full-size processed image even when the
+        // visible crop is smaller. Use the full transform bounds here so a
+        // previous frame can never leave processed/blended pixels behind.
+        const worldBounds = getLayerWorldBounds(layer);
         const padding = 32;
         const x = Math.floor((worldBounds.x - viewport.x) * viewport.zoom) - padding;
         const y = Math.floor((worldBounds.y - viewport.y) * viewport.zoom) - padding;
@@ -37,14 +40,56 @@ export class CanvasRenderer {
             height: Math.max(0, clampedBottom - top)
         };
     }
+    getLayerInfoScreenBounds(layer, viewport, width, height) {
+        const bounds = getLayerWorldBounds(layer);
+        const layerIndex = this.canvas.layers.indexOf(layer);
+        const lines = [
+            `${Math.round(layer.width)}x${Math.round(layer.height)} | ${Math.round(layer.rotation % 360)}° | Layer #${layerIndex + 1}`
+        ];
+        if (layer.originalWidth && layer.originalHeight) {
+            lines.push(`Original: ${layer.originalWidth}x${layer.originalHeight}`);
+        }
+        // drawTextWithBackground uses a fixed screen-space font and line
+        // height. Measure the same text so narrow layers are invalidated far
+        // enough horizontally as well as below the image.
+        const textContext = this.canvas.offscreenCtx;
+        let textWidth = 320;
+        if (textContext) {
+            textContext.save();
+            textContext.setTransform(1, 0, 0, 1, 0, 0);
+            textContext.font = "14px sans-serif";
+            textWidth = Math.max(...lines.map(line => textContext.measureText(line).width));
+            textContext.restore();
+        }
+        const backgroundWidth = textWidth + 10;
+        const backgroundHeight = lines.length * 18 + 4;
+        const centerX = (bounds.x + bounds.width / 2 - viewport.x) * viewport.zoom;
+        const centerY = (bounds.y + bounds.height - viewport.y) * viewport.zoom + 20;
+        const x = Math.floor(centerX - backgroundWidth / 2);
+        const y = Math.floor(centerY - backgroundHeight / 2);
+        const right = Math.ceil(centerX + backgroundWidth / 2);
+        const bottom = Math.ceil(centerY + backgroundHeight / 2);
+        const left = Math.max(0, x);
+        const top = Math.max(0, y);
+        const clampedRight = Math.min(width, right);
+        const clampedBottom = Math.min(height, bottom);
+        return {
+            x: left,
+            y: top,
+            width: Math.max(0, clampedRight - left),
+            height: Math.max(0, clampedBottom - top)
+        };
+    }
     getDragSelectionBounds(selectedLayers, viewport, width, height) {
         if (selectedLayers.length === 0)
             return null;
-        const layerBounds = selectedLayers.map(layer => this.getLayerScreenBounds(layer, viewport, width, height));
-        const left = Math.min(...layerBounds.map(bounds => bounds.x));
-        const top = Math.min(...layerBounds.map(bounds => bounds.y));
-        const right = Math.max(...layerBounds.map(bounds => bounds.x + bounds.width));
-        const bottom = Math.max(...layerBounds.map(bounds => bounds.y + bounds.height));
+        const renderBounds = selectedLayers.map(layer => this.getLayerScreenBounds(layer, viewport, width, height));
+        const infoBounds = selectedLayers.map(layer => this.getLayerInfoScreenBounds(layer, viewport, width, height));
+        const allBounds = [...renderBounds, ...infoBounds];
+        const left = Math.min(...allBounds.map(bounds => bounds.x));
+        const top = Math.min(...allBounds.map(bounds => bounds.y));
+        const right = Math.max(...allBounds.map(bounds => bounds.x + bounds.width));
+        const bottom = Math.max(...allBounds.map(bounds => bounds.y + bounds.height));
         return {
             x: left,
             y: top,
