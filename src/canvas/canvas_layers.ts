@@ -1587,10 +1587,20 @@ export class CanvasLayers {
         if (processedImage) {
             ctx.drawImage(processedImage, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
         } else if ((layer.blendArea ?? 0) > 0) {
-            // Keep the mask in the prepared texture, but defer the layer's
-            // blend mode to playback so it is evaluated against the real
-            // compositing backdrop.
-            this.drawLayerWithBlendArea(ctx, layer);
+            // Isolate the destination-in mask from earlier layers in the
+            // source-over segment. The layer's blend mode is still deferred
+            // to playback so it is evaluated against the real backdrop.
+            const surface = createCanvas(Math.max(1, Math.ceil(layer.width)), Math.max(1, Math.ceil(layer.height)));
+            if (surface.ctx) {
+                surface.ctx.globalCompositeOperation = 'source-over';
+                surface.ctx.globalAlpha = 1;
+                this.drawLayerWithBlendArea(surface.ctx, layer, 0, 0);
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = applyLayerOpacity ? (layer.opacity !== undefined ? layer.opacity : 1) : 1;
+                ctx.drawImage(surface.canvas, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+            } else {
+                this.drawLayerImageWithCrop(ctx, layer);
+            }
         } else {
             this.drawLayerImageWithCrop(ctx, layer);
         }
