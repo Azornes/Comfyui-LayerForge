@@ -327,8 +327,22 @@ export class CanvasRenderer {
             this.canvas.canvas.width = this.canvas.offscreenCanvas.width;
             this.canvas.canvas.height = this.canvas.offscreenCanvas.height;
         }
-        this.canvas.ctx.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
-        this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
+        if (canReuseDragFrame) {
+            // The offscreen canvas already contains the unchanged pixels. A
+            // partial blit keeps the visible canvas from copying the entire
+            // viewport on every drag frame.
+            this.canvas.ctx.save();
+            this.canvas.ctx.globalCompositeOperation = 'source-over';
+            this.canvas.ctx.globalAlpha = 1;
+            dirtyRects.forEach(rect => {
+                this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, rect.x, rect.y, rect.width, rect.height, rect.x, rect.y, rect.width, rect.height);
+            });
+            this.canvas.ctx.restore();
+        }
+        else {
+            this.canvas.ctx.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
+            this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
+        }
         // Ensure overlay canvases are in DOM and properly sized
         this.addOverlayToDOM();
         this.updateOverlaySize();

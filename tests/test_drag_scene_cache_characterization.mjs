@@ -100,6 +100,7 @@ test('drag scene cache groups source-over layers and replays non-normal modes', 
   assert.match(canvasRendererSource, /canReuseDragFrame/);
   assert.match(canvasRendererSource, /getDragDirtyRects/);
   assert.match(canvasRendererSource, /dirtyRects\.forEach/);
+  assert.match(canvasRendererSource, /this\.canvas\.offscreenCanvas,\s*rect\.x/);
   assert.match(canvasRendererSource, /ctx\.clip\(\)/);
   assert.match(canvasLayersSource, /getOrCreateDragLayerPreview/);
   assert.match(canvasLayersSource, /prepareDragLayerPreviews/);
