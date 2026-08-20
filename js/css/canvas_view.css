@@ -1090,6 +1090,12 @@
     box-sizing: border-box;
 }
 
+/* Keep the fullscreen actions clear of the top toolbar controls. */
+.lf-painter-modal-content .lf-painter-controls {
+    box-sizing: border-box;
+    padding-right: 92px;
+}
+
 .lf-workflow-overview-toggle {
     position: absolute;
     top: 12px;
@@ -1104,7 +1110,25 @@
     justify-content: center;
 }
 
+.lf-workflow-run-button {
+    position: absolute;
+    top: 12px;
+    right: 52px;
+    z-index: 30;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .lf-workflow-overview-toggle i[class~="icon-[lucide--panel-right]"] {
+    font-size: 16px;
+}
+
+.lf-workflow-run-button i[class~="icon-[lucide--play]"] {
     font-size: 16px;
 }
 

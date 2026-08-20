@@ -411,9 +411,9 @@ export class Canvas {
     /**
      * Renderuje canvas
      */
-    render(preserveZoomSnapshot = false) {
-        if (!preserveZoomSnapshot) {
-            this.canvasRenderer.invalidateZoomSnapshot();
+    render(preserveViewportSnapshot = false) {
+        if (!preserveViewportSnapshot) {
+            this.canvasRenderer.invalidateViewportSnapshot();
         }
         this.canvasRenderer.render();
     }

@@ -1719,6 +1719,7 @@ async function createCanvasWidget(node, widget, _app) {
     let backdrop = null;
     let modalContent = null;
     let workflowOverviewToggleButton = null;
+    let workflowRunButton = null;
     let workflowOverviewResizeObserver = null;
     let workflowOverviewWindowResizeHandler = null;
     let workflowOverviewLayoutFrame = null;
@@ -1727,6 +1728,14 @@ async function createCanvasWidget(node, widget, _app) {
     let lastModalBounds = { left: Number.NaN, right: Number.NaN };
     let originalParent = null;
     let isEditorOpen = false;
+    const clearFullscreenButtonTooltips = () => {
+        if (workflowOverviewToggleButton) {
+            tooltipManager.removeTooltip(workflowOverviewToggleButton);
+        }
+        if (workflowRunButton) {
+            tooltipManager.removeTooltip(workflowRunButton);
+        }
+    };
     let viewportAdjustment = { x: 0, y: 0 };
     let workflowOverviewSelectionSnapshot = null;
     let workflowOverviewSelectionCleared = false;
@@ -1923,9 +1932,7 @@ async function createCanvasWidget(node, widget, _app) {
         }
         const isOpen = isWorkflowOverviewOpen();
         workflowOverviewToggleButton.setAttribute("aria-pressed", String(isOpen));
-        workflowOverviewToggleButton.title = isOpen
-            ? "Close Workflow Overview"
-            : "Open Workflow Overview";
+        tooltipManager.setTooltip(workflowOverviewToggleButton, isOpen ? "Close Workflow Overview" : "Open Workflow Overview");
         workflowOverviewToggleButton.classList.toggle("lf-workflow-overview-open", isOpen);
     };
     const applyWorkflowOverviewLayout = () => {
@@ -2086,6 +2093,24 @@ async function createCanvasWidget(node, widget, _app) {
         // Reset adjustment
         viewportAdjustment = { x: 0, y: 0 };
     };
+    const runWorkflowFromFullscreen = () => {
+        // Use ComfyUI's own queue button when available. This preserves the
+        // current batch count, queue mode, disabled state, and all native
+        // prompt preparation hooks.
+        const nativeQueueButton = document.querySelector('button[data-testid="queue-button"]');
+        if (nativeQueueButton) {
+            nativeQueueButton.click();
+            return;
+        }
+        // Older ComfyUI versions may not expose the current queue button
+        // markup, but still provide the public queuePrompt API.
+        const queuePrompt = app?.queuePrompt;
+        if (typeof queuePrompt === 'function') {
+            void queuePrompt.call(app, 0, 1);
+            return;
+        }
+        showErrorNotification('Unable to find ComfyUI workflow run action.');
+    };
     const closeEditor = () => {
         if (!isEditorOpen) {
             return;
@@ -2099,8 +2124,10 @@ async function createCanvasWidget(node, widget, _app) {
         }
         isEditorOpen = false;
         restoreWorkflowOverviewSelection();
+        clearFullscreenButtonTooltips();
         modalContent = null;
         workflowOverviewToggleButton = null;
+        workflowRunButton = null;
         openEditorBtn.textContent = "⛶";
         tooltipManager.setTooltip(openEditorBtn, "Open in Editor");
         // Remove ESC key listener when editor closes
@@ -2141,7 +2168,7 @@ async function createCanvasWidget(node, widget, _app) {
             "lf-painter-button lf-icon-button lf-workflow-overview-toggle";
         workflowOverviewToggleButton.setAttribute("aria-label", "Toggle Workflow Overview");
         workflowOverviewToggleButton.setAttribute("aria-pressed", "false");
-        workflowOverviewToggleButton.title = "Open Workflow Overview";
+        tooltipManager.setTooltip(workflowOverviewToggleButton, "Open Workflow Overview");
         const workflowOverviewIcon = document.createElement("i");
         workflowOverviewIcon.className = "icon-[lucide--panel-right] size-4";
         workflowOverviewIcon.setAttribute("aria-hidden", "true");
@@ -2149,7 +2176,18 @@ async function createCanvasWidget(node, widget, _app) {
         workflowOverviewToggleButton.onclick = () => {
             void toggleWorkflowOverview();
         };
+        workflowRunButton = document.createElement("button");
+        workflowRunButton.type = "button";
+        workflowRunButton.className = "lf-painter-button lf-icon-button lf-workflow-run-button";
+        workflowRunButton.setAttribute("aria-label", "Run workflow");
+        tooltipManager.setTooltip(workflowRunButton, "Run workflow");
+        const workflowRunIcon = document.createElement("i");
+        workflowRunIcon.className = "icon-[lucide--play] size-4";
+        workflowRunIcon.setAttribute("aria-hidden", "true");
+        workflowRunButton.appendChild(workflowRunIcon);
+        workflowRunButton.onclick = runWorkflowFromFullscreen;
         modalContent.appendChild(mainContainer);
+        modalContent.appendChild(workflowRunButton);
         modalContent.appendChild(workflowOverviewToggleButton);
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
@@ -2218,8 +2256,10 @@ async function createCanvasWidget(node, widget, _app) {
                 isEditorOpen = false;
                 workflowOverviewSelectionSnapshot = null;
                 workflowOverviewSelectionCleared = false;
+                clearFullscreenButtonTooltips();
                 modalContent = null;
                 workflowOverviewToggleButton = null;
+                workflowRunButton = null;
             }
             unregisterTooltips();
             mattingAbortController?.abort();

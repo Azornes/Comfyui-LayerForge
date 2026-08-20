@@ -623,6 +623,9 @@ export class CanvasLayers {
         
         // Check if this layer is being scaled by wheel or buttons (continues live rendering until cache is ready)
         const isWheelScaling = this.layersWheelScaling.has(layer.id);
+        const isTransformingWithCacheTransition = isTransformingCropBoundsSet ||
+            isTransformingScaleSet ||
+            isWheelScaling;
         
         const shouldRenderLive = !isDraggingLayers && (isTransformingCropBounds || isTransformingScale || isThisLayerBeingAdjusted || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling);
         const deferProcessedImage = isDraggingLayers || isTransformingCropBounds || isTransformingScale || isTransformingCropBoundsSet || isTransformingScaleSet || isWheelScaling;
@@ -635,6 +638,9 @@ export class CanvasLayers {
             cacheOnly: deferProcessedImage,
             allowCacheWhileAdjusting: isDraggingLayers,
             allowStaleCacheWhileDragging: isDraggingLayers,
+            allowStaleCacheWhileTransforming: isTransformingCropBounds ||
+                isTransformingScale ||
+                isTransformingWithCacheTransition,
         });
         
         // For scaling operations, try to find the BEST matching cache for this layer
@@ -693,7 +699,7 @@ export class CanvasLayers {
             }
         }
         
-        if (processedImage && !shouldRenderLive) {
+        if (processedImage && (!shouldRenderLive || isTransformingWithCacheTransition)) {
             // Use cached processed image for all cases except specific live rendering scenarios
             ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
             ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
@@ -704,9 +710,10 @@ export class CanvasLayers {
             ctx.globalCompositeOperation = layer.blendMode as any || 'normal';
             ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1;
             ctx.drawImage(bestMatchingCache, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
-        } else if (needsBlendAreaEffect && shouldRenderLive && !isWheelScaling) {
-            // Render blend area live only when transforming crop bounds or adjusting blend area slider
-            // BUT NOT during wheel scaling - that should use cached image
+        } else if (needsBlendAreaEffect) {
+            // Never expose an unprocessed frame for a layer that has Blend
+            // Area enabled. This also covers the short hand-off window after
+            // a resize, while the new processed cache is being built.
             this._drawLayerWithLiveBlendArea(ctx, layer);
         } else {
             // Normal drawing without blend area effect
@@ -1105,12 +1112,14 @@ export class CanvasLayers {
             cacheOnly?: boolean;
             allowCacheWhileAdjusting?: boolean;
             allowStaleCacheWhileDragging?: boolean;
+            allowStaleCacheWhileTransforming?: boolean;
         } = {}
     ): CanvasImageSource | null {
         const {
             cacheOnly = false,
             allowCacheWhileAdjusting = false,
-            allowStaleCacheWhileDragging = false
+            allowStaleCacheWhileDragging = false,
+            allowStaleCacheWhileTransforming = false
         } = options;
         const blendArea = layer.blendArea ?? 0;
         const needsBlendAreaEffect = blendArea > 0;
@@ -1134,6 +1143,13 @@ export class CanvasLayers {
                 log.debug(`Using cached processed image for layer ${layer.id} during wheel scaling`);
                 return this.processedImageCache.get(cacheKey) || null;
             }
+            if (allowStaleCacheWhileTransforming) {
+                const fallback = this.lastProcessedImageFallbacks.get(layer.id);
+                if (fallback && fallback.sourceImage === layer.image) {
+                    log.debug(`Using last valid processed image for layer ${layer.id} during wheel scaling`);
+                    return fallback.image;
+                }
+            }
             // No cache available and we're scaling - return null to use normal drawing
             return null;
         }
@@ -1152,6 +1168,17 @@ export class CanvasLayers {
                 fallback.sourceImage === layer.image &&
                 fallback.geometryKey === this.getProcessedImageGeometryKey(layer)) {
                 log.debug(`Using last valid processed image for layer ${layer.id} while cache is rebuilding`);
+                return fallback.image;
+            }
+        }
+
+        // During a resize the previous processed image may have a different
+        // geometry, but it is still preferable to a frame without the blend
+        // effect. The final cache replaces this fallback when ready.
+        if (cacheOnly && allowStaleCacheWhileTransforming) {
+            const fallback = this.lastProcessedImageFallbacks.get(layer.id);
+            if (fallback && fallback.sourceImage === layer.image) {
+                log.debug(`Using last valid processed image for layer ${layer.id} during transform`);
                 return fallback.image;
             }
         }
@@ -1282,15 +1309,14 @@ export class CanvasLayers {
             try {
                 return await createImageBitmap(processedCanvas);
             } catch (error) {
-                log.debug('ImageBitmap cache creation failed, using image fallback.', error);
+                log.debug('ImageBitmap cache creation failed, using canvas fallback.', error);
             }
         }
 
-        // Convert canvas to image as a compatibility fallback.
-        const processedImage = new Image();
-        processedImage.crossOrigin = 'anonymous';
-        processedImage.src = processedCanvas.toDataURL();
-        return processedImage;
+        // The canvas is already fully rasterized and is a valid
+        // CanvasImageSource. Returning it avoids the asynchronous Image/dataURL
+        // decode that could briefly expose the layer without its Blend Area.
+        return processedCanvas;
     }
 
     private buildProcessedImage(layer: Layer, cacheKey: string, operationName: string): Promise<boolean> {
@@ -1488,10 +1514,12 @@ export class CanvasLayers {
         
         // Create processed image asynchronously with optional delay
         const executeTransform = async () => {
-            const built = await this.buildProcessedImage(layer, cacheKey, `${transformName} transform`);
-            // Fallback: remove from live rendering even if cache creation failed.
+            await this.buildProcessedImage(layer, cacheKey, `${transformName} transform`);
+            // The render requested by buildProcessedImage may have been queued
+            // while this transition flag was still set. Remove the flag first,
+            // then render once more with the final cache state.
             transformingSet.delete(layerId);
-            if (!built) this.canvas.render();
+            this.canvas.render();
         };
         
         if (delay > 0) {

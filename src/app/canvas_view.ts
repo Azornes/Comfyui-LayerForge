@@ -1995,6 +1995,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     let backdrop: HTMLDivElement | null = null;
     let modalContent: HTMLDivElement | null = null;
     let workflowOverviewToggleButton: HTMLButtonElement | null = null;
+    let workflowRunButton: HTMLButtonElement | null = null;
     let workflowOverviewResizeObserver: ResizeObserver | null = null;
     let workflowOverviewWindowResizeHandler: (() => void) | null = null;
     let workflowOverviewLayoutFrame: number | null = null;
@@ -2003,6 +2004,15 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
     let lastModalBounds = { left: Number.NaN, right: Number.NaN };
     let originalParent: HTMLElement | null = null;
     let isEditorOpen = false;
+
+    const clearFullscreenButtonTooltips = () => {
+        if (workflowOverviewToggleButton) {
+            tooltipManager.removeTooltip(workflowOverviewToggleButton);
+        }
+        if (workflowRunButton) {
+            tooltipManager.removeTooltip(workflowRunButton);
+        }
+    };
     let viewportAdjustment = { x: 0, y: 0 };
     let workflowOverviewSelectionSnapshot: any[] | null = null;
     let workflowOverviewSelectionCleared = false;
@@ -2242,9 +2252,10 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         const isOpen = isWorkflowOverviewOpen();
         workflowOverviewToggleButton.setAttribute("aria-pressed", String(isOpen));
-        workflowOverviewToggleButton.title = isOpen
-            ? "Close Workflow Overview"
-            : "Open Workflow Overview";
+        tooltipManager.setTooltip(
+            workflowOverviewToggleButton,
+            isOpen ? "Close Workflow Overview" : "Open Workflow Overview"
+        );
         workflowOverviewToggleButton.classList.toggle("lf-workflow-overview-open", isOpen);
     };
 
@@ -2444,6 +2455,29 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         viewportAdjustment = { x: 0, y: 0 };
     };
 
+    const runWorkflowFromFullscreen = (): void => {
+        // Use ComfyUI's own queue button when available. This preserves the
+        // current batch count, queue mode, disabled state, and all native
+        // prompt preparation hooks.
+        const nativeQueueButton = document.querySelector<HTMLButtonElement>(
+            'button[data-testid="queue-button"]'
+        );
+        if (nativeQueueButton) {
+            nativeQueueButton.click();
+            return;
+        }
+
+        // Older ComfyUI versions may not expose the current queue button
+        // markup, but still provide the public queuePrompt API.
+        const queuePrompt = (app as any)?.queuePrompt;
+        if (typeof queuePrompt === 'function') {
+            void queuePrompt.call(app, 0, 1);
+            return;
+        }
+
+        showErrorNotification('Unable to find ComfyUI workflow run action.');
+    };
+
     const closeEditor = () => {
         if (!isEditorOpen) {
             return;
@@ -2460,8 +2494,10 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
 
         isEditorOpen = false;
         restoreWorkflowOverviewSelection();
+        clearFullscreenButtonTooltips();
         modalContent = null;
         workflowOverviewToggleButton = null;
+        workflowRunButton = null;
         openEditorBtn.textContent = "⛶";
         tooltipManager.setTooltip(openEditorBtn, "Open in Editor");
 
@@ -2511,7 +2547,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
             "lf-painter-button lf-icon-button lf-workflow-overview-toggle";
         workflowOverviewToggleButton.setAttribute("aria-label", "Toggle Workflow Overview");
         workflowOverviewToggleButton.setAttribute("aria-pressed", "false");
-        workflowOverviewToggleButton.title = "Open Workflow Overview";
+        tooltipManager.setTooltip(workflowOverviewToggleButton, "Open Workflow Overview");
 
         const workflowOverviewIcon = document.createElement("i");
         workflowOverviewIcon.className = "icon-[lucide--panel-right] size-4";
@@ -2521,7 +2557,20 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
             void toggleWorkflowOverview();
         };
 
+        workflowRunButton = document.createElement("button");
+        workflowRunButton.type = "button";
+        workflowRunButton.className = "lf-painter-button lf-icon-button lf-workflow-run-button";
+        workflowRunButton.setAttribute("aria-label", "Run workflow");
+        tooltipManager.setTooltip(workflowRunButton, "Run workflow");
+
+        const workflowRunIcon = document.createElement("i");
+        workflowRunIcon.className = "icon-[lucide--play] size-4";
+        workflowRunIcon.setAttribute("aria-hidden", "true");
+        workflowRunButton.appendChild(workflowRunIcon);
+        workflowRunButton.onclick = runWorkflowFromFullscreen;
+
         modalContent.appendChild(mainContainer);
+        modalContent.appendChild(workflowRunButton);
         modalContent.appendChild(workflowOverviewToggleButton);
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
@@ -2603,8 +2652,10 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                 isEditorOpen = false;
                 workflowOverviewSelectionSnapshot = null;
                 workflowOverviewSelectionCleared = false;
+                clearFullscreenButtonTooltips();
                 modalContent = null;
                 workflowOverviewToggleButton = null;
+                workflowRunButton = null;
             }
             unregisterTooltips();
             mattingAbortController?.abort();

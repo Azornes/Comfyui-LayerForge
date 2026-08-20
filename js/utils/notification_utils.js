@@ -22,6 +22,10 @@ const CONFIG = {
     // Shared global container ID to stack notifications across different custom nodes/projects
     SHARED_CONTAINER_ID: "az-toast-container"
 };
+// Keep notifications above the LayerForge fullscreen editor and other
+// application overlays. This is intentionally near the browser's practical
+// z-index limit because the fullscreen editor uses a high stacking layer too.
+const NOTIFICATION_LAYER_Z_INDEX = 2147483647;
 // ==========================================
 // 3. LOGGER SETUP & FALLBACK
 // ==========================================
@@ -165,7 +169,7 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
             position: fixed;
             top: 24px;
             right: 24px;
-            z-index: 100005; /* Above modal overlays but below context menus */
+            z-index: ${NOTIFICATION_LAYER_Z_INDEX}; /* Always above application overlays */
             display: flex;
             flex-direction: column;
             gap: 16px;
@@ -174,6 +178,10 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
         `;
         document.body.appendChild(container);
     }
+    // The shared container may have been created before fullscreen was
+    // opened, or by another caller with older inline styles. Re-assert the
+    // top layer on every notification so existing toasts are raised too.
+    container.style.zIndex = String(NOTIFICATION_LAYER_Z_INDEX);
     // --- Dark, modern notification style ---
     const notification = document.createElement('div');
     notification.className = `${CONFIG.CSS_PREFIX}notification-item ${CONFIG.CSS_PREFIX}notification--${type}${options?.contextMenuModel ? ` ${CONFIG.CSS_PREFIX}download-folder-context` : ''}`;

@@ -9,30 +9,51 @@ export class CanvasRenderer {
         this.renderInterval = 1000 / 60;
         this.isDirty = false;
         this.dragRenderState = null;
-        this.zoomInteractionActive = false;
-        this.zoomSnapshot = null;
+        this.viewportInteractionActive = false;
+        this.viewportInteractionKind = null;
+        this.viewportSnapshot = null;
         // Initialize overlay canvases
         this.initOverlay();
         this.initStrokeOverlay();
     }
     /**
-     * Starts a zoom interaction using the persistent composited-scene cache.
-     * The cache survives the short pause between wheel events so a discrete
-     * mouse wheel does not rebuild every blend layer for every notch.
+     * Starts a viewport interaction using the persistent composited-scene
+     * cache. The same cache is used by zooming and panning so blend modes are
+     * composited once and then moved as a bitmap during the interaction.
      */
     beginZoomInteraction() {
+        return this.beginViewportInteraction('zoom');
+    }
+    /**
+     * Starts a pan interaction using the composited-scene cache. Mask mode is
+     * intentionally excluded because the mask stroke and cursor need a live
+     * scene while the viewport moves.
+     */
+    beginPanInteraction() {
+        return this.beginViewportInteraction('pan');
+    }
+    beginViewportInteraction(kind) {
+        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
+        const isAllowedMode = kind === 'pan'
+            ? interactionMode === 'panning'
+            : !interactionMode || interactionMode === 'none';
         // Mask drawing and other active transforms need live rendering because
         // their scene can change while the viewport is moving.
-        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
-        if (this.canvas.maskTool?.isActive || (interactionMode && interactionMode !== 'none')) {
+        if (this.canvas.maskTool?.isActive || !isAllowedMode) {
             return false;
         }
-        if (this.zoomInteractionActive)
+        if (this.viewportInteractionActive) {
+            // A user can start panning immediately after zooming. Keep the
+            // valid scene cache and switch only the interaction type so the
+            // zoom end timer cannot terminate the pan unexpectedly.
+            this.viewportInteractionKind = kind;
             return true;
-        this.zoomInteractionActive = true;
+        }
+        this.viewportInteractionActive = true;
+        this.viewportInteractionKind = kind;
         this.dragRenderState = null;
-        if (!this.zoomSnapshot) {
-            this.zoomSnapshot = this.createZoomSnapshot();
+        if (!this.viewportSnapshot) {
+            this.viewportSnapshot = this.createViewportSnapshot();
         }
         return true;
     }
@@ -41,27 +62,36 @@ export class CanvasRenderer {
      * the next wheel event. Normal canvas mutations explicitly invalidate it.
      */
     endZoomInteraction() {
-        if (!this.zoomInteractionActive)
+        this.endViewportInteraction('zoom');
+    }
+    /** Ends panning while retaining the valid scene cache for the next view interaction. */
+    endPanInteraction() {
+        this.endViewportInteraction('pan');
+    }
+    endViewportInteraction(kind) {
+        if (!this.viewportInteractionActive || this.viewportInteractionKind !== kind)
             return;
-        this.zoomInteractionActive = false;
+        this.viewportInteractionActive = false;
+        this.viewportInteractionKind = null;
         this.dragRenderState = null;
     }
     /**
      * Invalidates the cached scene after a non-viewport edit. This is called
      * by Canvas.render() for regular renders and deliberately skipped for
-     * wheel-driven viewport-only renders.
+     * viewport-only interaction renders.
      */
-    invalidateZoomSnapshot() {
-        this.zoomInteractionActive = false;
+    invalidateViewportSnapshot() {
+        this.viewportInteractionActive = false;
+        this.viewportInteractionKind = null;
         this.dragRenderState = null;
-        this.releaseZoomSnapshot();
+        this.releaseViewportSnapshot();
     }
-    releaseZoomSnapshot() {
-        if (this.zoomSnapshot) {
-            this.zoomSnapshot.canvas.width = 0;
-            this.zoomSnapshot.canvas.height = 0;
+    releaseViewportSnapshot() {
+        if (this.viewportSnapshot) {
+            this.viewportSnapshot.canvas.width = 0;
+            this.viewportSnapshot.canvas.height = 0;
         }
-        this.zoomSnapshot = null;
+        this.viewportSnapshot = null;
     }
     getCanvasFill() {
         if (typeof getComputedStyle === 'function') {
@@ -73,22 +103,26 @@ export class CanvasRenderer {
         }
         return 'rgba(96, 96, 96, 0.72)';
     }
-    getZoomSnapshotScale(displayWidth, displayHeight) {
-        // A modest overscan keeps zooming out cached for several wheel steps.
+    getViewportSnapshotScale(displayWidth, displayHeight) {
+        // A modest overscan keeps both zooming and panning cached across
+        // several input events without allowing the backing surface to grow
+        // without bound.
         // Cap the backing surface so a large editor widget cannot allocate an
         // unexpectedly large temporary bitmap.
-        const requestedScale = 1.5;
+        // Panning consumes the overscan linearly, so give it a little more
+        // room than zooming while keeping the same hard memory limit.
+        const requestedScale = this.viewportInteractionKind === 'pan' ? 1.75 : 1.5;
         const maxSnapshotPixels = 16000000;
         const requestedPixels = displayWidth * displayHeight * requestedScale * requestedScale;
         if (requestedPixels <= maxSnapshotPixels)
             return requestedScale;
         return Math.max(1, Math.sqrt(maxSnapshotPixels / (displayWidth * displayHeight)));
     }
-    createZoomSnapshot() {
+    createViewportSnapshot() {
         const displayWidth = Math.max(1, this.canvas.offscreenCanvas.width || this.canvas.canvas.clientWidth || 1);
         const displayHeight = Math.max(1, this.canvas.offscreenCanvas.height || this.canvas.canvas.clientHeight || 1);
         const zoom = this.canvas.viewport.zoom;
-        const snapshotScale = this.getZoomSnapshotScale(displayWidth, displayHeight);
+        const snapshotScale = this.getViewportSnapshotScale(displayWidth, displayHeight);
         const snapshotWidth = Math.max(1, Math.ceil(displayWidth * snapshotScale));
         const snapshotHeight = Math.max(1, Math.ceil(displayHeight * snapshotScale));
         const extraWorldWidth = (snapshotWidth - displayWidth) / zoom;
@@ -121,13 +155,16 @@ export class CanvasRenderer {
             displayHeight,
         };
     }
-    canUseZoomSnapshot(viewport, displayWidth, displayHeight) {
-        const snapshot = this.zoomSnapshot;
+    canUseViewportSnapshot(viewport, displayWidth, displayHeight) {
+        const snapshot = this.viewportSnapshot;
         const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
-        if (!this.zoomInteractionActive ||
+        const isAllowedMode = this.viewportInteractionKind === 'pan'
+            ? interactionMode === 'panning'
+            : interactionMode === 'none';
+        if (!this.viewportInteractionActive ||
             this.canvas.maskTool?.isActive ||
             !snapshot ||
-            interactionMode !== 'none')
+            !isAllowedMode)
             return false;
         if (snapshot.displayWidth !== displayWidth || snapshot.displayHeight !== displayHeight)
             return false;
@@ -143,8 +180,8 @@ export class CanvasRenderer {
             visibleRight <= snapshotRight + epsilon &&
             visibleBottom <= snapshotBottom + epsilon;
     }
-    drawZoomSnapshot(ctx, viewport) {
-        const snapshot = this.zoomSnapshot;
+    drawViewportSnapshot(ctx, viewport) {
+        const snapshot = this.viewportSnapshot;
         if (!snapshot)
             return;
         const scale = viewport.zoom / snapshot.viewport.zoom;
@@ -365,17 +402,19 @@ export class CanvasRenderer {
         const dirtyRects = canReuseDragFrame && currentDragBounds
             ? this.getDragDirtyRects(currentDragBounds, canvasWidth, canvasHeight)
             : [{ x: 0, y: 0, width: canvasWidth, height: canvasHeight }];
-        let canUseZoomSnapshot = this.canUseZoomSnapshot(this.canvas.viewport, canvasWidth, canvasHeight);
-        // If the viewport leaves the cached overscan (most commonly while
-        // zooming out), rebuild one expanded snapshot around the new view.
-        // This pays the composition cost once and keeps subsequent wheel
-        // frames on the cheap bitmap path.
-        if (!canUseZoomSnapshot &&
-            this.zoomInteractionActive &&
-            this.canvas.canvasInteractions?.interaction?.mode === 'none') {
-            this.releaseZoomSnapshot();
-            this.zoomSnapshot = this.createZoomSnapshot();
-            canUseZoomSnapshot = this.canUseZoomSnapshot(this.canvas.viewport, canvasWidth, canvasHeight);
+        let canUseViewportSnapshot = this.canUseViewportSnapshot(this.canvas.viewport, canvasWidth, canvasHeight);
+        // If the viewport leaves the cached overscan while zooming or
+        // panning, rebuild one expanded snapshot around the new view. This
+        // pays the composition cost once and keeps subsequent frames on the
+        // cheap bitmap path.
+        const interactionMode = this.canvas.canvasInteractions?.interaction?.mode;
+        const canRebuildViewportSnapshot = this.viewportInteractionActive &&
+            ((this.viewportInteractionKind === 'pan' && interactionMode === 'panning') ||
+                (this.viewportInteractionKind === 'zoom' && interactionMode === 'none'));
+        if (!canUseViewportSnapshot && canRebuildViewportSnapshot) {
+            this.releaseViewportSnapshot();
+            this.viewportSnapshot = this.createViewportSnapshot();
+            canUseViewportSnapshot = this.canUseViewportSnapshot(this.canvas.viewport, canvasWidth, canvasHeight);
         }
         // Keep the visible canvas dimensions in sync before selecting the
         // fast target. The zoom path can render directly to the visible
@@ -385,7 +424,7 @@ export class CanvasRenderer {
             this.canvas.canvas.width = canvasWidth;
             this.canvas.canvas.height = canvasHeight;
         }
-        if (canUseZoomSnapshot) {
+        if (canUseViewportSnapshot) {
             ctx = this.canvas.ctx;
         }
         // Keep the canvas readable while allowing the node's native color to
@@ -414,13 +453,13 @@ export class CanvasRenderer {
         ctx.save();
         ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
         ctx.translate(-this.canvas.viewport.x, -this.canvas.viewport.y);
-        if (canUseZoomSnapshot) {
+        if (canUseViewportSnapshot) {
             // The snapshot already contains the background, grid, mask, and
             // all composited layers. Restore the screen transform for one
             // inexpensive bitmap scale, then restore the world transform so
             // selection and interaction overlays remain live.
             ctx.restore();
-            this.drawZoomSnapshot(ctx, this.canvas.viewport);
+            this.drawViewportSnapshot(ctx, this.canvas.viewport);
             ctx.save();
             ctx.scale(this.canvas.viewport.zoom, this.canvas.viewport.zoom);
             ctx.translate(-this.canvas.viewport.x, -this.canvas.viewport.y);
@@ -495,7 +534,7 @@ export class CanvasRenderer {
         else {
             this.dragRenderState = null;
         }
-        if (!canUseZoomSnapshot && canReuseDragFrame) {
+        if (!canUseViewportSnapshot && canReuseDragFrame) {
             // The offscreen canvas already contains the unchanged pixels. A
             // partial blit keeps the visible canvas from copying the entire
             // viewport on every drag frame.
@@ -507,7 +546,7 @@ export class CanvasRenderer {
             });
             this.canvas.ctx.restore();
         }
-        else if (!canUseZoomSnapshot) {
+        else if (!canUseViewportSnapshot) {
             this.canvas.ctx.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
             this.canvas.ctx.drawImage(this.canvas.offscreenCanvas, 0, 0);
         }

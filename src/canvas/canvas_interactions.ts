@@ -65,6 +65,9 @@ export class CanvasInteractions {
     private zoomEndTimer: number | null = null;
     private pendingZoomOperations: Array<{ world: Point; zoomFactor: number }> = [];
     private zoomOperationAnimationFrame: number | null = null;
+    private pendingPanPosition: { event: MouseEvent; clientX: number; clientY: number } | null = null;
+    private panAnimationFrame: number | null = null;
+    private panSnapshotActive = false;
 
     // Bound event handlers to enable proper removeEventListener and avoid leaks
     private onMouseDown = (e: MouseEvent) => this.handleMouseDown(e);
@@ -199,6 +202,71 @@ export class CanvasInteractions {
         return preserveZoomSnapshot;
     }
 
+    /**
+     * Coalesce high-frequency pan events into one viewport update per display
+     * frame. The scene snapshot is prepared lazily on the first real movement
+     * so a simple click on the canvas does not pay the compositing cost.
+     */
+    private schedulePanViewport(e: MouseEvent): void {
+        if (!this.panSnapshotActive) {
+            this.panSnapshotActive = this.canvas.canvasRenderer.beginPanInteraction();
+        }
+
+        this.pendingPanPosition = {
+            event: e,
+            clientX: e.clientX,
+            clientY: e.clientY,
+        };
+
+        if (this.panAnimationFrame === null) {
+            this.panAnimationFrame = window.requestAnimationFrame(() => {
+                this.panAnimationFrame = null;
+                this.flushPendingPanViewport();
+            });
+        }
+
+        // Queue the renderer after the interaction frame so it observes the
+        // latest viewport position in the same browser frame.
+        this.canvas.render(this.panSnapshotActive);
+    }
+
+    private flushPendingPanViewport(): void {
+        if (this.panAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.panAnimationFrame);
+            this.panAnimationFrame = null;
+        }
+
+        const pendingPosition = this.pendingPanPosition;
+        this.pendingPanPosition = null;
+        if (!pendingPosition || this.interaction.mode !== 'panning') return;
+
+        this.panViewport(pendingPosition.clientX, pendingPosition.clientY);
+
+        if (this.canvas.maskTool.isActive) {
+            // Panning in mask mode uses the live fallback, but the brush
+            // cursor still needs the final world coordinates after the pan.
+            const pannedCoords = this.getMouseCoordinates(pendingPosition.event);
+            this.canvas.canvasRenderer.drawMaskBrushCursor(pannedCoords.world);
+        }
+    }
+
+    private cancelPendingPanViewport(): void {
+        if (this.panAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.panAnimationFrame);
+            this.panAnimationFrame = null;
+        }
+        this.pendingPanPosition = null;
+    }
+
+    private finishPanInteraction(): boolean {
+        const preserveViewportSnapshot = this.panSnapshotActive;
+        if (preserveViewportSnapshot) {
+            this.canvas.canvasRenderer.endPanInteraction();
+        }
+        this.panSnapshotActive = false;
+        return preserveViewportSnapshot;
+    }
+
     private renderAndSave(shouldSave: boolean = false): void {
         this.canvas.render();
         if (shouldSave) {
@@ -327,6 +395,7 @@ export class CanvasInteractions {
     }
 
     teardownEventListeners(): void {
+        this.cancelPendingPanViewport();
         this.cancelPendingTransformMove();
         if (this.zoomOperationAnimationFrame !== null) {
             window.cancelAnimationFrame(this.zoomOperationAnimationFrame);
@@ -337,7 +406,7 @@ export class CanvasInteractions {
             window.clearTimeout(this.zoomEndTimer);
             this.zoomEndTimer = null;
         }
-        this.canvas.canvasRenderer.invalidateZoomSnapshot();
+        this.canvas.canvasRenderer.invalidateViewportSnapshot();
         this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown as EventListener);
         this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove as EventListener);
         this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp as EventListener);
@@ -404,6 +473,10 @@ export class CanvasInteractions {
     }
 
     resetInteractionState(): void {
+        if (this.interaction.mode === 'panning') {
+            this.finishPanInteraction();
+        }
+        this.cancelPendingPanViewport();
         this.cancelPendingTransformMove();
         this.interaction.mode = 'none';
         this.interaction.resizeHandle = null;
@@ -553,14 +626,7 @@ export class CanvasInteractions {
                 // Don't render during mask drawing - it's handled by mask tool internally
                 break;
             case 'panning':
-                this.panViewport(e);
-                if (this.canvas.maskTool.isActive) {
-                    // Panning changes the world-to-screen transform. Redraw
-                    // the cursor from the new world coordinates so the brush
-                    // outline stays under the actual mouse position.
-                    const pannedCoords = this.getMouseCoordinates(e);
-                    this.canvas.canvasRenderer.drawMaskBrushCursor(pannedCoords.world);
-                }
+                this.schedulePanViewport(e);
                 break;
             case 'dragging':
                 this.scheduleTransformMove(coords.world);
@@ -604,12 +670,15 @@ export class CanvasInteractions {
 
         // --- DYNAMICZNY PODGLĄD LINII CUSTOM SHAPE ---
         if (this.canvas.shapeTool.isActive && !this.canvas.shapeTool.shape.isClosed) {
-            this.canvas.render();
+            this.canvas.render(this.interaction.mode === 'panning' && this.panSnapshotActive);
         }
     }
 
     handleMouseUp(e: MouseEvent): void {
         const coords = this.getMouseCoordinates(e);
+        const wasPanning = this.interaction.mode === 'panning';
+        this.flushPendingPanViewport();
+        const preservePanSnapshot = wasPanning ? this.finishPanInteraction() : false;
         this.flushPendingTransformMove();
 
         if (this.interaction.mode === 'drawingMask') {
@@ -659,7 +728,7 @@ export class CanvasInteractions {
         }
 
         this.resetInteractionState();
-        this.canvas.render();
+        this.canvas.render(preservePanSnapshot);
     }
 
     private logDragCompletion(coords: MouseCoordinates): void {
@@ -681,6 +750,11 @@ export class CanvasInteractions {
 
     handleMouseLeave(e: MouseEvent): void {
         const coords = this.getMouseCoordinates(e);
+        const wasPanning = this.interaction.mode === 'panning';
+        if (wasPanning) {
+            this.flushPendingPanViewport();
+        }
+        const preservePanSnapshot = wasPanning ? this.finishPanInteraction() : false;
         if (this.canvas.maskTool.isActive) {
             this.canvas.maskTool.handleMouseLeave();
             if (this.canvas.maskTool.isDrawing) {
@@ -689,12 +763,12 @@ export class CanvasInteractions {
             if (this.interaction.mode !== 'none' && this.interaction.mode !== 'drawingMask') {
                 this.resetInteractionState();
             }
-            this.canvas.render();
+            this.canvas.render(preservePanSnapshot);
             return;
         }
         if (this.interaction.mode !== 'none') {
             this.resetInteractionState();
-            this.canvas.render();
+            this.canvas.render(preservePanSnapshot);
         }
 
         if (this.canvas.canvasLayers.internalClipboard.length > 0) {
@@ -965,6 +1039,11 @@ export class CanvasInteractions {
 
     handleBlur(): void {
         log.debug('Window lost focus, resetting key states.');
+        const wasPanning = this.interaction.mode === 'panning';
+        if (wasPanning) {
+            this.flushPendingPanViewport();
+        }
+        const preservePanSnapshot = wasPanning ? this.finishPanInteraction() : false;
         this.flushPendingTransformMove();
         this.interaction.isCtrlPressed = false;
         this.interaction.isMetaPressed = false;
@@ -988,7 +1067,7 @@ export class CanvasInteractions {
         // Reset interaction mode if it's something that can get "stuck"
         if (this.interaction.mode !== 'none' && this.interaction.mode !== 'drawingMask') {
             this.resetInteractionState();
-            this.canvas.render();
+            this.canvas.render(preservePanSnapshot);
         }
     }
 
@@ -1086,6 +1165,7 @@ export class CanvasInteractions {
         if (clearSelection && !this.interaction.isCtrlPressed) {
             this.canvas.canvasSelection.updateSelection([]);
         }
+        this.panSnapshotActive = false;
         this.interaction.mode = 'panning';
         this.interaction.panStart = { x: e.clientX, y: e.clientY };
         this.canvas.canvas.style.cursor = 'grabbing';
@@ -1143,19 +1223,19 @@ export class CanvasInteractions {
         this.canvas.saveState();
     }
 
-    panViewport(e: MouseEvent): void {
-        const dx = e.clientX - this.interaction.panStart.x;
-        const dy = e.clientY - this.interaction.panStart.y;
+    panViewport(clientX: number, clientY: number): void {
+        const dx = clientX - this.interaction.panStart.x;
+        const dy = clientY - this.interaction.panStart.y;
         this.canvas.viewport.x -= dx / this.canvas.viewport.zoom;
         this.canvas.viewport.y -= dy / this.canvas.viewport.zoom;
-        this.interaction.panStart = { x: e.clientX, y: e.clientY };
+        this.interaction.panStart = { x: clientX, y: clientY };
 
         // Update stroke overlay if mask tool is drawing during pan
         if (this.canvas.maskTool.isDrawing) {
             this.canvas.maskTool.handleViewportChange();
         }
 
-        this.canvas.render();
+        this.canvas.render(this.panSnapshotActive);
         this.canvas.onViewportChange?.();
     }
 
