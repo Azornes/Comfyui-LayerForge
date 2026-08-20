@@ -1,7 +1,7 @@
 [project]
 name = "layerforge"
 description = "Photoshop-like layered canvas editor to your ComfyUI workflow. This node is perfect for complex compositing, inpainting, and outpainting, featuring multi-layer support, masking, blend modes, and precise transformations. Includes optional AI-powered background removal for streamlined image editing."
-version = "1.5.13"
+version = "1.6.0"
 license = { text = "MIT License" }
 requires-python = ">=3.10"
 dependencies = ["torch", "torchvision", "huggingface_hub", "aiohttp", "numpy", "tqdm", "Pillow", "transformers", "kornia"]
