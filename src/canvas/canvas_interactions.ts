@@ -63,6 +63,8 @@ export class CanvasInteractions {
     private pendingTransformMove: { world: Point; isShiftPressed: boolean } | null = null;
     private transformMoveAnimationFrame: number | null = null;
     private zoomEndTimer: number | null = null;
+    private pendingZoomOperations: Array<{ world: Point; zoomFactor: number }> = [];
+    private zoomOperationAnimationFrame: number | null = null;
 
     // Bound event handlers to enable proper removeEventListener and avoid leaks
     private onMouseDown = (e: MouseEvent) => this.handleMouseDown(e);
@@ -137,15 +139,44 @@ export class CanvasInteractions {
             window.clearTimeout(this.zoomEndTimer);
         }
 
+        // Keep the fast path alive across discrete mouse-wheel notches. A
+        // short 140 ms timeout caused a full-quality render between notches.
         this.zoomEndTimer = window.setTimeout(() => {
             this.zoomEndTimer = null;
             this.canvas.canvasRenderer.endZoomInteraction();
-            this.canvas.render();
-        }, 140);
+            this.canvas.render(true);
+        }, 260);
     }
 
-    private performZoomOperation(worldCoords: Point, zoomFactor: number): void {
-        this.canvas.canvasRenderer.beginZoomInteraction();
+    private queueZoomOperation(worldCoords: Point, zoomFactor: number): void {
+        this.pendingZoomOperations.push({
+            world: { ...worldCoords },
+            zoomFactor,
+        });
+
+        if (this.zoomOperationAnimationFrame !== null) return;
+
+        this.zoomOperationAnimationFrame = window.requestAnimationFrame(() => {
+            this.zoomOperationAnimationFrame = null;
+            const operations = this.pendingZoomOperations;
+            this.pendingZoomOperations = [];
+
+            // Apply all wheel deltas before the renderer's frame. This keeps
+            // focal-point math exact while ensuring only one visual render is
+            // produced for a burst of wheel events.
+            let preserveZoomSnapshot = true;
+            operations.forEach(operation => {
+                preserveZoomSnapshot = this.performZoomOperation(
+                    operation.world,
+                    operation.zoomFactor
+                ) && preserveZoomSnapshot;
+            });
+            this.canvas.render(preserveZoomSnapshot);
+        });
+    }
+
+    private performZoomOperation(worldCoords: Point, zoomFactor: number): boolean {
+        const preserveZoomSnapshot = this.canvas.canvasRenderer.beginZoomInteraction();
 
         const mouseBufferX = (worldCoords.x - this.canvas.viewport.x) * this.canvas.viewport.zoom;
         const mouseBufferY = (worldCoords.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
@@ -162,7 +193,10 @@ export class CanvasInteractions {
         }
 
         this.canvas.onViewportChange?.();
-        this.scheduleZoomInteractionEnd();
+        if (preserveZoomSnapshot) {
+            this.scheduleZoomInteractionEnd();
+        }
+        return preserveZoomSnapshot;
     }
 
     private renderAndSave(shouldSave: boolean = false): void {
@@ -294,11 +328,16 @@ export class CanvasInteractions {
 
     teardownEventListeners(): void {
         this.cancelPendingTransformMove();
+        if (this.zoomOperationAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.zoomOperationAnimationFrame);
+            this.zoomOperationAnimationFrame = null;
+        }
+        this.pendingZoomOperations = [];
         if (this.zoomEndTimer !== null) {
             window.clearTimeout(this.zoomEndTimer);
             this.zoomEndTimer = null;
         }
-        this.canvas.canvasRenderer.endZoomInteraction();
+        this.canvas.canvasRenderer.invalidateZoomSnapshot();
         this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown as EventListener);
         this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove as EventListener);
         this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp as EventListener);
@@ -679,11 +718,14 @@ export class CanvasInteractions {
     handleWheel(e: WheelEvent): void {
         this.preventEventDefaults(e);
         const coords = this.getMouseCoordinates(e);
+        let preserveZoomSnapshot = false;
+        let queuedZoomOperation = false;
 
         if (this.canvas.maskTool.isActive || this.canvas.canvasSelection.selectedLayers.length === 0) {
             // Zoom operation for mask tool or when no layers selected
             const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            this.performZoomOperation(coords.world, zoomFactor);
+            this.queueZoomOperation(coords.world, zoomFactor);
+            queuedZoomOperation = true;
         } else {
             // Check if mouse is over any selected layer
             const isOverSelectedLayer = this.isPointInSelectedLayers(coords.world.x, coords.world.y);
@@ -694,11 +736,17 @@ export class CanvasInteractions {
             } else {
                 // Zoom operation when mouse is not over selected layers
                 const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-                this.performZoomOperation(coords.world, zoomFactor);
+                this.queueZoomOperation(coords.world, zoomFactor);
+                queuedZoomOperation = true;
             }
         }
 
-        this.canvas.render();
+        if (queuedZoomOperation) {
+            // The interaction callback is queued before this render callback,
+            // so the latest viewport is ready when the renderer paints.
+            preserveZoomSnapshot = !this.canvas.maskTool.isActive && this.interaction.mode === 'none';
+        }
+        this.canvas.render(preserveZoomSnapshot);
         if (!this.canvas.maskTool.isActive) {
             this.canvas.requestSaveState();
         }

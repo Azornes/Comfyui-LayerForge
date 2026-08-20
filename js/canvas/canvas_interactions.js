@@ -8,6 +8,8 @@ export class CanvasInteractions {
         this.pendingTransformMove = null;
         this.transformMoveAnimationFrame = null;
         this.zoomEndTimer = null;
+        this.pendingZoomOperations = [];
+        this.zoomOperationAnimationFrame = null;
         // Bound event handlers to enable proper removeEventListener and avoid leaks
         this.onMouseDown = (e) => this.handleMouseDown(e);
         this.onMouseMove = (e) => this.handleMouseMove(e);
@@ -73,14 +75,37 @@ export class CanvasInteractions {
         if (this.zoomEndTimer !== null) {
             window.clearTimeout(this.zoomEndTimer);
         }
+        // Keep the fast path alive across discrete mouse-wheel notches. A
+        // short 140 ms timeout caused a full-quality render between notches.
         this.zoomEndTimer = window.setTimeout(() => {
             this.zoomEndTimer = null;
             this.canvas.canvasRenderer.endZoomInteraction();
-            this.canvas.render();
-        }, 140);
+            this.canvas.render(true);
+        }, 260);
+    }
+    queueZoomOperation(worldCoords, zoomFactor) {
+        this.pendingZoomOperations.push({
+            world: { ...worldCoords },
+            zoomFactor,
+        });
+        if (this.zoomOperationAnimationFrame !== null)
+            return;
+        this.zoomOperationAnimationFrame = window.requestAnimationFrame(() => {
+            this.zoomOperationAnimationFrame = null;
+            const operations = this.pendingZoomOperations;
+            this.pendingZoomOperations = [];
+            // Apply all wheel deltas before the renderer's frame. This keeps
+            // focal-point math exact while ensuring only one visual render is
+            // produced for a burst of wheel events.
+            let preserveZoomSnapshot = true;
+            operations.forEach(operation => {
+                preserveZoomSnapshot = this.performZoomOperation(operation.world, operation.zoomFactor) && preserveZoomSnapshot;
+            });
+            this.canvas.render(preserveZoomSnapshot);
+        });
     }
     performZoomOperation(worldCoords, zoomFactor) {
-        this.canvas.canvasRenderer.beginZoomInteraction();
+        const preserveZoomSnapshot = this.canvas.canvasRenderer.beginZoomInteraction();
         const mouseBufferX = (worldCoords.x - this.canvas.viewport.x) * this.canvas.viewport.zoom;
         const mouseBufferY = (worldCoords.y - this.canvas.viewport.y) * this.canvas.viewport.zoom;
         const newZoom = Math.max(0.1, Math.min(10, this.canvas.viewport.zoom * zoomFactor));
@@ -92,7 +117,10 @@ export class CanvasInteractions {
             this.canvas.maskTool.handleViewportChange();
         }
         this.canvas.onViewportChange?.();
-        this.scheduleZoomInteractionEnd();
+        if (preserveZoomSnapshot) {
+            this.scheduleZoomInteractionEnd();
+        }
+        return preserveZoomSnapshot;
     }
     renderAndSave(shouldSave = false) {
         this.canvas.render();
@@ -206,11 +234,16 @@ export class CanvasInteractions {
     }
     teardownEventListeners() {
         this.cancelPendingTransformMove();
+        if (this.zoomOperationAnimationFrame !== null) {
+            window.cancelAnimationFrame(this.zoomOperationAnimationFrame);
+            this.zoomOperationAnimationFrame = null;
+        }
+        this.pendingZoomOperations = [];
         if (this.zoomEndTimer !== null) {
             window.clearTimeout(this.zoomEndTimer);
             this.zoomEndTimer = null;
         }
-        this.canvas.canvasRenderer.endZoomInteraction();
+        this.canvas.canvasRenderer.invalidateZoomSnapshot();
         this.canvas.canvas.removeEventListener('mousedown', this.onMouseDown);
         this.canvas.canvas.removeEventListener('mousemove', this.onMouseMove);
         this.canvas.canvas.removeEventListener('mouseup', this.onMouseUp);
@@ -544,10 +577,13 @@ export class CanvasInteractions {
     handleWheel(e) {
         this.preventEventDefaults(e);
         const coords = this.getMouseCoordinates(e);
+        let preserveZoomSnapshot = false;
+        let queuedZoomOperation = false;
         if (this.canvas.maskTool.isActive || this.canvas.canvasSelection.selectedLayers.length === 0) {
             // Zoom operation for mask tool or when no layers selected
             const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            this.performZoomOperation(coords.world, zoomFactor);
+            this.queueZoomOperation(coords.world, zoomFactor);
+            queuedZoomOperation = true;
         }
         else {
             // Check if mouse is over any selected layer
@@ -559,10 +595,16 @@ export class CanvasInteractions {
             else {
                 // Zoom operation when mouse is not over selected layers
                 const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-                this.performZoomOperation(coords.world, zoomFactor);
+                this.queueZoomOperation(coords.world, zoomFactor);
+                queuedZoomOperation = true;
             }
         }
-        this.canvas.render();
+        if (queuedZoomOperation) {
+            // The interaction callback is queued before this render callback,
+            // so the latest viewport is ready when the renderer paints.
+            preserveZoomSnapshot = !this.canvas.maskTool.isActive && this.interaction.mode === 'none';
+        }
+        this.canvas.render(preserveZoomSnapshot);
         if (!this.canvas.maskTool.isActive) {
             this.canvas.requestSaveState();
         }

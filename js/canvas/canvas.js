@@ -64,7 +64,10 @@ export class Canvas {
     constructor(node, widget, callbacks = {}) {
         this.node = node;
         this.widget = widget;
-        const { canvas, ctx } = createCanvas(0, 0, '2d', { willReadFrequently: true });
+        // These contexts only draw and blit rendered frames. Keeping them on
+        // the normal compositor path allows the browser to use GPU-backed
+        // canvas acceleration instead of preparing for frequent pixel reads.
+        const { canvas, ctx } = createCanvas(0, 0, '2d');
         if (!ctx)
             throw new Error("Could not create canvas context");
         this.canvas = canvas;
@@ -82,8 +85,7 @@ export class Canvas {
             zoom: 0.8,
         };
         const { canvas: offscreenCanvas, ctx: offscreenCtx } = createCanvas(0, 0, '2d', {
-            alpha: false,
-            willReadFrequently: true
+            alpha: false
         });
         this.offscreenCanvas = offscreenCanvas;
         this.offscreenCtx = offscreenCtx;
@@ -306,7 +308,10 @@ export class Canvas {
     /**
      * Renderuje canvas
      */
-    render() {
+    render(preserveZoomSnapshot = false) {
+        if (!preserveZoomSnapshot) {
+            this.canvasRenderer.invalidateZoomSnapshot();
+        }
         this.canvasRenderer.render();
     }
     /**
