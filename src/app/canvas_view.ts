@@ -52,6 +52,7 @@ import {
 } from "../utils/matting_utils.js";
 import { cancelSAMDetectorMonitoring, registerImageInClipspace, startSAMDetectorMonitoring, setupSAMDetectorHook } from "../mask/sam_detector_integration.js";
 import type { ComfyNode, Layer, AddMode } from '../shared/types';
+import { installWorkflowProgress, setWorkflowProgressFullscreen } from "./workflow_progress.js";
 
 const log = createModuleLogger('Canvas_view');
 
@@ -2493,6 +2494,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         }
 
         isEditorOpen = false;
+        setWorkflowProgressFullscreen(false);
         restoreWorkflowOverviewSelection();
         clearFullscreenButtonTooltips();
         modalContent = null;
@@ -2576,6 +2578,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
         document.body.appendChild(backdrop);
 
         isEditorOpen = true;
+        setWorkflowProgressFullscreen(true);
         applyWorkflowOverviewLayout();
         startWorkflowOverviewLayoutTracking();
         if (isWorkflowOverviewOpen()) {
@@ -2650,6 +2653,7 @@ $el("label.lf-clipboard-switch.lf-mask-switch", {
                     backdrop.parentNode.removeChild(backdrop);
                 }
                 isEditorOpen = false;
+                setWorkflowProgressFullscreen(false);
                 workflowOverviewSelectionSnapshot = null;
                 workflowOverviewSelectionCleared = false;
                 clearFullscreenButtonTooltips();
@@ -2690,6 +2694,7 @@ export function registerLayerForgeExtension(): void {
 
     init() {
         addStylesheet(getUrl('./css/canvas_view.css'));
+        installWorkflowProgress();
         installLayerForgeMultiImagePromptPatch();
         installLayerForgeVirtualWirePatch();
         for (const delay of [0, 100, 500, 1200]) {

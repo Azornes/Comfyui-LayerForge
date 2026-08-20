@@ -1132,6 +1132,90 @@
     font-size: 16px;
 }
 
+.lf-workflow-progress {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 6px;
+    overflow: visible;
+    box-sizing: border-box;
+    background: rgba(20, 20, 20, 0.72);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 2147483646;
+    transition: opacity 120ms ease;
+}
+
+.lf-workflow-progress.lf-workflow-progress-visible {
+    opacity: 1;
+}
+
+.lf-workflow-progress-completed,
+.lf-workflow-progress-active {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    transition: width 120ms ease-out, background-color 120ms ease;
+}
+
+.lf-workflow-progress-completed {
+    z-index: 1;
+    background: #2f6fb5;
+}
+
+.lf-workflow-progress-active {
+    z-index: 2;
+    background: #7fc4ff;
+    opacity: 0.92;
+}
+
+.lf-workflow-progress-label {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    z-index: 3;
+    display: block;
+    max-width: min(70vw, 720px);
+    overflow: hidden;
+    padding: 2px 8px 3px;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.9);
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.28);
+    font: 11px/14px sans-serif;
+    text-align: center;
+    text-overflow: ellipsis;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.lf-workflow-progress.lf-workflow-progress-success .lf-workflow-progress-completed,
+.lf-workflow-progress.lf-workflow-progress-success .lf-workflow-progress-active {
+    background: #54b56d;
+}
+
+.lf-workflow-progress.lf-workflow-progress-error .lf-workflow-progress-completed,
+.lf-workflow-progress.lf-workflow-progress-error .lf-workflow-progress-active {
+    background: #d15a5a;
+}
+
+.lf-workflow-progress.lf-workflow-progress-indeterminate .lf-workflow-progress-active {
+    width: 34%;
+    animation: lf-workflow-progress-indeterminate 1.15s ease-in-out infinite;
+}
+
+@keyframes lf-workflow-progress-indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(300%);
+    }
+}
+
 .lf-workflow-overview-toggle.lf-workflow-overview-open {
     background: var(--comfy-menu-bg, #2f2f2f);
 }

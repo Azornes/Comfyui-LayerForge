@@ -24,6 +24,7 @@ import { getImageAddMode } from "../utils/canvas_input_utils.js";
 import { clearLayerForgeImageInputLinks, getLayerForgeImageInputLinks, getLayerForgeMaskInputSlot, hasLayerForgeImageInput, } from "../utils/multi_image_input_utils.js";
 import { fetchMattingModelStatus, fetchMattingSettings, saveMattingSettings as saveMattingSettingsToServer, } from "../utils/matting_utils.js";
 import { cancelSAMDetectorMonitoring, setupSAMDetectorHook } from "../mask/sam_detector_integration.js";
+import { installWorkflowProgress, setWorkflowProgressFullscreen } from "./workflow_progress.js";
 const log = createModuleLogger('Canvas_view');
 const DEFAULT_MATTING_SETTINGS = {
     modelPath: '',
@@ -2123,6 +2124,7 @@ async function createCanvasWidget(node, widget, _app) {
             backdrop.parentNode.removeChild(backdrop);
         }
         isEditorOpen = false;
+        setWorkflowProgressFullscreen(false);
         restoreWorkflowOverviewSelection();
         clearFullscreenButtonTooltips();
         modalContent = null;
@@ -2192,6 +2194,7 @@ async function createCanvasWidget(node, widget, _app) {
         backdrop.appendChild(modalContent);
         document.body.appendChild(backdrop);
         isEditorOpen = true;
+        setWorkflowProgressFullscreen(true);
         applyWorkflowOverviewLayout();
         startWorkflowOverviewLayoutTracking();
         if (isWorkflowOverviewOpen()) {
@@ -2254,6 +2257,7 @@ async function createCanvasWidget(node, widget, _app) {
                     backdrop.parentNode.removeChild(backdrop);
                 }
                 isEditorOpen = false;
+                setWorkflowProgressFullscreen(false);
                 workflowOverviewSelectionSnapshot = null;
                 workflowOverviewSelectionCleared = false;
                 clearFullscreenButtonTooltips();
@@ -2287,6 +2291,7 @@ export function registerLayerForgeExtension() {
         name: "Comfy.LayerForgeNode",
         init() {
             addStylesheet(getUrl('./css/canvas_view.css'));
+            installWorkflowProgress();
             installLayerForgeMultiImagePromptPatch();
             installLayerForgeVirtualWirePatch();
             for (const delay of [0, 100, 500, 1200]) {
