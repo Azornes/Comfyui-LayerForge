@@ -59,6 +59,13 @@ export interface ComfyNode {
 
 declare global {
     interface Window {
+        comfyAPI?: {
+            ui?: {
+                $el?: any;
+                [key: string]: any;
+            };
+            [key: string]: any;
+        };
         MaskEditorDialog?: {
             instance?: {
                 getMessageBroker: () => any;

@@ -6,8 +6,7 @@ import {api} from "../../../scripts/api.js";
 import {ComfyApp} from "../../../scripts/app.js";
 // @ts-ignore
 import {ChangeTracker} from "../../../scripts/changeTracker.js";
-// @ts-ignore
-import {$el} from "../../../scripts/ui.js";
+const $el: any = window.comfyAPI?.ui?.$el;
 
 import { addStylesheet, getUrl, loadTemplate } from "../utils/resource_manager.js";
 

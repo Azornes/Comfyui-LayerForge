@@ -4,8 +4,7 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 // @ts-ignore
 import { ChangeTracker } from "../../../scripts/changeTracker.js";
-// @ts-ignore
-import { $el } from "../../../scripts/ui.js";
+const $el = window.comfyAPI?.ui?.$el;
 import { addStylesheet, getUrl, loadTemplate } from "../utils/resource_manager.js";
 import { Canvas, configureCanvasImagePreviewWidget } from "../canvas/canvas.js";
 import { canvasNodeInstances, installLayerForgeMultiImagePromptPatch, installLayerForgeVirtualWirePatch, isLayerForgeTransportInput, pruneLayerForgeTransportInputs, scheduleLayerForgeImageConnectionConversion, } from "./layer_forge_connections.js";

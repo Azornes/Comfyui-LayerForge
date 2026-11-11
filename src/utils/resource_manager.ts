@@ -1,5 +1,3 @@
-// @ts-ignore
-import { $el } from "../../../scripts/ui.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "../shared/error_handler.js";
 
@@ -15,12 +13,22 @@ export const addStylesheet = withErrorHandling(function(url: string): void {
     if (url.endsWith(".js")) {
         url = url.substr(0, url.length - 2) + "css";
     }
-    $el("link", {
-        parent: document.head,
-        rel: "stylesheet",
-        type: "text/css",
-        href: url.startsWith("http") ? url : getUrl(url),
-    });
+    const href = url.startsWith("http") ? url : getUrl(url);
+    const $el = window.comfyAPI?.ui?.$el;
+    if ($el) {
+        $el("link", {
+            parent: document.head,
+            rel: "stylesheet",
+            type: "text/css",
+            href,
+        });
+    } else {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.type = "text/css";
+        link.href = href;
+        document.head.appendChild(link);
+    }
 
     log.debug('Stylesheet added successfully:', { finalUrl: url });
 }, 'addStylesheet');

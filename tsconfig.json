@@ -14,7 +14,6 @@
     "paths": {
       "../../scripts/app.js": ["./__mocks__/app.js"],
       "../../scripts/api.js": ["./__mocks__/api.js"],
-      "../../scripts/ui.js": ["./__mocks__/ui.js"],
       "./*.js": ["./src/*.ts"],
       "./utils/*.js": ["./src/utils/*.ts"]
     }
