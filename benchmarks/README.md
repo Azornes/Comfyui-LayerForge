@@ -22,7 +22,7 @@ for that part.
 Run it with the embedded Python used by the active Easy ComfyUI installation:
 
 ```powershell
-rtk proxy E:\AI\AI\ComfyUI\ComfyUI_Easy\All_Nodes\python_embeded\python.exe benchmarks\backend.py --sizes 512,1024,2048 --iterations 5
+E:\AI\AI\ComfyUI\ComfyUI_Easy\All_Nodes\python_embeded\python.exe benchmarks\backend.py --sizes 512,1024,2048 --iterations 5
 ```
 
 The script measures tensor/data-URL conversion, per-sample and batch PNG
@@ -41,7 +41,7 @@ Start a static server with the repository explicitly selected as its document
 root. This works even when the terminal is currently in another directory:
 
 ```powershell
-rtk proxy E:\AI\AI\ComfyUI\ComfyUI_Easy\All_Nodes\python_embeded\python.exe -m http.server 8765 --directory E:\AI\AI\ComfyUI\ComfyUI_Windows_portable\ComfyUI\custom_nodes\Comfyui-LayerForge
+E:\AI\AI\ComfyUI\ComfyUI_Easy\All_Nodes\python_embeded\python.exe -m http.server 8765 --directory E:\AI\AI\ComfyUI\ComfyUI_Windows_portable\ComfyUI\custom_nodes\Comfyui-LayerForge
 ```
 
 Open:
